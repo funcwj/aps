@@ -37,7 +37,8 @@ def run(args):
 
     decoder = Decoder(Seq2Seq, args.checkpoint, gpu_id=args.gpu)
 
-    output = open(args.output, "w") if args.output else None
+    output = open(args.output, "w") if args.output != "-" else None
+    N = 0
     for key, feats in feats_reader:
         logger.info("Decoding utterance {}...".format(key))
         nbest = decoder.compute(feats,
@@ -52,6 +53,9 @@ def run(args):
                 print("{}\t{}".format(key, " ".join(trans)), flush=True)
             else:
                 output.write("{}\t{}\n".format(key, " ".join(trans)))
+                if not (N + 1) % 100:
+                    output.flush()
+        N += 1
     if output:
         output.close()
     logger.info("Decode {:d} utterance done".format(len(feats_reader)))

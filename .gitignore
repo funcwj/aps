@@ -1,3 +1,6 @@
 .vscode/
 __pycache__/
 .py[cod]
+
+asr/test
+asr/debug*

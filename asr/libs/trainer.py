@@ -126,15 +126,18 @@ class S2STrainer(object):
         if checkpoint:
             os.makedirs(checkpoint, exist_ok=True)
         self.checkpoint = checkpoint
-        self.logger = logger if logger else get_logger(
-            os.path.join(checkpoint, "trainer.log"), file=True)
+        if logger:
+            self.logger = logger
+        else:
+            self.logger = get_logger(os.path.join(checkpoint, "trainer.log"),
+                                     file=True)
 
         self.gradient_clip = gradient_clip
-        self.logging_period = logging_period
         self.cur_epoch = 0  # zero based
         self.no_impr = no_impr
         self.label_smooth = label_smooth
         self.ssr = schedule_sampling
+        self.reporter = ProgressReporter(self.logger, period=logging_period)
 
         if resume:
             if not os.path.exists(resume):
@@ -160,7 +163,7 @@ class S2STrainer(object):
         # logging
         self.logger.info("Model summary:\n{}".format(nnet))
         self.logger.info("Loading model to GPUs:{}, #param: {:.2f}M".format(
-            device_ids, self.num_params))
+            self.device_ids, self.num_params))
         if gradient_clip:
             self.logger.info(
                 "Gradient clipping by {}, default L2".format(gradient_clip))
@@ -238,10 +241,10 @@ class S2STrainer(object):
         for i in range(tgts.shape[0]):
             tgts[i, egs["y_len"][i]] = self.nnet.eos
         # compute loss
-        # if self.label_smooth > 0:
-        #     loss = self._ls_loss(outs, tgts)
-        # else:
-        loss = self._ce_loss(outs, tgts)
+        if self.label_smooth > 0:
+            loss = self._ls_loss(outs, tgts)
+        else:
+            loss = self._ce_loss(outs, tgts)
         # compute accu
         accu = self._compute_accu(outs, tgts)
         return loss, accu
@@ -275,17 +278,26 @@ class S2STrainer(object):
         Label smooth loss
         """
         _, _, V = outs.shape
-        # N x T x V
+        # NT x V
+        outs = outs.view(-1, V)
+        # NT
+        tgts = tgts.view(-1)
+        mask = (tgts != -1)
+        # M x V
+        outs = th.masked_select(outs, mask.unsqueeze(-1)).view(-1, V)
+        # M
+        tgts = th.masked_select(tgts, mask)
+        # M x V
         dist = outs.new_full(outs.size(), self.label_smooth / (V - 1))
-        dist = dist.scatter_(2, tgts.unsqueeze(2), 1 - self.label_smooth)
+        dist = dist.scatter_(1, tgts.unsqueeze(-1), 1 - self.label_smooth)
         # KL distance
-        loss = F.kl_div(F.log_softmax(outs, 2), dist, reduction="mean")
+        loss = F.kl_div(F.log_softmax(outs, -1), dist, reduction="batchmean")
         return loss
 
     def train(self, data_loader):
         self.logger.info("Set train mode...")
         self.nnet.train()
-        reporter = ProgressReporter(self.logger, period=self.logging_period)
+        self.reporter.reset()
 
         for egs in data_loader:
             # load to gpu
@@ -297,17 +309,17 @@ class S2STrainer(object):
             if self.gradient_clip:
                 norm = clip_grad_norm_(self.nnet.parameters(),
                                        self.gradient_clip)
-                reporter.add("norm", norm)
+                self.reporter.add("norm", norm)
             self.optimizer.step()
 
-            reporter.add("loss", loss.item())
-            reporter.add("accu", accu)
-        return reporter.report()
+            self.reporter.add("loss", loss.item())
+            self.reporter.add("accu", accu)
+        return self.reporter.report()
 
     def eval(self, data_loader):
         self.logger.info("Set eval mode...")
         self.nnet.eval()
-        reporter = ProgressReporter(self.logger, period=self.logging_period)
+        self.reporter.reset()
 
         with th.no_grad():
             for egs in data_loader:
@@ -316,9 +328,9 @@ class S2STrainer(object):
                 loss, accu = self.compute_loss(egs,
                                                ssr=self.ssr,
                                                dump_ali=False)
-                reporter.add("loss", loss.item())
-                reporter.add("accu", accu)
-        return reporter.report(details=True)
+                self.reporter.add("loss", loss.item())
+                self.reporter.add("accu", accu)
+        return self.reporter.report(details=True)
 
     def run(self, train_loader, valid_loader, num_epoches=50):
         """
@@ -392,8 +404,7 @@ class S2STrainer(object):
         no_impr = 0
         stop = False
         trained_batches = 0
-        train_reporter = ProgressReporter(self.logger,
-                                          period=self.logging_period)
+        self.reporter.reset()
         # make sure not inf
         self.scheduler.best = best_loss
         # set train mode
@@ -410,11 +421,11 @@ class S2STrainer(object):
                 if self.gradient_clip:
                     norm = clip_grad_norm_(self.nnet.parameters(),
                                            self.gradient_clip)
-                    train_reporter.add("norm", norm)
+                    self.reporter.add("norm", norm)
                 self.optimizer.step()
                 # record loss & accu
-                train_reporter.add("accu", accu)
-                train_reporter.add("loss", loss.item())
+                self.reporter.add("accu", accu)
+                self.reporter.add("loss", loss.item())
                 # if trained on batches done, start evaluation
                 if trained_batches == 0:
                     self.cur_epoch += 1
@@ -422,7 +433,7 @@ class S2STrainer(object):
                     stats[
                         "title"] = "Loss(time/N, lr={:.3e}) - Epoch {:2d}:".format(
                             cur_lr, self.cur_epoch)
-                    tr = train_reporter.report()
+                    tr = self.reporter.report()
                     stats[
                         "tr"] = "train = {:.4f}/{:.2f}%({:.2f}m/{:d})".format(
                             tr["loss"], tr["accu"], tr["cost"], tr["batches"])
@@ -447,7 +458,7 @@ class S2STrainer(object):
                     # save last checkpoint
                     self.save_checkpoint(best=False)
                     # reset reporter
-                    train_reporter.reset()
+                    self.reporter.reset()
                     # early stop or not
                     if no_impr == self.no_impr:
                         self.logger.info(
