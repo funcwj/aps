@@ -185,8 +185,11 @@ class BatchSampler(dat.Sampler):
 
     def __iter__(self):
         n = len(self.batch_idx)
-        idx_order = th.randperm(n) if self.shuffle else th.arange(n)
-        for idx in idx_order.tolist():
+        if self.shuffle:
+            order = th.randperm(n)
+        else:
+            order = th.range(n)
+        for idx in order.tolist():
             beg, end = self.batch_idx[idx]
             yield range(beg, end)
 

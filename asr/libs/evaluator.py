@@ -14,7 +14,6 @@ class Evaluator(object):
     """
     A simple wrapper for model evaluation
     """
-
     def __init__(self, nnet_cls, cpt_dir, gpu_id=-1):
         # load nnet
         self.nnet = self._load_nnet(nnet_cls, cpt_dir)

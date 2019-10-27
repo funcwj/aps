@@ -20,7 +20,6 @@ class Seq2Seq(nn.Module):
     """
     A simple attention based sequence-to-sequence model
     """
-
     def __init__(
             self,
             input_size=80,

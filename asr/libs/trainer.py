@@ -24,7 +24,6 @@ def load_obj(obj, device):
     """
     Offload tensor object in obj to cuda device
     """
-
     def cuda(obj):
         return obj.to(device) if isinstance(obj, th.Tensor) else obj
 
@@ -55,7 +54,6 @@ class SimpleTimer(object):
     """
     A simple timer
     """
-
     def __init__(self):
         self.reset()
 
@@ -70,7 +68,6 @@ class ProgressReporter(object):
     """
     A simple progress reporter
     """
-
     def __init__(self, logger, period=100):
         self.period = period
         self.logger = logger
@@ -106,7 +103,6 @@ class S2STrainer(object):
     """
     A PyTorch seq2seq trainer
     """
-
     def __init__(self,
                  nnet,
                  checkpoint="cpt",

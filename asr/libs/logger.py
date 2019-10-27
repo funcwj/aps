@@ -4,6 +4,7 @@
 
 import logging
 
+
 def get_logger(
         name,
         format_str="%(asctime)s [%(pathname)s:%(lineno)s - %(levelname)s ] %(message)s",
@@ -12,7 +13,6 @@ def get_logger(
     """
     Get logger instance
     """
-
     def get_handler(handler):
         handler.setLevel(logging.INFO)
         formatter = logging.Formatter(fmt=format_str, datefmt=date_format)
@@ -28,5 +28,3 @@ def get_logger(
     else:
         logger.addHandler(logging.StreamHandler())
     return logger
-
-

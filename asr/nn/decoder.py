@@ -14,7 +14,6 @@ class TorchDecoder(nn.Module):
     """
     PyTorch's RNN decoder
     """
-
     def __init__(self,
                  input_size,
                  vocab_size,

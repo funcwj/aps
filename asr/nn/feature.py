@@ -65,7 +65,6 @@ class Spectrogram(nn.Module):
     """
     Compute spectrogram as a layer
     """
-
     def __init__(self,
                  frame_len,
                  frame_hop,
@@ -111,7 +110,6 @@ class MelTransform(nn.Module):
     """
     Transform linear spectrogram to mel spectrogram
     """
-
     def __init__(self,
                  frame_len,
                  round_pow_of_two=True,
@@ -156,7 +154,6 @@ class AsrFeature(nn.Module):
     """
     A layer to compute features for ASR task
     """
-
     def __init__(self,
                  feature,
                  frame_len=400,
