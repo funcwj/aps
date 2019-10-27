@@ -72,7 +72,7 @@ class TorchEncoder(nn.Module):
                                        batch_first=True,
                                        total_length=max_len)
         y = self.proj(y)
-        return y
+        return y, x_len
 
 
 class CustomRnnLayer(nn.Module):

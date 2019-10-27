@@ -27,36 +27,23 @@ class Seq2Seq(nn.Module):
             sos=-1,
             eos=-1,
             att_type="ctx",
-            att_kwargs={"att_dim": 512},
+            att_kwargs=None,
             # encoder
             encoder_type="common",
-            encoder_dim=512,
             encoder_proj=256,
-            encoder_layers=3,
-            encoder_rnn="lstm",
-            encoder_dropout=0.0,
+            encoder_kwargs=None,
             # decoder
             decoder_dim=512,
-            decoder_layers=2,
-            decoder_dropout=0.0,
-            decoder_rnn="lstm"):
+            decoder_kwargs=None):
         super(Seq2Seq, self).__init__()
-        self.encoder = encoder_instance(encoder_type,
-                                        input_size,
-                                        encoder_proj,
-                                        rnn=encoder_rnn,
-                                        bidirectional=True,
-                                        dropout=encoder_dropout,
-                                        hidden_size=encoder_dim)
+        self.encoder = encoder_instance(encoder_type, input_size, encoder_proj,
+                                        **encoder_kwargs)
         attend = att_instance(att_type, encoder_proj, decoder_dim,
                               **att_kwargs)
         self.decoder = TorchDecoder(encoder_proj + decoder_dim,
                                     vocab_size,
-                                    rnn=decoder_rnn,
-                                    hidden_size=decoder_dim,
-                                    dropout=decoder_dropout,
-                                    num_layers=decoder_layers,
-                                    attention=attend)
+                                    attention=attend,
+                                    **decoder_kwargs)
         if not eos or not sos:
             raise RuntimeError("Unsupported SOS/EOS "
                                "value: {:d}/{:d}".format(sos, eos))
@@ -75,10 +62,10 @@ class Seq2Seq(nn.Module):
             alis: N x (To+1) x T
         """
         # N x Ti x D
-        enc_out = self.encoder(x_pad, x_len)
+        enc_out, enc_len = self.encoder(x_pad, x_len)
         # N x (To+1), pad SOS
         outs, alis = self.decoder(enc_out,
-                                  x_len,
+                                  enc_len,
                                   y_pad,
                                   sos=self.sos,
                                   schedule_sampling=ssr)
@@ -94,7 +81,7 @@ class Seq2Seq(nn.Module):
 
         with th.no_grad():
             # 1 x Ti x F
-            enc_out = self.encoder(x.unsqueeze(0), None)
+            enc_out, _ = self.encoder(x.unsqueeze(0), None)
             return self.decoder.beam_search(enc_out,
                                             beam=beam,
                                             nbest=nbest,
@@ -113,16 +100,24 @@ def foo():
         "sos": 1,
         "eos": 2,
         "vocab_size": V,
-        "encoder_type": "common",
-        "encoder_dim": 128,
+        "encoder_type": "pyramid",
         "encoder_proj": 128,
-        "encoder_layers": 2,
-        "encoder_rnn": "lstm",
-        "encoder_dropout": 0.0,
+        "encoder_kwargs": {
+            "hidden_size": 256,
+            "num_layers": 3,
+            "dropout": 0.4,
+            "pyramid": True,
+            "ln": True,
+            "bidirectional": True,
+            "add_forward_backward": True
+        },
         "decoder_dim": 128,
-        "decoder_layers": 2,
-        "decoder_dropout": 0.0,
-        "decoder_rnn": "lstm",
+        "decoder_kwargs": {
+            "rnn": "lstm",
+            "num_layers": 3,
+            "hidden_size": 128,  # must eq decoder_dim
+            "dropout": 0.2
+        },
         "att_type": "loc",
         "att_kwargs": {
             "att_dim": 128,
@@ -133,7 +128,7 @@ def foo():
     # 1.5s
     S, L = 50, 30
     nnet = Seq2Seq(**nnet_conf)
-
+    print(nnet)
     x_len = th.randint(S, S * 2, (N, ))
     S = x_len.max().item()
 
