@@ -24,7 +24,7 @@ def get_logger(
     if file:
         # both stdout & file
         logger.addHandler(get_handler(logging.FileHandler(name)))
-        # logger.addHandler(logging.StreamHandler())
+        logger.addHandler(logging.StreamHandler())
     else:
         logger.addHandler(logging.StreamHandler())
     return logger

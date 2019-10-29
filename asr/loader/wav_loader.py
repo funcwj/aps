@@ -114,6 +114,9 @@ class WaveReader(BaseReader):
 
 
 class Dataset(dat.Dataset):
+    """
+    Dataset for raw waveform
+    """
     def __init__(self,
                  wav_scp="",
                  token_scp="",
@@ -146,18 +149,17 @@ class Dataset(dat.Dataset):
 
 
 def egs_collate(egs):
+    def pad_seq(olist, value=0):
+        return pad_sequence(olist, batch_first=True, padding_value=value)
+
     return {
-        "x_pad":
-        pad_sequence([th.from_numpy("wav") for eg in egs],
-                     batch_first=True,
-                     padding_value=0),
-        "y_pad":
-        pad_sequence([th.as_tensor(eg["token"]) for eg in egs],
-                     batch_first=True,
-                     padding_value=-1),
-        "x_len":    # N, number of the frames
+        "x_pad":  # N x S
+        pad_seq([th.from_numpy("wav") for eg in egs], value=0),
+        "y_pad":  # N x T
+        pad_seq([th.as_tensor(eg["token"]) for eg in egs], value=-1),
+        "x_len":  # N, number of the frames
         th.tensor([eg["dur"] for eg in egs], dtype=th.int64),
-        "y_len":    # N, length of the tokens
+        "y_len":  # N, length of the tokens
         th.tensor([eg["len"] for eg in egs], dtype=th.int64)
     }
 

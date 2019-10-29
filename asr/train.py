@@ -2,11 +2,11 @@
 
 # wujian@2019
 
-import os
 import pprint
 import argparse
 import yaml
 
+from pathlib import Path
 from libs.logger import get_logger
 from libs.trainer import S2STrainer
 from libs.dataset import make_dataloader
@@ -18,25 +18,22 @@ def run(args):
     dev_conf = args.device_ids
     device_ids = tuple(map(int, dev_conf.split(","))) if dev_conf else None
 
-    # make checkpoint
-    if args.checkpoint:
-        os.makedirs(args.checkpoint, exist_ok=True)
-
     # new logger instance
-    logger = get_logger(os.path.join(args.checkpoint, "run.log"), file=True)
-    logger.info("Arguments in args:\n{}".format(pprint.pformat(vars(args))))
+    print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
+          flush=True)
 
+    checkpoint = Path(args.checkpoint)
     # if exist, resume training
-    last_checkpoint = os.path.join(args.checkpoint, "last.tar.pt")
+    last_checkpoint = checkpoint / "last.tar.pt"
     resume = args.resume
-    if os.path.exists(last_checkpoint):
-        resume = last_checkpoint
+    if last_checkpoint.exists():
+        resume = last_checkpoint.as_posix()
 
     # load configurations
     with open(args.conf, "r") as f:
         conf = yaml.load(f, Loader=yaml.FullLoader)
 
-    logger.info("Arguments in yaml:\n{}".format(pprint.pformat(conf)))
+    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
 
     # add dictionary info
     with open(args.dict, "rb") as f:
@@ -46,7 +43,7 @@ def run(args):
         conf["nnet_conf"]["vocab_size"] = len(token2idx)
 
     # dump configurations
-    with open(os.path.join(args.checkpoint, "train.yaml"), "w") as f:
+    with open(checkpoint / "train.yaml", "w") as f:
         yaml.dump(conf, f)
 
     nnet = Seq2Seq(**conf["nnet_conf"])
@@ -54,7 +51,6 @@ def run(args):
                          device_ids=device_ids,
                          checkpoint=args.checkpoint,
                          resume=resume,
-                         logger=logger,
                          **conf["trainer_conf"])
     data_conf = conf["data_conf"]
     train_loader = make_dataloader(**data_conf["train"],
@@ -107,10 +103,6 @@ if __name__ == "__main__":
                         type=int,
                         default=32,
                         help="Number of utterances in each batch")
-    # parser.add_argument("--cache-size",
-    #                     type=int,
-    #                     default=16,
-    #                     help="Number of batches cached in dataloader")
     parser.add_argument("--eval-interval",
                         type=int,
                         default=3000,

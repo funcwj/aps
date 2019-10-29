@@ -1,6 +1,5 @@
 # wujian@2018
 
-import os
 import sys
 import time
 import random
@@ -8,6 +7,7 @@ import uuid
 
 from itertools import permutations
 from collections import defaultdict
+from pathlib import Path
 
 import numpy as np
 import torch as th
@@ -15,6 +15,8 @@ import torch.nn.functional as F
 
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.utils import clip_grad_norm_
+from torch.nn.parallel import data_parallel
+from torch.utils.tensorboard import SummaryWriter
 from torch import autograd
 
 from .logger import get_logger
@@ -68,9 +70,28 @@ class ProgressReporter(object):
     """
     A simple progress reporter
     """
-    def __init__(self, logger, period=100):
+    def __init__(self, checkpoint, period=100, tensorboard=True):
         self.period = period
-        self.logger = logger
+        logger_loc = (checkpoint / "trainer.log").as_posix()
+        self.logger = get_logger(logger_loc, file=True)
+        if tensorboard:
+            self.board_writer = SummaryWriter(checkpoint)
+        else:
+            self.board_writer = None
+        self.header = "Trainer"
+        self.reset()
+
+    def log(self, sstr):
+        self.logger.info(f"{self.header}: {sstr}")
+
+    def eval(self):
+        self.log("set eval mode...")
+        self.mode = "eval"
+        self.reset()
+
+    def train(self):
+        self.log("set train mode...")
+        self.mode = "train"
         self.reset()
 
     def reset(self):
@@ -82,21 +103,24 @@ class ProgressReporter(object):
         N = len(self.stats[key])
         if not N % self.period:
             avg = sum(self.stats[key][-self.period:]) / self.period
-            self.logger.info("Processed {:.2e} batches "
-                             "({} = {:+.2f})...".format(N, key, avg))
+            self.log(f"processed {N:.2e} batches ({key} = {avg:+.2f})...")
 
-    def report(self, details=False):
+    def report(self, epoch, lr):
         N = len(self.stats["loss"])
-        if details:
+        if self.mode == "eval":
             sstr = ",".join(
-                map(lambda f: "{:.2f}".format(f), self.stats["accu"]))
-            self.logger.info("Accu on {:d} batches: {}".format(N, sstr))
-        return {
-            "loss": sum(self.stats["loss"]) / N,
-            "accu": sum(self.stats["accu"]) * 100 / N,
-            "batches": N,
-            "cost": self.timer.elapsed()
-        }
+                map(lambda f: "{:.2f}".format(f), self.stats["loss"]))
+            self.log(f"loss on {N:d} batches: {sstr}")
+
+        loss = sum(self.stats["loss"]) / N
+        accu = sum(self.stats["loss"]) * 100 / N
+        if self.board_writer:
+            self.board_writer.add_scalar(f"loss/{self.mode}", loss, epoch)
+            self.board_writer.add_scalar(f"accu/{self.mode}", accu, epoch)
+        cost = self.timer.elapsed()
+        hstr = f"Loss/Accu(time/N, lr={lr:.3e}) - Epoch {epoch:2d}: "
+        cstr = f"{self.mode} = {loss:.4f}/{accu:.2f}({cost:.2f}m/{N:d})"
+        return loss, hstr + cstr
 
 
 class S2STrainer(object):
@@ -113,35 +137,34 @@ class S2STrainer(object):
                  label_smooth=0,
                  schedule_sampling=0,
                  gradient_clip=None,
-                 logger=None,
                  logging_period=100,
+                 save_interval=-1,
                  resume=None,
+                 tensorboard=False,
                  no_impr=6):
         self.device_ids = get_device_ids(device_ids)
         self.default_device = th.device("cuda:{}".format(self.device_ids[0]))
-        if checkpoint:
-            os.makedirs(checkpoint, exist_ok=True)
-        self.checkpoint = checkpoint
-        if logger:
-            self.logger = logger
-        else:
-            self.logger = get_logger(os.path.join(checkpoint, "trainer.log"),
-                                     file=True)
+
+        self.checkpoint = Path(checkpoint)
+        self.checkpoint.mkdir(parents=True, exist_ok=True)
+        self.reporter = ProgressReporter(self.checkpoint,
+                                         period=logging_period,
+                                         tensorboard=tensorboard)
 
         self.gradient_clip = gradient_clip
         self.cur_epoch = 0  # zero based
         self.no_impr = no_impr
+        self.save_interval = save_interval
         self.label_smooth = label_smooth
         self.ssr = schedule_sampling
-        self.reporter = ProgressReporter(self.logger, period=logging_period)
 
         if resume:
-            if not os.path.exists(resume):
+            if not Path(resume).exists():
                 raise FileNotFoundError(
                     "Could not find resume checkpoint: {}".format(resume))
             cpt = th.load(resume, map_location="cpu")
             self.cur_epoch = cpt["epoch"]
-            self.logger.info("Resume from checkpoint {}: epoch {:d}".format(
+            self.reporter.log("Resume from checkpoint {}: epoch {:d}".format(
                 resume, self.cur_epoch))
             # load nnet
             nnet.load_state_dict(cpt["model_state_dict"])
@@ -157,23 +180,27 @@ class S2STrainer(object):
             [param.nelement() for param in nnet.parameters()]) / 10.0**6
 
         # logging
-        self.logger.info("Model summary:\n{}".format(nnet))
-        self.logger.info("Loading model to GPUs:{}, #param: {:.2f}M".format(
+        self.reporter.log("Model summary:\n{}".format(nnet))
+        self.reporter.log("Loading model to GPUs:{}, #param: {:.2f}M".format(
             self.device_ids, self.num_params))
         if gradient_clip:
-            self.logger.info(
+            self.reporter.log(
                 "Gradient clipping by {}, default L2".format(gradient_clip))
 
-    def save_checkpoint(self, best=True):
+    def save_checkpoint(self, epoch, best=True):
+        """
+        Save checkpoint (epoch, model, optimizer)
+        """
         cpt = {
-            "epoch": self.cur_epoch,
+            "epoch": epoch,
             "model_state_dict": self.nnet.state_dict(),
             "optim_state_dict": self.optimizer.state_dict()
         }
-        th.save(
-            cpt,
-            os.path.join(self.checkpoint,
-                         "{0}.pt.tar".format("best" if best else "last")))
+        cpt_name = "{0}.pt.tar".format("best" if best else "last")
+        th.save(cpt, self.checkpoint / cpt_name)
+        self.reporter.log(f"save checkpoint {cpt_name}")
+        if self.save_interval > 0 and epoch % self.save_interval == 0:
+            th.save(cpt, self.checkpoint / f"{epoch}.pt.tar")
 
     def create_optimizer(self, optimizer, kwargs, state=None):
         supported_optimizer = {
@@ -188,26 +215,24 @@ class S2STrainer(object):
         if optimizer not in supported_optimizer:
             raise ValueError("Now only support optimizer {}".format(optimizer))
         opt = supported_optimizer[optimizer](self.nnet.parameters(), **kwargs)
-        self.logger.info("Create optimizer {0}: {1}".format(optimizer, kwargs))
+        self.reporter.log("Create optimizer {0}: {1}".format(
+            optimizer, kwargs))
         if state is not None:
             opt.load_state_dict(state)
-            self.logger.info("Load optimizer state dict from checkpoint")
+            self.reporter.log("Load optimizer state dict from checkpoint")
         return opt
 
     def _dump_ali(self, dump_dir, key, alis, feats=None):
         """
         Sample and dump out alignments
         """
-        os.makedirs(dump_dir, exist_ok=True)
         N, _, _ = alis.shape
         n = random.randint(0, N - 1)
         a = alis[n].detach().cpu().numpy()
         # s = np.arange(0, T, 10)
-        np.save(os.path.join(dump_dir, key) + "-align", a)
+        np.save(dump_dir / f"{key}-align", a)
         if feats is not None:
-            np.save(
-                os.path.join(dump_dir, key) + "-feats",
-                feats[n].detach().cpu().numpy())
+            np.save(dump_dir / f"{key}-feats", feats[n].detach().cpu().numpy())
 
     def compute_loss(self, egs, ssr=0, dump_ali=False):
         """
@@ -223,13 +248,12 @@ class S2STrainer(object):
         # outs, alis
         # N x (To+1) x V
         # N x (To+1) x Ti
-        outs, alis = th.nn.parallel.data_parallel(
-            self.nnet, (egs["x_pad"], egs["x_len"], y_pad, ssr),
-            device_ids=self.device_ids)
-        # outs, alis = self.nnet(egs["x_pad"], egs["x_len"], y_pad, ssr)
+        outs, alis = data_parallel(self.nnet,
+                                   (egs["x_pad"], egs["x_len"], y_pad, ssr),
+                                   device_ids=self.device_ids)
 
         if dump_ali:
-            self._dump_ali(os.path.join(self.checkpoint, str(self.cur_epoch)),
+            self._dump_ali(self.checkpoint / str(self.cur_epoch),
                            str(uuid.uuid4()), alis)
         # N x (To+1), pad -1
         tgts = F.pad(egs["y_pad"], (0, 1), value=-1)
@@ -291,9 +315,8 @@ class S2STrainer(object):
         return loss
 
     def train(self, data_loader):
-        self.logger.info("Set train mode...")
         self.nnet.train()
-        self.reporter.reset()
+        self.reporter.train()
 
         for egs in data_loader:
             # load to gpu
@@ -310,12 +333,10 @@ class S2STrainer(object):
 
             self.reporter.add("loss", loss.item())
             self.reporter.add("accu", accu)
-        return self.reporter.report()
 
     def eval(self, data_loader):
-        self.logger.info("Set eval mode...")
         self.nnet.eval()
-        self.reporter.reset()
+        self.reporter.eval()
 
         with th.no_grad():
             for egs in data_loader:
@@ -326,7 +347,6 @@ class S2STrainer(object):
                                                dump_ali=False)
                 self.reporter.add("loss", loss.item())
                 self.reporter.add("accu", accu)
-        return self.reporter.report(details=True)
 
     def run(self, train_loader, valid_loader, num_epoches=50):
         """
@@ -334,77 +354,76 @@ class S2STrainer(object):
         """
         # avoid alloc memory from gpu0
         th.cuda.set_device(self.default_device)
-        stats = dict()
         # check if save is OK
-        self.save_checkpoint(best=False)
-        cv = self.eval(valid_loader)
-        best_loss = cv["loss"]
-        self.logger.info("START FROM EPOCH {:d}, LOSS = {:.4f}".format(
-            self.cur_epoch, best_loss))
-        no_impr = 0
+        self.save_checkpoint(0, best=False)
+
+        self.eval(valid_loader)
+        e = self.cur_epoch
+        best_loss, _ = self.reporter.report(e, 0)
+
+        self.reporter.log(f"start from epoch {e:d}, loss = {best_loss:.4f}")
         # make sure not inf
         self.scheduler.best = best_loss
-        while self.cur_epoch < num_epoches:
-            self.cur_epoch += 1
+        no_impr = 0
+
+        while e < num_epoches:
+            e += 1
             cur_lr = self.optimizer.param_groups[0]["lr"]
-            stats["title"] = "Loss(time/N, lr={:.3e}) - Epoch {:2d}:".format(
-                cur_lr, self.cur_epoch)
-            tr = self.train(train_loader)
-            stats["tr"] = "train = {:.4f}/{:.2f}%({:.2f}m/{:d})".format(
-                tr["loss"], tr["accu"], tr["cost"], tr["batches"])
-            cv = self.eval(valid_loader)
-            stats["cv"] = "dev = {:.4f}/{:.2f}%({:.2f}m/{:d})".format(
-                cv["loss"], cv["accu"], cv["cost"], cv["batches"])
-            stats["scheduler"] = ""
-            if cv["loss"] > best_loss:
+            # >> train
+            self.train(train_loader)
+            _, sstr = self.reporter.report(e, cur_lr)
+            self.reporter.log(sstr)
+            # << train
+            # >> eval
+            self.eval(valid_loader)
+            cv_loss, sstr = self.reporter.report(e, cur_lr)
+            if cv_loss > best_loss:
                 no_impr += 1
-                stats["scheduler"] = "| no impr, best = {:.4f}".format(
-                    self.scheduler.best)
+                sstr += f"| no impr, best = {self.scheduler.best:.4f}"
             else:
-                best_loss = cv["loss"]
+                best_loss = cv_loss
                 no_impr = 0
-                self.save_checkpoint(best=True)
-            self.logger.info("{title} {tr} | {cv} {scheduler}".format(**stats))
+                self.save_checkpoint(e, best=True)
+            self.reporter.log(sstr)
+            # << eval
             # schedule here
-            self.scheduler.step(cv["loss"])
+            self.scheduler.step(cv_loss)
             # flush scheduler info
             sys.stdout.flush()
             # save last checkpoint
-            self.save_checkpoint(best=False)
+            self.save_checkpoint(e, best=False)
             if no_impr == self.no_impr:
-                self.logger.info(
-                    "Stop training cause no impr for {:d} epochs".format(
-                        no_impr))
+                self.reporter.log(
+                    f"Stop training cause no impr for {no_impr:d} epochs")
                 break
-        self.logger.info("Training for {:d}/{:d} epoches done!".format(
-            self.cur_epoch, num_epoches))
+        self.reporter.log(f"Training for {e:d}/{num_epoches:d} epoches done!")
 
     def run_batch_per_epoch(self,
                             train_loader,
                             valid_loader,
                             num_epoches=100,
                             eval_interval=4000):
-        self.logger.info("Number of batches in train/valid = {:d}/{:d}".format(
-            len(train_loader), len(valid_loader)))
-        stats = dict()
+        self.reporter.log(
+            "Number of batches in train/valid = {:d}/{:d}".format(
+                len(train_loader), len(valid_loader)))
         # make dilated conv faster
-        # th.backends.cudnn.benchmark = True
+        th.backends.cudnn.benchmark = True
         # avoid alloc memory from gpu0
         th.cuda.set_device(self.default_device)
-        # check if save is OK
-        self.save_checkpoint(best=False)
-        cv = self.eval(valid_loader)
-        best_loss = cv["loss"]
-        self.logger.info("START FROM EPOCH {:d}, LOSS = {:.4f}".format(
-            self.cur_epoch, best_loss))
-        no_impr = 0
-        stop = False
-        trained_batches = 0
-        self.reporter.reset()
+
+        e = self.cur_epoch
+        self.eval(valid_loader)
+        best_loss, _ = self.reporter.report(e, 0)
+        self.reporter.log(f"start from epoch {e:d}, loss = {best_loss:.4f}")
         # make sure not inf
         self.scheduler.best = best_loss
+        no_impr = 0
+
+        stop = False
+        trained_batches = 0
         # set train mode
         self.nnet.train()
+        self.reporter.train()
         while True:
             # trained on several batches
             for egs in train_loader:
@@ -424,52 +443,41 @@ class S2STrainer(object):
                 self.reporter.add("loss", loss.item())
                 # if trained on batches done, start evaluation
                 if trained_batches == 0:
-                    self.cur_epoch += 1
+                    e += 1
                     cur_lr = self.optimizer.param_groups[0]["lr"]
-                    stats[
-                        "title"] = "Loss(time/N, lr={:.3e}) - Epoch {:2d}:".format(
-                            cur_lr, self.cur_epoch)
-                    tr = self.reporter.report()
-                    stats[
-                        "tr"] = "train = {:.4f}/{:.2f}%({:.2f}m/{:d})".format(
-                            tr["loss"], tr["accu"], tr["cost"], tr["batches"])
-                    cv = self.eval(valid_loader)
-                    stats["cv"] = "dev = {:.4f}/{:.2f}%({:.2f}m/{:d})".format(
-                        cv["loss"], cv["accu"], cv["cost"], cv["batches"])
-                    stats["scheduler"] = ""
-                    if cv["loss"] > best_loss:
+                    _, sstr = self.reporter.report(e, cur_lr)
+                    self.reporter.log(sstr)
+
+                    cv_loss, sstr = self.reporter.report(e, cur_lr)
+                    if cv_loss > best_loss:
                         no_impr += 1
-                        stats["scheduler"] = "| no impr, best = {:.4f}".format(
-                            self.scheduler.best)
+                        sstr += f"| no impr, best = {self.scheduler.best:.4f}"
                     else:
-                        best_loss = cv["loss"]
+                        best_loss = cv_loss
                         no_impr = 0
-                        self.save_checkpoint(best=True)
-                    self.logger.info(
-                        "{title} {tr} | {cv} {scheduler}".format(**stats))
+                        self.save_checkpoint(e, best=True)
+                    self.reporter.log(sstr)
                     # schedule here
-                    self.scheduler.step(cv["loss"])
+                    self.scheduler.step(cv_loss)
                     # flush scheduler info
                     sys.stdout.flush()
                     # save last checkpoint
-                    self.save_checkpoint(best=False)
+                    self.save_checkpoint(e, best=False)
                     # reset reporter
                     self.reporter.reset()
                     # early stop or not
                     if no_impr == self.no_impr:
-                        self.logger.info(
-                            "Stop training cause no impr for {:d} epochs".
-                            format(no_impr))
+                        self.logger.info("Stop training cause no impr " +
+                                         f"for {no_impr:d} epochs")
                         stop = True
                         break
-                    if self.cur_epoch == num_epoches:
+                    if e == num_epoches:
                         stop = True
                         break
                     # enable train mode
-                    self.logger.info("Set train mode...")
+                    self.reporter.log("Set train mode...")
                     self.nnet.train()
-            self.logger.info("Finished one epoch on training set")
+            self.reporter.log("Finished one epoch on training set")
             if stop:
                 break
-        self.logger.info("Training for {:d}/{:d} epoches done!".format(
-            self.cur_epoch, num_epoches))
+        self.reporter.log(f"Training for {e:d}/{num_epoches:d} epoches done!")
