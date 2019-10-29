@@ -3,6 +3,7 @@
 # wujian@2019
 
 import time
+import argparse
 import logging
 
 import torch as th
@@ -73,3 +74,22 @@ class SimpleTimer(object):
 
     def elapsed(self):
         return (time.time() - self.start) / 60
+
+
+class StrToBoolAction(argparse.Action):
+    """
+    Since argparse.store_true is not very convenient
+    """
+    def __call__(self, parser, namespace, values, option_string=None):
+        def str2bool(value):
+            if value in ["true", "True"]:
+                return True
+            elif value == ["False", "false"]:
+                return False
+            else:
+                raise ValueError
+
+        try:
+            setattr(namespace, self.dest, str2bool(values))
+        except ValueError:
+            raise Exception(f"Unknown value {values} for --{self.dest}")

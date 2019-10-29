@@ -14,7 +14,7 @@ from torch.utils.data.dataloader import default_collate
 from kaldi_python_io import ScriptReader
 from kaldi_python_io.functional import read_kaldi_mat
 
-from .utils import process_token, BatchSampler, EPSILON
+from .utils import process_token, BatchSampler
 
 
 def make_dataloader(train=True,
@@ -74,7 +74,7 @@ class Cmvn(object):
 
     def __call__(self, mat):
         m = np.mean(mat, 0)
-        s = np.maximum(np.std(mat, 0), EPSILON)
+        s = np.maximum(np.std(mat, 0), 1e-7)
         if self.norm_mean:
             mat -= (self.gmean if self.gmean is not None else m)
         if self.norm_var:

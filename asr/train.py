@@ -6,11 +6,10 @@ import pprint
 import argparse
 import yaml
 
-import loader
-
 from pathlib import Path
-from libs.utils import get_logger
+from libs.utils import get_logger, StrToBoolAction
 from libs.trainer import S2STrainer
+from loader import wav_loader, kaldi_loader
 from transform.asr import FeatureTransform
 
 from seq2seq import Seq2Seq
@@ -23,8 +22,8 @@ def get_dataloader(fmt="wav", **kwargs):
     if fmt not in ["wav", "kaldi"]:
         raise RuntimeError(f"Unknown data loader: {fmt}")
     func = {
-        "wav": loader.wav_loader.make_dataloader,
-        "kaldi": loader.kaldi_loader.make_dataloader
+        "wav": wav_loader.make_dataloader,
+        "kaldi": kaldi_loader.make_dataloader
     }[fmt]
     return func(**kwargs)
 
@@ -134,8 +133,13 @@ if __name__ == "__main__":
                         type=int,
                         default=-1,
                         help="Interval to save the checkpoint")
+    parser.add_argument("--num-workers",
+                        type=int,
+                        default=4,
+                        help="Number of workers used in script data loader")
     parser.add_argument("--tensorboard",
-                        action="store_true",
+                        action=StrToBoolAction,
+                        default="false",
                         help="Flags to use the tensorboad")
     args = parser.parse_args()
     run(args)

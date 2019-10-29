@@ -3,9 +3,9 @@
 # wujian@2019
 
 import numpy as np
+import torch as th
 import soundfile as sf
 import scipy.io.wavfile as wf
-
 import torch.utils.data as dat
 
 from torch.nn.utils.rnn import pad_sequence
@@ -19,6 +19,7 @@ EPSILON = np.finfo(np.float32).eps
 
 def make_dataloader(train=True,
                     wav_scp="",
+                    sr=16000,
                     token_scp="",
                     utt2dur="",
                     max_token_num=400,
@@ -32,6 +33,7 @@ def make_dataloader(train=True,
     dataset = Dataset(wav_scp,
                       token_scp,
                       utt2dur,
+                      sr=sr,
                       max_token_num=max_token_num,
                       max_wav_dur=max_dur,
                       min_wav_dur=min_dur)
@@ -122,12 +124,13 @@ class Dataset(dat.Dataset):
                  wav_scp="",
                  token_scp="",
                  utt2dur="",
+                 sr=16000,
                  max_token_num=400,
                  max_wav_dur=30,
                  min_wav_dur=0.4,
                  adapt_wav_dur=8,
                  adapt_token_num=150):
-        self.wav_reader = WaveReader(wav_scp)
+        self.wav_reader = WaveReader(wav_scp, sr=sr)
         self.token_reader = process_token(token_scp,
                                           utt2dur,
                                           max_token_num=max_token_num,
@@ -139,7 +142,7 @@ class Dataset(dat.Dataset):
         key = tok["key"]
         wav = self.wav_reader[key]
         return {
-            "dur": tok["dur"],
+            "dur": wav.shape[-1],
             "len": tok["len"],
             "wav": wav,
             "token": tok["tok"]
@@ -155,7 +158,7 @@ def egs_collate(egs):
 
     return {
         "x_pad":  # N x S
-        pad_seq([th.from_numpy("wav") for eg in egs], value=0),
+        pad_seq([th.from_numpy(eg["wav"]) for eg in egs], value=0),
         "y_pad":  # N x T
         pad_seq([th.as_tensor(eg["token"]) for eg in egs], value=-1),
         "x_len":  # N, number of the frames

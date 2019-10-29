@@ -9,9 +9,9 @@ nnet_conf:
     num_layers: 3
     dropout: 0.2
     pyramid: True
-    ln: True
+    ln: False
     bidirectional: True
-    add_forward_backward: True
+    add_forward_backward: False
   decoder_dim: 256
   decoder_kwargs":
     rnn": "lstm"
@@ -59,10 +59,10 @@ data_conf:
     min_dur: 0.4 # (s)
     adapt_dur: 8 # (s)
   train:
-    wav_scp: "data/train/wav.scp"
-    utt2dur: "data/train/utt2dur"
-    token_scp: "data/train/token.scp"
+    wav_scp: "data/aishell_v1/train/wav.scp"
+    utt2dur: "data/aishell_v1/train/utt2dur"
+    token_scp: "data/aishell_v1/train/token.scp"
   valid:
-    wav_scp: "data/valid/wav.scp"
-    utt2dur: "data/valid/utt2dur"
-    token_scp: "data/valid/token.scp"
+    wav_scp: "data/aishell_v1/dev/wav.scp"
+    utt2dur: "data/aishell_v1/dev/utt2dur"
+    token_scp: "data/aishell_v1/dev/token.scp"

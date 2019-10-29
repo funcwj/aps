@@ -22,6 +22,8 @@ def process_token(token_scp,
         L = len(token)
         if L > max_token_num:
             continue
+        if key not in utt2dur:
+            continue
         num_frames = utt2dur[key]
         if num_frames < min_dur or num_frames > max_dur:
             continue
@@ -33,6 +35,8 @@ def process_token(token_scp,
         })
     # long -> short
     token_set = sorted(token_set, key=lambda d: d["dur"], reverse=True)
+    if len(token_set) < 10:
+        raise RuntimeError("Less utterances, check data configurations")
     return token_set
 
 
@@ -75,11 +79,11 @@ class BatchSampler(dat.Sampler):
         return idx_bz
 
     def __iter__(self):
-        order = th.randperm(self.num_batches) if self.shuffle else th.range(
-            self.num_batches)
+        order = th.randperm(self.num_batches) if self.shuffle else th.arange(
+            0, self.num_batches - 1, dtype=th.int32)
         for i in order.tolist():
             beg, end = self.batches[i]
-            yield range(beg, end)
+            yield list(range(beg, end))
 
     def __len__(self):
         return self.num_batches

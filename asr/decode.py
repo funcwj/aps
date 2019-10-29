@@ -5,7 +5,7 @@ import argparse
 import torch as th
 
 from libs.evaluator import Evaluator
-from libs.logger import get_logger
+from libs.utils import get_logger
 
 from kaldi_python_io import ScriptReader
 
@@ -18,7 +18,6 @@ class Decoder(Evaluator):
     """
     Decoder wrapper
     """
-
     def __init__(self, *args, **kwargs):
         super(Decoder, self).__init__(*args, **kwargs)
 

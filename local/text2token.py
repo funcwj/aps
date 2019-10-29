@@ -29,16 +29,31 @@ def exist_or_not(i, match_pos):
 def main():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--nchar', '-n', default=1, type=int,
+    parser.add_argument('--nchar',
+                        '-n',
+                        default=1,
+                        type=int,
                         help='number of characters to split, i.e., \
                         aabb -> a a b b with -n 1 and aa bb with -n 2')
-    parser.add_argument('--skip-ncols', '-s', default=0, type=int,
+    parser.add_argument('--skip-ncols',
+                        '-s',
+                        default=0,
+                        type=int,
                         help='skip first n columns')
-    parser.add_argument('--space', default='<space>', type=str,
+    parser.add_argument('--space',
+                        default='<space>',
+                        type=str,
                         help='space symbol')
-    parser.add_argument('--non-lang-syms', '-l', default=None, type=str,
-                        help='list of non-linguistic symobles, e.g., <NOISE> etc.')
-    parser.add_argument('text', type=str, default=False, nargs='?',
+    parser.add_argument(
+        '--non-lang-syms',
+        '-l',
+        default=None,
+        type=str,
+        help='list of non-linguistic symobles, e.g., <NOISE> etc.')
+    parser.add_argument('text',
+                        type=str,
+                        default=False,
+                        nargs='?',
                         help='input text')
     args = parser.parse_args()
 
@@ -51,9 +66,11 @@ def main():
     if args.text:
         f = codecs.open(args.text, encoding="utf-8")
     else:
-        f = codecs.getreader("utf-8")(sys.stdin if is_python2 else sys.stdin.buffer)
+        f = codecs.getreader("utf-8")(
+            sys.stdin if is_python2 else sys.stdin.buffer)
 
-    sys.stdout = codecs.getwriter("utf-8")(sys.stdout if is_python2 else sys.stdout.buffer)
+    sys.stdout = codecs.getwriter("utf-8")(
+        sys.stdout if is_python2 else sys.stdout.buffer)
     line = f.readline()
     n = args.nchar
     while line:
