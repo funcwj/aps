@@ -14,6 +14,7 @@ from kaldi_python_io import Reader as BaseReader
 from .utils import process_token, BatchSampler
 
 MAX_INT16 = np.iinfo(np.int16).max
+EPSILON = np.finfo(np.float32).eps
 
 
 def make_dataloader(train=True,

@@ -22,7 +22,6 @@ class Computer(Evaluator):
     """
     Computer wrapper
     """
-
     def __init__(self, *args, **kwargs):
         super(Computer, self).__init__(*args, **kwargs)
 

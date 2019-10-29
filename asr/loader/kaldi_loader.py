@@ -14,15 +14,15 @@ from torch.utils.data.dataloader import default_collate
 from kaldi_python_io import ScriptReader
 from kaldi_python_io.functional import read_kaldi_mat
 
-from .utils import process_token, BatchSampler
+from .utils import process_token, BatchSampler, EPSILON
 
 
 def make_dataloader(train=True,
                     feats_scp="",
                     token_scp="",
                     gcmvn="",
-                    norm_means=True,
-                    norm_vars=True,
+                    norm_mean=True,
+                    norm_var=True,
                     utt2dur="",
                     max_token_num=400,
                     max_dur=3000,
@@ -36,8 +36,8 @@ def make_dataloader(train=True,
                       token_scp,
                       utt2dur,
                       gcmvn=gcmvn,
-                      norm_means=True,
-                      norm_vars=True,
+                      norm_mean=True,
+                      norm_var=True,
                       max_token_num=max_token_num,
                       max_frame_num=max_dur,
                       min_frame_num=min_dur)
@@ -52,15 +52,15 @@ def make_dataloader(train=True,
 
 class Cmvn(object):
     """
-    Class to do global cmvn or utterance-level cmvn
+    Do global cmvn or utterance-level cmvn
     """
-    def __init__(self, gcmvn="", norm_means=True, norm_vars=True):
+    def __init__(self, gcmvn="", norm_mean=True, norm_var=True):
         if gcmvn:
             self.gmean, self.gstd = self._load_cmvn(gcmvn)
         else:
             self.gmean, self.gstd = None, None
-        self.norm_means = norm_means
-        self.norm_vars = norm_vars
+        self.norm_mean = norm_mean
+        self.norm_var = norm_var
 
     def _load_cmvn(self, cmvn_mat):
         """
@@ -73,10 +73,12 @@ class Cmvn(object):
         return mean, var**0.5
 
     def __call__(self, mat):
-        if self.norm_means:
-            mat -= (self.gmean if self.gmean is not None else np.mean(mat, 0))
-        if self.norm_vars:
-            mat -= (self.gstd if self.gstd is not None else np.std(mat, 0))
+        m = np.mean(mat, 0)
+        s = np.maximum(np.std(mat, 0), EPSILON)
+        if self.norm_mean:
+            mat -= (self.gmean if self.gmean is not None else m)
+        if self.norm_var:
+            mat /= (self.gstd if self.gstd is not None else s)
         return mat
 
 
@@ -89,15 +91,13 @@ class Dataset(dat.Dataset):
                  token_scp,
                  utt2num_frames,
                  gcmvn="",
-                 norm_means=True,
-                 norm_vars=True,
+                 norm_mean=True,
+                 norm_var=True,
                  max_token_num=400,
                  max_frame_num=3000,
                  min_frame_num=40):
         self.feats_reader = ScriptReader(feats_scp)
-        self.cmvn = Cmvn(gcmvn=gcmvn,
-                         norm_means=norm_means,
-                         norm_vars=norm_vars)
+        self.cmvn = Cmvn(gcmvn=gcmvn, norm_mean=norm_mean, norm_var=norm_var)
         # sorted
         self.token_reader = process_token(token_scp,
                                           utt2num_frames,

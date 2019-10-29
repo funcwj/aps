@@ -6,12 +6,27 @@ import pprint
 import argparse
 import yaml
 
+import loader
+
 from pathlib import Path
-from libs.logger import get_logger
+from libs.utils import get_logger
 from libs.trainer import S2STrainer
-from libs.dataset import make_dataloader
+from transform.asr import FeatureTransform
 
 from seq2seq import Seq2Seq
+
+
+def get_dataloader(fmt="wav", **kwargs):
+    """
+    Got dataloader instance
+    """
+    if fmt not in ["wav", "kaldi"]:
+        raise RuntimeError(f"Unknown data loader: {fmt}")
+    func = {
+        "wav": loader.wav_loader.make_dataloader,
+        "kaldi": loader.kaldi_loader.make_dataloader
+    }[fmt]
+    return func(**kwargs)
 
 
 def run(args):
@@ -46,21 +61,28 @@ def run(args):
     with open(checkpoint / "train.yaml", "w") as f:
         yaml.dump(conf, f)
 
-    nnet = Seq2Seq(**conf["nnet_conf"])
+    if "transform" in conf:
+        transform = FeatureTransform(**conf["transform"])
+    else:
+        transform = None
+
+    nnet = Seq2Seq(**conf["nnet_conf"], transform=transform)
     trainer = S2STrainer(nnet,
                          device_ids=device_ids,
                          checkpoint=args.checkpoint,
                          resume=resume,
+                         save_interval=args.save_interval,
+                         tensorboard=args.tensorboard,
                          **conf["trainer_conf"])
     data_conf = conf["data_conf"]
-    train_loader = make_dataloader(**data_conf["train"],
-                                   train=True,
-                                   batch_size=args.batch_size,
-                                   **data_conf["loader"])
-    valid_loader = make_dataloader(**data_conf["valid"],
-                                   train=False,
-                                   batch_size=args.batch_size,
-                                   **data_conf["loader"])
+    train_loader = get_dataloader(**data_conf["train"],
+                                  train=True,
+                                  batch_size=args.batch_size,
+                                  **data_conf["loader"])
+    valid_loader = get_dataloader(**data_conf["valid"],
+                                  train=False,
+                                  batch_size=args.batch_size,
+                                  **data_conf["loader"])
 
     if args.eval_interval > 0:
         trainer.run_batch_per_epoch(train_loader,
@@ -108,5 +130,12 @@ if __name__ == "__main__":
                         default=3000,
                         help="Number of batches trained per epoch "
                         "(for larger training dataset)")
+    parser.add_argument("--save-interval",
+                        type=int,
+                        default=-1,
+                        help="Interval to save the checkpoint")
+    parser.add_argument("--tensorboard",
+                        action="store_true",
+                        help="Flags to use the tensorboad")
     args = parser.parse_args()
     run(args)

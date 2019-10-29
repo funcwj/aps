@@ -16,7 +16,7 @@ def encoder_instance(encoder_type, input_size, output_size, **kwargs):
     """
     supported_encoder = {"common": TorchEncoder, "pyramid": PyramidEncoder}
     if encoder_type not in supported_encoder:
-        raise RuntimeError("Unknown encoder type: {}".format(encoder_type))
+        raise RuntimeError(f"Unknown encoder type: {encoder_type}")
     return supported_encoder[encoder_type](input_size, output_size, **kwargs)
 
 
@@ -36,7 +36,7 @@ class TorchEncoder(nn.Module):
         RNN = rnn.upper()
         supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU}
         if RNN not in supported_rnn:
-            raise RuntimeError("unknown RNN type: {}".format(RNN))
+            raise RuntimeError(f"Unknown RNN type: {RNN}")
         self.rnns = supported_rnn[RNN](input_size,
                                        hidden_size,
                                        num_layers,
@@ -60,8 +60,8 @@ class TorchEncoder(nn.Module):
         # extend dim when inference
         else:
             if x_pad.dim() not in [2, 3]:
-                raise RuntimeError("RNN expect input dim as 2 or 3, "
-                                   "got {:d}".format(x_pad.dim()))
+                raise RuntimeError("RNN expect input dim as 2 or 3, " +
+                                   f"got {x_pad.dim():d}")
             if x_pad.dim() != 3:
                 x_pad = th.unsqueeze(x_pad, 0)
         y, _ = self.rnns(x_pad)
@@ -91,7 +91,7 @@ class CustomRnnLayer(nn.Module):
         RNN = rnn.upper()
         supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU}
         if RNN not in supported_rnn:
-            raise RuntimeError("unknown RNN type: {}".format(RNN))
+            raise RuntimeError(f"Unknown RNN type: {RNN}")
 
         self.rnn = supported_rnn[RNN](input_size,
                                       output_size,
@@ -207,23 +207,3 @@ class PyramidEncoder(nn.Module):
                     x_len = x_len // 2
         x_pad = self.proj(x_pad)
         return x_pad, x_len
-
-
-def foo():
-    nnet = PyramidEncoder(10,
-                          20,
-                          hidden_size=32,
-                          num_layers=3,
-                          dropout=0.4,
-                          pyramid=True,
-                          ln=True,
-                          bidirectional=True,
-                          add_forward_backward=False)
-    print(nnet)
-    x = th.rand(30, 32, 10)
-    y, z = nnet(x, None)
-    print(y.shape)
-
-
-if __name__ == "__main__":
-    foo()

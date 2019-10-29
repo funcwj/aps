@@ -1,0 +1,68 @@
+# default conf
+
+nnet_conf:
+  input_size: 240
+  encoder_type: "pyramid"
+  encoder_proj: 256
+  encoder_kwargs: 
+    hidden_size: 256
+    num_layers: 3
+    dropout: 0.2
+    pyramid: True
+    ln: True
+    bidirectional: True
+    add_forward_backward: True
+  decoder_dim: 256
+  decoder_kwargs":
+    rnn": "lstm"
+    num_layers: 3
+    hidden_size: 256  # must eq decoder_dim
+    dropout: 0.2
+  att_type: "dot"
+  att_kwargs:
+    att_dim: 512
+
+transform:
+  feats: "fbank-log-cmvn-delta"
+  frame_len: 400
+  frame_hop: 160
+  window: "hamm"
+  round_pow_of_two: True
+  sr: 16000
+  num_mels: 80
+  norm_mean: True
+  norm_var: True
+  ctx: 2
+  order: 2
+
+trainer_conf:
+  optimizer: "adam"
+  optimizer_kwargs:
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+  lr_scheduler_kwargs:
+    min_lr: 1.0e-8
+    patience: 3
+    factor: 0.5
+  logging_period: 100
+  gradient_clip: 10
+  no_impr: 4
+  label_smooth: 0
+  schedule_sampling: 0
+
+data_conf:
+  fmt: "wav"  # or "kaldi"
+  loader:
+    max_token_num: 400
+    adapt_token_num: 150
+    max_dur: 30 # (s)
+    min_dur: 0.4 # (s)
+    adapt_dur: 8 # (s)
+  train:
+    wav_scp: "data/train/wav.scp"
+    utt2dur: "data/train/utt2dur"
+    token_scp: "data/train/token.scp"
+  valid:
+    wav_scp: "data/valid/wav.scp"
+    utt2dur: "data/valid/utt2dur"
+    token_scp: "data/valid/token.scp"

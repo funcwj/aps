@@ -26,6 +26,7 @@ class Seq2Seq(nn.Module):
             vocab_size=30,
             sos=-1,
             eos=-1,
+            transform=None,
             att_type="ctx",
             att_kwargs=None,
             # encoder
@@ -49,11 +50,12 @@ class Seq2Seq(nn.Module):
                                "value: {:d}/{:d}".format(sos, eos))
         self.sos = sos
         self.eos = eos
+        self.transform = transform
 
     def forward(self, x_pad, x_len, y_pad, ssr=0):
         """
         args:
-            x_pad: N x Ti x D
+            x_pad: N x Ti x D or N x S
             x_len: N or None
             y_pad: N x To
             ssr: schedule sampling rate
@@ -61,6 +63,9 @@ class Seq2Seq(nn.Module):
             outs: N x (To+1) x V
             alis: N x (To+1) x T
         """
+        # feature transform
+        if self.transform:
+            x_pad, x_len = self.transform(x_pad, x_len)
         # N x Ti x D
         enc_out, enc_len = self.encoder(x_pad, x_len)
         # N x (To+1), pad SOS
@@ -80,72 +85,15 @@ class Seq2Seq(nn.Module):
             raise RuntimeError("Now only support for one utterance")
 
         with th.no_grad():
-            # 1 x Ti x F
-            enc_out, _ = self.encoder(x.unsqueeze(0), None)
+            if self.transform:
+                x, _ = self.transform(x.unsqueeze(0), None)
+                enc_out, _ = self.encoder(x, None)
+            else:
+                # 1 x Ti x F
+                enc_out, _ = self.encoder(x.unsqueeze(0), None)
             return self.decoder.beam_search(enc_out,
                                             beam=beam,
                                             nbest=nbest,
                                             max_len=max_len,
                                             sos=self.sos,
                                             eos=self.eos)
-
-
-import matplotlib.pyplot as plt
-
-
-def foo():
-    N, V, F = 10, 30, 80
-    nnet_conf = {
-        "input_size": F,
-        "sos": 1,
-        "eos": 2,
-        "vocab_size": V,
-        "encoder_type": "pyramid",
-        "encoder_proj": 128,
-        "encoder_kwargs": {
-            "hidden_size": 256,
-            "num_layers": 3,
-            "dropout": 0.4,
-            "pyramid": True,
-            "ln": True,
-            "bidirectional": True,
-            "add_forward_backward": True
-        },
-        "decoder_dim": 128,
-        "decoder_kwargs": {
-            "rnn": "lstm",
-            "num_layers": 3,
-            "hidden_size": 128,  # must eq decoder_dim
-            "dropout": 0.2
-        },
-        "att_type": "loc",
-        "att_kwargs": {
-            "att_dim": 128,
-            "att_kernel": 15,
-            "att_channels": 128
-        }
-    }
-    # 1.5s
-    S, L = 50, 30
-    nnet = Seq2Seq(**nnet_conf)
-    print(nnet)
-    x_len = th.randint(S, S * 2, (N, ))
-    S = x_len.max().item()
-
-    x_len, _ = th.sort(x_len, descending=True)
-
-    x_pad = th.rand(N, S, F) * 10
-    y_pad = th.randint(0, V, (N, L))
-
-    print(x_pad.shape)
-    print(y_pad.shape)
-    # print(y_pad)
-    outs, alis = nnet(x_pad, x_len, y_pad, ssr=0)
-    print(outs.shape)
-    print(alis.shape)
-    plt.imshow(alis[5].detach().numpy())
-    plt.show()
-
-
-if __name__ == "__main__":
-    foo()

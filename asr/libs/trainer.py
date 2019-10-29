@@ -1,7 +1,6 @@
 # wujian@2018
 
 import sys
-import time
 import random
 import uuid
 
@@ -19,51 +18,7 @@ from torch.nn.parallel import data_parallel
 from torch.utils.tensorboard import SummaryWriter
 from torch import autograd
 
-from .logger import get_logger
-
-
-def load_obj(obj, device):
-    """
-    Offload tensor object in obj to cuda device
-    """
-    def cuda(obj):
-        return obj.to(device) if isinstance(obj, th.Tensor) else obj
-
-    if isinstance(obj, dict):
-        return {key: load_obj(obj[key], device) for key in obj}
-    elif isinstance(obj, list):
-        return [load_obj(val, device) for val in obj]
-    else:
-        return cuda(obj)
-
-
-def get_device_ids(device_ids):
-    """
-    Got device ids
-    """
-    if not th.cuda.is_available():
-        raise RuntimeError("CUDA device unavailable...exist")
-    if device_ids is None:
-        # detect number of device available
-        dev_cnt = th.cuda.device_count()
-        device_ids = tuple(range(0, dev_cnt))
-    if isinstance(device_ids, int):
-        device_ids = (device_ids, )
-    return device_ids
-
-
-class SimpleTimer(object):
-    """
-    A simple timer
-    """
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.start = time.time()
-
-    def elapsed(self):
-        return (time.time() - self.start) / 60
+from .utils import get_device_ids, get_logger, load_obj, SimpleTimer
 
 
 class ProgressReporter(object):
