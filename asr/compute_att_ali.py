@@ -1,19 +1,21 @@
 #!/usr/bin/env python
 
-import os
-import json
 import argparse
 
 import torch as th
 import numpy as np
 
+from pathlib import Path
+
 from libs.evaluator import Evaluator
-from libs.logger import get_logger
+from libs.utils import get_logger
+from loader.wav_loader import WaveReader
 
 from kaldi_python_io import ScriptReader
 from kaldi_python_io import Reader as BaseReader
 
 from seq2seq import Seq2Seq
+from transform.asr import FeatureTransform
 
 logger = get_logger(__name__)
 
@@ -25,10 +27,10 @@ class Computer(Evaluator):
     def __init__(self, *args, **kwargs):
         super(Computer, self).__init__(*args, **kwargs)
 
-    def compute(self, feats, token):
-        feats = th.from_numpy(feats).to(self.device)
+    def compute(self, src, token):
+        src = th.from_numpy(src).to(self.device)
         token = th.tensor(token, dtype=th.int64, device=self.device)
-        prob, ali = self.nnet(feats[None, :], None, token[None, :], ssr=1)
+        prob, ali = self.nnet(src[None, :], None, token[None, :], ssr=1)
         pred = th.argmax(prob.detach().squeeze(0), -1)[:-1]
         accu = th.sum(pred == token).float() / token.size(-1)
         logger.info("Accu = {:.2f}".format(accu.item()))
@@ -37,18 +39,26 @@ class Computer(Evaluator):
 
 def run(args):
 
-    os.makedirs(args.dump_dir, exist_ok=True)
+    dump_dir = Path(args.dump_dir)
+    dump_dir.mkdir(parents=True, exist_ok=True)
 
-    feats_reader = ScriptReader(args.feats_scp)
     token_reader = BaseReader(args.token_scp,
                               value_processor=lambda l: [int(n) for n in l],
                               num_tokens=-1)
-    computer = Computer(Seq2Seq, args.checkpoint, gpu_id=args.gpu)
-    for key, feats in feats_reader:
+    computer = Computer(Seq2Seq,
+                        FeatureTransform,
+                        args.checkpoint,
+                        device_id=args.device_id)
+    if computer.raw_waveform:
+        src_reader = WaveReader(args.feats_or_wav_scp, sr=16000)
+    else:
+        src_reader = ScriptReader(args.feats_or_wav_scp)
+
+    for key, src in src_reader:
         logger.info("Processing utterance {}...".format(key))
-        alis = computer.compute(feats, token_reader[key])
-        np.save(os.path.join(args.dump_dir, key), alis)
-    logger.info("Processed {:d} utterance done".format(len(feats_reader)))
+        alis = computer.compute(src, token_reader[key])
+        np.save(dump_dir / key, alis)
+    logger.info("Processed {:d} utterance done".format(len(src_reader)))
 
 
 if __name__ == "__main__":
@@ -58,13 +68,13 @@ if __name__ == "__main__":
     parser.add_argument("checkpoint",
                         type=str,
                         help="Checkpoint of the E2E model")
-    parser.add_argument("feats_scp",
+    parser.add_argument("feats_or_wav_scp",
                         type=str,
-                        help="Rspecifier for evaluation feature")
+                        help="Feature/Wave scripts")
     parser.add_argument("token_scp",
                         type=str,
                         help="Rspecifier for evaluation transcriptions")
-    parser.add_argument("--gpu",
+    parser.add_argument("--device-id",
                         type=int,
                         default=-1,
                         help="GPU-id to offload model to, "

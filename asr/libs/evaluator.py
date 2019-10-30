@@ -15,7 +15,7 @@ class Evaluator(object):
     """
     A simple wrapper for model evaluation
     """
-    def __init__(self, nnet_cls, cpt_dir, device_id=-1, transform=None):
+    def __init__(self, nnet_cls, trans_cls, cpt_dir, device_id=-1):
         cpt_dir = Path(cpt_dir)
         with open(cpt_dir / "train.yaml") as f:
             conf = yaml.load(f, Loader=yaml.FullLoader)
@@ -25,8 +25,11 @@ class Evaluator(object):
         # log state
         logger.info(f"Load model from checkpoint at {cpt_dir}/best.pt.tar " +
                     f"on epoch {epoch}")
+        self.raw_waveform = "transform" in conf
         # load nnet
-        self.nnet = nnet_cls(**conf["nnet_conf"], transform=transform)
+        self.nnet = nnet_cls(**conf["nnet_conf"],
+                             transform=trans_cls(**conf["transform"])
+                             if self.raw_waveform else None)
         self.nnet.load_state_dict(cpt["model_state_dict"])
         if device_id < 0:
             self.device = th.device("cpu")

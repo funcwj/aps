@@ -84,7 +84,7 @@ class StrToBoolAction(argparse.Action):
         def str2bool(value):
             if value in ["true", "True"]:
                 return True
-            elif value == ["False", "false"]:
+            elif value in ["False", "false"]:
                 return False
             else:
                 raise ValueError

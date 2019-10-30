@@ -13,8 +13,8 @@ nnet_conf:
     bidirectional: True
     add_forward_backward: False
   decoder_dim: 256
-  decoder_kwargs":
-    rnn": "lstm"
+  decoder_kwargs:
+    rnn: "lstm"
     num_layers: 3
     hidden_size: 256  # must eq decoder_dim
     dropout: 0.2

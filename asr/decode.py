@@ -6,10 +6,12 @@ import torch as th
 
 from libs.evaluator import Evaluator
 from libs.utils import get_logger
+from loader.wav_loader import WaveReader
 
 from kaldi_python_io import ScriptReader
 
 from seq2seq import Seq2Seq
+from transform.asr import FeatureTransform
 
 logger = get_logger(__name__)
 
@@ -21,26 +23,31 @@ class Decoder(Evaluator):
     def __init__(self, *args, **kwargs):
         super(Decoder, self).__init__(*args, **kwargs)
 
-    def compute(self, feats, **kwargs):
-        feats = th.from_numpy(feats).to(self.device)
-        return self.nnet.beam_search(feats, **kwargs)
+    def compute(self, src, **kwargs):
+        src = th.from_numpy(src).to(self.device)
+        return self.nnet.beam_search(src, **kwargs)
 
 
 def run(args):
-
-    feats_reader = ScriptReader(args.feats_scp)
     # build dictionary
     with open(args.dict, "rb") as f:
         token2idx = [line.decode("utf-8").split()[0] for line in f]
     vocab = {idx: char for idx, char in enumerate(token2idx)}
 
-    decoder = Decoder(Seq2Seq, args.checkpoint, gpu_id=args.gpu)
+    decoder = Decoder(Seq2Seq,
+                      FeatureTransform,
+                      args.checkpoint,
+                      device_id=args.device_id)
+    if decoder.raw_waveform:
+        src_reader = WaveReader(args.feats_or_wav_scp, sr=16000)
+    else:
+        src_reader = ScriptReader(args.feats_or_wav_scp)
 
     output = open(args.output, "w") if args.output != "-" else None
     N = 0
-    for key, feats in feats_reader:
+    for key, src in src_reader:
         logger.info("Decoding utterance {}...".format(key))
-        nbest = decoder.compute(feats,
+        nbest = decoder.compute(src,
                                 beam=args.beam_size,
                                 nbest=1,
                                 max_len=args.max_len)
@@ -57,7 +64,7 @@ def run(args):
         N += 1
     if output:
         output.close()
-    logger.info("Decode {:d} utterance done".format(len(feats_reader)))
+    logger.info("Decode {:d} utterance done".format(len(src_reader)))
 
 
 if __name__ == "__main__":
@@ -68,9 +75,9 @@ if __name__ == "__main__":
     parser.add_argument("checkpoint",
                         type=str,
                         help="Checkpoint of the E2E model")
-    parser.add_argument("feats_scp",
+    parser.add_argument("feats_or_wav_scp",
                         type=str,
-                        help="Rspecifier for evaluation feature files")
+                        help="Feature/Wave scripts")
     parser.add_argument("output",
                         type=str,
                         help="Wspecifier for decoded results")
@@ -86,7 +93,7 @@ if __name__ == "__main__":
                         type=str,
                         required=True,
                         help="Dictionary file")
-    parser.add_argument("--gpu",
+    parser.add_argument("--device-id",
                         type=int,
                         default=-1,
                         help="GPU-id to offload model to, "

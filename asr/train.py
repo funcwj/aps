@@ -37,6 +37,7 @@ def run(args):
           flush=True)
 
     checkpoint = Path(args.checkpoint)
+    checkpoint.mkdir(exist_ok=True, parents=True)
     # if exist, resume training
     last_checkpoint = checkpoint / "last.tar.pt"
     resume = args.resume

@@ -25,6 +25,7 @@ class SpectrogramTransform(nn.Module):
                  window="hamm",
                  round_pow_of_two=True):
         super(SpectrogramTransform, self).__init__()
+        self.frame_len, self.frame_hop = frame_len, frame_hop
         self.STFT = STFT(frame_len,
                          frame_hop,
                          window=window,
@@ -34,7 +35,10 @@ class SpectrogramTransform(nn.Module):
         return self.STFT.num_bins
 
     def len(self, xlen):
-        return (xlen - self.STFT.frame_hop) // self.STFT.frame_len + 1
+        if th.sum(xlen <= self.frame_len):
+            raise RuntimeError(f"Audio samples {xlen.cpu()} less " +
+                               f"than frame_len ({self.frame_len})")
+        return (xlen - self.frame_len) // self.frame_hop + 1
 
     def forward(self, x):
         """

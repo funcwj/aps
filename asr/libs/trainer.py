@@ -68,7 +68,7 @@ class ProgressReporter(object):
             self.log(f"loss on {N:d} batches: {sstr}")
 
         loss = sum(self.stats["loss"]) / N
-        accu = sum(self.stats["loss"]) * 100 / N
+        accu = sum(self.stats["accu"]) * 100 / N
         if self.board_writer:
             self.board_writer.add_scalar(f"loss/{self.mode}", loss, epoch)
             self.board_writer.add_scalar(f"accu/{self.mode}", accu, epoch)
