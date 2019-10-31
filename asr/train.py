@@ -83,7 +83,9 @@ def run(args):
                                   train=False,
                                   batch_size=args.batch_size,
                                   **data_conf["loader"])
-
+    print(
+        f"Number of batches (train/valid) = {len(train_loader)}/{len(valid_loader)}",
+        flush=True)
     if args.eval_interval > 0:
         trainer.run_batch_per_epoch(train_loader,
                                     valid_loader,

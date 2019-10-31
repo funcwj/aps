@@ -41,7 +41,7 @@ class ProgressReporter(object):
 
     def eval(self):
         self.log("set eval mode...")
-        self.mode = "eval"
+        self.mode = "valid"
         self.reset()
 
     def train(self):
@@ -116,11 +116,11 @@ class S2STrainer(object):
         if resume:
             if not Path(resume).exists():
                 raise FileNotFoundError(
-                    "Could not find resume checkpoint: {}".format(resume))
+                    f"Could not find resume checkpoint: {resume}")
             cpt = th.load(resume, map_location="cpu")
             self.cur_epoch = cpt["epoch"]
-            self.reporter.log("Resume from checkpoint {}: epoch {:d}".format(
-                resume, self.cur_epoch))
+            self.reporter.log(
+                f"Resume from checkpoint {resume}: epoch {self.cur_epoch}")
             # load nnet
             nnet.load_state_dict(cpt["model_state_dict"])
             self.nnet = nnet.to(self.default_device)
@@ -135,12 +135,12 @@ class S2STrainer(object):
             [param.nelement() for param in nnet.parameters()]) / 10.0**6
 
         # logging
-        self.reporter.log("Model summary:\n{}".format(nnet))
-        self.reporter.log("Loading model to GPUs:{}, #param: {:.2f}M".format(
-            self.device_ids, self.num_params))
+        self.reporter.log(f"Model summary:\n{nnet}")
+        self.reporter.log(f"Loading model to GPUs:{self.device_ids}, " +
+                          f"#param: {self.num_params:.2f}M")
         if gradient_clip:
             self.reporter.log(
-                "Gradient clipping by {}, default L2".format(gradient_clip))
+                f"Gradient clipping by {gradient_clip}, default L2")
 
     def save_checkpoint(self, epoch, best=True):
         """
@@ -151,7 +151,7 @@ class S2STrainer(object):
             "model_state_dict": self.nnet.state_dict(),
             "optim_state_dict": self.optimizer.state_dict()
         }
-        cpt_name = "{0}.pt.tar".format("best" if best else "last")
+        cpt_name = "{}.pt.tar".format("best" if best else "last")
         th.save(cpt, self.checkpoint / cpt_name)
         self.reporter.log(f"save checkpoint {cpt_name}")
         if self.save_interval > 0 and epoch % self.save_interval == 0:
@@ -168,10 +168,9 @@ class S2STrainer(object):
             # ...
         }
         if optimizer not in supported_optimizer:
-            raise ValueError("Now only support optimizer {}".format(optimizer))
+            raise ValueError(f"Now only support optimizer {optimizer}")
         opt = supported_optimizer[optimizer](self.nnet.parameters(), **kwargs)
-        self.reporter.log("Create optimizer {0}: {1}".format(
-            optimizer, kwargs))
+        self.reporter.log(f"Create optimizer {optimizer}: {kwargs}")
         if state is not None:
             opt.load_state_dict(state)
             self.reporter.log("Load optimizer state dict from checkpoint")
@@ -358,9 +357,6 @@ class S2STrainer(object):
                             valid_loader,
                             num_epoches=100,
                             eval_interval=4000):
-        self.reporter.log(
-            "Number of batches in train/valid = {:d}/{:d}".format(
-                len(train_loader), len(valid_loader)))
         # make dilated conv faster
         th.backends.cudnn.benchmark = True
         # avoid alloc memory from gpu0
@@ -422,8 +418,8 @@ class S2STrainer(object):
                     self.reporter.reset()
                     # early stop or not
                     if no_impr == self.no_impr:
-                        self.logger.info("Stop training cause no impr " +
-                                         f"for {no_impr:d} epochs")
+                        self.reporter.log("Stop training cause no impr " +
+                                          f"for {no_impr:d} epochs")
                         stop = True
                         break
                     if e == num_epoches:

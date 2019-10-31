@@ -79,17 +79,18 @@ class Seq2Seq(nn.Module):
     def beam_search(self, x, beam=8, nbest=5, max_len=None):
         """
         args
-            x: Ti x F
+            x: S or Ti x F
         """
-        if x.dim() != 2:
-            raise RuntimeError("Now only support for one utterance")
-
         with th.no_grad():
             if self.transform:
+                if x.dim() != 1:
+                    raise RuntimeError("Now only support for one utterance")
                 x, _ = self.transform(x.unsqueeze(0), None)
                 enc_out, _ = self.encoder(x, None)
             else:
                 # 1 x Ti x F
+                if x.dim() != 2:
+                    raise RuntimeError("Now only support for one utterance")
                 enc_out, _ = self.encoder(x.unsqueeze(0), None)
             return self.decoder.beam_search(enc_out,
                                             beam=beam,

@@ -33,7 +33,7 @@ class Computer(Evaluator):
         prob, ali = self.nnet(src[None, :], None, token[None, :], ssr=1)
         pred = th.argmax(prob.detach().squeeze(0), -1)[:-1]
         accu = th.sum(pred == token).float() / token.size(-1)
-        logger.info("Accu = {:.2f}".format(accu.item()))
+        logger.info(f"Accu = {accu.item():.2f}")
         return ali.detach().cpu().squeeze().numpy()
 
 
@@ -55,25 +55,26 @@ def run(args):
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
     for key, src in src_reader:
-        logger.info("Processing utterance {}...".format(key))
+        logger.info(f"Processing utterance {key}...")
         alis = computer.compute(src, token_reader[key])
         np.save(dump_dir / key, alis)
-    logger.info("Processed {:d} utterance done".format(len(src_reader)))
+    logger.info(f"Processed {len(src_reader)} utterance done")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Command to compute attention alignments",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("checkpoint",
-                        type=str,
-                        help="Checkpoint of the E2E model")
     parser.add_argument("feats_or_wav_scp",
                         type=str,
                         help="Feature/Wave scripts")
     parser.add_argument("token_scp",
                         type=str,
                         help="Rspecifier for evaluation transcriptions")
+    parser.add_argument("--checkpoint",
+                        type=str,
+                        required=True,
+                        help="Checkpoint of the E2E model")
     parser.add_argument("--device-id",
                         type=int,
                         default=-1,

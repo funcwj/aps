@@ -202,7 +202,8 @@ class PyramidEncoder(nn.Module):
                 if T % 2:
                     x_pad = x_pad[:, :-1]
                 # concat
-                x_pad = x_pad.reshape(-1, T // 2, 2 * F)
+                half = [x_pad[:, ::2], x_pad[:, 1::2]]
+                x_pad = th.cat(half, -1)
                 if x_len is not None:
                     x_len = x_len // 2
         x_pad = self.proj(x_pad)
