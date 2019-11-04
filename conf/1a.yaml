@@ -23,7 +23,7 @@ nnet_conf:
     att_dim: 512
 
 transform:
-  feats: "fbank-log-cmvn-delta"
+  feats: "fbank-log-aug-cmvn-delta"
   frame_len: 400
   frame_hop: 160
   window: "hamm"

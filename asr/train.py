@@ -2,14 +2,15 @@
 
 # wujian@2019
 
+import yaml
 import pprint
 import argparse
-import yaml
 
 from pathlib import Path
 from libs.utils import get_logger, StrToBoolAction
 from libs.trainer import S2STrainer
 from loader import wav_loader, kaldi_loader
+from loader.utils import count_token
 from transform.asr import FeatureTransform
 
 from seq2seq import Seq2Seq
@@ -48,51 +49,60 @@ def run(args):
     with open(args.conf, "r") as f:
         conf = yaml.load(f, Loader=yaml.FullLoader)
 
-    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
-
     # add dictionary info
     with open(args.dict, "rb") as f:
         token2idx = [line.decode("utf-8").split()[0] for line in f]
-        conf["nnet_conf"]["sos"] = token2idx.index("<sos>")
-        conf["nnet_conf"]["eos"] = token2idx.index("<eos>")
-        conf["nnet_conf"]["vocab_size"] = len(token2idx)
 
+    conf["nnet_conf"]["sos"] = token2idx.index("<sos>")
+    conf["nnet_conf"]["eos"] = token2idx.index("<eos>")
+    conf["nnet_conf"]["vocab_size"] = len(token2idx)
+
+    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
     # dump configurations
     with open(checkpoint / "train.yaml", "w") as f:
         yaml.dump(conf, f)
+
+    data_conf = conf["data_conf"]
+    trn_loader = get_dataloader(**data_conf["train"],
+                                train=True,
+                                batch_size=args.batch_size,
+                                **data_conf["loader"])
+    dev_loader = get_dataloader(**data_conf["valid"],
+                                train=False,
+                                batch_size=args.batch_size,
+                                **data_conf["loader"])
+    print(
+        f"Number of batches (train/valid) = {len(trn_loader)}/{len(dev_loader)}",
+        flush=True)
 
     if "transform" in conf:
         transform = FeatureTransform(**conf["transform"])
     else:
         transform = None
 
+    trainer_conf = conf["trainer_conf"]
+    if trainer_conf["lsm_factor"] > 0:
+        token_count = count_token(data_conf["train"]["token_scp"],
+                                  conf["nnet_conf"]["vocab_size"])
+    else:
+        token_count = None
     nnet = Seq2Seq(**conf["nnet_conf"], transform=transform)
     trainer = S2STrainer(nnet,
                          device_ids=device_ids,
                          checkpoint=args.checkpoint,
                          resume=resume,
+                         token_count=token_count,
                          save_interval=args.save_interval,
                          tensorboard=args.tensorboard,
-                         **conf["trainer_conf"])
-    data_conf = conf["data_conf"]
-    train_loader = get_dataloader(**data_conf["train"],
-                                  train=True,
-                                  batch_size=args.batch_size,
-                                  **data_conf["loader"])
-    valid_loader = get_dataloader(**data_conf["valid"],
-                                  train=False,
-                                  batch_size=args.batch_size,
-                                  **data_conf["loader"])
-    print(
-        f"Number of batches (train/valid) = {len(train_loader)}/{len(valid_loader)}",
-        flush=True)
+                         **trainer_conf)
+
     if args.eval_interval > 0:
-        trainer.run_batch_per_epoch(train_loader,
-                                    valid_loader,
+        trainer.run_batch_per_epoch(trn_loader,
+                                    dev_loader,
                                     num_epoches=args.epoches,
                                     eval_interval=args.eval_interval)
     else:
-        trainer.run(train_loader, valid_loader, num_epoches=args.epoches)
+        trainer.run(trn_loader, dev_loader, num_epoches=args.epoches)
 
 
 if __name__ == "__main__":

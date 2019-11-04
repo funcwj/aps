@@ -31,3 +31,5 @@ $cmd --gpu 1 train.$exp_id.log \
     --batch-size $batch_size \
     --epoches $epoches \
     --eval-interval $eval_interval
+
+mv train.$exp_id.log exp/aishell_v1/$exp_id

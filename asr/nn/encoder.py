@@ -198,7 +198,7 @@ class PyramidEncoder(nn.Module):
         for layer in self.rnns:
             x_pad = layer(x_pad, x_len)
             if self.pyramid:
-                _, T, F = x_pad.shape
+                _, T, _ = x_pad.shape
                 if T % 2:
                     x_pad = x_pad[:, :-1]
                 # concat

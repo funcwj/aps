@@ -89,7 +89,8 @@ class S2STrainer(object):
                  device_ids=0,
                  optimizer_kwargs=None,
                  lr_scheduler_kwargs=None,
-                 label_smooth=0,
+                 lsm_factor=0,
+                 token_count=None,
                  schedule_sampling=0,
                  gradient_clip=None,
                  logging_period=100,
@@ -110,8 +111,14 @@ class S2STrainer(object):
         self.cur_epoch = 0  # zero based
         self.no_impr = no_impr
         self.save_interval = save_interval
-        self.label_smooth = label_smooth
+        self.lsm_factor = lsm_factor
         self.ssr = schedule_sampling
+        if token_count is None:
+            self.token_prob = None
+        else:
+            token_count[nnet.eos] = token_count[-1]
+            token_prob = token_count[:-1] / th.sum(token_count[:-1])
+            self.token_prob = token_prob.to(self.default_device)
 
         if resume:
             if not Path(resume).exists():
@@ -158,6 +165,9 @@ class S2STrainer(object):
             th.save(cpt, self.checkpoint / f"{epoch}.pt.tar")
 
     def create_optimizer(self, optimizer, kwargs, state=None):
+        """
+        Return a pytorch-optimizer
+        """
         supported_optimizer = {
             "sgd": th.optim.SGD,  # momentum, weight_decay, lr
             "rmsprop": th.optim.RMSprop,  # momentum, weight_decay, lr
@@ -215,10 +225,7 @@ class S2STrainer(object):
         for i in range(tgts.shape[0]):
             tgts[i, egs["y_len"][i]] = self.nnet.eos
         # compute loss
-        if self.label_smooth > 0:
-            loss = self._ls_loss(outs, tgts)
-        else:
-            loss = self._ce_loss(outs, tgts)
+        loss = self._ce_loss(outs, tgts)
         # compute accu
         accu = self._compute_accu(outs, tgts)
         return loss, accu
@@ -239,34 +246,28 @@ class S2STrainer(object):
         """
         Cross entropy loss
         """
-        _, _, V = outs.shape
+        N, _, V = outs.shape
         # N(To+1) x V
         outs = outs.view(-1, V)
         # N(To+1)
         tgts = tgts.view(-1)
-        loss = F.cross_entropy(outs, tgts, ignore_index=-1, reduction="mean")
-        return loss
-
-    def _ls_loss(self, outs, tgts):
-        """
-        Label smooth loss
-        """
-        _, _, V = outs.shape
-        # NT x V
-        outs = outs.view(-1, V)
-        # NT
-        tgts = tgts.view(-1)
-        mask = (tgts != -1)
-        # M x V
-        outs = th.masked_select(outs, mask.unsqueeze(-1)).view(-1, V)
-        # M
-        tgts = th.masked_select(tgts, mask)
-        # M x V
-        dist = outs.new_full(outs.size(), self.label_smooth / (V - 1))
-        dist = dist.scatter_(1, tgts.unsqueeze(-1), 1 - self.label_smooth)
-        # KL distance
-        loss = F.kl_div(F.log_softmax(outs, -1), dist, reduction="batchmean")
-        return loss
+        ce_loss = F.cross_entropy(outs,
+                                  tgts,
+                                  ignore_index=-1,
+                                  reduction="mean")
+        if self.lsm_factor > 0:
+            if self.token_prob is None:
+                raise RuntimeError(
+                    "trainer.token_prob is None but lsm_factor != 0")
+            mask = (tgts != -1)
+            # M x V
+            outs = th.masked_select(outs, mask.unsqueeze(-1)).view(-1, V)
+            # M x V
+            ls_loss = -F.log_softmax(outs, -1) * self.token_prob
+            ls_loss = th.sum(ls_loss.view(-1), dim=0) / N
+            ce_loss = ce_loss * (1 -
+                                 self.lsm_factor) + ls_loss * self.lsm_factor
+        return ce_loss
 
     def train(self, data_loader):
         self.nnet.train()

@@ -40,6 +40,26 @@ def process_token(token_scp,
     return token_set
 
 
+def count_token(token_scp, vocab_size):
+    """
+    Count number of each token
+    """
+    token_count = th.zeros(vocab_size + 1, dtype=th.float32)
+    token_reader = BaseReader(token_scp,
+                              value_processor=lambda l: [int(n) for n in l],
+                              num_tokens=-1)
+    num_utts = 0
+    for key, token in token_reader:
+        if len(token):
+            token_count[token] += 1
+            num_utts += 1
+        else:
+            print(f"Empty utterance: {key}")
+    token_count = th.clamp(token_count, min=1)
+    token_count[-1] = num_utts
+    return token_count
+
+
 class BatchSampler(dat.Sampler):
     """
     A custom batchsampler

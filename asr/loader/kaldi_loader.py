@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 # wujian@2019
-
+"""
+Dataloader for kaldi features
+"""
 import random
 
 import numpy as np

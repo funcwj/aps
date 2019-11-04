@@ -1,5 +1,7 @@
-numpy==1.16.2
-torch==1.1.0
-matplotlib==3.0.3
+torch==1.2.0
+kaldi_python_io==1.0.1
+numpy==1.16.4
 librosa==0.6.3
-PyYAML==5.1.1
+SoundFile==0.10.2
+scipy==1.2.1
+PyYAML==5.1.2

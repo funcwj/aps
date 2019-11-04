@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 # wujian@2019
-
+"""
+Dataloader for raw waveforms
+"""
 import numpy as np
 import torch as th
 import soundfile as sf
