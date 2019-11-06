@@ -51,7 +51,9 @@ def specaug(spec,
     :param int num_time_masks: number of time masks
     :param bool replace_with_zero: if True, masked parts will be filled with 0, if False, filled with mean
     """
-    return time_mask(freq_mask(time_warp(spec, W=W),
+    if W:
+        spec = time_warp(spec, W=W)
+    return time_mask(freq_mask(spec,
                                F=F,
                                num_masks=num_freq_masks,
                                replace_with_zero=replace_with_zero),

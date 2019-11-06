@@ -14,7 +14,7 @@ from loader.wav_loader import WaveReader
 from kaldi_python_io import ScriptReader
 from kaldi_python_io import Reader as BaseReader
 
-from seq2seq import Seq2Seq
+from common import E2EASR
 from transform.asr import FeatureTransform
 
 logger = get_logger(__name__)
@@ -45,7 +45,7 @@ def run(args):
     token_reader = BaseReader(args.token_scp,
                               value_processor=lambda l: [int(n) for n in l],
                               num_tokens=-1)
-    computer = Computer(Seq2Seq,
+    computer = Computer(E2EASR,
                         FeatureTransform,
                         args.checkpoint,
                         device_id=args.device_id)

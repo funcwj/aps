@@ -13,7 +13,7 @@ from loader import wav_loader, kaldi_loader
 from loader.utils import count_token
 from transform.asr import FeatureTransform
 
-from seq2seq import Seq2Seq
+from nn.common import E2EASR
 
 
 def get_dataloader(fmt="wav", **kwargs):
@@ -86,7 +86,7 @@ def run(args):
                                   conf["nnet_conf"]["vocab_size"])
     else:
         token_count = None
-    nnet = Seq2Seq(**conf["nnet_conf"], transform=transform)
+    nnet = E2EASR(**conf["nnet_conf"], transform=transform)
     trainer = S2STrainer(nnet,
                          device_ids=device_ids,
                          checkpoint=args.checkpoint,

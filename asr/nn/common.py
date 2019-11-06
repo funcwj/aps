@@ -11,14 +11,14 @@ import torch.nn.functional as F
 
 from torch.nn.utils.rnn import pack_padded_sequence
 
-from nn.decoder import TorchDecoder
-from nn.encoder import encoder_instance
-from nn.attention import att_instance
+from .recurrent.decoder import TorchDecoder
+from .recurrent.encoder import encoder_instance
+from .recurrent.attention import att_instance
 
 
-class Seq2Seq(nn.Module):
+class E2EASR(nn.Module):
     """
-    A simple attention based sequence-to-sequence model
+    A recurrent structure end-to-end ASR model
     """
     def __init__(
             self,
@@ -36,7 +36,7 @@ class Seq2Seq(nn.Module):
             # decoder
             decoder_dim=512,
             decoder_kwargs=None):
-        super(Seq2Seq, self).__init__()
+        super(E2EASR, self).__init__()
         self.encoder = encoder_instance(encoder_type, input_size, encoder_proj,
                                         **encoder_kwargs)
         attend = att_instance(att_type, encoder_proj, decoder_dim,
@@ -46,8 +46,7 @@ class Seq2Seq(nn.Module):
                                     attention=attend,
                                     **decoder_kwargs)
         if not eos or not sos:
-            raise RuntimeError("Unsupported SOS/EOS "
-                               "value: {:d}/{:d}".format(sos, eos))
+            raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         self.sos = sos
         self.eos = eos
         self.transform = transform

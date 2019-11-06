@@ -10,8 +10,8 @@ from loader.wav_loader import WaveReader
 
 from kaldi_python_io import ScriptReader
 
-from seq2seq import Seq2Seq
 from transform.asr import FeatureTransform
+from nn.common import E2EASR
 
 logger = get_logger(__name__)
 
@@ -35,7 +35,7 @@ def run(args):
             vocab = {w: idx for w, idx in line.split() for line in f}
     else:
         vocab = None
-    decoder = Decoder(Seq2Seq,
+    decoder = Decoder(E2EASR,
                       FeatureTransform,
                       args.checkpoint,
                       device_id=args.device_id)

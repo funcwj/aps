@@ -117,45 +117,6 @@ class LogTransform(nn.Module):
         return th.log(x)
 
 
-class SpecAugTransform(nn.Module):
-    """
-    Spectra data augmentation
-    """
-    def __init__(self,
-                 wrap_step=4,
-                 mask_band=30,
-                 mask_step=40,
-                 num_bands=2,
-                 num_steps=2):
-        super(SpecAugTransform, self).__init__()
-        self.num_bands, self.num_steps = num_bands, num_steps
-        self.W, self.F, self.T = wrap_step, mask_band, mask_step
-
-    def extra_repr(self):
-        return f"time_wrap={self.W}, max_band={self.F}, max_step={self.T} " \
-                + f"num_bands={self.num_bands}, num_steps={self.num_steps}"
-
-    def forward(self, x):
-        """
-        x: features N x C x T x F or N x T x F
-        """
-        if self.training:
-            if x.dim() == 4:
-                raise RuntimeError("Not supported for multi-channel")
-            aug = []
-            for n in range(x.shape[0]):
-                aug.append(
-                    specaug(x[n],
-                            W=self.W,
-                            F=self.F,
-                            T=self.T,
-                            num_freq_masks=self.num_bands,
-                            num_time_masks=self.num_steps,
-                            replace_with_zero=True))
-            x = th.stack(aug, 0)
-        return x
-
-
 class CmvnTransform(nn.Module):
     """
     Utterance-level mean-variance normalization
@@ -184,6 +145,47 @@ class CmvnTransform(nn.Module):
             x -= m
         if self.norm_var:
             x /= th.clamp(s, min=EPSILON)
+        return x
+
+
+class SpecAugTransform(nn.Module):
+    """
+    Spectra data augmentation
+    """
+    def __init__(self,
+                 p=0.5,
+                 wrap_step=4,
+                 mask_band=30,
+                 mask_step=40,
+                 num_bands=2,
+                 num_steps=2):
+        super(SpecAugTransform, self).__init__()
+        self.num_bands, self.num_steps = num_bands, num_steps
+        self.W, self.F, self.T = wrap_step, mask_band, mask_step
+        self.p = p
+
+    def extra_repr(self):
+        return f"time_wrap={self.W}, max_band={self.F}, max_step={self.T}, p={self.p}, " \
+                + f"num_bands={self.num_bands}, num_steps={self.num_steps}"
+
+    def forward(self, x):
+        """
+        x: features N x C x T x F or N x T x F
+        """
+        if self.training and th.rand(1).item() < self.p:
+            if x.dim() == 4:
+                raise RuntimeError("Not supported for multi-channel")
+            aug = []
+            for n in range(x.shape[0]):
+                aug.append(
+                    specaug(x[n],
+                            W=self.W,
+                            F=self.F,
+                            T=self.T,
+                            num_freq_masks=self.num_bands,
+                            num_time_masks=self.num_steps,
+                            replace_with_zero=True))
+            x = th.stack(aug, 0)
         return x
 
 
@@ -237,6 +239,7 @@ class FeatureTransform(nn.Module):
                  round_pow_of_two=True,
                  sr=16000,
                  num_mels=80,
+                 aug_prob=0,
                  wrap_step=4,
                  mask_band=30,
                  mask_step=40,
@@ -271,18 +274,26 @@ class FeatureTransform(nn.Module):
                                  sr=sr,
                                  num_mels=num_mels))
                 feats_dim = transform[-1].dim()
+            elif tok == "mel":
+                transform.append(
+                    MelTransform(frame_len,
+                                 round_pow_of_two=round_pow_of_two,
+                                 sr=sr,
+                                 num_mels=num_mels))
+                feats_dim = transform[-1].dim()
             elif tok == "log":
                 transform.append(LogTransform(eps=eps))
+            elif tok == "cmvn":
+                transform.append(
+                    CmvnTransform(norm_mean=norm_mean, norm_var=norm_var))
             elif tok == "aug":
                 transform.append(
-                    SpecAugTransform(wrap_step=wrap_step,
+                    SpecAugTransform(p=aug_prob,
+                                     wrap_step=wrap_step,
                                      mask_band=mask_band,
                                      mask_step=mask_step,
                                      num_bands=num_aug_bands,
                                      num_steps=num_aug_steps))
-            elif tok == "cmvn":
-                transform.append(
-                    CmvnTransform(norm_mean=norm_mean, norm_var=norm_var))
             elif tok == "delta":
                 transform.append(DeltaTransform(ctx=ctx, order=order))
                 feats_dim *= (1 + order)

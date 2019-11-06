@@ -20,6 +20,8 @@ from torch import autograd
 
 from .utils import get_device_ids, get_logger, load_obj, SimpleTimer
 
+IGNORE_ID = -1
+
 
 class ProgressReporter(object):
     """
@@ -207,25 +209,33 @@ class S2STrainer(object):
             y_len: N
         """
         # N x To, -1 => EOS
-        ignore_mask = (egs["y_pad"] == -1)
+        ignore_mask = (egs["y_pad"] == IGNORE_ID)
         y_pad = egs["y_pad"].masked_fill(ignore_mask, self.nnet.eos)
+        if ssr > 0:
+            f_arg = (egs["x_pad"], egs["x_len"], y_pad, ssr)
+        else:
+            f_arg = (egs["x_pad"], egs["x_len"], y_pad)
         # outs, alis
         # N x (To+1) x V
         # N x (To+1) x Ti
         outs, alis = data_parallel(self.nnet,
-                                   (egs["x_pad"], egs["x_len"], y_pad, ssr),
+                                   f_arg,
                                    device_ids=self.device_ids)
-
+        # dump alignments
         if dump_ali:
             self._dump_ali(self.checkpoint / str(self.cur_epoch),
                            str(uuid.uuid4()), alis)
         # N x (To+1), pad -1
-        tgts = F.pad(egs["y_pad"], (0, 1), value=-1)
+        tgts = F.pad(egs["y_pad"], (0, 1), value=IGNORE_ID)
         # add eos
-        for i in range(tgts.shape[0]):
-            tgts[i, egs["y_len"][i]] = self.nnet.eos
+        # for i in range(tgts.shape[0]):
+        #   tgts[i, egs["y_len"][i]] = self.nnet.eos
+        tgts = tgts.scatter(1, egs["y_len"][:, None], self.nnet.eos)
         # compute loss
-        loss = self._ce_loss(outs, tgts)
+        if self.lsm_factor > 0:
+            loss = self._ls_loss(outs, tgts)
+        else:
+            loss = self._ce_loss(outs, tgts)
         # compute accu
         accu = self._compute_accu(outs, tgts)
         return loss, accu
@@ -237,7 +247,7 @@ class S2STrainer(object):
         # N x (To+1)
         pred = th.argmax(outs.detach(), dim=-1)
         # ignore mask, -1
-        mask = (tgts != -1)
+        mask = (tgts != IGNORE_ID)
         ncorr = th.sum(pred[mask] == tgts[mask]).item()
         total = th.sum(mask).item()
         return float(ncorr) / total
@@ -246,7 +256,7 @@ class S2STrainer(object):
         """
         Cross entropy loss
         """
-        N, _, V = outs.shape
+        _, _, V = outs.shape
         # N(To+1) x V
         outs = outs.view(-1, V)
         # N(To+1)
@@ -255,19 +265,40 @@ class S2STrainer(object):
                                   tgts,
                                   ignore_index=-1,
                                   reduction="mean")
-        if self.lsm_factor > 0:
-            if self.token_prob is None:
-                raise RuntimeError(
-                    "trainer.token_prob is None but lsm_factor != 0")
-            mask = (tgts != -1)
-            # M x V
-            outs = th.masked_select(outs, mask.unsqueeze(-1)).view(-1, V)
-            # M x V
-            ls_loss = -F.log_softmax(outs, -1) * self.token_prob
-            ls_loss = th.sum(ls_loss.view(-1), dim=0) / N
-            ce_loss = ce_loss * (1 -
-                                 self.lsm_factor) + ls_loss * self.lsm_factor
+        # if self.lsm_factor > 0:
+        #     if self.token_prob is None:
+        #         raise RuntimeError(
+        #             "trainer.token_prob is None but lsm_factor != 0")
+        #     mask = (tgts != -1)
+        #     # M x V
+        #     outs = th.masked_select(outs, mask.unsqueeze(-1)).view(-1, V)
+        #     # M x V
+        #     ls_loss = -F.log_softmax(outs, -1) * self.token_prob
+        #     ls_loss = th.sum(ls_loss.view(-1), dim=0) / N
+        #     ce_loss = ce_loss * (1 -
+        #                          self.lsm_factor) + ls_loss * self.lsm_factor
         return ce_loss
+
+    def _ls_loss(self, outs, tgts):
+        """
+        Label smooth loss (using KL)
+        """
+        _, _, V = outs.shape
+        # NT x V
+        outs = outs.view(-1, V)
+        # NT
+        tgts = tgts.view(-1)
+        mask = (tgts != IGNORE_ID)
+        # M x V
+        outs = th.masked_select(outs, mask.unsqueeze(-1)).view(-1, V)
+        # M
+        tgts = th.masked_select(tgts, mask)
+        # M x V
+        dist = outs.new_full(outs.size(), self.lsm_factor / (V - 1))
+        dist = dist.scatter_(1, tgts.unsqueeze(-1), 1 - self.lsm_factor)
+        # KL distance
+        loss = F.kl_div(F.log_softmax(outs, -1), dist, reduction="batchmean")
+        return loss
 
     def train(self, data_loader):
         self.nnet.train()
