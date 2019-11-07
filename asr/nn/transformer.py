@@ -172,6 +172,7 @@ class TransformerASR(nn.Module):
         self.sos = sos
         self.eos = eos
         self.transform = transform
+        self.output = nn.Linear(att_dim, vocab_size, bias=False)
 
     def _prep_pad_mask(self, x_len, y_pad):
         """
@@ -195,10 +196,9 @@ class TransformerASR(nn.Module):
         Prepare a square sub-sequence masks (-inf/0)
         """
         _, T = mat.shape
-        mask = (th.triu(th.ones(T, T, device=mat.device)) == 1).float()
-        # mask = mask.float()
+        mask = (th.triu(th.ones(T, T, device=mat.device),
+                        diagonal=1) == 1).float()
         mask = mask.masked_fill(mask == 1, float("-inf"))
-        # mask = mask.masked_fill(mask == 1, float(0.0))
         return mask
 
     def forward(self, x_pad, x_len, y_pad):
@@ -218,7 +218,8 @@ class TransformerASR(nn.Module):
         y_pad, src_pad_mask, tgt_pad_mask = self._prep_pad_mask(x_len, y_pad)
         # genrarte target masks
         tgt_mask = self._prep_sub_mask(y_pad)
-        # N x Ti x D => Ti x N x D
+        # x_emb: N x Ti x D => Ti x N x D
+        # src_pad_mask: N x Ti
         x_emb, src_pad_mask = self.src_embed(x_pad, mask=src_pad_mask)
         # N x To+1
         y_tgt, _ = self.tgt_embed(y_pad)
@@ -231,6 +232,7 @@ class TransformerASR(nn.Module):
                                memory_mask=None,
                                tgt_key_padding_mask=tgt_pad_mask,
                                memory_key_padding_mask=src_pad_mask)
+        dec_out = self.output(dec_out)
         # N x To+1 x D
-        dec_out = th.einsum("tnf->ntf", dec_out)
-        return dec_out
+        dec_out = dec_out.transpose(0, 1).contiguous()
+        return dec_out, None

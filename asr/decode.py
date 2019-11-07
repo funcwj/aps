@@ -4,14 +4,13 @@ import argparse
 
 import torch as th
 
+import nn
 from libs.evaluator import Evaluator
 from libs.utils import get_logger
 from loader.wav_loader import WaveReader
+from transform.asr import FeatureTransform
 
 from kaldi_python_io import ScriptReader
-
-from transform.asr import FeatureTransform
-from nn.common import E2EASR
 
 logger = get_logger(__name__)
 
@@ -35,7 +34,11 @@ def run(args):
             vocab = {w: idx for w, idx in line.split() for line in f}
     else:
         vocab = None
-    decoder = Decoder(E2EASR,
+    nnet_templ = {
+        "common": nn.common.E2EASR,
+        "transformer": nn.transformer.TransformerASR
+    }
+    decoder = Decoder(nnet_templ[args.nnet],
                       FeatureTransform,
                       args.checkpoint,
                       device_id=args.device_id)
@@ -104,5 +107,10 @@ if __name__ == "__main__":
                         default=-1,
                         help="GPU-id to offload model to, "
                         "-1 means running on CPU")
+    parser.add_argument("--nnet",
+                        type=str,
+                        default="common",
+                        choices=["common", "transformer"],
+                        help="Network type used")
     args = parser.parse_args()
     run(args)

@@ -13,8 +13,6 @@ from loader import wav_loader, kaldi_loader
 from loader.utils import count_token
 from transform.asr import FeatureTransform
 
-from nn.common import E2EASR
-
 
 def get_dataloader(fmt="wav", **kwargs):
     """
@@ -86,7 +84,17 @@ def run(args):
                                   conf["nnet_conf"]["vocab_size"])
     else:
         token_count = None
-    nnet = E2EASR(**conf["nnet_conf"], transform=transform)
+
+    ntype = conf["nnet_type"]
+    if ntype == "common":
+        from nn.common import E2EASR
+        nnet = E2EASR(**conf["nnet_conf"], transform=transform)
+    elif ntype == "transformer":
+        from nn.transformer import TransformerASR
+        nnet = TransformerASR(**conf["nnet_conf"], transform=transform)
+    else:
+        raise RuntimeError(f"Unknown type of network: {ntype}")
+
     trainer = S2STrainer(nnet,
                          device_ids=device_ids,
                          checkpoint=args.checkpoint,

@@ -265,18 +265,6 @@ class S2STrainer(object):
                                   tgts,
                                   ignore_index=-1,
                                   reduction="mean")
-        # if self.lsm_factor > 0:
-        #     if self.token_prob is None:
-        #         raise RuntimeError(
-        #             "trainer.token_prob is None but lsm_factor != 0")
-        #     mask = (tgts != -1)
-        #     # M x V
-        #     outs = th.masked_select(outs, mask.unsqueeze(-1)).view(-1, V)
-        #     # M x V
-        #     ls_loss = -F.log_softmax(outs, -1) * self.token_prob
-        #     ls_loss = th.sum(ls_loss.view(-1), dim=0) / N
-        #     ce_loss = ce_loss * (1 -
-        #                          self.lsm_factor) + ls_loss * self.lsm_factor
         return ce_loss
 
     def _ls_loss(self, outs, tgts):
