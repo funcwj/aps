@@ -114,7 +114,7 @@ class TorchDecoder(nn.Module):
     def beam_search(self,
                     enc_out,
                     beam=8,
-                    nbest=5,
+                    nbest=1,
                     max_len=None,
                     sos=-1,
                     eos=-1):
@@ -126,13 +126,15 @@ class TorchDecoder(nn.Module):
         # reset flags
         self.attend.reset()
 
+        if beam < nbest:
+            raise RuntimeError("N-best value can not exceed " +
+                               f"beam size, {beam:d} vs {nbest:d}")
         if sos < 0 or eos < 0:
-            raise RuntimeError("Invalid SOS/EOS ID: {:d}/{:d}".format(
-                sos, eos))
+            raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
         N, T, D_enc = enc_out.shape
         if N != 1:
-            raise RuntimeError("Got batch size {:d}, now only "
-                               "support one utterance".format(N))
+            raise RuntimeError(
+                f"Got batch size {N:d}, now only support one utterance")
         att_ctx = th.zeros([N, D_enc], device=enc_out.device)
 
         def init_node():
@@ -208,3 +210,116 @@ class TorchDecoder(nn.Module):
             "score": n["score"],
             "trans": n["trans"]
         } for n in nbest_nodes]
+
+    def beam_search_parallel(self,
+                             enc_out,
+                             beam=8,
+                             nbest=1,
+                             max_len=None,
+                             sos=-1,
+                             eos=-1):
+        """
+        Beam search algothrim
+        args
+            enc_out: N x T x F
+        """
+        # reset flags
+        self.attend.reset()
+
+        if beam < nbest:
+            raise RuntimeError("N-best value can not exceed " +
+                               f"beam size, {beam:d} vs {nbest:d}")
+        if sos < 0 or eos < 0:
+            raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
+        N, T, D_enc = enc_out.shape
+        if N != 1:
+            raise RuntimeError(
+                f"Got batch size {N:d}, now only support one utterance")
+        if max_len is None:
+            max_len = T
+
+        dev = enc_out.device
+        att_ali = None
+        dec_hid = None
+        # N x T x F => N*beam x T x F
+        enc_out = th.repeat_interleave(enc_out, beam, 0)
+        att_ctx = th.zeros([N * beam, D_enc], device=dev)
+
+        # False
+        end = (th.ones(N * beam, device=dev) == 0)
+        sos_mat = th.tensor([sos] * (beam * N), dtype=th.int64, device=dev)
+        eos_mat = th.tensor([eos] * (beam * N), dtype=th.int64, device=dev)
+        eos_dev = th.tensor(eos, dtype=th.int64, device=dev)
+        accu_score = th.zeros(beam, device=dev)
+        hist_token = [sos_mat]
+        # step by step
+        for t in range(max_len):
+            # beam
+            out = hist_token[-1]
+            # beam x E
+            out_emb = self.vocab_embed(out)
+            # active mask
+            act_idx = th.nonzero(end == False).view(-1)
+            act_num = th.sum(end == False).item()
+            # print(f"Active nodes: {act_num:d}, t = {t:d}")
+            # dec_out: beam x D_dec
+            dec_out, dec_hid = self._step_decoder(out_emb,
+                                                  att_ctx,
+                                                  dec_hid=dec_hid)
+            # compute align context, beam x D_enc
+            att_ali, att_ctx = self.attend(enc_out, None, dec_out, att_ali)
+            # pred: beam x V
+            pred = self.output(th.cat([dec_out, att_ctx], dim=-1))
+            # compute prob: beam x V, nagetive
+            prob = F.log_softmax(pred, dim=-1)
+            # filter prob: ~beam x V
+            prob = prob[act_idx]
+            # local pruning: ~beam x beam
+            topk_score, topk_token = th.topk(prob, beam, dim=-1)
+            if t == 0:
+                # beam
+                accu_score += topk_score[0]
+                token = topk_token[0]
+            else:
+                # global pruning
+                # ~beam x 1 + ~beam x beam => ~beam x beam
+                beam_score = accu_score[..., None][act_idx] + topk_score
+                # ~beam*beam => ~beam
+                topk_score, topk_index = th.topk(beam_score.view(-1),
+                                                 act_num,
+                                                 dim=-1)
+                # update accu_score
+                accu_score[act_idx] = topk_score
+                # 1 x ~beam*beam
+                topk_token = topk_token.view(1, -1)
+                # 1 x ~beam
+                cur_token = th.gather(topk_token, 1, topk_index[None, ...])
+                # update token
+                token = eos_mat.clone()
+                token[act_idx] = cur_token[0]
+            # add best token
+            hist_token.append(token)
+            # set end flags
+            end += (token == eos_dev)
+            # all True
+            if th.sum(end).item() == N * beam:
+                break
+        # beam
+        score_sort, score_argx = th.sort(accu_score, dim=-1, descending=True)
+        # nbest
+        score_sort = score_sort[:nbest].tolist()
+        score_argx = score_argx[:nbest].tolist()
+        trans_set = []
+        for argx in score_argx:
+            trans = []
+            for token in hist_token:
+                trans.append(token[argx].item())
+                if trans[-1] == eos:
+                    break
+            if trans[-1] != eos:
+                trans.append(eos)
+            trans_set.append(trans)
+        return [{
+            "score": s,
+            "trans": t
+        } for s, t in zip(score_sort, trans_set)]

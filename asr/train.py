@@ -12,6 +12,7 @@ from libs.trainer import S2STrainer
 from loader import wav_loader, kaldi_loader
 from loader.utils import count_token
 from transform.asr import FeatureTransform
+from nn import support_nnet
 
 
 def get_dataloader(fmt="wav", **kwargs):
@@ -85,15 +86,8 @@ def run(args):
     else:
         token_count = None
 
-    ntype = conf["nnet_type"]
-    if ntype == "common":
-        from nn.common import E2EASR
-        nnet = E2EASR(**conf["nnet_conf"], transform=transform)
-    elif ntype == "transformer":
-        from nn.transformer import TransformerASR
-        nnet = TransformerASR(**conf["nnet_conf"], transform=transform)
-    else:
-        raise RuntimeError(f"Unknown type of network: {ntype}")
+    NNET_CLS = support_nnet(conf["nnet_type"])
+    nnet = NNET_CLS(**conf["nnet_conf"], transform=transform)
 
     trainer = S2STrainer(nnet,
                          device_ids=device_ids,

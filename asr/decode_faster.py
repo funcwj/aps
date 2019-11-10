@@ -14,12 +14,12 @@ from kaldi_python_io import ScriptReader
 logger = get_logger(__name__)
 
 
-class Decoder(Evaluator):
+class FasterDecoder(Evaluator):
     """
     Decoder wrapper
     """
     def __init__(self, *args, **kwargs):
-        super(Decoder, self).__init__(*args, **kwargs)
+        super(FasterDecoder, self).__init__(*args, **kwargs)
 
     def compute(self, src, **kwargs):
         src = th.from_numpy(src).to(self.device)
@@ -33,10 +33,10 @@ def run(args):
             vocab = {w: idx for w, idx in line.split() for line in f}
     else:
         vocab = None
-    decoder = Decoder(support_nnet(args.nnet),
-                      FeatureTransform,
-                      args.checkpoint,
-                      device_id=args.device_id)
+    decoder = FasterDecoder(support_nnet(args.nnet),
+                            FeatureTransform,
+                            args.checkpoint,
+                            device_id=args.device_id)
     if decoder.raw_waveform:
         src_reader = WaveReader(args.feats_or_wav_scp, sr=16000)
     else:
@@ -49,7 +49,8 @@ def run(args):
         nbest = decoder.compute(src,
                                 beam=args.beam_size,
                                 nbest=1,
-                                max_len=args.max_len)
+                                max_len=args.max_len,
+                                parallel=True)
         for token in nbest:
             score = token["score"]
             logger.info(f"{key}\tscore = {score:.2f}")

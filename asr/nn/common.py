@@ -75,7 +75,7 @@ class E2EASR(nn.Module):
                                   schedule_sampling=ssr)
         return outs, alis
 
-    def beam_search(self, x, beam=8, nbest=5, max_len=None):
+    def beam_search(self, x, beam=8, nbest=5, max_len=None, parallel=False):
         """
         args
             x: S or Ti x F
@@ -91,9 +91,17 @@ class E2EASR(nn.Module):
                 if x.dim() != 2:
                     raise RuntimeError("Now only support for one utterance")
                 enc_out, _ = self.encoder(x.unsqueeze(0), None)
-            return self.decoder.beam_search(enc_out,
-                                            beam=beam,
-                                            nbest=nbest,
-                                            max_len=max_len,
-                                            sos=self.sos,
-                                            eos=self.eos)
+            if parallel:
+                return self.decoder.beam_search_parallel(enc_out,
+                                                         beam=beam,
+                                                         nbest=nbest,
+                                                         max_len=max_len,
+                                                         sos=self.sos,
+                                                         eos=self.eos)
+            else:
+                return self.decoder.beam_search(enc_out,
+                                                beam=beam,
+                                                nbest=nbest,
+                                                max_len=max_len,
+                                                sos=self.sos,
+                                                eos=self.eos)

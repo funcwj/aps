@@ -182,7 +182,7 @@ class TransformerASR(nn.Module):
         """
         if x_len is not None:
             src_mask = padding_mask(x_len)
-            src_mask = (src_mask == 1)
+            src_mask = (src_mask == 1)  # padding position = True
         else:
             src_mask = None
         # pad sos to y_pad N x To+1
@@ -214,14 +214,14 @@ class TransformerASR(nn.Module):
         if self.transform:
             x_pad, x_len = self.transform(x_pad, x_len)
 
-        # generate padding masks
+        # generate padding masks (True/False)
         y_pad, src_pad_mask, tgt_pad_mask = self._prep_pad_mask(x_len, y_pad)
-        # genrarte target masks
+        # genrarte target masks (-inf/0)
         tgt_mask = self._prep_sub_mask(y_pad)
         # x_emb: N x Ti x D => Ti x N x D
         # src_pad_mask: N x Ti
         x_emb, src_pad_mask = self.src_embed(x_pad, mask=src_pad_mask)
-        # N x To+1
+        # To+1 x N x E
         y_tgt, _ = self.tgt_embed(y_pad)
         # Ti x N x D
         enc_out = self.encoder(x_emb, src_key_padding_mask=src_pad_mask)
