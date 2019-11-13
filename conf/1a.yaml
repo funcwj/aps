@@ -1,4 +1,6 @@
-# default conf
+# CER: 9.50 on aishell_v1 test set
+
+nnet_type: "common"
 
 nnet_conf:
   input_size: 240
@@ -15,15 +17,16 @@ nnet_conf:
   decoder_dim: 256
   decoder_kwargs:
     rnn: "lstm"
-    num_layers: 3
+    num_layers: 2
     hidden_size: 256  # must eq decoder_dim
-    dropout: 0.2
+    dropout: 0
+    input_feeding: True
   att_type: "dot"
   att_kwargs:
     att_dim: 512
 
 transform:
-  feats: "fbank-log-aug-cmvn-delta"
+  feats: "fbank-log-cmvn-aug-delta"
   frame_len: 400
   frame_hop: 160
   window: "hamm"
@@ -34,6 +37,8 @@ transform:
   norm_var: True
   ctx: 2
   order: 2
+  aug_prob: 0.8
+  wrap_step: 4
 
 trainer_conf:
   optimizer: "adam"
@@ -42,13 +47,13 @@ trainer_conf:
     weight_decay: 1.0e-5
   lr_scheduler_kwargs:
     min_lr: 1.0e-8
-    patience: 3
+    patience: 1
     factor: 0.5
   logging_period: 100
-  gradient_clip: 10
+  gradient_clip: 5
   no_impr: 4
-  label_smooth: 0
-  schedule_sampling: 0
+  lsm_factor: 0.1
+  schedule_sampling: 0.2
 
 data_conf:
   fmt: "wav"  # or "kaldi"

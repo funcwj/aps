@@ -15,7 +15,7 @@ from kaldi_python_io import ScriptReader
 from kaldi_python_io import Reader as BaseReader
 
 from common import E2EASR
-from transform.asr import FeatureTransform
+from feats.asr import FeatureTransform
 
 logger = get_logger(__name__)
 

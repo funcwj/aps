@@ -11,7 +11,7 @@ from libs.utils import get_logger, StrToBoolAction
 from libs.trainer import S2STrainer
 from loader import wav_loader, kaldi_loader
 from loader.utils import count_token
-from transform.asr import FeatureTransform
+from feats.asr import FeatureTransform
 from nn import support_nnet
 
 
@@ -86,6 +86,8 @@ def run(args):
     else:
         token_count = None
 
+    if "nnet_type" not in conf:
+        conf["nnet_type"] = "common"
     NNET_CLS = support_nnet(conf["nnet_type"])
     nnet = NNET_CLS(**conf["nnet_conf"], transform=transform)
 
