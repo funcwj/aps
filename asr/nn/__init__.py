@@ -1,7 +1,7 @@
-from .common import E2EASR
+from .las_asr import LasASR
 from .transformer import TransformerASR
 
-nnet_templ = {"common": E2EASR, "transformer": TransformerASR}
+nnet_templ = {"las": LasASR, "transformer": TransformerASR}
 
 
 def support_nnet(nnet_type):

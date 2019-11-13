@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .recurrent.attention import padding_mask
+from .las.attention import padding_mask
 
 IGNORE_ID = -1
 

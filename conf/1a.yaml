@@ -1,6 +1,6 @@
 # CER: 9.50 on aishell_v1 test set
 
-nnet_type: "common"
+nnet_type: "las"
 
 nnet_conf:
   input_size: 240

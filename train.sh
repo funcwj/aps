@@ -21,7 +21,7 @@ cmd="/home/work_nfs/common/tools/pyqueue_asr.pl"
 python=$(which python)
 
 $cmd --gpu 1 train.$exp_id.log \
-  $python asr/train.py \
+  $python asr/train_am.py \
     --conf conf/$exp_id.yaml \
     --dict $dict \
     --tensorboard false \

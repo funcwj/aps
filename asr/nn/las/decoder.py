@@ -55,6 +55,29 @@ class TorchDecoder(nn.Module):
         # N x 1 x D_dec => N x D_dec
         return dec_out.squeeze(1), hx
 
+    def _step(self,
+              emb_pre,
+              enc_out,
+              att_ctx,
+              dec_hid=None,
+              att_ali=None,
+              enc_len=None,
+              proj=None):
+        """
+        Make a prediction step
+        """
+        # dec_out: N x D_dec
+        dec_out, dec_hid = self._step_decoder(
+            emb_pre, proj if self.input_feeding else att_ctx, dec_hid=dec_hid)
+        # att_ali: N x Ti
+        # att_ctx: N x D_enc
+        att_ali, att_ctx = self.attend(enc_out, enc_len, dec_out, att_ali)
+        # proj: N x D_enc
+        proj = self.proj(th.cat([dec_out, att_ctx], dim=-1))
+        # pred: N x V
+        pred = self.pred(F.relu(proj))
+        return att_ali, att_ctx, dec_hid, proj, pred
+
     def forward(self, enc_pad, enc_len, tgt_pad, sos=-1, schedule_sampling=0):
         """
         args
@@ -74,7 +97,6 @@ class TorchDecoder(nn.Module):
         outs = []  # collect prediction
         att_ali = None  # attention alignments
         dec_hid = None
-        dec_out = None
         dev = enc_pad.device
         # zero init context
         att_ctx = th.zeros([N, D_enc], device=dev)
@@ -96,19 +118,14 @@ class TorchDecoder(nn.Module):
                     out = tgt_pad[:, t - 1]
             # N x D_emb
             emb_pre = self.vocab_embed(out)
-            # dec_out: N x D_dec
-            dec_out, dec_hid = self._step_decoder(
-                emb_pre,
-                proj if self.input_feeding else att_ctx,
-                dec_hid=dec_hid)
-            # att_ali: N x Ti
-            # att_ctx: N x D_enc
-            att_ali, att_ctx = self.attend(enc_pad, enc_len, dec_out, att_ali)
-            # proj: N x D_enc
-            proj = self.proj(th.cat([dec_out, att_ctx], dim=-1))
-            # pred: N x V
-            pred = self.pred(F.relu(proj))
-            # pred = self.output(dec_out)
+            # step forward
+            att_ali, att_ctx, dec_hid, proj, pred = self._step(emb_pre,
+                                                               enc_pad,
+                                                               att_ctx,
+                                                               dec_hid=dec_hid,
+                                                               att_ali=att_ali,
+                                                               enc_len=enc_len,
+                                                               proj=proj)
             outs.append(pred)
             alis.append(att_ali)
         # N x To x V
@@ -166,22 +183,18 @@ class TorchDecoder(nn.Module):
             for n in alive:
                 # [x], out is different
                 out = th.tensor([n["trans"][-1]], dtype=th.int64, device=dev)
-                # dec_out: 1 x D_dec
-                dec_out, dec_hid = self._step_decoder(
+                # step forward
+                att_ali, att_ctx, dec_hid, proj, pred = self._step(
                     self.vocab_embed(out),
-                    n["proj"] if self.input_feeding else n["att_ctx"],
-                    dec_hid=n["dec_hid"])
-                # compute align context, 1 x D_enc
-                att_ali, att_ctx = self.attend(enc_out, None, dec_out,
-                                               n["att_ali"])
-                # proj: 1 x D_enc
-                proj = self.proj(th.cat([dec_out, att_ctx], dim=-1))
-                # pred: 1 x V
-                pred = self.pred(F.relu(proj))
+                    enc_out,
+                    n["att_ctx"],
+                    dec_hid=n["dec_hid"],
+                    att_ali=n["att_ali"],
+                    proj=n["proj"])
                 # compute prob: V, nagetive
                 prob = F.log_softmax(pred, dim=1).squeeze(0)
                 # beam
-                best_score, best_index = th.topk(prob, beam)
+                topk_score, topk_index = th.topk(prob, beam)
                 # new node
                 next_node_templ = {
                     "att_ali": att_ali,
@@ -190,14 +203,14 @@ class TorchDecoder(nn.Module):
                     "score": n["score"],
                     "proj": proj
                 }
-                for c in range(beam):
+                for score, index in zip(topk_score, topk_index):
                     # copy
                     new_node = next_node_templ.copy()
                     # add score
-                    new_node["score"] += best_score[c].item()
+                    new_node["score"] += score.item()
                     # add trans
                     new_node["trans"] = n["trans"].copy()
-                    new_node["trans"].append(best_index[c].item())
+                    new_node["trans"].append(index.item())
                     beams.append(new_node)
                 # clip beam
                 beams = sorted(beams, key=lambda n: n["score"],
@@ -300,17 +313,14 @@ class TorchDecoder(nn.Module):
 
             # out_emb: beam x E
             out_emb = self.vocab_embed(out)
-            # dec_out: beam x D_dec
-            dec_out, dec_hid = self._step_decoder(
+            # step forward
+            att_ali, att_ctx, dec_hid, proj, pred = self._step(
                 out_emb,
-                proj[point] if self.input_feeding else att_ctx[point],
-                dec_hid=dec_hid)
-            # compute align context, beam x D_enc
-            att_ali, att_ctx = self.attend(enc_out, None, dec_out, att_ali)
-            # proj: beam x D_enc
-            proj = self.proj(th.cat([dec_out, att_ctx], dim=-1))
-            # pred: beam x V
-            pred = self.pred(F.relu(proj))
+                enc_out,
+                att_ctx[point],
+                dec_hid=dec_hid,
+                att_ali=att_ali,
+                proj=proj[point])
             # compute prob: beam x V, nagetive
             prob = F.log_softmax(pred, dim=-1)
             # local pruning: beam x beam

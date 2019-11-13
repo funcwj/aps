@@ -105,8 +105,8 @@ if __name__ == "__main__":
                         "-1 means running on CPU")
     parser.add_argument("--nnet",
                         type=str,
-                        default="common",
-                        choices=["common", "transformer"],
+                        default="las",
+                        choices=["las", "transformer"],
                         help="Network type used")
     args = parser.parse_args()
     run(args)

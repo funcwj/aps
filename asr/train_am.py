@@ -87,7 +87,7 @@ def run(args):
         token_count = None
 
     if "nnet_type" not in conf:
-        conf["nnet_type"] = "common"
+        conf["nnet_type"] = "las"
     NNET_CLS = support_nnet(conf["nnet_type"])
     nnet = NNET_CLS(**conf["nnet_conf"], transform=transform)
 

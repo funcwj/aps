@@ -11,14 +11,14 @@ import torch.nn.functional as F
 
 from torch.nn.utils.rnn import pack_padded_sequence
 
-from .recurrent.decoder import TorchDecoder
-from .recurrent.encoder import encoder_instance
-from .recurrent.attention import att_instance
+from .las.decoder import TorchDecoder
+from .las.encoder import encoder_instance
+from .las.attention import att_instance
 
 
-class E2EASR(nn.Module):
+class LasASR(nn.Module):
     """
-    A recurrent structure end-to-end ASR model
+    LAS-based ASR model
     """
     def __init__(
             self,
@@ -36,7 +36,7 @@ class E2EASR(nn.Module):
             # decoder
             decoder_dim=512,
             decoder_kwargs=None):
-        super(E2EASR, self).__init__()
+        super(LasASR, self).__init__()
         self.encoder = encoder_instance(encoder_type, input_size, encoder_proj,
                                         **encoder_kwargs)
         attend = att_instance(att_type, encoder_proj, decoder_dim,
