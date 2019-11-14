@@ -69,8 +69,7 @@ class TorchDecoder(nn.Module):
         # dec_out: N x D_dec
         dec_out, dec_hid = self._step_decoder(
             emb_pre, proj if self.input_feeding else att_ctx, dec_hid=dec_hid)
-        # att_ali: N x Ti
-        # att_ctx: N x D_enc
+        # att_ali: N x Ti, att_ctx: N x D_enc
         att_ali, att_ctx = self.attend(enc_out, enc_len, dec_out, att_ali)
         # proj: N x D_enc
         proj = self.proj(th.cat([dec_out, att_ctx], dim=-1))
@@ -209,8 +208,8 @@ class TorchDecoder(nn.Module):
                     # add score
                     new_node["score"] += score.item()
                     # add trans
-                    new_node["trans"] = n["trans"].copy()
-                    new_node["trans"].append(index.item())
+                    new_node["trans"] = n["trans"].copy() + [index.item()]
+                    # new_node["trans"].append(index.item())
                     beams.append(new_node)
                 # clip beam
                 beams = sorted(beams, key=lambda n: n["score"],

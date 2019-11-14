@@ -10,10 +10,8 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .utils import STFT, init_melfilter
+from .utils import STFT, EPSILON, init_melfilter
 from .spec_aug import specaug
-
-EPSILON = th.finfo(th.float32).eps
 
 
 class SpectrogramTransform(nn.Module):
@@ -36,10 +34,7 @@ class SpectrogramTransform(nn.Module):
         return self.STFT.num_bins
 
     def len(self, xlen):
-        if th.sum(xlen <= self.frame_len):
-            raise RuntimeError(f"Audio samples {xlen.cpu()} less " +
-                               f"than frame_len ({self.frame_len})")
-        return (xlen - self.frame_len) // self.frame_hop + 1
+        return self.STFT.num_frames(xlen)
 
     def forward(self, x):
         """
@@ -304,9 +299,11 @@ class FeatureTransform(nn.Module):
 
     def forward(self, x_pad, x_len):
         """
-        x_pad: raw waveform: N x C x S or N x S
-        x_len: N
-        f_pad: acoustic features: N x C x T x ...
+        args:
+            x_pad: raw waveform: N x C x S or N x S
+            x_len: N
+        return:
+            f_pad: acoustic features: N x C x T x ...
         """
         f_pad = self.transform(x_pad)
         f_len = None if x_len is None else self.transform[0].len(x_len)

@@ -9,6 +9,11 @@ import math
 import torch as th
 import torch.nn as nn
 
+from torch_complex.tensor import ComplexTensor
+
+from .utils import STFT, EPSILON
+from .asr import LogTransform, CmvnTransform
+
 MATH_PI = math.pi
 
 
@@ -16,10 +21,7 @@ class IpdTransform(nn.Module):
     """
     Compute inter-channel phase difference
     """
-    def __init__(self,
-                 ipd_index="1,0;2,0;3,0;4,0;5,0;6,0",
-                 cos=True,
-                 sin=False):
+    def __init__(self, ipd_index="1,0", cos=True, sin=False):
         super(IpdTransform, self).__init__()
         split_index = lambda sstr: [
             tuple(map(int, p.split(","))) for p in sstr.split(";")
@@ -67,3 +69,81 @@ class IpdTransform(nn.Module):
         ipd = ipd.view(N, -1, T)
         # N x MF x T
         return ipd
+
+
+class FeatureTransform(nn.Module):
+    """
+    Feature transform for ASR tasks
+    Spectrogram - LogTransform - CmvnTransform + IpdTransform
+    """
+    def __init__(self,
+                 feats="spectrogram-log-cmvn-ipd",
+                 frame_len=512,
+                 frame_hop=256,
+                 window="sqrthann",
+                 round_pow_of_two=True,
+                 sr=16000,
+                 norm_mean=True,
+                 norm_var=True,
+                 ipd_index="1,0",
+                 cos_ipd=True,
+                 sin_ipd=False,
+                 eps=EPSILON):
+        super(FeatureTransform, self).__init__()
+        self.STFT = STFT(frame_len,
+                         frame_hop,
+                         window=window,
+                         round_pow_of_two=round_pow_of_two)
+        trans_tokens = feats.split("-")
+        transform = []
+        feats_dim = 0
+        feats_ipd = None
+        for i, tok in enumerate(trans_tokens):
+            if i == 0:
+                if tok != "spectrogram":
+                    raise RuntimeError("Now only support spectrogram features")
+                feats_dim = self.STFT.num_bins
+            elif tok == "log":
+                transform.append(LogTransform(eps=EPSILON))
+            elif tok == "cmvn":
+                transform.append(
+                    CmvnTransform(norm_mean=norm_mean, norm_var=norm_var))
+            elif tok == "ipd":
+                feats_ipd = IpdTransform(ipd_index=ipd_index,
+                                         cos=cos_ipd,
+                                         sin=sin_ipd)
+                if cos_ipd and sin_ipd:
+                    feats_dim *= len(ipd_index) * 3
+                else:
+                    feats_dim *= len(ipd_index) * 2
+            else:
+                raise RuntimeError(f"Unknown token {tok} in {feats}")
+        self.spe = nn.Sequential(*transform)
+        self.ipd = feats_ipd
+        self.feats_dim = feats_dim
+
+    def forward(self, x_pad, x_len):
+        """
+        args:
+            x_pad: raw waveform: N x C x S or N x S
+            x_len: N or None
+        return:
+            feats: spatial+spectral features: N x T x ...
+            f_len: N or None
+        """
+        real, imag = self.STFT(x_pad, cplx=True)
+        # complex spectrogram of CH 0~(C-1), N x C x F x T
+        cplx = ComplexTensor(real, imag)
+        # N x F x T
+        feats = cplx[:, 0].abs()
+        # spectra features of CH0, N x T x F
+        feats = self.spe(feats.transpose(1, 2))
+        if self.ipd is not None:
+            # N x C x F x T
+            phase = cplx.angle()
+            # N x T x ...
+            ipd = self.ipd(phase).transpose(1, 2)
+            # N x T x ...
+            feats = th.cat([feats, ipd], -1)
+        f_len = self.STFT.num_frames(x_len) if x_len is not None else None
+        return feats, cplx, f_len

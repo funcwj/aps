@@ -92,7 +92,6 @@ class S2STrainer(object):
                  optimizer_kwargs=None,
                  lr_scheduler_kwargs=None,
                  lsm_factor=0,
-                 token_count=None,
                  schedule_sampling=0,
                  gradient_clip=None,
                  logging_period=100,
@@ -115,12 +114,6 @@ class S2STrainer(object):
         self.save_interval = save_interval
         self.lsm_factor = lsm_factor
         self.ssr = schedule_sampling
-        if token_count is None:
-            self.token_prob = None
-        else:
-            token_count[nnet.eos] = token_count[-1]
-            token_prob = token_count[:-1] / th.sum(token_count[:-1])
-            self.token_prob = token_prob.to(self.default_device)
 
         if resume:
             if not Path(resume).exists():

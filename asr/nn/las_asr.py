@@ -26,7 +26,7 @@ class LasASR(nn.Module):
             vocab_size=30,
             sos=-1,
             eos=-1,
-            transform=None,
+            asr_transform=None,
             att_type="ctx",
             att_kwargs=None,
             # encoder
@@ -49,7 +49,7 @@ class LasASR(nn.Module):
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         self.sos = sos
         self.eos = eos
-        self.transform = transform
+        self.asr_transform = asr_transform
 
     def forward(self, x_pad, x_len, y_pad, ssr=0):
         """
@@ -62,9 +62,9 @@ class LasASR(nn.Module):
             outs: N x (To+1) x V
             alis: N x (To+1) x T
         """
-        # feature transform
-        if self.transform:
-            x_pad, x_len = self.transform(x_pad, x_len)
+        # asr feature transform
+        if self.asr_transform:
+            x_pad, x_len = self.asr_transform(x_pad, x_len)
         # N x Ti x D
         enc_out, enc_len = self.encoder(x_pad, x_len)
         # N x (To+1), pad SOS
@@ -81,10 +81,10 @@ class LasASR(nn.Module):
             x: S or Ti x F
         """
         with th.no_grad():
-            if self.transform:
+            if self.asr_transform:
                 if x.dim() != 1:
                     raise RuntimeError("Now only support for one utterance")
-                x, _ = self.transform(x.unsqueeze(0), None)
+                x, _ = self.asr_transform(x[None, ...], None)
                 enc_out, _ = self.encoder(x, None)
             else:
                 # 1 x Ti x F

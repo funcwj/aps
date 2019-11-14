@@ -8,6 +8,8 @@ import torch.nn.functional as F
 
 import librosa.filters as filters
 
+EPSILON = th.finfo(th.float32).eps
+
 
 def init_window(wnd, frame_len):
     """
@@ -91,12 +93,19 @@ class STFTBase(nn.Module):
                         round_pow_of_two=round_pow_of_two,
                         window=window)
         self.K = nn.Parameter(K, requires_grad=False)
-        self.stride = frame_hop
+        self.frame_len = frame_len
+        self.frame_hop = frame_hop
         self.window = window
         self.num_bins = self.K.shape[0] // 2
 
+    def num_frames(self, num_samples):
+        if th.sum(num_samples <= self.frame_len):
+            raise RuntimeError(f"Audio samples {num_samples.cpu()} less " +
+                               f"than frame_len ({self.frame_len})")
+        return (num_samples - self.frame_len) // self.frame_hop + 1
+
     def extra_repr(self):
-        return (f"window={self.window}, stride={self.stride}, " +
+        return (f"window={self.window}, stride={self.frame_hop}, " +
                 f"kernel_size={self.K.shape[0]}x{self.K.shape[2]}")
 
 

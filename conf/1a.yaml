@@ -25,7 +25,7 @@ nnet_conf:
   att_kwargs:
     att_dim: 512
 
-transform:
+asr_transform:
   feats: "fbank-log-cmvn-aug-delta"
   frame_len: 400
   frame_hop: 160

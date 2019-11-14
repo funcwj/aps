@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 
 import argparse
+import pathlib
+import yaml
 
 import torch as th
 
 from libs.evaluator import Evaluator
 from libs.utils import get_logger
 from loader.wav_loader import WaveReader
-from feats.asr import FeatureTransform
 from nn import support_nnet
+from feats import support_transform
 from kaldi_python_io import ScriptReader
 
 logger = get_logger(__name__)
@@ -18,12 +20,36 @@ class FasterDecoder(Evaluator):
     """
     Decoder wrapper
     """
-    def __init__(self, *args, **kwargs):
-        super(FasterDecoder, self).__init__(*args, **kwargs)
+    def __init__(self, cpt_dir, device_id=-1):
+        nnet = self._load(cpt_dir)
+        super(FasterDecoder, self).__init__(nnet, cpt_dir, device_id=-1)
 
     def compute(self, src, **kwargs):
         src = th.from_numpy(src).to(self.device)
         return self.nnet.beam_search(src, **kwargs)
+
+    def _load(self, cpt_dir):
+        with open(pathlib.Path(cpt_dir) / "trainer.yaml", "r") as f:
+            conf = yaml.full_load(f)
+            asr_cls = support_nnet(conf["nnet_type"])
+        asr_transform = None
+        enh_transform = None
+        self.accept_raw = False
+        if "asr_transform" in conf:
+            asr_transform = support_transform("asr")(**conf["asr_transform"])
+            self.accept_raw = True
+        if "enh_transform" in conf:
+            enh_transform = support_transform("enh")(**conf["enh_transform"])
+            self.accept_raw = True
+        if enh_transform:
+            nnet = asr_cls(enh_transform=enh_transform,
+                           asr_transform=asr_transform,
+                           **conf["nnet_conf"])
+        elif asr_transform:
+            nnet = asr_cls(asr_transform=asr_transform, **conf["nnet_conf"])
+        else:
+            nnet = asr_cls(**conf["nnet_conf"])
+        return nnet
 
 
 def run(args):
@@ -33,11 +59,8 @@ def run(args):
             vocab = {w: idx for w, idx in line.split() for line in f}
     else:
         vocab = None
-    decoder = FasterDecoder(support_nnet(args.nnet),
-                            FeatureTransform,
-                            args.checkpoint,
-                            device_id=args.device_id)
-    if decoder.raw_waveform:
+    decoder = FasterDecoder(args.checkpoint, device_id=args.device_id)
+    if decoder.accept_raw:
         src_reader = WaveReader(args.feats_or_wav_scp, sr=16000)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
@@ -106,7 +129,7 @@ if __name__ == "__main__":
     parser.add_argument("--nnet",
                         type=str,
                         default="las",
-                        choices=["las", "transformer"],
+                        choices=["las", "enh_las", "transformer"],
                         help="Network type used")
     args = parser.parse_args()
     run(args)

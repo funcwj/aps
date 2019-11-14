@@ -4,28 +4,15 @@
 
 import yaml
 import pprint
+import pathlib
 import argparse
 
-from pathlib import Path
 from libs.utils import get_logger, StrToBoolAction
 from libs.trainer import S2STrainer
-from loader import wav_loader, kaldi_loader
-from loader.utils import count_token
-from feats.asr import FeatureTransform
+
+from loader import support_loader
+from feats import support_transform
 from nn import support_nnet
-
-
-def get_dataloader(fmt="wav", **kwargs):
-    """
-    Got dataloader instance
-    """
-    if fmt not in ["wav", "kaldi"]:
-        raise RuntimeError(f"Unknown data loader: {fmt}")
-    func = {
-        "wav": wav_loader.make_dataloader,
-        "kaldi": kaldi_loader.make_dataloader
-    }[fmt]
-    return func(**kwargs)
 
 
 def run(args):
@@ -36,7 +23,7 @@ def run(args):
     print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
           flush=True)
 
-    checkpoint = Path(args.checkpoint)
+    checkpoint = pathlib.Path(args.checkpoint)
     checkpoint.mkdir(exist_ok=True, parents=True)
     # if exist, resume training
     last_checkpoint = checkpoint / "last.tar.pt"
@@ -55,6 +42,8 @@ def run(args):
     conf["nnet_conf"]["sos"] = token2idx.index("<sos>")
     conf["nnet_conf"]["eos"] = token2idx.index("<eos>")
     conf["nnet_conf"]["vocab_size"] = len(token2idx)
+    if "nnet_type" not in conf:
+        conf["nnet_type"] = "las"
 
     print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
     # dump configurations
@@ -62,43 +51,41 @@ def run(args):
         yaml.dump(conf, f)
 
     data_conf = conf["data_conf"]
-    trn_loader = get_dataloader(**data_conf["train"],
+    trn_loader = support_loader(**data_conf["train"],
                                 train=True,
                                 batch_size=args.batch_size,
                                 **data_conf["loader"])
-    dev_loader = get_dataloader(**data_conf["valid"],
+    dev_loader = support_loader(**data_conf["valid"],
                                 train=False,
                                 batch_size=args.batch_size,
                                 **data_conf["loader"])
-    print(
-        f"Number of batches (train/valid) = {len(trn_loader)}/{len(dev_loader)}",
-        flush=True)
+    print("Number of batches (train/valid) = " +
+          f"{len(trn_loader)}/{len(dev_loader)}",
+          flush=True)
 
-    if "transform" in conf:
-        transform = FeatureTransform(**conf["transform"])
+    asr_cls = support_nnet(conf["nnet_type"])
+    asr_transform = None
+    enh_transform = None
+    if "asr_transform" in conf:
+        asr_transform = support_transform("asr")(**conf["asr_transform"])
+    if "enh_transform" in conf:
+        enh_transform = support_transform("enh")(**conf["enh_transform"])
+    if enh_transform:
+        nnet = asr_cls(enh_transform=enh_transform,
+                       asr_transform=asr_transform,
+                       **conf["nnet_conf"])
+    elif asr_transform:
+        nnet = asr_cls(asr_transform=asr_transform, **conf["nnet_conf"])
     else:
-        transform = None
-
-    trainer_conf = conf["trainer_conf"]
-    if trainer_conf["lsm_factor"] > 0:
-        token_count = count_token(data_conf["train"]["token_scp"],
-                                  conf["nnet_conf"]["vocab_size"])
-    else:
-        token_count = None
-
-    if "nnet_type" not in conf:
-        conf["nnet_type"] = "las"
-    NNET_CLS = support_nnet(conf["nnet_type"])
-    nnet = NNET_CLS(**conf["nnet_conf"], transform=transform)
+        nnet = asr_cls(**conf["nnet_conf"])
 
     trainer = S2STrainer(nnet,
                          device_ids=device_ids,
                          checkpoint=args.checkpoint,
                          resume=resume,
-                         token_count=token_count,
                          save_interval=args.save_interval,
                          tensorboard=args.tensorboard,
-                         **trainer_conf)
+                         **conf["trainer_conf"])
 
     if args.eval_interval > 0:
         trainer.run_batch_per_epoch(trn_loader,
