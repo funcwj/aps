@@ -4,32 +4,38 @@
 
 set -eu
 
-dict=data/aishell_v1/dict
 epoches=100
-batch_size=96
+tensorboard=false
+batch_size=64
 num_workers=4
 eval_interval=-1
 save_interval=-1
 
 echo "$0 $@"
 
-[ $# -ne 1 ] && echo "Script format error: $0 <exp-id>" && exit 1
+[ $# -ne 2 ] && echo "Script format error: $0 <data-set> <exp-id>" && exit 1
 
-exp_id=$1
+data=$1
+exp_id=$2
+dict=data/$data/dict
+conf=conf/$data/$exp_id.yaml
 
-cmd="/home/work_nfs/common/tools/pyqueue_asr.pl"
+[ ! -f $dict ] && echo "$0: missing dictionary $dict" && exit 1
+[ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
+
+cmd="/home/work_nfs/common/tools/pyqueue_tts.pl"
 python=$(which python)
 
-$cmd --gpu 1 train.$exp_id.log \
+$cmd --gpu 1 -l hostname=node4 $data.train.$exp_id.log \
   $python asr/train_am.py \
-    --conf conf/$exp_id.yaml \
+    --conf $conf \
     --dict $dict \
-    --tensorboard false \
+    --tensorboard $tensorboard \
     --save-interval $save_interval \
     --num-workers $num_workers \
-    --checkpoint exp/aishell_v1/$exp_id \
+    --checkpoint exp/$data/$exp_id \
     --batch-size $batch_size \
     --epoches $epoches \
     --eval-interval $eval_interval
 
-mv train.$exp_id.log exp/aishell_v1/$exp_id
+mv $data.train.$exp_id.log exp/$data/$exp_id

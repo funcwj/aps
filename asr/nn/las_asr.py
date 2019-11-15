@@ -41,7 +41,7 @@ class LasASR(nn.Module):
                                         **encoder_kwargs)
         attend = att_instance(att_type, encoder_proj, decoder_dim,
                               **att_kwargs)
-        self.decoder = TorchDecoder(encoder_proj + decoder_dim,
+        self.decoder = TorchDecoder(encoder_proj,
                                     vocab_size,
                                     attention=attend,
                                     **decoder_kwargs)

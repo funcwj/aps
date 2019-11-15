@@ -93,14 +93,17 @@ class S2STrainer(object):
                  lr_scheduler_kwargs=None,
                  lsm_factor=0,
                  schedule_sampling=0,
+                 schedule_strategy="const",
                  gradient_clip=None,
                  logging_period=100,
                  save_interval=-1,
                  resume=None,
                  tensorboard=False,
                  no_impr=6):
+        if schedule_strategy not in ["const", "saturate"]:
+            raise ValueError(f"Unknown schedule strategy: {schedule_strategy}")
         self.device_ids = get_device_ids(device_ids)
-        self.default_device = th.device("cuda:{}".format(self.device_ids[0]))
+        self.default_device = th.device(f"cuda:{self.device_ids[0]}")
 
         self.checkpoint = Path(checkpoint)
         self.checkpoint.mkdir(parents=True, exist_ok=True)
@@ -113,7 +116,9 @@ class S2STrainer(object):
         self.no_impr = no_impr
         self.save_interval = save_interval
         self.lsm_factor = lsm_factor
-        self.ssr = schedule_sampling
+        self.ssr_init = schedule_sampling
+        self.ssr_vary = 0
+        self.sss = schedule_strategy
 
         if resume:
             if not Path(resume).exists():
@@ -169,7 +174,8 @@ class S2STrainer(object):
             "adam": th.optim.Adam,  # weight_decay, lr
             "adadelta": th.optim.Adadelta,  # weight_decay, lr
             "adagrad": th.optim.Adagrad,  # lr, lr_decay, weight_decay
-            "adamax": th.optim.Adamax  # lr, weight_decay
+            "adamax": th.optim.Adamax,  # lr, weight_decay
+            "adamw": th.optim.AdamW  # lr, weight_decay
             # ...
         }
         if optimizer not in supported_optimizer:
@@ -221,8 +227,6 @@ class S2STrainer(object):
         # N x (To+1), pad -1
         tgts = F.pad(egs["y_pad"], (0, 1), value=IGNORE_ID)
         # add eos
-        # for i in range(tgts.shape[0]):
-        #   tgts[i, egs["y_len"][i]] = self.nnet.eos
         tgts = tgts.scatter(1, egs["y_len"][:, None], self.nnet.eos)
         # compute loss
         if self.lsm_factor > 0:
@@ -290,7 +294,8 @@ class S2STrainer(object):
             egs = load_obj(egs, self.default_device)
 
             self.optimizer.zero_grad()
-            loss, accu = self.compute_loss(egs, ssr=self.ssr)
+            ssr = self.ssr_init if self.sss == "const" else self.ssr_vary
+            loss, accu = self.compute_loss(egs, ssr=ssr)
             loss.backward()
             if self.gradient_clip:
                 norm = clip_grad_norm_(self.nnet.parameters(),
@@ -308,10 +313,8 @@ class S2STrainer(object):
         with th.no_grad():
             for egs in data_loader:
                 egs = load_obj(egs, self.default_device)
-                # TODO: make ssr=0 when eval?
-                loss, accu = self.compute_loss(egs,
-                                               ssr=self.ssr,
-                                               dump_ali=False)
+                # ssr = 0 when eval
+                loss, accu = self.compute_loss(egs, ssr=0)
                 self.reporter.add("loss", loss.item())
                 self.reporter.add("accu", accu)
 
@@ -395,7 +398,9 @@ class S2STrainer(object):
                 # update per-batch
                 egs = load_obj(egs, self.default_device)
                 self.optimizer.zero_grad()
-                loss, accu = self.compute_loss(egs, ssr=self.ssr)
+
+                ssr = self.ssr_init if self.sss == "const" else self.ssr_vary
+                loss, accu = self.compute_loss(egs, ssr=ssr)
                 loss.backward()
                 if self.gradient_clip:
                     norm = clip_grad_norm_(self.nnet.parameters(),
@@ -416,10 +421,14 @@ class S2STrainer(object):
                     if cv_loss > best_loss:
                         no_impr += 1
                         sstr += f"| no impr, best = {self.scheduler.best:.4f}"
+                        if self.ssr_vary != self.ssr_init:
+                            self.ssr_vary = self.ssr_init
                     else:
                         best_loss = cv_loss
                         no_impr = 0
                         self.save_checkpoint(e, best=True)
+                    rate = self.ssr_init if self.sss == "const" else self.ssr_vary
+                    sstr += f"| ssr = {rate:.3f}"
                     self.reporter.log(sstr)
                     # schedule here
                     self.scheduler.step(cv_loss)

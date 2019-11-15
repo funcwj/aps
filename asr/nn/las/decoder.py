@@ -12,24 +12,57 @@ import torch.nn.functional as F
 NEG_INF = th.finfo(th.float32).min
 
 
+class OneHotEmbedding(nn.Module):
+    """
+    Onehot encode
+    """
+    def __init__(self, vocab_size):
+        super(OneHotEmbedding, self).__init__()
+        self.vocab_size = vocab_size
+
+    def extra_repr(self):
+        return f"vocab_size={self.vocab_size}"
+
+    def forward(self, x):
+        """
+        args:
+            x: ...
+        return
+            e: ... x V
+        """
+        S = list(x.shape) + [self.vocab_size]
+        # ... x V
+        H = th.zeros(S, dtype=th.float32, device=x.device)
+        # set one
+        H = H.scatter(-1, x[..., None], 1)
+        return H
+
+
 class TorchDecoder(nn.Module):
     """
     PyTorch's RNN decoder
     """
     def __init__(self,
-                 input_size,
+                 enc_proj,
                  vocab_size,
                  rnn="lstm",
                  num_layers=3,
                  hidden_size=512,
                  dropout=0.0,
                  attention=None,
-                 input_feeding=False):
+                 input_feeding=False,
+                 vocab_embeded=True):
         super(TorchDecoder, self).__init__()
         RNN = rnn.upper()
         supported_rnn = {"RNN": nn.RNN, "GRU": nn.GRU, "LSTM": nn.LSTM}
         if RNN not in supported_rnn:
             raise RuntimeError(f"unknown RNN type: {RNN}")
+        if vocab_embeded:
+            self.vocab_embed = nn.Embedding(vocab_size, hidden_size)
+            input_size = enc_proj + hidden_size
+        else:
+            self.vocab_embed = OneHotEmbedding(vocab_size)
+            input_size = enc_proj + vocab_size
         self.decoder = supported_rnn[RNN](input_size,
                                           hidden_size,
                                           num_layers,
@@ -37,8 +70,7 @@ class TorchDecoder(nn.Module):
                                           dropout=dropout,
                                           bidirectional=False)
         self.attend = attention
-        self.vocab_embed = nn.Embedding(vocab_size, hidden_size)
-        self.proj = nn.Linear(input_size, hidden_size)
+        self.proj = nn.Linear(hidden_size * 2, hidden_size)
         self.pred = nn.Linear(hidden_size, vocab_size)
         self.input_feeding = input_feeding
 
@@ -115,7 +147,7 @@ class TorchDecoder(nn.Module):
                     out = th.tensor([sos] * N, dtype=th.int64, device=dev)
                 else:
                     out = tgt_pad[:, t - 1]
-            # N x D_emb
+            # N x D_emb or N x V
             emb_pre = self.vocab_embed(out)
             # step forward
             att_ali, att_ctx, dec_hid, proj, pred = self._step(emb_pre,
