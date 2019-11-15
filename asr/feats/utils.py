@@ -133,7 +133,7 @@ class STFT(STFTBase):
         if x.dim() == 2:
             x = th.unsqueeze(x, 1)
             # N x 2F x T
-            c = F.conv1d(x, self.K, stride=self.stride, padding=0)
+            c = F.conv1d(x, self.K, stride=self.frame_hop, padding=0)
             # N x F x T
             r, i = th.chunk(c, 2, dim=1)
         # else reshape NC x 1 x S
@@ -141,7 +141,7 @@ class STFT(STFTBase):
             N, C, S = x.shape
             x = x.view(N * C, 1, S)
             # NC x 2F x T
-            c = F.conv1d(x, self.K, stride=self.stride, padding=0)
+            c = F.conv1d(x, self.K, stride=self.frame_hop, padding=0)
             # N x C x 2F x T
             c = c.view(N, C, -1, c.shape[-1])
             # N x C x F x T
@@ -184,7 +184,7 @@ class iSTFT(STFTBase):
             # N x 2F x T
             c = th.cat([r, i], dim=1)
         # N x 2F x T
-        s = F.conv_transpose1d(c, self.K, stride=self.stride, padding=0)
+        s = F.conv_transpose1d(c, self.K, stride=self.frame_hop, padding=0)
         # N x S
         s = s.squeeze(1)
         if squeeze:

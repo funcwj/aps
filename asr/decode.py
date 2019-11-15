@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
-import argparse
-import pathlib
 import yaml
+import pathlib
+import argparse
 
 import torch as th
 
@@ -29,7 +29,7 @@ class FasterDecoder(Evaluator):
         return self.nnet.beam_search(src, **kwargs)
 
     def _load(self, cpt_dir):
-        with open(pathlib.Path(cpt_dir) / "trainer.yaml", "r") as f:
+        with open(pathlib.Path(cpt_dir) / "train.yaml", "r") as f:
             conf = yaml.full_load(f)
             asr_cls = support_nnet(conf["nnet_type"])
         asr_transform = None

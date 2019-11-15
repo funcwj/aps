@@ -10,10 +10,12 @@ import soundfile as sf
 import scipy.io.wavfile as wf
 import torch.utils.data as dat
 
+from io import BytesIO
+
 from torch.nn.utils.rnn import pad_sequence
 from kaldi_python_io import Reader as BaseReader
 
-from .utils import process_token, BatchSampler
+from .utils import process_token, run_command, BatchSampler
 
 MAX_INT16 = np.iinfo(np.int16).max
 EPSILON = np.finfo(np.float32).eps
@@ -22,7 +24,7 @@ EPSILON = np.finfo(np.float32).eps
 def make_dataloader(train=True,
                     wav_scp="",
                     sr=16000,
-                    token_scp="",
+                    token="",
                     utt2dur="",
                     max_token_num=400,
                     max_dur=30,
@@ -33,7 +35,7 @@ def make_dataloader(train=True,
                     num_workers=0,
                     min_batch_size=4):
     dataset = Dataset(wav_scp,
-                      token_scp,
+                      token,
                       utt2dur,
                       sr=sr,
                       max_token_num=max_token_num,
@@ -76,23 +78,27 @@ class WaveReader(BaseReader):
     """
         Sequential/Random Reader for single/multiple channel wave
         Format of wav.scp follows Kaldi's definition:
-            key1 /path/to/wav
+            key1 /path/to/key1.wav
+            ...
+        or
+            key1 sox /home/data/key1.wav -t wav - remix 1 |
             ...
     """
     def __init__(self, wav_scp, sr=16000, norm=True):
-        super(WaveReader, self).__init__(wav_scp)
+        super(WaveReader, self).__init__(wav_scp, num_tokens=-1)
         self.sr = sr
         self.norm = norm
 
     def _load(self, key):
+        fname = self.index_dict[key]
         # return C x N or N
-        sr, samps = read_wav(self.index_dict[key],
-                             norm=self.norm,
-                             return_sr=True)
+        if fname[-1] == "|":
+            shell, _ = run_command(" ".join(fname[:-1]), wait=True)
+            fname = BytesIO(shell)
+        sr, samps = read_wav(fname, norm=self.norm, return_sr=True)
         # if given samp_rate, check it
         if self.sr is not None and sr != self.sr:
-            raise RuntimeError("Sample rate mismatch: {:d} vs {:d}".format(
-                sr, self.sr))
+            raise RuntimeError(f"Sample rate mismatch: {sr:d} vs {self.sr:d}")
         return samps
 
     def nsamps(self, key):
@@ -124,7 +130,7 @@ class Dataset(dat.Dataset):
     """
     def __init__(self,
                  wav_scp="",
-                 token_scp="",
+                 token="",
                  utt2dur="",
                  sr=16000,
                  max_token_num=400,
@@ -133,7 +139,7 @@ class Dataset(dat.Dataset):
                  adapt_wav_dur=8,
                  adapt_token_num=150):
         self.wav_reader = WaveReader(wav_scp, sr=sr)
-        self.token_reader = process_token(token_scp,
+        self.token_reader = process_token(token,
                                           utt2dur,
                                           max_token_num=max_token_num,
                                           max_dur=max_wav_dur,

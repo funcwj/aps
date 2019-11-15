@@ -45,7 +45,7 @@ class LasASR(nn.Module):
                                     vocab_size,
                                     attention=attend,
                                     **decoder_kwargs)
-        if not eos or not sos:
+        if eos < 0 or sos < 0:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         self.sos = sos
         self.eos = eos

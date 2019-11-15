@@ -14,6 +14,11 @@ from loader import support_loader
 from feats import support_transform
 from nn import support_nnet
 
+constrained_conf_keys = [
+    "nnet_type", "nnet_conf", "data_conf", "trainer_conf", "asr_transform",
+    "enh_transform"
+]
+
 
 def run(args):
     dev_conf = args.device_ids
@@ -42,8 +47,12 @@ def run(args):
     conf["nnet_conf"]["sos"] = token2idx.index("<sos>")
     conf["nnet_conf"]["eos"] = token2idx.index("<eos>")
     conf["nnet_conf"]["vocab_size"] = len(token2idx)
+
     if "nnet_type" not in conf:
         conf["nnet_type"] = "las"
+    for key in conf.keys():
+        if key not in constrained_conf_keys:
+            raise ValueError(f"Invalid configuration item: {key}")
 
     print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
     # dump configurations

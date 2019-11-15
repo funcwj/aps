@@ -2,19 +2,16 @@
 
 # wujian@2019
 
+import subprocess
 import torch as th
 import torch.utils.data as dat
 
 from kaldi_python_io import Reader as BaseReader
 
 
-def process_token(token_scp,
-                  utt2dur,
-                  max_token_num=400,
-                  max_dur=3000,
-                  min_dur=40):
+def process_token(token, utt2dur, max_token_num=400, max_dur=3000, min_dur=40):
     utt2dur = BaseReader(utt2dur, value_processor=float)
-    token_reader = BaseReader(token_scp,
+    token_reader = BaseReader(token,
                               value_processor=lambda l: [int(n) for n in l],
                               num_tokens=-1)
     token_set = []
@@ -58,6 +55,27 @@ def count_token(token_scp, vocab_size):
     token_count = th.clamp(token_count, min=1)
     token_count[-1] = num_utts
     return token_count
+
+
+def run_command(command, wait=True):
+    """ 
+    Runs shell commands. These are usually a sequence of 
+    commands connected by pipes, so we use shell=True
+    """
+    p = subprocess.Popen(command,
+                         shell=True,
+                         stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE)
+
+    if wait:
+        [stdout, stderr] = p.communicate()
+        if p.returncode is not 0:
+            stderr_str = bytes.decode(stderr)
+            raise Exception("There was an error while running the " +
+                            f"command \"{command}\":\n{stderr_str}\n")
+        return stdout, stderr
+    else:
+        return p
 
 
 class BatchSampler(dat.Sampler):

@@ -70,6 +70,9 @@ class EnhLasASR(nn.Module):
         """
         Feature extraction and enhancement
         """
+        # N x C x S
+        if x_pad.dim() != 3:
+            raise RuntimeError(f"Expect 3D tensor, got {x_pad.dim()} instead")
         # enhancement feature transform
         x_pad, x_cplx, x_len = self.enh_transform(x_pad, x_len)
         # TF-mask estimation: N x T x F

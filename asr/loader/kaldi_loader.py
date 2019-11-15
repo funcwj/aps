@@ -21,7 +21,7 @@ from .utils import process_token, BatchSampler
 
 def make_dataloader(train=True,
                     feats_scp="",
-                    token_scp="",
+                    token="",
                     gcmvn="",
                     norm_mean=True,
                     norm_var=True,
@@ -35,7 +35,7 @@ def make_dataloader(train=True,
                     num_workers=0,
                     min_batch_size=4):
     dataset = Dataset(feats_scp,
-                      token_scp,
+                      token,
                       utt2dur,
                       gcmvn=gcmvn,
                       norm_mean=True,
@@ -90,7 +90,7 @@ class Dataset(dat.Dataset):
     """
     def __init__(self,
                  feats_scp,
-                 token_scp,
+                 token,
                  utt2num_frames,
                  gcmvn="",
                  norm_mean=True,
@@ -101,7 +101,7 @@ class Dataset(dat.Dataset):
         self.feats_reader = ScriptReader(feats_scp)
         self.cmvn = Cmvn(gcmvn=gcmvn, norm_mean=norm_mean, norm_var=norm_var)
         # sorted
-        self.token_reader = process_token(token_scp,
+        self.token_reader = process_token(token,
                                           utt2num_frames,
                                           max_token_num=max_token_num,
                                           max_dur=max_frame_num,
