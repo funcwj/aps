@@ -38,7 +38,7 @@ class RNNLM(nn.Module):
 
     def repackage_hidden(self, h):
         """
-        Detach variable from graph
+        detach variable from graph
         """
         if isinstance(h, th.Tensor):
             return h.detach()

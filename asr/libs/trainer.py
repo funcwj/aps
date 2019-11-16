@@ -112,7 +112,7 @@ class ProgressReporter(object):
 
     def report(self, epoch, lr):
         N = len(self.stats["loss"])
-        if self.mode == "eval":
+        if self.mode == "valid":
             sstr = ",".join(
                 map(lambda f: "{:.2f}".format(f), self.stats["loss"]))
             self.log(f"loss on {N:d} batches: {sstr}")
@@ -237,7 +237,7 @@ class Trainer(object):
 
     def compute_loss(self, egs, **kwargs):
         """
-        Compute training loss, return loss and other statistics
+        Compute training loss, return loss and other numbers
         """
         raise NotImplementedError
 
@@ -251,7 +251,7 @@ class Trainer(object):
 
             self.optimizer.zero_grad()
             ssr = self.ssr_init if self.sss == "const" else self.ssr_vary
-            loss, stats = self.compute_loss(egs, idx=idx, ssr=ssr)
+            loss, accu = self.compute_loss(egs, idx=idx, ssr=ssr)
             loss.backward()
             if self.gradient_clip:
                 norm = clip_grad_norm_(self.nnet.parameters(),
@@ -260,9 +260,7 @@ class Trainer(object):
             self.optimizer.step()
 
             self.reporter.add("loss", loss.item())
-            if stats is not None:
-                for key, value in stats.items():
-                    self.reporter.add(key, value)
+            self.reporter.add("accu", accu)
 
     def eval(self, data_loader):
         self.nnet.eval()
@@ -272,11 +270,9 @@ class Trainer(object):
             for idx, egs in enumerate(data_loader):
                 egs = load_obj(egs, self.default_device)
                 ssr = self.ssr_init if self.sss == "const" else self.ssr_vary
-                loss, stats = self.compute_loss(egs, idx=idx, ssr=ssr)
+                loss, accu = self.compute_loss(egs, idx=idx, ssr=ssr)
                 self.reporter.add("loss", loss.item())
-                if stats is None:
-                    for key, value in stats.items():
-                        self.reporter.add(key, value)
+                self.reporter.add("accu", accu)
 
     def run(self, train_loader, valid_loader, num_epoches=50):
         """
@@ -360,19 +356,17 @@ class Trainer(object):
                 self.optimizer.zero_grad()
 
                 ssr = self.ssr_init if self.sss == "const" else self.ssr_vary
-                loss, stats = self.compute_loss(egs, idx=idx, ssr=ssr)
+                loss, accu = self.compute_loss(egs, idx=idx, ssr=ssr)
                 loss.backward()
                 if self.gradient_clip:
                     norm = clip_grad_norm_(self.nnet.parameters(),
                                            self.gradient_clip)
                     self.reporter.add("norm", norm)
                 self.optimizer.step()
-                # record loss
+                # record loss & accu
                 self.reporter.add("loss", loss.item())
-                # record other statictis
-                if stats is not None:
-                    for key, value in stats.items():
-                        self.reporter.add(key, value)
+                self.reporter.add("accu", accu)
+
                 # if trained on batches done, start evaluation
                 if trained_batches == 0:
                     e += 1
@@ -453,7 +447,7 @@ class S2STrainer(Trainer):
             loss = ce_loss(outs, tgts)
         # compute accu
         accu = compute_accu(outs, tgts)
-        return loss, {"accu": accu}
+        return loss, accu
 
 
 class LmTrainer(Trainer):
@@ -481,5 +475,4 @@ class LmTrainer(Trainer):
         loss = ce_loss(pred, egs["y"])
         accu = compute_accu(pred, egs["y"])
 
-        stats = {"accu": accu, "pplx": np.exp(loss.item())}
-        return loss, stats
+        return loss, accu
