@@ -201,7 +201,7 @@ class TransformerASR(nn.Module):
         mask = mask.masked_fill(mask == 1, float("-inf"))
         return mask
 
-    def forward(self, x_pad, x_len, y_pad):
+    def forward(self, x_pad, x_len, y_pad, ssr=0):
         """
         args:
             x_pad: N x Ti x D or N x S

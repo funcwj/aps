@@ -1,7 +1,12 @@
-from .kaldi_loader import make_dataloader as make_kaldi_loader
-from .wav_loader import make_dataloader as make_wave_loader
+from .kaldi_loader import make_kaldi_loader
+from .wav_loader import make_wave_loader
+from .token_loader import make_token_loader
 
-loader_templ = {"kaldi": make_kaldi_loader, "wav": make_wave_loader}
+loader_templ = {
+    "kaldi": make_kaldi_loader,
+    "wav": make_wave_loader,
+    "token": make_token_loader
+}
 
 
 def support_loader(fmt="wav", **kwargs):

@@ -26,7 +26,7 @@ conf=conf/$data/$exp_id.yaml
 cmd="/home/work_nfs/common/tools/pyqueue_tts.pl"
 python=$(which python)
 
-$cmd --gpu 1 -l hostname=node4 $data.train.$exp_id.log \
+$cmd --gpu 1 -l hostname=node4 $data.train_am.$exp_id.log \
   $python asr/train_am.py \
     --conf $conf \
     --dict $dict \

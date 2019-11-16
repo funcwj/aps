@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 # wujian@2019
 
 import yaml
@@ -8,16 +7,11 @@ import pathlib
 import argparse
 
 from libs.utils import StrToBoolAction
-from libs.trainer import S2STrainer
-
+from libs.trainer import LmTrainer
 from loader import support_loader
-from feats import support_transform
 from nn import support_nnet
 
-constrained_conf_keys = [
-    "nnet_type", "nnet_conf", "data_conf", "trainer_conf", "asr_transform",
-    "enh_transform"
-]
+constrained_conf_keys = ["nnet_type", "nnet_conf", "data_conf", "trainer_conf"]
 
 
 def run(args):
@@ -44,12 +38,10 @@ def run(args):
     with open(args.dict, "rb") as f:
         token2idx = [line.decode("utf-8").split()[0] for line in f]
 
-    conf["nnet_conf"]["sos"] = token2idx.index("<sos>")
-    conf["nnet_conf"]["eos"] = token2idx.index("<eos>")
+    eos = token2idx.index("<eos>")
     conf["nnet_conf"]["vocab_size"] = len(token2idx)
+    conf["nnet_type"] = "rnnlm"
 
-    if "nnet_type" not in conf:
-        conf["nnet_type"] = "las"
     for key in conf.keys():
         if key not in constrained_conf_keys:
             raise ValueError(f"Invalid configuration item: {key}")
@@ -61,42 +53,31 @@ def run(args):
 
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
-                                train=True,
                                 fmt=data_conf["fmt"],
+                                train=True,
                                 batch_size=args.batch_size,
-                                **data_conf["loader"])
+                                chunk_size=args.chunk_size,
+                                eos=eos)
     dev_loader = support_loader(**data_conf["valid"],
                                 train=False,
                                 fmt=data_conf["fmt"],
                                 batch_size=args.batch_size,
-                                **data_conf["loader"])
+                                chunk_size=args.chunk_size,
+                                eos=eos)
     print("Number of batches (train/valid) = " +
           f"{len(trn_loader)}/{len(dev_loader)}",
           flush=True)
 
     asr_cls = support_nnet(conf["nnet_type"])
-    asr_transform = None
-    enh_transform = None
-    if "asr_transform" in conf:
-        asr_transform = support_transform("asr")(**conf["asr_transform"])
-    if "enh_transform" in conf:
-        enh_transform = support_transform("enh")(**conf["enh_transform"])
-    if enh_transform:
-        nnet = asr_cls(enh_transform=enh_transform,
-                       asr_transform=asr_transform,
-                       **conf["nnet_conf"])
-    elif asr_transform:
-        nnet = asr_cls(asr_transform=asr_transform, **conf["nnet_conf"])
-    else:
-        nnet = asr_cls(**conf["nnet_conf"])
+    nnet = asr_cls(**conf["nnet_conf"])
 
-    trainer = S2STrainer(nnet,
-                         device_ids=device_ids,
-                         checkpoint=args.checkpoint,
-                         resume=resume,
-                         save_interval=args.save_interval,
-                         tensorboard=args.tensorboard,
-                         **conf["trainer_conf"])
+    trainer = LmTrainer(nnet,
+                        device_ids=device_ids,
+                        checkpoint=args.checkpoint,
+                        resume=resume,
+                        save_interval=args.save_interval,
+                        tensorboard=args.tensorboard,
+                        **conf["trainer_conf"])
 
     if args.eval_interval > 0:
         trainer.run_batch_per_epoch(trn_loader,
@@ -109,8 +90,7 @@ def run(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description=
-        "Command to start ASR model training, configured by yaml files",
+        description="Command to start model training, configured by yaml files",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--conf",
                         type=str,
@@ -140,6 +120,10 @@ if __name__ == "__main__":
                         type=int,
                         default=32,
                         help="Number of utterances in each batch")
+    parser.add_argument("--chunk-size",
+                        type=int,
+                        default=32,
+                        help="Bptt size used during training")
     parser.add_argument("--eval-interval",
                         type=int,
                         default=3000,

@@ -1,8 +1,8 @@
 # wujian@2018
 
 import sys
-import random
 import uuid
+import random
 
 from itertools import permutations
 from collections import defaultdict
@@ -21,6 +21,54 @@ from torch import autograd
 from .utils import get_device_ids, get_logger, load_obj, SimpleTimer
 
 IGNORE_ID = -1
+
+
+def ce_loss(outs, tgts):
+    """
+    Cross entropy loss
+    """
+    _, _, V = outs.shape
+    # N(To+1) x V
+    outs = outs.view(-1, V)
+    # N(To+1)
+    tgts = tgts.view(-1)
+    ce_loss = F.cross_entropy(outs, tgts, ignore_index=-1, reduction="mean")
+    return ce_loss
+
+
+def ls_loss(outs, tgts, lsm_factor=0.1):
+    """
+    Label smooth loss (using KL)
+    """
+    _, _, V = outs.shape
+    # NT x V
+    outs = outs.view(-1, V)
+    # NT
+    tgts = tgts.view(-1)
+    mask = (tgts != IGNORE_ID)
+    # M x V
+    outs = th.masked_select(outs, mask.unsqueeze(-1)).view(-1, V)
+    # M
+    tgts = th.masked_select(tgts, mask)
+    # M x V
+    dist = outs.new_full(outs.size(), lsm_factor / (V - 1))
+    dist = dist.scatter_(1, tgts.unsqueeze(-1), 1 - lsm_factor)
+    # KL distance
+    loss = F.kl_div(F.log_softmax(outs, -1), dist, reduction="batchmean")
+    return loss
+
+
+def compute_accu(outs, tgts):
+    """
+    Compute frame-level accuracy
+    """
+    # N x (To+1)
+    pred = th.argmax(outs.detach(), dim=-1)
+    # ignore mask, -1
+    mask = (tgts != IGNORE_ID)
+    ncorr = th.sum(pred[mask] == tgts[mask]).item()
+    total = th.sum(mask).item()
+    return float(ncorr) / total
 
 
 class ProgressReporter(object):
@@ -80,9 +128,9 @@ class ProgressReporter(object):
         return loss, hstr + cstr
 
 
-class S2STrainer(object):
+class Trainer(object):
     """
-    A PyTorch seq2seq trainer
+    A PyTorch base trainer
     """
     def __init__(self,
                  nnet,
@@ -187,115 +235,23 @@ class S2STrainer(object):
             self.reporter.log("Load optimizer state dict from checkpoint")
         return opt
 
-    def _dump_ali(self, dump_dir, key, alis, feats=None):
+    def compute_loss(self, egs, **kwargs):
         """
-        Sample and dump out alignments
+        Compute training loss, return loss and other statistics
         """
-        N, _, _ = alis.shape
-        n = random.randint(0, N - 1)
-        a = alis[n].detach().cpu().numpy()
-        # s = np.arange(0, T, 10)
-        np.save(dump_dir / f"{key}-align", a)
-        if feats is not None:
-            np.save(dump_dir / f"{key}-feats", feats[n].detach().cpu().numpy())
-
-    def compute_loss(self, egs, ssr=0, dump_ali=False):
-        """
-        Compute training loss, egs contains
-            x_pad: N x Ti x F
-            x_len: N
-            y_pad: N x To
-            y_len: N
-        """
-        # N x To, -1 => EOS
-        ignore_mask = (egs["y_pad"] == IGNORE_ID)
-        y_pad = egs["y_pad"].masked_fill(ignore_mask, self.nnet.eos)
-        if ssr > 0:
-            f_arg = (egs["x_pad"], egs["x_len"], y_pad, ssr)
-        else:
-            f_arg = (egs["x_pad"], egs["x_len"], y_pad)
-        # outs, alis
-        # N x (To+1) x V
-        # N x (To+1) x Ti
-        outs, alis = data_parallel(self.nnet,
-                                   f_arg,
-                                   device_ids=self.device_ids)
-        # dump alignments
-        if dump_ali:
-            self._dump_ali(self.checkpoint / str(self.cur_epoch),
-                           str(uuid.uuid4()), alis)
-        # N x (To+1), pad -1
-        tgts = F.pad(egs["y_pad"], (0, 1), value=IGNORE_ID)
-        # add eos
-        tgts = tgts.scatter(1, egs["y_len"][:, None], self.nnet.eos)
-        # compute loss
-        if self.lsm_factor > 0:
-            loss = self._ls_loss(outs, tgts)
-        else:
-            loss = self._ce_loss(outs, tgts)
-        # compute accu
-        accu = self._compute_accu(outs, tgts)
-        return loss, accu
-
-    def _compute_accu(self, outs, tgts):
-        """
-        Compute frame-level accuracy
-        """
-        # N x (To+1)
-        pred = th.argmax(outs.detach(), dim=-1)
-        # ignore mask, -1
-        mask = (tgts != IGNORE_ID)
-        ncorr = th.sum(pred[mask] == tgts[mask]).item()
-        total = th.sum(mask).item()
-        return float(ncorr) / total
-
-    def _ce_loss(self, outs, tgts):
-        """
-        Cross entropy loss
-        """
-        _, _, V = outs.shape
-        # N(To+1) x V
-        outs = outs.view(-1, V)
-        # N(To+1)
-        tgts = tgts.view(-1)
-        ce_loss = F.cross_entropy(outs,
-                                  tgts,
-                                  ignore_index=-1,
-                                  reduction="mean")
-        return ce_loss
-
-    def _ls_loss(self, outs, tgts):
-        """
-        Label smooth loss (using KL)
-        """
-        _, _, V = outs.shape
-        # NT x V
-        outs = outs.view(-1, V)
-        # NT
-        tgts = tgts.view(-1)
-        mask = (tgts != IGNORE_ID)
-        # M x V
-        outs = th.masked_select(outs, mask.unsqueeze(-1)).view(-1, V)
-        # M
-        tgts = th.masked_select(tgts, mask)
-        # M x V
-        dist = outs.new_full(outs.size(), self.lsm_factor / (V - 1))
-        dist = dist.scatter_(1, tgts.unsqueeze(-1), 1 - self.lsm_factor)
-        # KL distance
-        loss = F.kl_div(F.log_softmax(outs, -1), dist, reduction="batchmean")
-        return loss
+        raise NotImplementedError
 
     def train(self, data_loader):
         self.nnet.train()
         self.reporter.train()
 
-        for egs in data_loader:
+        for idx, egs in enumerate(data_loader):
             # load to gpu
             egs = load_obj(egs, self.default_device)
 
             self.optimizer.zero_grad()
             ssr = self.ssr_init if self.sss == "const" else self.ssr_vary
-            loss, accu = self.compute_loss(egs, ssr=ssr)
+            loss, stats = self.compute_loss(egs, idx=idx, ssr=ssr)
             loss.backward()
             if self.gradient_clip:
                 norm = clip_grad_norm_(self.nnet.parameters(),
@@ -304,19 +260,23 @@ class S2STrainer(object):
             self.optimizer.step()
 
             self.reporter.add("loss", loss.item())
-            self.reporter.add("accu", accu)
+            if stats is not None:
+                for key, value in stats.items():
+                    self.reporter.add(key, value)
 
     def eval(self, data_loader):
         self.nnet.eval()
         self.reporter.eval()
 
         with th.no_grad():
-            for egs in data_loader:
+            for idx, egs in enumerate(data_loader):
                 egs = load_obj(egs, self.default_device)
-                # ssr = 0 when eval
-                loss, accu = self.compute_loss(egs, ssr=0)
+                ssr = self.ssr_init if self.sss == "const" else self.ssr_vary
+                loss, stats = self.compute_loss(egs, idx=idx, ssr=ssr)
                 self.reporter.add("loss", loss.item())
-                self.reporter.add("accu", accu)
+                if stats is None:
+                    for key, value in stats.items():
+                        self.reporter.add(key, value)
 
     def run(self, train_loader, valid_loader, num_epoches=50):
         """
@@ -393,23 +353,26 @@ class S2STrainer(object):
         self.reporter.train()
         while True:
             # trained on several batches
-            for egs in train_loader:
+            for idx, egs in enumerate(train_loader):
                 trained_batches = (trained_batches + 1) % eval_interval
                 # update per-batch
                 egs = load_obj(egs, self.default_device)
                 self.optimizer.zero_grad()
 
                 ssr = self.ssr_init if self.sss == "const" else self.ssr_vary
-                loss, accu = self.compute_loss(egs, ssr=ssr)
+                loss, stats = self.compute_loss(egs, idx=idx, ssr=ssr)
                 loss.backward()
                 if self.gradient_clip:
                     norm = clip_grad_norm_(self.nnet.parameters(),
                                            self.gradient_clip)
                     self.reporter.add("norm", norm)
                 self.optimizer.step()
-                # record loss & accu
-                self.reporter.add("accu", accu)
+                # record loss
                 self.reporter.add("loss", loss.item())
+                # record other statictis
+                if stats is not None:
+                    for key, value in stats.items():
+                        self.reporter.add(key, value)
                 # if trained on batches done, start evaluation
                 if trained_batches == 0:
                     e += 1
@@ -454,3 +417,69 @@ class S2STrainer(object):
             if stop:
                 break
         self.reporter.log(f"Training for {e:d}/{num_epoches:d} epoches done!")
+
+
+class S2STrainer(Trainer):
+    """
+    E2E ASR Trainer (CE)
+    """
+    def __init__(self, *args, **kwargs):
+        super(S2STrainer, self).__init__(*args, **kwargs)
+
+    def compute_loss(self, egs, idx=0, ssr=0):
+        """
+        Compute training loss, egs contains
+            x_pad: N x Ti x F
+            x_len: N
+            y_pad: N x To
+            y_len: N
+        """
+        # N x To, -1 => EOS
+        y_pad = egs["y_pad"].masked_fill(egs["y_pad"] == IGNORE_ID,
+                                         self.nnet.eos)
+        # outs: N x (To+1) x V
+        # alis: N x (To+1) x Ti
+        outs, _ = data_parallel(self.nnet,
+                                (egs["x_pad"], egs["x_len"], y_pad, ssr),
+                                device_ids=self.device_ids)
+        # N x (To+1), pad -1
+        tgts = F.pad(egs["y_pad"], (0, 1), value=IGNORE_ID)
+        # add eos
+        tgts = tgts.scatter(1, egs["y_len"][:, None], self.nnet.eos)
+        # compute loss
+        if self.lsm_factor > 0:
+            loss = ls_loss(outs, tgts, lsm_factor=self.lsm_factor)
+        else:
+            loss = ce_loss(outs, tgts)
+        # compute accu
+        accu = compute_accu(outs, tgts)
+        return loss, {"accu": accu}
+
+
+class LmTrainer(Trainer):
+    """
+    E2E ASR Trainer (CE)
+    """
+    def __init__(self, *args, **kwargs):
+        super(LmTrainer, self).__init__(*args, **kwargs)
+        self.hidden = None
+        if self.sss != "const" and self.ssr_init != 0:
+            raise RuntimeError(
+                "For LM training, we don't use schedule sampling")
+
+    def compute_loss(self, egs, idx=0, ssr=0):
+        """
+        Compute training loss, egs contains
+            x: N x T
+            y: N x T
+        """
+        if idx == 0:
+            self.hidden = None
+        # pred: N x T x V
+        pred, self.hidden = data_parallel(self.nnet, (egs["x"], self.hidden),
+                                          device_ids=self.device_ids)
+        loss = ce_loss(pred, egs["y"])
+        accu = compute_accu(pred, egs["y"])
+
+        stats = {"accu": accu, "pplx": np.exp(loss.item())}
+        return loss, stats

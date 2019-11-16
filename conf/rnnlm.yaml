@@ -1,0 +1,31 @@
+
+nnet_type: "rnnlm"
+
+nnet_conf:
+  embed_size: 256
+  rnn: "lstm"
+  num_layers: 3
+  hidden_size: 512
+  dropout: 0.1
+
+trainer_conf:
+  optimizer: "adam"
+  optimizer_kwargs:
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+  lr_scheduler_kwargs:
+    min_lr: 1.0e-8
+    patience: 1
+    factor: 0.5
+  logging_period: 100
+  gradient_clip: 5
+  no_impr: 4
+  lsm_factor: 0
+  schedule_sampling: 0
+
+data_conf:
+  fmt: "token"
+  train:
+    token: "data/aishell_v1/train/token"
+  valid:
+    token: "data/aishell_v1/dev/token"
