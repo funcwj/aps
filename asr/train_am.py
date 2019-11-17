@@ -3,9 +3,13 @@
 # wujian@2019
 
 import yaml
+import random
 import pprint
 import pathlib
 import argparse
+
+import torch as th
+import numpy as np
 
 from libs.utils import StrToBoolAction
 from libs.trainer import S2STrainer
@@ -21,6 +25,12 @@ constrained_conf_keys = [
 
 
 def run(args):
+    # set random seed
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    th.random.manual_seed(args.seed)
+
+    # get device
     dev_conf = args.device_ids
     device_ids = tuple(map(int, dev_conf.split(","))) if dev_conf else None
 
@@ -157,5 +167,9 @@ if __name__ == "__main__":
                         action=StrToBoolAction,
                         default="false",
                         help="Flags to use the tensorboad")
+    parser.add_argument("--seed",
+                        type=int,
+                        default=777,
+                        help="Random seed used for random package")
     args = parser.parse_args()
     run(args)

@@ -53,12 +53,14 @@ class DataLoader(object):
     """
     LM loader for bptt training
     """
-    def __init__(self, dataset, batch_size=64, chunk_size=20, shuffle=True):
-        self.token_list = [th.tensor(tok, dtype=th.int64) for tok in dataset]
-        self.batch_size, self.chunk_size = batch_size, chunk_size
-        self.shuffle = shuffle
+    def __init__(self, dataset, shuffle=True, batch_size=64, chunk_size=20):
         utt_lens = [len(tok) for tok in dataset]
-        self.num_batches = sum(utt_lens) // (batch_size * chunk_size)
+        seq_lens = sum(utt_lens) // batch_size
+        self.num_batches = seq_lens // chunk_size - 1
+        self.shuffle = shuffle
+        self.token_list = [th.tensor(tok, dtype=th.int64) for tok in dataset]
+        self.batch_size = batch_size
+        self.chunk_size = chunk_size
 
     def batchify(self):
         if self.shuffle:
@@ -78,10 +80,10 @@ class DataLoader(object):
     def __iter__(self):
         # N x S
         token_batch = self.batchify()
-        batch_len = token_batch.shape[-1]
-        for beg in range(0, batch_len, self.chunk_size):
-            bptt_size = min(self.chunk_size, batch_len - 1 - beg)
+        for beg in range(0, token_batch.shape[-1] - self.chunk_size,
+                         self.chunk_size):
+            end = beg + self.chunk_size
             yield {
-                "x": token_batch[:, beg:beg + bptt_size],
-                "y": token_batch[:, beg + 1:beg + 1 + bptt_size]
+                "x": token_batch[:, beg:end],
+                "y": token_batch[:, beg + 1:end + 1]
             }

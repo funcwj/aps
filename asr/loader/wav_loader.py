@@ -85,7 +85,7 @@ class WaveReader(BaseReader):
             ...
     """
     def __init__(self, wav_scp, sr=16000, norm=True):
-        super(WaveReader, self).__init__(wav_scp, num_tokens=-1)
+        super(WaveReader, self).__init__(wav_scp, num_tokens=2)
         self.sr = sr
         self.norm = norm
 
@@ -93,7 +93,7 @@ class WaveReader(BaseReader):
         fname = self.index_dict[key]
         # return C x N or N
         if fname[-1] == "|":
-            shell, _ = run_command(" ".join(fname[:-1]), wait=True)
+            shell, _ = run_command(fname[:-1], wait=True)
             fname = BytesIO(shell)
         sr, samps = read_wav(fname, norm=self.norm, return_sr=True)
         # if given samp_rate, check it

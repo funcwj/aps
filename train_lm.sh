@@ -13,6 +13,8 @@ save_interval=-1
 
 echo "$0 $@"
 
+. ./local/parse_options.sh || exit 1
+
 [ $# -ne 2 ] && echo "Script format error: $0 <data-set> <exp-id>" && exit 1
 
 data=$1

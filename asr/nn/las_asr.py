@@ -75,7 +75,13 @@ class LasASR(nn.Module):
                                   schedule_sampling=ssr)
         return outs, alis
 
-    def beam_search(self, x, beam=8, nbest=5, max_len=None, parallel=False):
+    def beam_search(self,
+                    x,
+                    beam=8,
+                    nbest=5,
+                    max_len=None,
+                    vectorized=False,
+                    normalized=True):
         """
         args
             x: S or Ti x F
@@ -91,17 +97,20 @@ class LasASR(nn.Module):
                 if x.dim() != 2:
                     raise RuntimeError("Now only support for one utterance")
                 enc_out, _ = self.encoder(x.unsqueeze(0), None)
-            if parallel:
-                return self.decoder.beam_search_parallel(enc_out,
-                                                         beam=beam,
-                                                         nbest=nbest,
-                                                         max_len=max_len,
-                                                         sos=self.sos,
-                                                         eos=self.eos)
+            if vectorized:
+                return self.decoder.beam_search_vectorized(
+                    enc_out,
+                    beam=beam,
+                    nbest=nbest,
+                    max_len=max_len,
+                    sos=self.sos,
+                    eos=self.eos,
+                    normalized=normalized)
             else:
                 return self.decoder.beam_search(enc_out,
                                                 beam=beam,
                                                 nbest=nbest,
                                                 max_len=max_len,
                                                 sos=self.sos,
-                                                eos=self.eos)
+                                                eos=self.eos,
+                                                normalized=normalized)

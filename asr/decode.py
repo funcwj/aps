@@ -7,7 +7,7 @@ import argparse
 import torch as th
 
 from libs.evaluator import Evaluator
-from libs.utils import get_logger
+from libs.utils import get_logger, StrToBoolAction
 from loader.wav_loader import WaveReader
 from nn import support_nnet
 from feats import support_transform
@@ -22,6 +22,7 @@ class FasterDecoder(Evaluator):
     """
     def __init__(self, cpt_dir, device_id=-1):
         nnet = self._load(cpt_dir)
+        print(f"Nnet structure:\n{nnet}")
         super(FasterDecoder, self).__init__(nnet, cpt_dir, device_id=-1)
 
     def compute(self, src, **kwargs):
@@ -56,7 +57,10 @@ def run(args):
     # build dictionary
     if args.dict:
         with open(args.dict, "r") as f:
-            vocab = {w: idx for w, idx in line.split() for line in f}
+            vocab = {}
+            for pair in f:
+                unit, idx = pair.split()
+                vocab[int(idx)] = unit
     else:
         vocab = None
     decoder = FasterDecoder(args.checkpoint, device_id=args.device_id)
@@ -71,17 +75,18 @@ def run(args):
         logger.info(f"Decoding utterance {key}...")
         nbest = decoder.compute(src,
                                 beam=args.beam_size,
-                                nbest=1,
+                                nbest=args.nbest,
                                 max_len=args.max_len,
-                                parallel=True)
-        for token in nbest:
-            score = token["score"]
+                                normalized=args.normalized,
+                                vectorized=args.vectorized)
+        for hyp in nbest:
+            score = hyp["score"]
             logger.info(f"{key}\tscore = {score:.2f}")
+            # remove SOS/EOS
             if vocab:
-                trans = [vocab[idx]
-                         for idx in token["trans"][1:-1]]  # remove SOS/EOS
+                trans = [vocab[idx] for idx in hyp["trans"][1:-1]]
             else:
-                trans = [str(idx) for idx in token["trans"][1:-1]]
+                trans = [str(idx) for idx in hyp["trans"][1:-1]]
             trans = " ".join(trans)
             if not output:
                 print(f"{key}\t{trans}", flush=True)
@@ -126,10 +131,23 @@ if __name__ == "__main__":
                         default=-1,
                         help="GPU-id to offload model to, "
                         "-1 means running on CPU")
+    parser.add_argument("--nbest",
+                        type=int,
+                        default=1,
+                        help="N-best decoded utterances to output")
     parser.add_argument("--nnet",
                         type=str,
                         default="las",
                         choices=["las", "enh_las", "transformer"],
                         help="Network type used")
+    parser.add_argument("--vectorized",
+                        action=StrToBoolAction,
+                        default="false",
+                        help="If ture, using vectorized algothrim")
+    parser.add_argument("--normalized",
+                        action=StrToBoolAction,
+                        default="false",
+                        help="If ture, using length normalized "
+                        "when sort nbest hypos")
     args = parser.parse_args()
     run(args)

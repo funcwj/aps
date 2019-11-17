@@ -97,7 +97,13 @@ class EnhLasASR(nn.Module):
         # outs, alis
         return self.las_asr(x_beam, x_len, y_pad, ssr=ssr)
 
-    def beam_search(self, x, beam=8, nbest=1, max_len=None, parallel=False):
+    def beam_search(self,
+                    x,
+                    beam=8,
+                    nbest=1,
+                    max_len=None,
+                    vectorized=False,
+                    normalized=True):
         """
         args
             x: S or Ti x F
@@ -110,4 +116,5 @@ class EnhLasASR(nn.Module):
                                             beam=beam,
                                             nbest=nbest,
                                             max_len=max_len,
-                                            parallel=parallel)
+                                            vectorized=vectorized,
+                                            normalized=normalized)

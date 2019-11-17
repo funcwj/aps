@@ -22,9 +22,12 @@ while (<M>) {
 
 while(<STDIN>) {
   @A = split(" ", $_);
-  for ($x = 1; $x < $#A; $x++) {
+  for ($x = 1; $x <= $#A; $x++) {
     $a = $A[$x];
     if (!defined $dict{$a}) {
+      if (!defined $dict{"<unk>"}) {
+        die "token2idx.pl: missing <unk> in dictionary $dict_obj";
+      }
       $A[$x] = $dict{"<unk>"};
     } else {
       $A[$x] = $dict{$a};

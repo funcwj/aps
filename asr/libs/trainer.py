@@ -303,6 +303,9 @@ class Trainer(object):
             # >> eval
             self.eval(valid_loader)
             cv_loss, sstr = self.reporter.report(e, cur_lr)
+            # schedule sampling for eval
+            rate = self.ssr_init if self.sss == "const" else self.ssr_vary
+            sstr += f"| ssr = {rate:.3f}"
             if cv_loss > best_loss:
                 no_impr += 1
                 sstr += f"| no impr, best = {self.scheduler.best:.4f}"
@@ -375,6 +378,10 @@ class Trainer(object):
                     self.reporter.log(sstr)
 
                     cv_loss, sstr = self.reporter.report(e, cur_lr)
+                    # schedule sampling for eval
+                    rate = self.ssr_init if self.sss == "const" else self.ssr_vary
+                    sstr += f"| ssr = {rate:.3f}"
+
                     if cv_loss > best_loss:
                         no_impr += 1
                         sstr += f"| no impr, best = {self.scheduler.best:.4f}"
@@ -384,8 +391,6 @@ class Trainer(object):
                         best_loss = cv_loss
                         no_impr = 0
                         self.save_checkpoint(e, best=True)
-                    rate = self.ssr_init if self.sss == "const" else self.ssr_vary
-                    sstr += f"| ssr = {rate:.3f}"
                     self.reporter.log(sstr)
                     # schedule here
                     self.scheduler.step(cv_loss)

@@ -70,8 +70,8 @@ class TorchDecoder(nn.Module):
                                           dropout=dropout,
                                           bidirectional=False)
         self.attend = attention
-        self.proj = nn.Linear(hidden_size * 2, hidden_size)
-        self.pred = nn.Linear(hidden_size, vocab_size)
+        self.proj = nn.Linear(hidden_size + enc_proj, enc_proj)
+        self.pred = nn.Linear(enc_proj, vocab_size)
         self.input_feeding = input_feeding
 
     def _step_decoder(self, emb_pre, att_ctx, dec_hid=None):
@@ -171,7 +171,8 @@ class TorchDecoder(nn.Module):
                     nbest=1,
                     max_len=None,
                     sos=-1,
-                    eos=-1):
+                    eos=-1,
+                    normalized=True):
         """
         Beam search algothrim (intuitive but not efficient)
         args
@@ -207,6 +208,8 @@ class TorchDecoder(nn.Module):
         hypos = []
         if max_len is None:
             max_len = T
+        else:
+            max_len = min(T, max_len)
 
         # step by step
         for t in range(max_len):
@@ -240,12 +243,12 @@ class TorchDecoder(nn.Module):
                     # add score
                     new_node["score"] += score.item()
                     # add trans
-                    new_node["trans"] = n["trans"].copy() + [index.item()]
-                    # new_node["trans"].append(index.item())
+                    new_node["trans"] = n["trans"].copy()
+                    new_node["trans"].append(index.item())
                     beams.append(new_node)
-                # clip beam
-                beams = sorted(beams, key=lambda n: n["score"],
-                               reverse=True)[:beam]
+            # clip beam
+            beams = sorted(beams, key=lambda n: n["score"],
+                           reverse=True)[:beam]
 
             if t == max_len - 1:
                 for n in beams:
@@ -259,9 +262,18 @@ class TorchDecoder(nn.Module):
             if not len(alive):
                 break
         # choose nbest
-        nbest_hypos = sorted(hypos, key=lambda n: n["score"],
-                             reverse=True)[:nbest]
-        return nbest_hypos
+        if normalized:
+            nbest_hypos = sorted(hypos,
+                                 key=lambda n: n["score"] /
+                                 (len(n["trans"]) - 1),
+                                 reverse=True)[:nbest]
+        else:
+            nbest_hypos = sorted(hypos, key=lambda n: n["score"],
+                                 reverse=True)[:nbest]
+        return [{
+            "score": n["score"],
+            "trans": n["trans"]
+        } for n in nbest_hypos]
 
     def _trace_back_hypos(self,
                           index,
@@ -280,15 +292,16 @@ class TorchDecoder(nn.Module):
             index = ptr[index]
         return {"score": score, "trans": [sos] + trans[::-1] + [eos]}
 
-    def beam_search_parallel(self,
-                             enc_out,
-                             beam=8,
-                             nbest=1,
-                             max_len=None,
-                             sos=-1,
-                             eos=-1):
+    def beam_search_vectorized(self,
+                               enc_out,
+                               beam=8,
+                               nbest=1,
+                               max_len=None,
+                               sos=-1,
+                               eos=-1,
+                               normalized=True):
         """
-        Beam search algothrim
+        Vectorized beam search algothrim (now inferior than normal beam search)
         args
             enc_out: 1 x T x F
         """
@@ -306,6 +319,8 @@ class TorchDecoder(nn.Module):
                 f"Got batch size {N:d}, now only support one utterance")
         if max_len is None:
             max_len = T
+        else:
+            max_len = min(T, max_len)
 
         dev = enc_out.device
         att_ali = None
@@ -364,6 +379,7 @@ class TorchDecoder(nn.Module):
                 # beam x beam = beam x 1 + beam x beam
                 accu_score = accu_score[..., None] + topk_score
                 # if previous step outputs eos, set -inf
+                # then it will not appear after topk operation
                 accu_score[out == eos_dev] = NEG_INF
                 # beam*beam => beam
                 accu_score, topk_index = th.topk(accu_score.view(-1),
@@ -410,6 +426,13 @@ class TorchDecoder(nn.Module):
                                                      sos=sos,
                                                      eos=eos)
                         hypos.append(hyp)
-        nbest_hypos = sorted(hypos, key=lambda n: n["score"],
-                             reverse=True)[:nbest]
+        if normalized:
+            nbest_hypos = sorted(hypos,
+                                 key=lambda n: n["score"] /
+                                 (len(n["trans"]) - 1),
+                                 reverse=True)[:nbest]
+        else:
+            nbest_hypos = sorted(hypos, key=lambda n: n["score"],
+                                 reverse=True)[:nbest]
+
         return nbest_hypos
