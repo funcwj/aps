@@ -125,6 +125,7 @@ if __name__ == "__main__":
                         help="Beam size used during decoding")
     parser.add_argument("--dict",
                         type=str,
+                        default="",
                         help="Dictionary file (not needed)")
     parser.add_argument("--device-id",
                         type=int,

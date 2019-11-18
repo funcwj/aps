@@ -269,8 +269,8 @@ class Trainer(object):
         with th.no_grad():
             for idx, egs in enumerate(data_loader):
                 egs = load_obj(egs, self.default_device)
-                ssr = self.ssr_init if self.sss == "const" else self.ssr_vary
-                loss, accu = self.compute_loss(egs, idx=idx, ssr=ssr)
+                # eval, ssr=0
+                loss, accu = self.compute_loss(egs, idx=idx, ssr=0)
                 self.reporter.add("loss", loss.item())
                 self.reporter.add("accu", accu)
 
@@ -305,10 +305,10 @@ class Trainer(object):
             cv_loss, sstr = self.reporter.report(e, cur_lr)
             # schedule sampling for eval
             rate = self.ssr_init if self.sss == "const" else self.ssr_vary
-            sstr += f"| ssr = {rate:.3f}"
+            sstr += f" | ssr = {rate:.3f}"
             if cv_loss > best_loss:
                 no_impr += 1
-                sstr += f"| no impr, best = {self.scheduler.best:.4f}"
+                sstr += f" | no impr, best = {self.scheduler.best:.4f}"
             else:
                 best_loss = cv_loss
                 no_impr = 0
@@ -380,11 +380,11 @@ class Trainer(object):
                     cv_loss, sstr = self.reporter.report(e, cur_lr)
                     # schedule sampling for eval
                     rate = self.ssr_init if self.sss == "const" else self.ssr_vary
-                    sstr += f"| ssr = {rate:.3f}"
+                    sstr += f" | ssr = {rate:.3f}"
 
                     if cv_loss > best_loss:
                         no_impr += 1
-                        sstr += f"| no impr, best = {self.scheduler.best:.4f}"
+                        sstr += f" | no impr, best = {self.scheduler.best:.4f}"
                         if self.ssr_vary != self.ssr_init:
                             self.ssr_vary = self.ssr_init
                     else:

@@ -209,7 +209,7 @@ class TorchDecoder(nn.Module):
         if max_len is None:
             max_len = T
         else:
-            max_len = min(T, max_len)
+            max_len = max(T, max_len)
 
         # step by step
         for t in range(max_len):
@@ -250,10 +250,6 @@ class TorchDecoder(nn.Module):
             beams = sorted(beams, key=lambda n: n["score"],
                            reverse=True)[:beam]
 
-            if t == max_len - 1:
-                for n in beams:
-                    n["trans"].append(eos)
-
             # add finished ones
             hypos.extend([n for n in beams if n["trans"][-1] == eos])
             # keep unfinished ones
@@ -261,32 +257,37 @@ class TorchDecoder(nn.Module):
 
             if not len(alive):
                 break
+
+            if t == max_len - 1:
+                for n in alive:
+                    n["trans"].append(eos)
+                    hypos.append(n)
+
         # choose nbest
         if normalized:
             nbest_hypos = sorted(hypos,
                                  key=lambda n: n["score"] /
                                  (len(n["trans"]) - 1),
-                                 reverse=True)[:nbest]
+                                 reverse=True)
         else:
-            nbest_hypos = sorted(hypos, key=lambda n: n["score"],
-                                 reverse=True)[:nbest]
+            nbest_hypos = sorted(hypos, key=lambda n: n["score"], reverse=True)
         return [{
             "score": n["score"],
             "trans": n["trans"]
-        } for n in nbest_hypos]
+        } for n in nbest_hypos[:nbest]]
 
     def _trace_back_hypos(self,
                           index,
                           back_point,
                           hist_token,
-                          accu_score,
+                          score,
                           sos=1,
                           eos=2):
         """
         Trace back from current time point
         """
         trans = []
-        score = accu_score[index]
+        score = score.item()
         for ptr, tok in zip(back_point[::-1], hist_token[::-1]):
             trans.append(tok[index].item())
             index = ptr[index]
@@ -320,7 +321,9 @@ class TorchDecoder(nn.Module):
         if max_len is None:
             max_len = T
         else:
-            max_len = min(T, max_len)
+            # if inputs are down-sampled, and small output
+            # unit (like graphme) may longer than length of the inputs
+            max_len = max(T, max_len)
 
         dev = enc_out.device
         att_ali = None
@@ -330,7 +333,6 @@ class TorchDecoder(nn.Module):
         att_ctx = th.zeros([N * beam, D_enc], device=dev)
         proj = th.zeros([N * beam, D_enc], device=dev)
 
-        eos_dev = th.tensor(eos, dtype=th.int64, device=dev)
         accu_score = th.zeros(beam, device=dev)
         hist_token = []
         back_point = []
@@ -380,7 +382,7 @@ class TorchDecoder(nn.Module):
                 accu_score = accu_score[..., None] + topk_score
                 # if previous step outputs eos, set -inf
                 # then it will not appear after topk operation
-                accu_score[out == eos_dev] = NEG_INF
+                # accu_score[out == eos_dev] = NEG_INF
                 # beam*beam => beam
                 accu_score, topk_index = th.topk(accu_score.view(-1),
                                                  beam,
@@ -388,11 +390,12 @@ class TorchDecoder(nn.Module):
                 # point to father's node
                 point = topk_index // beam
 
-                # 1 x beam*beam
-                topk_token = topk_token.view(1, -1)
+                # beam*beam
+                topk_token = topk_token.view(-1)
+                token = topk_token[topk_index]
                 # 1 x beam
-                token = th.gather(topk_token, 1, topk_index[None, ...])
-                token = token[0]
+                # token = th.gather(topk_token, 1, topk_index[None, ...])
+                # token = token[0]
 
             # continue flags
             not_end = (token != eos).tolist()
@@ -403,9 +406,10 @@ class TorchDecoder(nn.Module):
                     hyp = self._trace_back_hypos(point[i],
                                                  back_point,
                                                  hist_token,
-                                                 accu_score,
+                                                 accu_score[i],
                                                  sos=sos,
                                                  eos=eos)
+                    accu_score[i] = NEG_INF
                     hypos.append(hyp)
 
             # all True
@@ -419,10 +423,10 @@ class TorchDecoder(nn.Module):
             if t == max_len - 1:
                 for i, go_on in enumerate(not_end):
                     if go_on:
-                        hyp = self._trace_back_hypos(point[i],
+                        hyp = self._trace_back_hypos(i,
                                                      back_point,
                                                      hist_token,
-                                                     accu_score,
+                                                     accu_score[i],
                                                      sos=sos,
                                                      eos=eos)
                         hypos.append(hyp)
@@ -430,9 +434,7 @@ class TorchDecoder(nn.Module):
             nbest_hypos = sorted(hypos,
                                  key=lambda n: n["score"] /
                                  (len(n["trans"]) - 1),
-                                 reverse=True)[:nbest]
+                                 reverse=True)
         else:
-            nbest_hypos = sorted(hypos, key=lambda n: n["score"],
-                                 reverse=True)[:nbest]
-
-        return nbest_hypos
+            nbest_hypos = sorted(hypos, key=lambda n: n["score"], reverse=True)
+        return nbest_hypos[:nbest]
