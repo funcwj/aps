@@ -101,7 +101,7 @@ class EnhLasASR(nn.Module):
                     x,
                     beam=8,
                     nbest=1,
-                    max_len=None,
+                    max_len=-1,
                     vectorized=False,
                     normalized=True):
         """

@@ -79,7 +79,7 @@ class LasASR(nn.Module):
                     x,
                     beam=8,
                     nbest=5,
-                    max_len=None,
+                    max_len=-1,
                     vectorized=False,
                     normalized=True):
         """
@@ -91,12 +91,16 @@ class LasASR(nn.Module):
                 if x.dim() != 1:
                     raise RuntimeError("Now only support for one utterance")
                 x, _ = self.asr_transform(x[None, ...], None)
+                # 1 x C x T x ... or 1 x T x F
+                inp_len = x.shape[-2]
                 enc_out, _ = self.encoder(x, None)
             else:
-                # 1 x Ti x F
                 if x.dim() != 2:
                     raise RuntimeError("Now only support for one utterance")
-                enc_out, _ = self.encoder(x.unsqueeze(0), None)
+                # Ti x F
+                inp_len = x.shape[0]
+                enc_out, _ = self.encoder(x[None, ...], None)
+            max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
             if vectorized:
                 return self.decoder.beam_search_vectorized(
                     enc_out,
@@ -114,3 +118,39 @@ class LasASR(nn.Module):
                                                 sos=self.sos,
                                                 eos=self.eos,
                                                 normalized=normalized)
+
+    def beam_search_batch(self,
+                          x,
+                          x_len,
+                          beam=8,
+                          nbest=5,
+                          max_len=-1,
+                          normalized=True):
+        """
+        args
+            x: S or Ti x F
+        """
+        with th.no_grad():
+            if self.asr_transform:
+                if x.dim() == 1:
+                    raise RuntimeError(
+                        "Got one utterance, use beam_search(...) instead")
+                x, x_len = self.asr_transform(x, x_len)
+                inp_len = x.shape[-2]
+                enc_out, enc_len = self.encoder(x, x_len)
+            else:
+                # N x Ti x F
+                if x.dim() == 2:
+                    raise RuntimeError(
+                        "Got one utterance, use beam_search(...) instead")
+                inp_len = x.shape[1]
+                enc_out, enc_len = self.encoder(x, x_len)
+            max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
+            return self.decoder.beam_search_batch(enc_out,
+                                                  enc_len,
+                                                  beam=beam,
+                                                  nbest=nbest,
+                                                  max_len=max_len,
+                                                  sos=self.sos,
+                                                  eos=self.eos,
+                                                  normalized=normalized)

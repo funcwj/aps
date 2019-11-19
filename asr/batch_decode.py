@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 
 import yaml
+import random
 import pathlib
 import argparse
 
 import torch as th
+
+from torch.nn.utils.rnn import pad_sequence
 
 from libs.evaluator import Evaluator
 from libs.utils import get_logger, StrToBoolAction
@@ -16,18 +19,21 @@ from kaldi_python_io import ScriptReader
 logger = get_logger(__name__)
 
 
-class FasterDecoder(Evaluator):
+class BatchDecoder(Evaluator):
     """
     Decoder wrapper
     """
     def __init__(self, cpt_dir, device_id=-1):
         nnet = self._load(cpt_dir)
-        # print(f"Nnet structure:\n{nnet}")
-        super(FasterDecoder, self).__init__(nnet, cpt_dir, device_id=-1)
+        super(BatchDecoder, self).__init__(nnet, cpt_dir, device_id=-1)
 
-    def compute(self, src, **kwargs):
-        src = th.from_numpy(src).to(self.device)
-        return self.nnet.beam_search(src, **kwargs)
+    def compute(self, src, xlen, **kwargs):
+        src = pad_sequence([th.from_numpy(s) for s in src],
+                           batch_first=True,
+                           padding_value=0)
+        src = src.to(self.device)
+        xlen = th.tensor(xlen, dtype=th.int64, device=self.device)
+        return self.nnet.beam_search_batch(src, xlen, **kwargs)
 
     def _load(self, cpt_dir):
         with open(pathlib.Path(cpt_dir) / "train.yaml", "r") as f:
@@ -54,6 +60,8 @@ class FasterDecoder(Evaluator):
 
 
 def run(args):
+    if args.batch_size == 1:
+        raise RuntimeError("batch_size == 1, use decode.py instead")
     # build dictionary
     if args.dict:
         with open(args.dict, "r") as f:
@@ -63,41 +71,57 @@ def run(args):
                 vocab[int(idx)] = unit
     else:
         vocab = None
-    decoder = FasterDecoder(args.checkpoint, device_id=args.device_id)
+    decoder = BatchDecoder(args.checkpoint, device_id=args.device_id)
     if decoder.accept_raw:
         src_reader = WaveReader(args.feats_or_wav_scp, sr=16000)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
+    logger.info("Prepare dataset ...")
+    # long to short
+    utts_sort = [{"key": key, "len": src.shape[-1]} for key, src in src_reader]
+    utts_sort = sorted(utts_sort, key=lambda n: n["len"], reverse=True)
+    logger.info("Prepare dataset done")
+    batches = []
+    n = 0
+    while n < len(utts_sort):
+        batches.append(utts_sort[n:n + args.batch_size])
+        n += args.batch_size
+    random.shuffle(batches)
+
     output = open(args.output, "w") if args.output != "-" else None
-    N = 0
-    for key, src in src_reader:
-        logger.info(f"Decoding utterance {key}...")
-        nbest = decoder.compute(src,
-                                beam=args.beam_size,
-                                nbest=args.nbest,
-                                max_len=args.max_len,
-                                normalized=args.normalized,
-                                vectorized=args.vectorized)
-        for hyp in nbest:
-            score = hyp["score"]
-            logger.info(f"{key} score = {score:.2f}")
-            # remove SOS/EOS
-            if vocab:
-                trans = [vocab[idx] for idx in hyp["trans"][1:-1]]
-            else:
-                trans = [str(idx) for idx in hyp["trans"][1:-1]]
-            if vocab and args.space:
-                trans = "".join(trans).replace(args.space, " ")
-            else:
-                trans = " ".join(trans)
-            if not output:
-                print(f"{key} {trans}", flush=True)
-            else:
-                output.write(f"{key} {trans}\n")
-                if not (N + 1) % 50:
-                    output.flush()
-        N += 1
+
+    for batch in batches:
+        # prepare inputs
+        keys = [b["key"] for b in batch]
+        xlen = [b["len"] for b in batch]
+        mats = [src_reader[key] for key in keys]
+        # decode
+        batch_nbest = decoder.compute(mats,
+                                      xlen,
+                                      beam=args.beam_size,
+                                      nbest=args.nbest,
+                                      max_len=args.max_len,
+                                      normalized=args.normalized)
+
+        for key, nbest in zip(keys, batch_nbest):
+            logger.info(f"Decoding utterance {key}...")
+            for hyp in nbest:
+                score = hyp["score"]
+                logger.info(f"{key} score = {score:.2f}")
+                # remove SOS/EOS
+                if vocab:
+                    trans = [vocab[idx] for idx in hyp["trans"][1:-1]]
+                else:
+                    trans = [str(idx) for idx in hyp["trans"][1:-1]]
+                if vocab and args.space:
+                    trans = "".join(trans).replace(args.space, " ")
+                else:
+                    trans = " ".join(trans)
+                if not output:
+                    print(f"{key} {trans}", flush=True)
+                else:
+                    output.write(f"{key} {trans}\n")
     if output:
         output.close()
     logger.info(f"Decode {len(src_reader)} utterance done")
@@ -149,10 +173,10 @@ if __name__ == "__main__":
                         default="las",
                         choices=["las", "enh_las", "transformer"],
                         help="Network type used")
-    parser.add_argument("--vectorized",
-                        action=StrToBoolAction,
-                        default="false",
-                        help="If ture, using vectorized algothrim")
+    parser.add_argument("--batch-size",
+                        type=int,
+                        default=4,
+                        help="Number of utterances to process in a batch")
     parser.add_argument("--normalized",
                         action=StrToBoolAction,
                         default="false",

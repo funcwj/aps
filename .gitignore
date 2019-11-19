@@ -4,3 +4,4 @@ __pycache__/
 
 asr/test
 asr/debug*
+egs/

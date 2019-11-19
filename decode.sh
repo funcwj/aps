@@ -4,9 +4,12 @@
 
 set -eu
 
+dict=""
 stage=1
-max_len=200
+space=""
+max_len=100
 beam_size=16
+batch_size=1
 normalized=true
 
 echo "$0 $@"
@@ -26,21 +29,39 @@ exp_dir=exp/$data/$exp_id
 cmd="/home/work_nfs/common/tools/pyqueue_tts.pl"
 python=$(which python)
 
-if [ $stage -le 1 ]; then
-  $cmd --gpu 1 $data.decode.$exp_id.log \
-    $python asr/decode.py \
-    $data_dir/tst/wav.scp \
-    $exp_dir/beam${beam_size}_decode.token \
-    --beam-size $beam_size \
-    --checkpoint $exp_dir \
-    --device-id 0 \
-    --nnet "las" \
-    --normalized $normalized \
-    --vectorized false \
-    --max-len $max_len
+if [ $stage -eq 1 ]; then
+  if [ $batch_size -eq 1 ]; then
+    $cmd --gpu 1 $data.decode.$exp_id.log \
+      $python asr/decode.py \
+      $data_dir/tst/wav.scp \
+      $exp_dir/beam${beam_size}_decode.token \
+      --beam-size $beam_size \
+      --checkpoint $exp_dir \
+      --device-id 0 \
+      --nnet "las" \
+      --dict "$dict" \
+      --space "$space" \
+      --max-len $max_len \
+      --normalized $normalized \
+      --vectorized true
+  else
+    $cmd --gpu 1 $data.decode.$exp_id.log \
+      $python asr/decode.py \
+      $data_dir/tst/wav.scp \
+      $exp_dir/beam${beam_size}_decode.token \
+      --beam-size $beam_size \
+      --batch-size $batch_size \
+      --checkpoint $exp_dir \
+      --device-id 0 \
+      --nnet "las" \
+      --dict "$dict" \
+      --space "$space" \
+      --max-len $max_len \
+      --normalized $normalized
+  fi
 fi
 
-if [ $stage -le 2 ]; then
+if [ $stage -eq 2 ]; then
   cat $exp_dir/beam${beam_size}_decode.token | \
     local/token2idx.pl <(awk '{print $2"\t"$1}' $data_dir/dict) \
     > $exp_dir/beam${beam_size}_decode.trans

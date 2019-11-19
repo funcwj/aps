@@ -73,6 +73,7 @@ class TorchDecoder(nn.Module):
         self.proj = nn.Linear(hidden_size + enc_proj, enc_proj)
         self.pred = nn.Linear(enc_proj, vocab_size)
         self.input_feeding = input_feeding
+        self.vocab_size = vocab_size
 
     def _step_decoder(self, emb_pre, att_ctx, dec_hid=None):
         """
@@ -88,7 +89,7 @@ class TorchDecoder(nn.Module):
         return dec_out.squeeze(1), hx
 
     def _step(self,
-              emb_pre,
+              out_pre,
               enc_out,
               att_ctx,
               dec_hid=None,
@@ -98,6 +99,8 @@ class TorchDecoder(nn.Module):
         """
         Make a prediction step
         """
+        # N x D_emb or N x V
+        emb_pre = self.vocab_embed(out_pre)
         # dec_out: N x D_dec
         dec_out, dec_hid = self._step_decoder(
             emb_pre, proj if self.input_feeding else att_ctx, dec_hid=dec_hid)
@@ -141,16 +144,14 @@ class TorchDecoder(nn.Module):
             # using output at previous time step
             # out: N
             if t and random.random() < schedule_sampling:
-                out = th.argmax(outs[-1].detach(), dim=1)
+                out_pre = th.argmax(outs[-1].detach(), dim=1)
             else:
                 if t == 0:
-                    out = th.tensor([sos] * N, dtype=th.int64, device=dev)
+                    out_pre = th.tensor([sos] * N, dtype=th.int64, device=dev)
                 else:
-                    out = tgt_pad[:, t - 1]
-            # N x D_emb or N x V
-            emb_pre = self.vocab_embed(out)
+                    out_pre = tgt_pad[:, t - 1]
             # step forward
-            att_ali, att_ctx, dec_hid, proj, pred = self._step(emb_pre,
+            att_ali, att_ctx, dec_hid, proj, pred = self._step(out_pre,
                                                                enc_pad,
                                                                att_ctx,
                                                                dec_hid=dec_hid,
@@ -169,7 +170,7 @@ class TorchDecoder(nn.Module):
                     enc_out,
                     beam=8,
                     nbest=1,
-                    max_len=None,
+                    max_len=-1,
                     sos=-1,
                     eos=-1,
                     normalized=True):
@@ -181,9 +182,6 @@ class TorchDecoder(nn.Module):
         # reset flags
         self.attend.reset()
 
-        if beam < nbest:
-            raise RuntimeError("N-best value can not exceed " +
-                               f"beam size, {beam:d} vs {nbest:d}")
         if sos < 0 or eos < 0:
             raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
         N, T, D_enc = enc_out.shape
@@ -206,11 +204,13 @@ class TorchDecoder(nn.Module):
 
         alive = [init_node()]
         hypos = []
-        if max_len is None:
+        if max_len <= 0:
             max_len = T
         else:
             max_len = max(T, max_len)
-
+        nbest = min(beam, nbest)
+        if beam > self.vocab_size:
+            raise RuntimeError(f"Beam size({beam}) > vocabulary size")
         # step by step
         for t in range(max_len):
             beams = []
@@ -219,7 +219,7 @@ class TorchDecoder(nn.Module):
                 out = th.tensor([n["trans"][-1]], dtype=th.int64, device=dev)
                 # step forward
                 att_ali, att_ctx, dec_hid, proj, pred = self._step(
-                    self.vocab_embed(out),
+                    out,
                     enc_out,
                     n["att_ctx"],
                     dec_hid=n["dec_hid"],
@@ -258,6 +258,9 @@ class TorchDecoder(nn.Module):
             if not len(alive):
                 break
 
+            if len(hypos) >= beam:
+                break
+
             if t == max_len - 1:
                 for n in alive:
                     n["trans"].append(eos)
@@ -276,28 +279,11 @@ class TorchDecoder(nn.Module):
             "trans": n["trans"]
         } for n in nbest_hypos[:nbest]]
 
-    def _trace_back_hypos(self,
-                          index,
-                          back_point,
-                          hist_token,
-                          score,
-                          sos=1,
-                          eos=2):
-        """
-        Trace back from current time point
-        """
-        trans = []
-        score = score.item()
-        for ptr, tok in zip(back_point[::-1], hist_token[::-1]):
-            trans.append(tok[index].item())
-            index = ptr[index]
-        return {"score": score, "trans": [sos] + trans[::-1] + [eos]}
-
     def beam_search_vectorized(self,
                                enc_out,
                                beam=8,
                                nbest=1,
-                               max_len=None,
+                               max_len=-1,
                                sos=-1,
                                eos=-1,
                                normalized=True):
@@ -309,21 +295,39 @@ class TorchDecoder(nn.Module):
         # reset flags
         self.attend.reset()
 
-        if beam < nbest:
-            raise RuntimeError("N-best value can not exceed " +
-                               f"beam size, {beam:d} vs {nbest:d}")
         if sos < 0 or eos < 0:
             raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
         N, T, D_enc = enc_out.shape
         if N != 1:
             raise RuntimeError(
                 f"Got batch size {N:d}, now only support one utterance")
-        if max_len is None:
+
+        def _trace_back_hypos(point,
+                              back_point,
+                              hist_token,
+                              score,
+                              sos=1,
+                              eos=2):
+            """
+            Trace back from current time point
+            """
+            trans = []
+            score = score.item()
+            for ptr, tok in zip(back_point[::-1], hist_token[::-1]):
+                trans.append(tok[point].item())
+                point = ptr[point]
+            return {"score": score, "trans": [sos] + trans[::-1] + [eos]}
+
+        if max_len <= 0:
             max_len = T
         else:
             # if inputs are down-sampled, and small output
             # unit (like graphme) may longer than length of the inputs
             max_len = max(T, max_len)
+
+        nbest = min(beam, nbest)
+        if beam > self.vocab_size:
+            raise RuntimeError(f"Beam size({beam}) > vocabulary size")
 
         dev = enc_out.device
         att_ali = None
@@ -359,11 +363,9 @@ class TorchDecoder(nn.Module):
             if att_ali is not None:
                 att_ali = att_ali[point]
 
-            # out_emb: beam x E
-            out_emb = self.vocab_embed(out)
             # step forward
             att_ali, att_ctx, dec_hid, proj, pred = self._step(
-                out_emb,
+                out,
                 enc_out,
                 att_ctx[point],
                 dec_hid=dec_hid,
@@ -380,9 +382,6 @@ class TorchDecoder(nn.Module):
             else:
                 # beam x beam = beam x 1 + beam x beam
                 accu_score = accu_score[..., None] + topk_score
-                # if previous step outputs eos, set -inf
-                # then it will not appear after topk operation
-                # accu_score[out == eos_dev] = NEG_INF
                 # beam*beam => beam
                 accu_score, topk_index = th.topk(accu_score.view(-1),
                                                  beam,
@@ -393,9 +392,6 @@ class TorchDecoder(nn.Module):
                 # beam*beam
                 topk_token = topk_token.view(-1)
                 token = topk_token[topk_index]
-                # 1 x beam
-                # token = th.gather(topk_token, 1, topk_index[None, ...])
-                # token = token[0]
 
             # continue flags
             not_end = (token != eos).tolist()
@@ -403,18 +399,22 @@ class TorchDecoder(nn.Module):
             # process eos nodes
             for i, go_on in enumerate(not_end):
                 if not go_on:
-                    hyp = self._trace_back_hypos(point[i],
-                                                 back_point,
-                                                 hist_token,
-                                                 accu_score[i],
-                                                 sos=sos,
-                                                 eos=eos)
+                    hyp = _trace_back_hypos(point[i],
+                                            back_point,
+                                            hist_token,
+                                            accu_score[i],
+                                            sos=sos,
+                                            eos=eos)
                     accu_score[i] = NEG_INF
                     hypos.append(hyp)
 
             # all True
             if sum(not_end) == 0:
                 break
+
+            if len(hypos) >= beam:
+                break
+
             # add best token
             hist_token.append(token)
             back_point.append(point)
@@ -423,12 +423,12 @@ class TorchDecoder(nn.Module):
             if t == max_len - 1:
                 for i, go_on in enumerate(not_end):
                     if go_on:
-                        hyp = self._trace_back_hypos(i,
-                                                     back_point,
-                                                     hist_token,
-                                                     accu_score[i],
-                                                     sos=sos,
-                                                     eos=eos)
+                        hyp = _trace_back_hypos(i,
+                                                back_point,
+                                                hist_token,
+                                                accu_score[i],
+                                                sos=sos,
+                                                eos=eos)
                         hypos.append(hyp)
         if normalized:
             nbest_hypos = sorted(hypos,
@@ -438,3 +438,187 @@ class TorchDecoder(nn.Module):
         else:
             nbest_hypos = sorted(hypos, key=lambda n: n["score"], reverse=True)
         return nbest_hypos[:nbest]
+
+    def beam_search_batch(self,
+                          enc_out,
+                          enc_len,
+                          beam=8,
+                          nbest=1,
+                          max_len=-1,
+                          sos=-1,
+                          eos=-1,
+                          normalized=True):
+        """
+        Vectorized beam search algothrim (now inferior than normal beam search)
+        args
+            enc_out: N x T x F
+            enc_len: N
+        """
+        # reset flags
+        self.attend.reset()
+
+        if sos < 0 or eos < 0:
+            raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
+        N, T, D_enc = enc_out.shape
+
+        def _trace_back_hypos(uttid,
+                              point,
+                              back_point,
+                              hist_token,
+                              score,
+                              sos=1,
+                              eos=2):
+            """
+            Trace back from current time point
+            """
+            trans = []
+            score = score.item()
+            for ptr, tok in zip(back_point[::-1], hist_token[::-1]):
+                trans.append(tok[uttid, point].item())
+                point = ptr[uttid, point]
+            return {"score": score, "trans": [sos] + trans[::-1] + [eos]}
+
+        if max_len <= 0:
+            max_len = T
+        else:
+            # if inputs are down-sampled, and small output
+            # unit (like graphme) may longer than length of the inputs
+            max_len = max(T, max_len)
+
+        nbest = min(beam, nbest)
+        if beam > self.vocab_size:
+            raise RuntimeError(f"Beam size({beam}) > vocabulary size")
+
+        dev = enc_out.device
+        att_ali = None
+        dec_hid = None
+        # N x T x F => N*beam x T x F
+        enc_out = th.repeat_interleave(enc_out, beam, 0)
+        enc_len = th.repeat_interleave(enc_len, beam, 0)
+        att_ctx = th.zeros([N * beam, D_enc], device=dev)
+        proj = th.zeros([N * beam, D_enc], device=dev)
+
+        accu_score = th.zeros(N, beam, device=dev)
+        hist_token = []
+        back_point = []
+        step_point = th.arange(0, beam * N, beam, device=dev, dtype=th.int64)
+        # for each utterance
+        hypos = [[] for _ in range(N)]
+        stop_batch = [False] * N
+        # step by step
+        for t in range(max_len):
+            # N*beam
+            if t:
+                out = hist_token[-1].view(-1)
+                # N x beam
+                point = back_point[-1] + step_point[..., None]
+                point = point.view(-1)
+            else:
+                out = th.tensor([sos] * (beam * N), dtype=th.int64, device=dev)
+                point = th.tensor(list(range(beam)) * N,
+                                  dtype=th.int64,
+                                  device=dev)
+
+            # swap order
+            if dec_hid is not None:
+                if isinstance(dec_hid, tuple):
+                    # shape: num_layers * num_directions, batch, hidden_size
+                    h, c = dec_hid
+                    dec_hid = (h[:, point], c[:, point])
+                else:
+                    dec_hid = dec_hid[:, point]
+            if att_ali is not None:
+                att_ali = att_ali[point]
+
+            # step forward
+            att_ali, att_ctx, dec_hid, proj, pred = self._step(
+                out,
+                enc_out,
+                att_ctx[point],
+                enc_len=enc_len,
+                dec_hid=dec_hid,
+                att_ali=att_ali,
+                proj=proj[point])
+            # compute prob: N*beam x V, nagetive
+            prob = F.log_softmax(pred, dim=-1)
+            # local pruning: N*beam x beam
+            topk_score, topk_token = th.topk(prob, beam, dim=-1)
+            if t == 0:
+                # N x beam
+                accu_score += topk_score[::beam]
+                token = topk_token[::beam]
+                point = point.view(N, -1)
+            else:
+                # N*beam x beam = N*beam x 1 + N*beam x beam
+                accu_score = accu_score.view(-1, 1) + topk_score
+                # N x beam*beam => N x beam
+                accu_score, topk_index = th.topk(accu_score.view(N, -1),
+                                                 beam,
+                                                 dim=-1)
+                # point to father's node
+                # N x beam
+                point = topk_index // beam
+
+                # N x beam*beam
+                topk_token = topk_token.view(N, -1)
+                token = th.gather(topk_token, -1, topk_index)
+
+            # continue flags, N x beam
+            not_end = (token != eos).tolist()
+
+            # process eos nodes
+            for u in range(N):
+                # skip utterance u
+                if sum(not_end[u]) == 0 or len(hypos[u]) >= beam:
+                    stop_batch[u] = True
+                else:
+                    for i, go_on in enumerate(not_end[u]):
+                        if not go_on:
+                            hyp = _trace_back_hypos(u,
+                                                    point[u, i],
+                                                    back_point,
+                                                    hist_token,
+                                                    accu_score[u, i],
+                                                    sos=sos,
+                                                    eos=eos)
+                            accu_score[u, i] = NEG_INF
+                            hypos[u].append(hyp)
+
+            # all True, break search
+            if sum(stop_batch) == N:
+                break
+
+            # add best token
+            hist_token.append(token.clone())
+            back_point.append(point)
+
+            # process non-eos nodes at the final step
+            if t == max_len - 1:
+                for u in range(N):
+                    # skip utterance u
+                    if stop_batch[u]:
+                        continue
+                    for i, go_on in enumerate(not_end[u]):
+                        if go_on:
+                            hyp = _trace_back_hypos(u,
+                                                    i,
+                                                    back_point,
+                                                    hist_token,
+                                                    accu_score[u, i],
+                                                    sos=sos,
+                                                    eos=eos)
+                            hypos[u].append(hyp)
+
+        nbest_hypos = []
+        for utt_bypos in hypos:
+            if normalized:
+                hypos = sorted(utt_bypos,
+                               key=lambda n: n["score"] /
+                               (len(n["trans"]) - 1),
+                               reverse=True)
+            else:
+                hypos = sorted(utt_bypos,
+                               key=lambda n: n["score"],
+                               reverse=True)
+            nbest_hypos.append(hypos[:nbest])
+        return nbest_hypos
