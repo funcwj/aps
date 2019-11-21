@@ -122,6 +122,7 @@ def run(args):
                     print(f"{key} {trans}", flush=True)
                 else:
                     output.write(f"{key} {trans}\n")
+        output.flush()
     if output:
         output.close()
     logger.info(f"Decode {len(src_reader)} utterance done")

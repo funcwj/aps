@@ -146,6 +146,10 @@ if __name__ == "__main__":
                         type=str,
                         default="",
                         help="Exist model to resume training from")
+    parser.add_argument("--init",
+                        type=str,
+                        default="",
+                        help="Exist model to initialize model training")
     parser.add_argument("--batch-size",
                         type=int,
                         default=32,

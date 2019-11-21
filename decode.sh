@@ -40,13 +40,13 @@ if [ $stage -eq 1 ]; then
       --device-id 0 \
       --nnet "las" \
       --dict "$dict" \
-      --space "$space" \
+      --space "\"$space\"" \
       --max-len $max_len \
       --normalized $normalized \
       --vectorized true
   else
     $cmd --gpu 1 $data.decode.$exp_id.log \
-      $python asr/decode.py \
+      $python asr/batch_decode.py \
       $data_dir/tst/wav.scp \
       $exp_dir/beam${beam_size}_decode.token \
       --beam-size $beam_size \
@@ -55,7 +55,7 @@ if [ $stage -eq 1 ]; then
       --device-id 0 \
       --nnet "las" \
       --dict "$dict" \
-      --space "$space" \
+      --space "\"$space\"" \
       --max-len $max_len \
       --normalized $normalized
   fi

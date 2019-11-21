@@ -1,10 +1,9 @@
-# wujian@2018
+# wujian@2019
 
 import sys
 import uuid
 import random
 
-from itertools import permutations
 from collections import defaultdict
 from pathlib import Path
 
@@ -145,7 +144,8 @@ class Trainer(object):
                  gradient_clip=None,
                  logging_period=100,
                  save_interval=-1,
-                 resume=None,
+                 resume="",
+                 init="",
                  tensorboard=False,
                  no_impr=6):
         if schedule_strategy not in ["const", "saturate"]:
@@ -168,19 +168,25 @@ class Trainer(object):
         self.ssr_vary = 0
         self.sss = schedule_strategy
 
-        if resume:
-            if not Path(resume).exists():
+        if resume or init:
+            cpt_path = resume if resume else init
+            if not Path(cpt_path).exists():
                 raise FileNotFoundError(
-                    f"Could not find resume checkpoint: {resume}")
-            cpt = th.load(resume, map_location="cpu")
+                    f"Could not find resume/init checkpoint: {cpt_path}")
+            cpt = th.load(cpt_path, map_location="cpu")
             self.cur_epoch = cpt["epoch"]
-            self.reporter.log(
-                f"Resume from checkpoint {resume}: epoch {self.cur_epoch}")
-            # load nnet
             nnet.load_state_dict(cpt["model_state_dict"])
             self.nnet = nnet.to(self.default_device)
-            self.optimizer = self.create_optimizer(
-                optimizer, optimizer_kwargs, state=cpt["optim_state_dict"])
+            if resume:
+                self.reporter.log(f"Resume from checkpoint {cpt_path}: " +
+                                  f"epoch {self.cur_epoch}")
+                self.optimizer = self.create_optimizer(
+                    optimizer, optimizer_kwargs, state=cpt["optim_state_dict"])
+            else:
+                self.reporter.log(f"Intialized from checkpoint {cpt_path}: " +
+                                  f"epoch {self.cur_epoch}")
+                self.optimizer = self.create_optimizer(optimizer,
+                                                       optimizer_kwargs)
         else:
             self.nnet = nnet.to(self.default_device)
             self.optimizer = self.create_optimizer(optimizer, optimizer_kwargs)
