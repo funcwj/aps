@@ -184,6 +184,43 @@ class SpecAugTransform(nn.Module):
         return x
 
 
+class SpliceTransform(nn.Module):
+    """
+    Do splicing as well as downsampling if needed
+    """
+    def __init__(self, lctx=0, rctx=0, ds_rate=1):
+        super(SpliceTransform, self).__init__()
+        self.rate = ds_rate
+        self.lctx = max(lctx, 0)
+        self.rctx = max(rctx, 0)
+
+    def extra_repr(self):
+        return f"context=({self.lctx}, {self.rctx}), downsample_rate={self.rate}"
+
+    def dim_scale(self):
+        return (1 + self.rctx + self.lctx)
+
+    def forward(self, x):
+        """
+        x: original feature, N x ... x Ti x F
+        y: spliced feature, N x ... x To x FD
+        """
+        T = x.shape[-2]
+        T = T - T % self.rate
+        if self.lctx + self.rctx != 0:
+            ctx = []
+            for c in range(-self.lctx, self.rctx + 1):
+                idx = th.arange(c, c + T, device=x.device, dtype=th.int64)
+                idx = th.clamp(idx, min=0, max=T - 1)
+                # N x ... x T x F
+                ctx.append(th.index_select(x, -2, idx))
+            # N x ... x T x FD
+            x = th.cat(ctx, -1)
+        if self.rate != 1:
+            x = x[..., ::self.rate, :]
+        return x
+
+
 class DeltaTransform(nn.Module):
     """
     Add delta features
@@ -224,7 +261,7 @@ class DeltaTransform(nn.Module):
 class FeatureTransform(nn.Module):
     """
     Feature transform for ASR tasks
-    Spectrogram - MelTransform - LogTransform - SpecAugTransform - CmvnTransform - DeltaTransform
+    Spectrogram - MelTransform - LogTransform - CmvnTransform - SpecAugTransform - SpliceTransform - DeltaTransform
     """
     def __init__(self,
                  feats="fbank-log-cmvn",
@@ -242,13 +279,17 @@ class FeatureTransform(nn.Module):
                  num_aug_steps=2,
                  norm_mean=True,
                  norm_var=True,
-                 ctx=2,
-                 order=2,
+                 ds_rate=1,
+                 lctx=1,
+                 rctx=1,
+                 delta_ctx=2,
+                 delta_order=2,
                  eps=EPSILON):
         super(FeatureTransform, self).__init__()
         trans_tokens = feats.split("-")
         transform = []
         feats_dim = 0
+        downsample_rate = 1
         for tok in trans_tokens:
             if tok == "spectrogram":
                 transform.append(
@@ -289,13 +330,26 @@ class FeatureTransform(nn.Module):
                                      mask_step=mask_step,
                                      num_bands=num_aug_bands,
                                      num_steps=num_aug_steps))
+            elif tok == "splice":
+                transform.append(
+                    SpliceTransform(lctx=lctx, rctx=rctx, ds_rate=ds_rate))
+                feats_dim *= (1 + lctx + rctx)
+                downsample_rate = ds_rate
             elif tok == "delta":
-                transform.append(DeltaTransform(ctx=ctx, order=order))
-                feats_dim *= (1 + order)
+                transform.append(
+                    DeltaTransform(ctx=delta_ctx, order=delta_order))
+                feats_dim *= (1 + delta_order)
             else:
                 raise RuntimeError(f"Unknown token {tok} in {feats}")
         self.transform = nn.Sequential(*transform)
         self.feats_dim = feats_dim
+        self.downsample_rate = downsample_rate
+
+    def num_frames(self, x_len):
+        """
+        Work out number of frames
+        """
+        return self.transform[0].len(x_len)
 
     def forward(self, x_pad, x_len):
         """
@@ -303,8 +357,13 @@ class FeatureTransform(nn.Module):
             x_pad: raw waveform: N x C x S or N x S
             x_len: N
         return:
-            f_pad: acoustic features: N x C x T x ...
+            feats_pad: acoustic features: N x C x T x ...
+            feats_len: number of frames
         """
-        f_pad = self.transform(x_pad)
-        f_len = None if x_len is None else self.transform[0].len(x_len)
-        return f_pad, f_len
+        feats_pad = self.transform(x_pad)
+        if x_len is None:
+            feats_len = None
+        else:
+            feats_len = self.num_frames(x_len)
+            feats_len = feats_len // self.downsample_rate
+        return feats_pad, feats_len

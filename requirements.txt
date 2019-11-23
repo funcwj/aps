@@ -1,8 +1,10 @@
-kaldi_python_io==1.0.1
-numpy==1.16.4
+editdistance==0.5.3
+librosa==0.6.3
+kaldi_python_io==1.0.4
 scipy==1.2.1
 torch_complex==0.0.1
-torch==1.2.0
+numpy==1.16.4
 SoundFile==0.10.2
-librosa==0.6.3
+torch==1.2.0
+common==0.1.2
 PyYAML==5.1.2
