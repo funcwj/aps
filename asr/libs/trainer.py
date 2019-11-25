@@ -258,15 +258,19 @@ class Trainer(object):
             self.optimizer.zero_grad()
             ssr = self.ssr_init if self.sss == "const" else self.ssr_vary
             loss, accu = self.compute_loss(egs, idx=idx, ssr=ssr)
-            loss.backward()
             if self.gradient_clip:
                 norm = clip_grad_norm_(self.nnet.parameters(),
                                        self.gradient_clip)
                 self.reporter.add("norm", norm)
-            self.optimizer.step()
 
-            self.reporter.add("loss", loss.item())
-            self.reporter.add("accu", accu)
+            if float("inf") == norm or th.isnan(loss).item():
+                self.reporter.log("Invalid gradient or loss, skip...")
+            else:
+                loss.backward()
+                self.optimizer.step()
+
+                self.reporter.add("loss", loss.item())
+                self.reporter.add("accu", accu)
 
     def eval(self, data_loader):
         self.nnet.eval()
@@ -314,6 +318,8 @@ class Trainer(object):
             sstr += f" | ssr = {rate:.3f}"
             if cv_loss > best_loss:
                 no_impr += 1
+                if self.ssr_vary != self.ssr_init:
+                    self.ssr_vary = self.ssr_init
                 sstr += f" | no impr, best = {self.scheduler.best:.4f}"
             else:
                 best_loss = cv_loss
@@ -366,15 +372,19 @@ class Trainer(object):
 
                 ssr = self.ssr_init if self.sss == "const" else self.ssr_vary
                 loss, accu = self.compute_loss(egs, idx=idx, ssr=ssr)
-                loss.backward()
                 if self.gradient_clip:
                     norm = clip_grad_norm_(self.nnet.parameters(),
                                            self.gradient_clip)
                     self.reporter.add("norm", norm)
-                self.optimizer.step()
-                # record loss & accu
-                self.reporter.add("loss", loss.item())
-                self.reporter.add("accu", accu)
+
+                if float("inf") == norm or th.isnan(loss).item():
+                    self.reporter.log("Invalid gradient or loss, skip...")
+                else:
+                    loss.backward()
+                    self.optimizer.step()
+
+                    self.reporter.add("loss", loss.item())
+                    self.reporter.add("accu", accu)
 
                 # if trained on batches done, start evaluation
                 if trained_batches == 0:

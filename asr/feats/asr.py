@@ -37,8 +37,10 @@ class SpectrogramTransform(STFT):
 
     def forward(self, x):
         """
-        x: input signal, N x C x S or N x S
-        m: magnitude, N x C x T x F or N x T x F
+        args:
+            x: input signal, N x C x S or N x S
+        return:
+            m: magnitude, N x C x T x F or N x T x F
         """
         m, _ = super().forward(x)
         m = th.transpose(m, -1, -2)
@@ -107,8 +109,10 @@ class LogTransform(nn.Module):
 
     def forward(self, x):
         """
-        x: linear feature, N x C x T x F or N x T x F
-        y: log feature, N x C x T x F or N x T x F
+        args:
+            x: features in linear domain, N x C x T x F or N x T x F
+        return:
+            y: features in log domain, N x C x T x F or N x T x F
         """
         x = th.clamp(x, min=self.eps)
         return th.log(x)
@@ -165,8 +169,10 @@ class CmvnTransform(nn.Module):
 
     def forward(self, x):
         """
-        x: feature, N x C x T x F or N x T x F
-        y: normalized feature, N x C x T x F or N x T x F
+        args:
+            x: feature without normalized, N x C x T x F or N x T x F
+        return:
+            y: normalized feature, N x C x T x F or N x T x F
         """
         if not self.norm_mean and not self.norm_var:
             return x
@@ -201,7 +207,10 @@ class SpecAugTransform(nn.Module):
 
     def forward(self, x):
         """
-        x: features N x C x T x F or N x T x F
+        args:
+            x: original features, N x C x T x F or N x T x F
+        return:
+            y: augmented features
         """
         if self.training and th.rand(1).item() < self.p:
             if x.dim() == 4:
@@ -238,8 +247,10 @@ class SpliceTransform(nn.Module):
 
     def forward(self, x):
         """
-        x: original feature, N x ... x Ti x F
-        y: spliced feature, N x ... x To x FD
+        args:
+            x: original feature, N x ... x Ti x F
+        return:
+            y: spliced feature, N x ... x To x FD
         """
         T = x.shape[-2]
         T = T - T % self.rate
@@ -284,8 +295,10 @@ class DeltaTransform(nn.Module):
 
     def forward(self, x):
         """
-        x: feature, N x C x T x F or N x T x F
-        y: delta feature, N x C x T x FD or N x T x FD
+        args:
+            x: original feature, N x C x T x F or N x T x F
+        return:
+            y: delta feature, N x C x T x FD or N x T x FD
         """
         delta = [x]
         for _ in range(self.order):
@@ -297,7 +310,14 @@ class DeltaTransform(nn.Module):
 class FeatureTransform(nn.Module):
     """
     Feature transform for ASR tasks
-    Spectrogram - MelTransform - LogTransform - CmvnTransform - SpecAugTransform - SpliceTransform - DeltaTransform
+        - Spectrogram 
+        - MelTransform 
+        - LogTransform 
+        - DiscreteCosineTransform
+        - CmvnTransform 
+        - SpecAugTransform 
+        - SpliceTransform
+        - DeltaTransform
     """
     def __init__(self,
                  feats="fbank-log-cmvn",
@@ -372,14 +392,14 @@ class FeatureTransform(nn.Module):
                                  sr=sr,
                                  num_mels=num_mels))
                 feats_dim = transform[-1].dim()
+            elif tok == "log":
+                transform.append(LogTransform(eps=eps))
             elif tok == "dct":
                 transform.append(
                     DiscreteCosineTransform(num_ceps=num_ceps,
                                             num_mels=num_mels,
                                             lifter=lifter))
                 feats_dim = transform[-1].dim()
-            elif tok == "log":
-                transform.append(LogTransform(eps=eps))
             elif tok == "cmvn":
                 transform.append(
                     CmvnTransform(norm_mean=norm_mean, norm_var=norm_var))

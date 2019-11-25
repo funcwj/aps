@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
+import sys
 import yaml
+import codecs
 import random
 import pathlib
 import argparse
@@ -64,7 +66,7 @@ def run(args):
         raise RuntimeError("batch_size == 1, use decode.py instead")
     # build dictionary
     if args.dict:
-        with open(args.dict, "r") as f:
+        with codecs.open(args.dict, "r", encoding="utf-8") as f:
             vocab = {}
             for pair in f:
                 unit, idx = pair.split()
@@ -81,7 +83,7 @@ def run(args):
     # long to short
     utts_sort = [{"key": key, "len": src.shape[-1]} for key, src in src_reader]
     utts_sort = sorted(utts_sort, key=lambda n: n["len"], reverse=True)
-    logger.info("Prepare dataset done")
+    logger.info(f"Prepare dataset done ({len(utts_sort)}) utterances")
     batches = []
     n = 0
     while n < len(utts_sort):
@@ -89,7 +91,12 @@ def run(args):
         n += args.batch_size
     random.shuffle(batches)
 
-    output = open(args.output, "w") if args.output != "-" else None
+    if args.output != "-":
+        stdout = False
+        output = codecs.open(args.output, "w", encoding="utf-8")
+    else:
+        stdout = True
+        output = codecs.getwriter("utf-8")(sys.stdout.buffer)
 
     for batch in batches:
         # prepare inputs
@@ -118,12 +125,9 @@ def run(args):
                     trans = "".join(trans).replace(args.space, " ")
                 else:
                     trans = " ".join(trans)
-                if not output:
-                    print(f"{key} {trans}", flush=True)
-                else:
-                    output.write(f"{key} {trans}\n")
+                output.write(f"{key}\t{trans}\n")
         output.flush()
-    if output:
+    if not stdout:
         output.close()
     logger.info(f"Decode {len(src_reader)} utterance done")
 

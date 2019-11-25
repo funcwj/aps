@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
+import sys
 import yaml
+import codecs
 import pathlib
 import argparse
 
@@ -56,7 +58,7 @@ class FasterDecoder(Evaluator):
 def run(args):
     # build dictionary
     if args.dict:
-        with open(args.dict, "r") as f:
+        with codecs.open(args.dict, "r", encoding="utf-8") as f:
             vocab = {}
             for pair in f:
                 unit, idx = pair.split()
@@ -69,7 +71,12 @@ def run(args):
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
-    output = open(args.output, "w") if args.output != "-" else None
+    if args.output != "-":
+        stdout = False
+        output = codecs.open(args.output, "w", encoding="utf-8")
+    else:
+        stdout = True
+        output = codecs.getwriter("utf-8")(sys.stdout.buffer)
     N = 0
     for key, src in src_reader:
         logger.info(f"Decoding utterance {key}...")
@@ -91,14 +98,11 @@ def run(args):
                 trans = "".join(trans).replace(args.space, " ")
             else:
                 trans = " ".join(trans)
-            if not output:
-                print(f"{key} {trans}", flush=True)
-            else:
-                output.write(f"{key} {trans}\n")
-                if not (N + 1) % 50:
-                    output.flush()
+            output.write(f"{key}\t{trans}\n")
+            if not (N + 1) % 50:
+                output.flush()
         N += 1
-    if output:
+    if not stdout:
         output.close()
     logger.info(f"Decode {len(src_reader)} utterance done")
 
