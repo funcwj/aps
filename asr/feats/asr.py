@@ -10,11 +10,11 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .utils import STFT, EPSILON, init_melfilter
+from .utils import STFT, EPSILON, init_melfilter, init_dct
 from .spec_aug import specaug
 
 
-class SpectrogramTransform(nn.Module):
+class SpectrogramTransform(STFT):
     """
     Compute spectrogram as a layer
     """
@@ -23,25 +23,24 @@ class SpectrogramTransform(nn.Module):
                  frame_hop,
                  window="hamm",
                  round_pow_of_two=True):
-        super(SpectrogramTransform, self).__init__()
-        self.frame_len, self.frame_hop = frame_len, frame_hop
-        self.STFT = STFT(frame_len,
-                         frame_hop,
-                         window=window,
-                         round_pow_of_two=round_pow_of_two)
+        super(SpectrogramTransform,
+              self).__init__(frame_len,
+                             frame_hop,
+                             window=window,
+                             round_pow_of_two=round_pow_of_two)
 
     def dim(self):
-        return self.STFT.num_bins
+        return self.num_bins
 
     def len(self, xlen):
-        return self.STFT.num_frames(xlen)
+        return self.num_frames(xlen)
 
     def forward(self, x):
         """
         x: input signal, N x C x S or N x S
         m: magnitude, N x C x T x F or N x T x F
         """
-        m, _ = self.STFT(x)
+        m, _ = super().forward(x)
         m = th.transpose(m, -1, -2)
         return m
 
@@ -58,6 +57,7 @@ class MelTransform(nn.Module):
                  fmin=0.0,
                  fmax=None):
         super(MelTransform, self).__init__()
+        # num_mels x (N // 2 + 1)
         filters = init_melfilter(frame_len,
                                  round_pow_of_two=round_pow_of_two,
                                  sr=sr,
@@ -78,8 +78,10 @@ class MelTransform(nn.Module):
 
     def forward(self, x):
         """
-        x: spectrogram, N x C x T x F or N x T x F
-        y: mel-spectrogram, N x C x T x B
+        args:
+            x: spectrogram, N x C x T x F or N x T x F
+        return:
+            f: mel-spectrogram, N x C x T x B
         """
         if x.dim() not in [3, 4]:
             raise RuntimeError("MelTransform expect 3/4D tensor, " +
@@ -110,6 +112,40 @@ class LogTransform(nn.Module):
         """
         x = th.clamp(x, min=self.eps)
         return th.log(x)
+
+
+class DiscreteCosineTransform(nn.Module):
+    """
+    DCT as a layer (for mfcc features)
+    """
+    def __init__(self, num_ceps=13, num_mels=40, lifter=0):
+        super(DiscreteCosineTransform, self).__init__()
+        self.lifter = lifter
+        self.num_ceps = num_ceps
+        self.dct = nn.Parameter(init_dct(num_ceps, num_mels),
+                                requires_grad=False)
+        cepstral_lifter = 1 + lifter * 0.5 * th.sin(
+            math.pi * th.arange(1, 1 + num_ceps) / lifter)
+        self.cepstral_lifter = nn.Parameter(cepstral_lifter,
+                                            requires_grad=False)
+
+    def dim(self):
+        return self.num_ceps
+
+    def extra_repr(self):
+        return "cepstral_lifter={0}, dct={1[0]}x{1[1]}".format(
+            self.lifter, self.dct.shape)
+
+    def forward(self, x):
+        """
+        args:
+            x: log mel-spectrogram, N x C x T x B
+        return:
+            f: mfcc, N x C x T x P
+        """
+        f = F.linear(x, self.dct, bias=None)
+        f = f * self.cepstral_lifter
+        return f
 
 
 class CmvnTransform(nn.Module):
@@ -271,6 +307,8 @@ class FeatureTransform(nn.Module):
                  round_pow_of_two=True,
                  sr=16000,
                  num_mels=80,
+                 num_ceps=13,
+                 lifter=0,
                  aug_prob=0,
                  wrap_step=4,
                  mask_band=30,
@@ -299,23 +337,46 @@ class FeatureTransform(nn.Module):
                                          round_pow_of_two=round_pow_of_two))
                 feats_dim = transform[-1].dim()
             elif tok == "fbank":
-                transform.append(
+                fbank = [
                     SpectrogramTransform(frame_len,
                                          frame_hop,
                                          window=window,
-                                         round_pow_of_two=round_pow_of_two))
-                transform.append(
+                                         round_pow_of_two=round_pow_of_two),
                     MelTransform(frame_len,
                                  round_pow_of_two=round_pow_of_two,
                                  sr=sr,
-                                 num_mels=num_mels))
+                                 num_mels=num_mels)
+                ]
+                transform += fbank
                 feats_dim = transform[-1].dim()
+            elif tok == "mfcc":
+                log_fbank = [
+                    SpectrogramTransform(frame_len,
+                                         frame_hop,
+                                         window=window,
+                                         round_pow_of_two=round_pow_of_two),
+                    MelTransform(frame_len,
+                                 round_pow_of_two=round_pow_of_two,
+                                 sr=sr,
+                                 num_mels=num_mels),
+                    LogTransform(eps=eps),
+                    DiscreteCosineTransform(num_ceps=num_ceps,
+                                            num_mels=num_mels,
+                                            lifter=lifter)
+                ]
+                transform += log_fbank
             elif tok == "mel":
                 transform.append(
                     MelTransform(frame_len,
                                  round_pow_of_two=round_pow_of_two,
                                  sr=sr,
                                  num_mels=num_mels))
+                feats_dim = transform[-1].dim()
+            elif tok == "dct":
+                transform.append(
+                    DiscreteCosineTransform(num_ceps=num_ceps,
+                                            num_mels=num_mels,
+                                            lifter=lifter))
                 feats_dim = transform[-1].dim()
             elif tok == "log":
                 transform.append(LogTransform(eps=eps))

@@ -2,11 +2,14 @@
 
 import math
 
+import numpy as np
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
 import librosa.filters as filters
+
+from scipy.fftpack import dct
 
 EPSILON = th.finfo(th.float32).eps
 
@@ -72,6 +75,15 @@ def init_melfilter(frame_len,
     mel = filters.mel(sr, N, n_mels=num_mels, fmax=fmax, fmin=fmin, htk=True)
     # num_mels x (N // 2 + 1)
     return th.tensor(mel, dtype=th.float32)
+
+
+def init_dct(num_ceps=13, num_mels=40):
+    """
+    Return DCT matrix
+    """
+    dct_mat = dct(np.eye(num_mels), norm="ortho")[:num_ceps]
+    # num_ceps x num_mels
+    return th.tensor(dct_mat, dtype=th.float32)
 
 
 class STFTBase(nn.Module):

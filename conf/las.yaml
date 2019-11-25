@@ -11,7 +11,7 @@ nnet_conf:
     num_layers: 3
     dropout: 0.2
     pyramid: True
-    ln: False
+    layernorm: False
     bidirectional: True
     add_forward_backward: False
   decoder_dim: 256
@@ -21,6 +21,7 @@ nnet_conf:
     hidden_size: 256  # must eq decoder_dim
     dropout: 0
     input_feeding: True
+    vocab_embeded: True
   att_type: "dot"
   att_kwargs:
     att_dim: 512
@@ -35,8 +36,8 @@ asr_transform:
   num_mels: 80
   norm_mean: True
   norm_var: True
-  ctx: 2
-  order: 2
+  delta_ctx: 2
+  delta_order: 2
   aug_prob: 0.8
   wrap_step: 4
 
