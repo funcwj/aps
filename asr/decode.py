@@ -16,6 +16,19 @@ from feats import support_transform
 from kaldi_python_io import ScriptReader
 
 logger = get_logger(__name__)
+"""
+Nbest format:
+Number: n
+key1
+score-1 hyp-1
+...
+score-n hyp-n
+...
+keyM
+score-1 hyp-1
+...
+score-n hyp-n
+"""
 
 
 class FasterDecoder(Evaluator):
@@ -24,7 +37,6 @@ class FasterDecoder(Evaluator):
     """
     def __init__(self, cpt_dir, device_id=-1):
         nnet = self._load(cpt_dir)
-        # print(f"Nnet structure:\n{nnet}")
         super(FasterDecoder, self).__init__(nnet, cpt_dir, device_id=-1)
 
     def compute(self, src, **kwargs):
@@ -55,6 +67,19 @@ class FasterDecoder(Evaluator):
         return nnet
 
 
+def output_wrapper(io_str):
+    """
+    Wrapper for output stream
+    """
+    if io_str != "-":
+        stdout = False
+        output = codecs.open(io_str, "w", encoding="utf-8")
+    else:
+        stdout = True
+        output = codecs.getwriter("utf-8")(sys.stdout.buffer)
+    return stdout, output
+
+
 def run(args):
     # build dictionary
     if args.dict:
@@ -71,24 +96,24 @@ def run(args):
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
-    if args.output != "-":
-        stdout = False
-        output = codecs.open(args.output, "w", encoding="utf-8")
-    else:
-        stdout = True
-        output = codecs.getwriter("utf-8")(sys.stdout.buffer)
+    stdout_top1, top1 = output_wrapper(args.best)
+    topn = None
+    if args.dump_nbest:
+        stdout_topn, topn = output_wrapper(args.dump_nbest)
+        topn.write(f"{args.nbest}\n")
+
     N = 0
     for key, src in src_reader:
         logger.info(f"Decoding utterance {key}...")
-        nbest = decoder.compute(src,
-                                beam=args.beam_size,
-                                nbest=args.nbest,
-                                max_len=args.max_len,
-                                normalized=args.normalized,
-                                vectorized=args.vectorized)
-        for hyp in nbest:
+        nbest_hypos = decoder.compute(src,
+                                      beam=args.beam_size,
+                                      nbest=args.nbest,
+                                      max_len=args.max_len,
+                                      normalized=args.normalized,
+                                      vectorized=args.vectorized)
+        nbest = [f"{key}\n"]
+        for idx, hyp in enumerate(nbest_hypos):
             score = hyp["score"]
-            logger.info(f"{key} score = {score:.2f}")
             # remove SOS/EOS
             if vocab:
                 trans = [vocab[idx] for idx in hyp["trans"][1:-1]]
@@ -98,12 +123,19 @@ def run(args):
                 trans = "".join(trans).replace(args.space, " ")
             else:
                 trans = " ".join(trans)
-            output.write(f"{key}\t{trans}\n")
-            if not (N + 1) % 50:
-                output.flush()
+            nbest.append(f"{score:.3f}\t{trans}\n")
+            if idx == 0:
+                top1.write(f"{key}\t{trans}\n")
+        if topn:
+            topn.write("".join(nbest))
+        if not (N + 1) % 50:
+            top1.flush()
+            topn.flush()
         N += 1
-    if not stdout:
-        output.close()
+    if not stdout_top1:
+        top1.close()
+    if topn and not stdout_topn:
+        topn.close()
     logger.info(f"Decode {len(src_reader)} utterance done")
 
 
@@ -115,9 +147,9 @@ if __name__ == "__main__":
     parser.add_argument("feats_or_wav_scp",
                         type=str,
                         help="Feature/Wave scripts")
-    parser.add_argument("output",
+    parser.add_argument("best",
                         type=str,
-                        help="Wspecifier for decoded results")
+                        help="Wspecifier for decoded results (1-best)")
     parser.add_argument("--checkpoint",
                         type=str,
                         required=True,
@@ -148,6 +180,10 @@ if __name__ == "__main__":
                         type=int,
                         default=1,
                         help="N-best decoded utterances to output")
+    parser.add_argument("--dump-nbest",
+                        type=str,
+                        default="",
+                        help="If not empty, dump n-best hypothesis")
     parser.add_argument("--nnet",
                         type=str,
                         default="las",

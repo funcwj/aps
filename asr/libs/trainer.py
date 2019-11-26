@@ -4,8 +4,8 @@ import sys
 import uuid
 import random
 
-from collections import defaultdict
 from pathlib import Path
+from collections import defaultdict
 
 import numpy as np
 import torch as th
@@ -17,7 +17,7 @@ from torch.nn.parallel import data_parallel
 from torch.utils.tensorboard import SummaryWriter
 from torch import autograd
 
-from .utils import get_device_ids, get_logger, load_obj, SimpleTimer
+from .utils import get_logger, load_obj, get_device_ids, add_gaussian_noise, SimpleTimer
 
 IGNORE_ID = -1
 
@@ -142,6 +142,7 @@ class Trainer(object):
                  schedule_sampling=0,
                  schedule_strategy="const",
                  gradient_clip=None,
+                 gaussian_noise=None,
                  logging_period=100,
                  save_interval=-1,
                  resume="",
@@ -160,6 +161,7 @@ class Trainer(object):
                                          tensorboard=tensorboard)
 
         self.gradient_clip = gradient_clip
+        self.gaussian_noise = gaussian_noise
         self.cur_epoch = 0  # zero based
         self.no_impr = no_impr
         self.save_interval = save_interval
@@ -172,7 +174,7 @@ class Trainer(object):
             cpt_path = resume if resume else init
             if not Path(cpt_path).exists():
                 raise FileNotFoundError(
-                    f"Could not find resume/init checkpoint: {cpt_path}")
+                    f"Could not find checkpoint: {cpt_path}")
             cpt = th.load(cpt_path, map_location="cpu")
             self.cur_epoch = cpt["epoch"]
             nnet.load_state_dict(cpt["model_state_dict"])
@@ -202,6 +204,9 @@ class Trainer(object):
         if gradient_clip:
             self.reporter.log(
                 f"Gradient clipping by {gradient_clip}, default L2")
+        if gaussian_noise:
+            self.reporter.log(
+                f"Add gaussian noise to weights with std = {gaussian_noise}")
 
     def save_checkpoint(self, epoch, best=True):
         """
@@ -261,7 +266,6 @@ class Trainer(object):
             if self.gradient_clip:
                 norm = clip_grad_norm_(self.nnet.parameters(),
                                        self.gradient_clip)
-                self.reporter.add("norm", norm)
 
             if float("inf") == norm or th.isnan(loss).item():
                 self.reporter.log("Invalid gradient or loss, skip...")
@@ -269,6 +273,10 @@ class Trainer(object):
                 loss.backward()
                 self.optimizer.step()
 
+                if self.gaussian_noise:
+                    add_gaussian_noise(self.nnet, std=self.gaussian_noise)
+
+                self.reporter.add("norm", norm)
                 self.reporter.add("loss", loss.item())
                 self.reporter.add("accu", accu)
 
@@ -375,7 +383,6 @@ class Trainer(object):
                 if self.gradient_clip:
                     norm = clip_grad_norm_(self.nnet.parameters(),
                                            self.gradient_clip)
-                    self.reporter.add("norm", norm)
 
                 if float("inf") == norm or th.isnan(loss).item():
                     self.reporter.log("Invalid gradient or loss, skip...")
@@ -383,6 +390,7 @@ class Trainer(object):
                     loss.backward()
                     self.optimizer.step()
 
+                    self.reporter.add("norm", norm)
                     self.reporter.add("loss", loss.item())
                     self.reporter.add("accu", accu)
 

@@ -8,6 +8,11 @@ import logging
 
 import torch as th
 
+__all__ = [
+    "get_logger", "load_obj", "get_device_ids", "add_gaussian_noise",
+    "SimpleTimer", "StrToBoolAction"
+]
+
 
 def get_logger(
         name,
@@ -60,6 +65,16 @@ def get_device_ids(device_ids):
     if isinstance(device_ids, int):
         device_ids = (device_ids, )
     return device_ids
+
+
+def add_gaussian_noise(nnet, std=0.075):
+    """
+    Add gaussian noise to updated weights
+    """
+    for p in nnet.parameters():
+        if p.requires_grad:
+            noise = th.randn(p.data.shape, device=nnet.device)
+            p.data += noise * std
 
 
 class SimpleTimer(object):
