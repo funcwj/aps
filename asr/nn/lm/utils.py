@@ -31,5 +31,4 @@ class NbestReader(object):
         return self.hypos[key]
 
     def __iter__(self):
-        for key in self.hypos:
-            yield key, self.hypos[key]
+        return iter(self.hypos.items())

@@ -41,7 +41,7 @@ def run(args):
     checkpoint = pathlib.Path(args.checkpoint)
     checkpoint.mkdir(exist_ok=True, parents=True)
     # if exist, resume training
-    last_checkpoint = checkpoint / "last.tar.pt"
+    last_checkpoint = checkpoint / "last.pt.tar"
     resume = args.resume
     if last_checkpoint.exists():
         resume = last_checkpoint.as_posix()

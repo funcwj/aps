@@ -12,7 +12,7 @@ import torch as th
 from torch.nn.utils.rnn import pad_sequence
 
 from libs.evaluator import Evaluator
-from libs.utils import get_logger, StrToBoolAction
+from libs.utils import get_logger, io_wrapper, StrToBoolAction
 from loader.wav_loader import WaveReader
 from nn import support_nnet
 from feats import support_transform
@@ -91,12 +91,11 @@ def run(args):
         n += args.batch_size
     random.shuffle(batches)
 
-    if args.output != "-":
-        stdout = False
-        output = codecs.open(args.output, "w", encoding="utf-8")
-    else:
-        stdout = True
-        output = codecs.getwriter("utf-8")(sys.stdout.buffer)
+    stdout_top1, top1 = io_wrapper(args.best, "w")
+    topn = None
+    if args.dump_nbest:
+        stdout_topn, topn = io_wrapper(args.dump_nbest, "w")
+        topn.write(f"{args.nbest}\n")
 
     for batch in batches:
         # prepare inputs
@@ -110,12 +109,11 @@ def run(args):
                                       nbest=args.nbest,
                                       max_len=args.max_len,
                                       normalized=args.normalized)
-
         for key, nbest in zip(keys, batch_nbest):
             logger.info(f"Decoding utterance {key}...")
-            for hyp in nbest:
+            nbest = [f"{key}\n"]
+            for idx, hyp in enumerate(nbest):
                 score = hyp["score"]
-                logger.info(f"{key} score = {score:.2f}")
                 # remove SOS/EOS
                 if vocab:
                     trans = [vocab[idx] for idx in hyp["trans"][1:-1]]
@@ -125,10 +123,18 @@ def run(args):
                     trans = "".join(trans).replace(args.space, " ")
                 else:
                     trans = " ".join(trans)
-                output.write(f"{key}\t{trans}\n")
-        output.flush()
-    if not stdout:
-        output.close()
+                nbest.append(f"{score:.3f}\t{trans}\n")
+                if idx == 0:
+                    top1.write(f"{key}\t{trans}\n")
+            if topn:
+                topn.write("".join(nbest))
+            top1.flush()
+            if topn:
+                topn.flush()
+    if not stdout_top1:
+        top1.close()
+    if topn and not stdout_topn:
+        topn.close()
     logger.info(f"Decode {len(src_reader)} utterance done")
 
 
@@ -173,6 +179,10 @@ if __name__ == "__main__":
                         type=int,
                         default=1,
                         help="N-best decoded utterances to output")
+    parser.add_argument("--dump-nbest",
+                        type=str,
+                        default="",
+                        help="If not empty, dump n-best hypothesis")
     parser.add_argument("--nnet",
                         type=str,
                         default="las",

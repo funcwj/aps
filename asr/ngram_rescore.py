@@ -8,29 +8,16 @@ import codecs
 import argparse
 
 from nn.lm.utils import NbestReader
-from libs.utils import StrToBoolAction, get_logger
+from libs.utils import get_logger, io_wrapper, StrToBoolAction
 
 logger = get_logger(__name__)
-
-
-def output_wrapper(io_str):
-    """
-    Wrapper for output stream
-    """
-    if io_str != "-":
-        stdout = False
-        output = codecs.open(io_str, "w", encoding="utf-8")
-    else:
-        stdout = True
-        output = codecs.getwriter("utf-8")(sys.stdout.buffer)
-    return stdout, output
 
 
 def run(args):
     nbest_reader = NbestReader(args.nbest)
     ngram = kenlm.Model(args.lm)
 
-    stdout, top1 = output_wrapper(args.top1)
+    stdout, top1 = io_wrapper(args.top1, "w")
     for key, nbest in nbest_reader:
         rescore = []
         for hyp in nbest:

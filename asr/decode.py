@@ -9,7 +9,7 @@ import argparse
 import torch as th
 
 from libs.evaluator import Evaluator
-from libs.utils import get_logger, StrToBoolAction
+from libs.utils import get_logger, io_wrapper, StrToBoolAction
 from loader.wav_loader import WaveReader
 from nn import support_nnet
 from feats import support_transform
@@ -67,19 +67,6 @@ class FasterDecoder(Evaluator):
         return nnet
 
 
-def output_wrapper(io_str):
-    """
-    Wrapper for output stream
-    """
-    if io_str != "-":
-        stdout = False
-        output = codecs.open(io_str, "w", encoding="utf-8")
-    else:
-        stdout = True
-        output = codecs.getwriter("utf-8")(sys.stdout.buffer)
-    return stdout, output
-
-
 def run(args):
     # build dictionary
     if args.dict:
@@ -96,10 +83,10 @@ def run(args):
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
-    stdout_top1, top1 = output_wrapper(args.best)
+    stdout_top1, top1 = io_wrapper(args.best, "w")
     topn = None
     if args.dump_nbest:
-        stdout_topn, topn = output_wrapper(args.dump_nbest)
+        stdout_topn, topn = io_wrapper(args.dump_nbest, "w")
         topn.write(f"{args.nbest}\n")
 
     N = 0
@@ -130,7 +117,8 @@ def run(args):
             topn.write("".join(nbest))
         if not (N + 1) % 50:
             top1.flush()
-            topn.flush()
+            if topn:
+                topn.flush()
         N += 1
     if not stdout_top1:
         top1.close()

@@ -2,23 +2,26 @@
 
 # wujian@2019
 
+import sys
 import time
+import codecs
 import argparse
 import logging
 
 import torch as th
 
 __all__ = [
-    "get_logger", "load_obj", "get_device_ids", "add_gaussian_noise",
-    "SimpleTimer", "StrToBoolAction"
+    "get_logger", "load_obj", "get_device_ids", "SimpleTimer",
+    "StrToBoolAction"
 ]
 
+default_logger_format = "%(asctime)s [%(pathname)s:%(lineno)s - %(levelname)s ] %(message)s"
 
-def get_logger(
-        name,
-        format_str="%(asctime)s [%(pathname)s:%(lineno)s - %(levelname)s ] %(message)s",
-        date_format="%Y-%m-%d %H:%M:%S",
-        file=False):
+
+def get_logger(name,
+               format_str=default_logger_format,
+               date_format="%Y-%m-%d %H:%M:%S",
+               file=False):
     """
     Get logger instance
     """
@@ -35,6 +38,22 @@ def get_logger(
     if file:
         logger.addHandler(get_handler(logging.FileHandler(name)))
     return logger
+
+
+def io_wrapper(io_str, mode):
+    """
+    Wrapper for IO stream
+    """
+    if io_str != "-":
+        std = False
+        stream = codecs.open(io_str, mode, encoding="utf-8")
+    else:
+        std = True
+        if mode not in ["r", "w"]:
+            raise RuntimeError(f"Unknown IO mode: {mode}")
+        buffer = {"w": sys.stdout.buffer, "r": sys.stdin.buffer}
+        stream = codecs.getwriter("utf-8")(buffer[mode])
+    return std, stream
 
 
 def load_obj(obj, device):
@@ -65,16 +84,6 @@ def get_device_ids(device_ids):
     if isinstance(device_ids, int):
         device_ids = (device_ids, )
     return device_ids
-
-
-def add_gaussian_noise(nnet, std=0.075):
-    """
-    Add gaussian noise to updated weights
-    """
-    for p in nnet.parameters():
-        if p.requires_grad:
-            noise = th.randn(p.data.shape, device=nnet.device)
-            p.data += noise * std
 
 
 class SimpleTimer(object):
