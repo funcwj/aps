@@ -10,6 +10,7 @@ batch_size=128
 chunk_size=20
 eval_interval=-1
 save_interval=-1
+prog_interval=100
 
 echo "$0 $@"
 
@@ -25,7 +26,7 @@ conf=conf/$data/rnnlm/$exp_id.yaml
 [ ! -f $dict ] && echo "$0: missing dictionary $dict" && exit 1
 [ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
 
-cmd="/home/work_nfs/common/tools/pyqueue_tts.pl"
+cmd="/home/work_nfs/common/tools/pyqueue_asr.pl"
 python=$(which python)
 
 $cmd --gpu 1 $data.train_lm.$exp_id.log \
@@ -38,6 +39,7 @@ $cmd --gpu 1 $data.train_lm.$exp_id.log \
     --chunk-size $chunk_size \
     --epoches $epoches \
     --eval-interval $eval_interval \
+    --prog-interval $prog_interval \
     --save-interval $save_interval
 
 mv $data.train_lm.$exp_id.log exp/$data/rnnlm/$exp_id

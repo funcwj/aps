@@ -50,7 +50,6 @@ trainer_conf:
     min_lr: 1.0e-8
     patience: 1
     factor: 0.5
-  logging_period: 100
   gradient_clip: 5
   no_impr: 4
   lsm_factor: 0.1

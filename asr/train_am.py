@@ -105,6 +105,7 @@ def run(args):
                          checkpoint=args.checkpoint,
                          resume=resume,
                          save_interval=args.save_interval,
+                         prog_interval=args.prog_interval,
                          tensorboard=args.tensorboard,
                          **conf["trainer_conf"])
 
@@ -163,6 +164,10 @@ if __name__ == "__main__":
                         type=int,
                         default=-1,
                         help="Interval to save the checkpoint")
+    parser.add_argument("--prog-interval",
+                        type=int,
+                        default=100,
+                        help="Interval to report the progress of the training")
     parser.add_argument("--num-workers",
                         type=int,
                         default=4,

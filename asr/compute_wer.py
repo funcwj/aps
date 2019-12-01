@@ -8,7 +8,7 @@ import editdistance as ed
 
 from collections import defaultdict
 from itertools import permutations
-
+from libs.utils import StrToBoolAction
 from kaldi_python_io import Reader as BaseReader
 
 
@@ -36,26 +36,26 @@ class TransReader(object):
     """
     Class to handle single/multi-speaker transcriptions
     """
-    def __init__(self, text):
-        self.text_reader = [
+    def __init__(self, text_descriptor):
+        self.readers = [
             BaseReader(t, num_tokens=-1, restrict=False)
-            for t in text.split(",")
+            for t in text_descriptor.split(",")
         ]
 
     def __len__(self):
-        return len(self.text_reader)
+        return len(self.readers)
 
     def __getitem__(self, key):
         if not self._check(key):
-            raise RuntimeError(f"Missing {key} in text reader")
-        return [reader[key] for reader in self.text_reader]
+            raise RuntimeError(f"Missing {key} in one of the text files")
+        return [reader[key] for reader in self.readers]
 
     def _check(self, key):
-        status = [key in reader for reader in self.text_reader]
-        return sum(status) == len(self.text_reader)
+        status = [key in reader for reader in self.readers]
+        return sum(status) == len(self.readers)
 
     def __iter__(self):
-        ref = self.text_reader[0]
+        ref = self.readers[0]
         for key in ref.index_keys:
             if self._check(key):
                 yield key, self[key]

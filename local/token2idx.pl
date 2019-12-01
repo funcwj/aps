@@ -3,10 +3,9 @@
 
 use warnings;
 
-if(@ARGV != 1) {
-  print STDERR "Invalid usage: " . join(" ", @ARGV) . "\n";
-  print STDERR "Usage: token2idx.pl dict <token >index\n";
-  exit(1);
+if (@ARGV != 1) {
+  die "Invalid usage: " . join(" ", @ARGV) . "\n".
+      "Usage: token2idx.pl dict < text.char > token \n";
 }
 
 ($dict_obj) = @ARGV;

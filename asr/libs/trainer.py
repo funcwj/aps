@@ -140,6 +140,34 @@ class ProgressReporter(object):
         return loss, accu, hstr + cstr
 
 
+class EarlyStopCriterion(object):
+    """
+    Early stop of the training
+    """
+    def __init__(self, no_impr, order="min", init_criterion=math.inf):
+        self.max_no_impr = no_impr
+        self.no_impr = 0
+        self.order = order
+        self.best_criterion = init_criterion
+
+    def reset(self, update_value):
+        self.best_criterion = update_value
+
+    def stop(self):
+        return self.no_impr == self.max_no_impr
+
+    def step(self, update_value):
+        c1 = self.best_criterion < update_value and self.order == "min"
+        c2 = self.best_criterion > update_value and self.order == "max"
+        if c1 or c2:
+            self.no_impr += 1
+            return False
+        else:
+            self.best_criterion = update_value
+            self.no_impr = 0
+            return True
+
+
 class Trainer(object):
     """
     A PyTorch base trainer
@@ -157,7 +185,7 @@ class Trainer(object):
                  ss_scheduler_kwargs=None,
                  gradient_clip=None,
                  gaussian_noise=None,
-                 logging_period=100,
+                 prog_interval=100,
                  save_interval=-1,
                  resume="",
                  init="",
@@ -169,16 +197,17 @@ class Trainer(object):
         self.checkpoint = Path(checkpoint)
         self.checkpoint.mkdir(parents=True, exist_ok=True)
         self.reporter = ProgressReporter(self.checkpoint,
-                                         period=logging_period,
+                                         period=prog_interval,
                                          tensorboard=tensorboard)
 
         self.gradient_clip = gradient_clip
         self.gaussian_noise = gaussian_noise
         self.cur_epoch = 0  # zero based
-        self.no_impr = no_impr
         self.save_interval = save_interval
         self.lsm_factor = lsm_factor
         self.ssr = 0
+
+        self.early_stop = EarlyStopCriterion(no_impr)
         self.ss_scheduler = support_ss_scheduler(ss_scheduler, ss_prob,
                                                  **ss_scheduler_kwargs)
 
@@ -302,7 +331,8 @@ class Trainer(object):
         with th.no_grad():
             for idx, egs in enumerate(data_loader):
                 egs = load_obj(egs, self.default_device)
-                loss, accu = self.compute_loss(egs, idx=idx, ssr=self.ssr)
+                # ssr = 0, use ground truth
+                loss, accu = self.compute_loss(egs, idx=idx, ssr=0)
                 self.reporter.add("loss", loss.item())
                 self.reporter.add("accu", accu)
 
@@ -319,11 +349,11 @@ class Trainer(object):
         e = self.cur_epoch
         best_loss, best_accu, _ = self.reporter.report(e, 0)
         self.ssr = self.ss_scheduler.step(e, best_accu)
-        self.reporter.log(f"start from epoch {e:d}, loss = {best_loss:.4f}")
         # make sure not inf
         self.scheduler.best = best_loss
-        no_impr = 0
+        self.early_stop.reset(best_loss)
 
+        self.reporter.log(f"start from epoch {e:d}, loss = {best_loss:.4f}")
         while e < num_epoches:
             e += 1
             cur_lr = self.optimizer.param_groups[0]["lr"]
@@ -337,13 +367,13 @@ class Trainer(object):
             cv_loss, cv_accu, sstr = self.reporter.report(e, cur_lr)
             # schedule sampling for eval
             sstr += f" | ssr = {self.ssr:.3f}"
-            if cv_loss > best_loss:
-                no_impr += 1
-                sstr += f" | no impr, best = {self.scheduler.best:.4f}"
-            else:
-                best_loss = cv_loss
-                no_impr = 0
+
+            better = self.early_stop.step(cv_loss)
+            if better:
                 self.save_checkpoint(e, best=True)
+            else:
+                sstr += f" | no impr, best = {self.scheduler.best:.4f}"
+
             self.reporter.log(sstr)
             # << eval
             # schedule here
@@ -353,9 +383,10 @@ class Trainer(object):
             sys.stdout.flush()
             # save last checkpoint
             self.save_checkpoint(e, best=False)
-            if no_impr == self.no_impr:
-                self.reporter.log(
-                    f"Stop training cause no impr for {no_impr:d} epochs")
+            # early stop
+            if self.early_stop.stop():
+                self.reporter.log("Stop training cause no impr for " +
+                                  f"{self.early_stop.no_impr:d} epochs")
                 break
         self.reporter.log(f"Training for {e:d}/{num_epoches:d} epoches done!")
 
@@ -377,7 +408,7 @@ class Trainer(object):
         self.reporter.log(f"start from epoch {e:d}, loss = {best_loss:.4f}")
         # make sure not inf
         self.scheduler.best = best_loss
-        no_impr = 0
+        self.early_stop.reset(best_loss)
 
         stop = False
         trained_batches = 0
@@ -419,13 +450,12 @@ class Trainer(object):
                     # schedule sampling for eval
                     sstr += f" | ssr = {self.ssr:.3f}"
 
-                    if cv_loss > best_loss:
-                        no_impr += 1
-                        sstr += f" | no impr, best = {self.scheduler.best:.4f}"
-                    else:
-                        best_loss = cv_loss
-                        no_impr = 0
+                    better = self.early_stop.step(cv_loss)
+                    if better:
                         self.save_checkpoint(e, best=True)
+                    else:
+                        sstr += f" | no impr, best = {self.scheduler.best:.4f}"
+
                     self.reporter.log(sstr)
                     # schedule here
                     self.scheduler.step(cv_loss)
@@ -437,9 +467,10 @@ class Trainer(object):
                     # reset reporter
                     self.reporter.reset()
                     # early stop or not
-                    if no_impr == self.no_impr:
-                        self.reporter.log("Stop training cause no impr " +
-                                          f"for {no_impr:d} epochs")
+                    if self.early_stop.stop():
+                        self.reporter.log(
+                            "Stop training cause no impr for " +
+                            f"{self.early_stop.no_impr:d} epochs")
                         stop = True
                         break
                     if e == num_epoches:
@@ -498,9 +529,6 @@ class LmTrainer(Trainer):
     def __init__(self, *args, **kwargs):
         super(LmTrainer, self).__init__(*args, **kwargs)
         self.hidden = None
-        if self.sss != "const" and self.ssr_init != 0:
-            raise RuntimeError(
-                "For LM training, we don't use schedule sampling")
 
     def compute_loss(self, egs, idx=0, ssr=0):
         """

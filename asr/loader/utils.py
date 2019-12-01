@@ -9,7 +9,12 @@ import torch.utils.data as dat
 from kaldi_python_io import Reader as BaseReader
 
 
-def process_token(token, utt2dur, max_token_num=400, max_dur=3000, min_dur=40):
+def process_token(token,
+                  utt2dur,
+                  max_token_num=400,
+                  min_token_num=2,
+                  max_dur=3000,
+                  min_dur=40):
     utt2dur = BaseReader(utt2dur, value_processor=float)
     token_reader = BaseReader(token,
                               value_processor=lambda l: [int(n) for n in l],
@@ -17,7 +22,7 @@ def process_token(token, utt2dur, max_token_num=400, max_dur=3000, min_dur=40):
     token_set = []
     for key, token in token_reader:
         L = len(token)
-        if L > max_token_num:
+        if L > max_token_num or L <= min_token_num:
             continue
         if key not in utt2dur:
             continue
@@ -33,7 +38,7 @@ def process_token(token, utt2dur, max_token_num=400, max_dur=3000, min_dur=40):
     # long -> short
     token_set = sorted(token_set, key=lambda d: d["dur"], reverse=True)
     if len(token_set) < 10:
-        raise RuntimeError("Less utterances, check data configurations")
+        raise RuntimeError("Too less utterances, check data configurations")
     return token_set
 
 
