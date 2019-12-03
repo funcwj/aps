@@ -15,7 +15,6 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.utils import clip_grad_norm_
 from torch.nn.parallel import data_parallel
 from torch.utils.tensorboard import SummaryWriter
-from torch import autograd
 
 from .utils import get_logger, load_obj, get_device_ids, SimpleTimer
 from .scheduler import support_ss_scheduler

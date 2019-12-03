@@ -19,7 +19,7 @@ class RNNLM(nn.Module):
                  dropout=0.0):
         super(RNNLM, self).__init__()
         RNN = rnn.upper()
-        supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU}
+        supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
         if RNN not in supported_rnn:
             raise RuntimeError(f"Unknown RNN type: {RNN}")
         if embed_size != vocab_size:

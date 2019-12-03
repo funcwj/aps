@@ -7,6 +7,7 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 import torch_complex.functional as cF
+from torch_complex.tensor import ComplexTensor
 
 EPSILON = th.finfo(th.float32).min
 
@@ -51,6 +52,64 @@ def estimate_covar(mask, spectrogram):
     denominator = th.clamp(mask.sum(-1, keepdims=True), min=EPSILON)
     # N x F x C x C
     return nominator / denominator
+
+
+class FixedBeamformer(nn.Module):
+    """
+    Fixed beamformer as a layer
+    """
+    def __init__(self, weight, requires_grad=False):
+        super(FixedBeamformer, self).__init__()
+        # (2, 18, 7, 257)
+        w = th.load(weight)
+        # (18, 7, 257, 1)
+        self.real = nn.Parameter(w[0].unsqueeze(-1),
+                                 requires_grad=requires_grad)
+        self.imag = nn.Parameter(w[1].unsqueeze(-1),
+                                 requires_grad=requires_grad)
+        self.requires_grad = requires_grad
+
+    def extra_repr(self):
+        B, M, F, _ = self.real.shape
+        return (f"num_beams={B}, num_channels={M}, " +
+                f"num_bins={F}, requires_grad={self.requires_grad}")
+
+    def forward(self, r, i, beam=None, squeeze=False, trans=False, cplx=True):
+        """
+        args
+            r, i: N x C x F x T
+            beam: N
+        return
+            br, bi: N x B x F x T or N x F x T
+        """
+        if r.dim() != i.dim() and r.dim() != 4:
+            raise RuntimeError(
+                f"FixBeamformer accept 4D tensor, got {r.dim()}")
+        if self.real.shape[1] != r.shape[1]:
+            raise RuntimeError(f"Number of channels mismatch: "
+                               f"{r.shape[1]} vs {self.real.shape[1]}")
+        if beam is None:
+            # output all the beam
+            br = th.sum(r.unsqueeze(1) * self.real, 2) + th.sum(
+                i.unsqueeze(1) * self.imag, 2)
+            bi = th.sum(i.unsqueeze(1) * self.real, 2) - th.sum(
+                r.unsqueeze(1) * self.imag, 2)
+        else:
+            # output selected beam
+            br = th.sum(r * self.real[beam], 1) + th.sum(
+                i * self.imag[beam], 1)
+            bi = th.sum(i * self.real[beam], 1) - th.sum(
+                r * self.imag[beam], 1)
+        if squeeze:
+            br = br.squeeze()
+            bi = bi.squeeze()
+        if trans:
+            br = br.transpose(-1, -2)
+            bi = bi.transpose(-1, -2)
+        if cplx:
+            return ComplexTensor(br, bi)
+        else:
+            return br, bi
 
 
 class MvdrBeamformer(nn.Module):

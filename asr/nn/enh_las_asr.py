@@ -2,8 +2,6 @@
 
 # wujian@2019
 
-import random
-
 import torch as th
 import torch.nn as nn
 
@@ -28,6 +26,7 @@ class EnhLasASR(nn.Module):
             num_bins=257,
             sos=-1,
             eos=-1,
+            # feature transform
             asr_transform=None,
             # beamforming
             enh_transform=None,
@@ -48,6 +47,8 @@ class EnhLasASR(nn.Module):
             raise RuntimeError("Enhancement feature transform can not be None")
         # Front-end feature extraction
         self.enh_transform = enh_transform
+        # Back-end feature transform
+        self.asr_transform = asr_transform
         # TF-mask estimation network
         self.mask_net = TorchEncoder(enh_input_size, num_bins,
                                      **mask_net_kwargs)
@@ -57,7 +58,7 @@ class EnhLasASR(nn.Module):
                               vocab_size=vocab_size,
                               eos=eos,
                               sos=sos,
-                              asr_transform=asr_transform,
+                              asr_transform=None,
                               att_type=att_type,
                               att_kwargs=att_kwargs,
                               encoder_type=encoder_type,
@@ -79,7 +80,9 @@ class EnhLasASR(nn.Module):
         x_mask = self.mask_net(x_pad, x_len)
         # mvdr beamforming: N x Ti x F
         x_beam = self.mvdr_net(x_mask, x_cplx)
-        return x_beam
+        # asr feature transform
+        x_beam, x_len = self.asr_transform(x_beam, x_len)
+        return x_beam, x_len
 
     def forward(self, x_pad, x_len, y_pad, ssr=0):
         """
@@ -93,7 +96,7 @@ class EnhLasASR(nn.Module):
             alis: N x (To+1) x T
         """
         # mvdr beamforming: N x Ti x F
-        x_beam = self._enhance(x_pad, x_len)
+        x_beam, x_len = self._enhance(x_pad, x_len)
         # outs, alis
         return self.las_asr(x_beam, x_len, y_pad, ssr=ssr)
 
@@ -111,7 +114,7 @@ class EnhLasASR(nn.Module):
         with th.no_grad():
             if x.dim() != 1:
                 raise RuntimeError("Now only support for one utterance")
-            x_beam = self._enhance(x[None, ...], None)
+            x_beam, _ = self._enhance(x[None, ...], None)
             return self.las_asr.beam_search(x_beam,
                                             beam=beam,
                                             nbest=nbest,

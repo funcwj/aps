@@ -47,6 +47,23 @@ class SpectrogramTransform(STFT):
         return m
 
 
+class AbsTransform(nn.Module):
+    """
+    Absolute transform
+    """
+    def __init__(self):
+        super(AbsTransform, self).__init__()
+
+    def forward(self, x):
+        """
+        args:
+            x: enhanced complex spectrogram N x T x F
+        return:
+            y: enhanced N x T x F
+        """
+        return x.abs()
+
+
 class MelTransform(nn.Module):
     """
     Mel tranform as a layer
@@ -311,7 +328,8 @@ class FeatureTransform(nn.Module):
     """
     Feature transform for ASR tasks
         - Spectrogram 
-        - MelTransform 
+        - MelTransform
+        - AbsTransform
         - LogTransform 
         - DiscreteCosineTransform
         - CmvnTransform 
@@ -394,6 +412,8 @@ class FeatureTransform(nn.Module):
                 feats_dim = transform[-1].dim()
             elif tok == "log":
                 transform.append(LogTransform(eps=eps))
+            elif tok == "abs":
+                transform.append(AbsTransform())
             elif tok == "dct":
                 transform.append(
                     DiscreteCosineTransform(num_ceps=num_ceps,
