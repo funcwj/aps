@@ -10,7 +10,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .utils import STFT, EPSILON, init_melfilter, init_dct
+from .utils import STFT, EPSILON, init_melfilter, init_dct, load_gcmvn_stats
 from .spec_aug import specaug
 
 
@@ -173,13 +173,19 @@ class CmvnTransform(nn.Module):
     """
     Utterance-level mean-variance normalization
     """
-    def __init__(self, norm_mean=True, norm_var=True):
+    def __init__(self, norm_mean=True, norm_var=True, gcmvn=""):
         super(CmvnTransform, self).__init__()
+        self.gmean, self.gstd = None, None
+        if gcmvn:
+            mean, std = load_gcmvn_stats(gcmvn)
+            self.gmean = nn.Parameter(mean, requires_grad=False)
+            self.gstd = nn.Parameter(std, requires_grad=False)
         self.norm_mean = norm_mean
         self.norm_var = norm_var
+        self.gcmvn = gcmvn
 
     def extra_repr(self):
-        return f"norm_mean={self.norm_mean}, norm_var={self.norm_var}"
+        return f"norm_mean={self.norm_mean}, norm_var={self.norm_var}, gcmvn_stats={self.gcmvn}"
 
     def dim_scale(self):
         return 1
@@ -193,8 +199,8 @@ class CmvnTransform(nn.Module):
         """
         if not self.norm_mean and not self.norm_var:
             return x
-        m = th.mean(x, -1, keepdim=True)
-        s = th.std(x, -1, keepdim=True)
+        m = th.mean(x, -1, keepdim=True) if self.gmean is None else self.gmean
+        s = th.std(x, -1, keepdim=True) if self.gstd is None else self.gstd
         if self.norm_mean:
             x -= m
         if self.norm_var:
@@ -355,6 +361,7 @@ class FeatureTransform(nn.Module):
                  num_aug_steps=2,
                  norm_mean=True,
                  norm_var=True,
+                 gcmvn="",
                  ds_rate=1,
                  lctx=1,
                  rctx=1,
@@ -422,7 +429,9 @@ class FeatureTransform(nn.Module):
                 feats_dim = transform[-1].dim()
             elif tok == "cmvn":
                 transform.append(
-                    CmvnTransform(norm_mean=norm_mean, norm_var=norm_var))
+                    CmvnTransform(norm_mean=norm_mean,
+                                  norm_var=norm_var,
+                                  gcmvn=gcmvn))
             elif tok == "aug":
                 transform.append(
                     SpecAugTransform(p=aug_prob,

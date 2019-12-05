@@ -14,7 +14,6 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data.dataloader import default_collate
 
 from kaldi_python_io import ScriptReader
-from kaldi_python_io.functional import read_kaldi_mat
 
 from .utils import process_token, BatchSampler
 
@@ -22,9 +21,6 @@ from .utils import process_token, BatchSampler
 def make_kaldi_loader(train=True,
                       feats_scp="",
                       token="",
-                      gcmvn="",
-                      norm_mean=True,
-                      norm_var=True,
                       utt2dur="",
                       max_token_num=400,
                       max_dur=3000,
@@ -37,9 +33,6 @@ def make_kaldi_loader(train=True,
     dataset = Dataset(feats_scp,
                       token,
                       utt2dur,
-                      gcmvn=gcmvn,
-                      norm_mean=True,
-                      norm_var=True,
                       max_token_num=max_token_num,
                       max_frame_num=max_dur,
                       min_frame_num=min_dur)
@@ -52,38 +45,6 @@ def make_kaldi_loader(train=True,
                       min_batch_size=min_batch_size)
 
 
-class Cmvn(object):
-    """
-    Do global cmvn or utterance-level cmvn
-    """
-    def __init__(self, gcmvn="", norm_mean=True, norm_var=True):
-        if gcmvn:
-            self.gmean, self.gstd = self._load_cmvn(gcmvn)
-        else:
-            self.gmean, self.gstd = None, None
-        self.norm_mean = norm_mean
-        self.norm_var = norm_var
-
-    def _load_cmvn(self, cmvn_mat):
-        """
-        Compute mean/std from cmvn.mat
-        """
-        cmvn = read_kaldi_mat(cmvn_mat)
-        N = cmvn[0, -1]
-        mean = cmvn[0, :-1] / N
-        var = cmvn[1, :-1] / N - mean**2
-        return mean, var**0.5
-
-    def __call__(self, mat):
-        m = np.mean(mat, 0)
-        s = np.maximum(np.std(mat, 0), 1e-7)
-        if self.norm_mean:
-            mat -= (self.gmean if self.gmean is not None else m)
-        if self.norm_var:
-            mat /= (self.gstd if self.gstd is not None else s)
-        return mat
-
-
 class Dataset(dat.Dataset):
     """
     Dataset for kaldi features
@@ -92,14 +53,10 @@ class Dataset(dat.Dataset):
                  feats_scp,
                  token,
                  utt2num_frames,
-                 gcmvn="",
-                 norm_mean=True,
-                 norm_var=True,
                  max_token_num=400,
                  max_frame_num=3000,
                  min_frame_num=40):
         self.feats_reader = ScriptReader(feats_scp)
-        self.cmvn = Cmvn(gcmvn=gcmvn, norm_mean=norm_mean, norm_var=norm_var)
         # sorted
         self.token_reader = process_token(token,
                                           utt2num_frames,
@@ -110,11 +67,10 @@ class Dataset(dat.Dataset):
     def __getitem__(self, idx):
         tok = self.token_reader[idx]
         key = tok["key"]
-        feats = self.feats_reader[key]
         return {
             "dur": tok["dur"],
             "len": tok["len"],
-            "feats": self.cmvn(feats),
+            "feats": self.feats_reader[key],
             "token": tok["tok"]
         }
 
