@@ -138,6 +138,7 @@ class TransformerASR(nn.Module):
                  vocab_size=40,
                  sos=-1,
                  eos=-1,
+                 ctc=False,
                  transform=None,
                  input_embed="conv2d",
                  att_dim=512,
@@ -172,6 +173,10 @@ class TransformerASR(nn.Module):
         self.sos = sos
         self.eos = eos
         self.transform = transform
+        # if use CTC, eos & sos should be V and V - 1
+        self.ctc = nn.Linear(encoder_proj, vocab_size -
+                             2 if sos != eos else vocab_size -
+                             1) if ctc else None
         self.output = nn.Linear(att_dim, vocab_size, bias=False)
 
     def _prep_pad_mask(self, x_len, y_pad):
@@ -225,6 +230,8 @@ class TransformerASR(nn.Module):
         y_tgt, _ = self.tgt_embed(y_pad)
         # Ti x N x D
         enc_out = self.encoder(x_emb, src_key_padding_mask=src_pad_mask)
+        # CTC
+        ctc_branch = self.ctc(enc_out) if self.ctc else None
         # To+1 x N x D
         dec_out = self.decoder(y_tgt,
                                enc_out,
@@ -235,4 +242,4 @@ class TransformerASR(nn.Module):
         dec_out = self.output(dec_out)
         # N x To+1 x D
         dec_out = dec_out.transpose(0, 1).contiguous()
-        return dec_out, None
+        return dec_out, None, ctc_branch, x_len

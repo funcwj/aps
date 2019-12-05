@@ -304,6 +304,9 @@ class Trainer(object):
             self.optimizer.zero_grad()
 
             loss, accu = self.compute_loss(egs, idx=idx, ssr=self.ssr)
+            loss.backward()
+
+            # clip gradient after backward
             if self.gradient_clip:
                 norm = clip_grad_norm_(self.nnet.parameters(),
                                        self.gradient_clip)
@@ -313,7 +316,6 @@ class Trainer(object):
                 self.reporter.log(f"Invalid gradient {norm} or " +
                                   f"loss {loss_value}, skip...")
             else:
-                loss.backward()
                 self.optimizer.step()
 
                 if self.gaussian_noise:
@@ -341,8 +343,8 @@ class Trainer(object):
         """
         # avoid alloc memory from gpu0
         th.cuda.set_device(self.default_device)
-        # check if save is OK
-        self.save_checkpoint(0, best=False)
+        # make dilated conv faster
+        th.backends.cudnn.benchmark = True
 
         self.eval(valid_loader)
         e = self.cur_epoch
@@ -394,10 +396,10 @@ class Trainer(object):
                             valid_loader,
                             num_epoches=100,
                             eval_interval=4000):
-        # make dilated conv faster
-        th.backends.cudnn.benchmark = True
         # avoid alloc memory from gpu0
         th.cuda.set_device(self.default_device)
+        # make dilated conv faster
+        th.backends.cudnn.benchmark = True
 
         e = self.cur_epoch
         self.eval(valid_loader)
@@ -423,6 +425,8 @@ class Trainer(object):
                 self.optimizer.zero_grad()
 
                 loss, accu = self.compute_loss(egs, idx=idx, ssr=self.ssr)
+                loss.backward()
+
                 if self.gradient_clip:
                     norm = clip_grad_norm_(self.nnet.parameters(),
                                            self.gradient_clip)
@@ -431,7 +435,6 @@ class Trainer(object):
                     self.reporter.log(f"Invalid gradient {norm} or " +
                                       f"loss {loss_value}, skip...")
                 else:
-                    loss.backward()
                     self.optimizer.step()
 
                     self.reporter.add("norm", norm)
@@ -488,34 +491,51 @@ class S2STrainer(Trainer):
     """
     E2E ASR Trainer (CE)
     """
-    def __init__(self, *args, **kwargs):
-        super(S2STrainer, self).__init__(*args, **kwargs)
+    def __init__(self, nnet, ctc_coeff=0, ctc_blank=0, **kwargs):
+        super(S2STrainer, self).__init__(nnet, **kwargs)
+        self.ctc_coeff = ctc_coeff
+        self.ctc_blank = ctc_blank
+        if ctc_coeff:
+            self.reporter.log("Using CTC regularization (coeff = " +
+                              f"{ctc_coeff:.2f}, blank = {ctc_blank})")
 
     def compute_loss(self, egs, idx=0, ssr=0):
         """
         Compute training loss, egs contains
-            x_pad: N x Ti x F
-            x_len: N
-            y_pad: N x To
-            y_len: N
+            src_pad: N x Ti x F
+            src_len: N
+            tgt_pad: N x To
+            tgt_len: N
         """
         # N x To, -1 => EOS
-        y_pad = egs["y_pad"].masked_fill(egs["y_pad"] == IGNORE_ID,
-                                         self.nnet.eos)
+        ignored_mask = egs["tgt_pad"] == IGNORE_ID
+        tgt_pad = egs["tgt_pad"].masked_fill(ignored_mask, self.nnet.eos)
         # outs: N x (To+1) x V
         # alis: N x (To+1) x Ti
-        outs, _ = data_parallel(self.nnet,
-                                (egs["x_pad"], egs["x_len"], y_pad, ssr),
-                                device_ids=self.device_ids)
+        outs, _, ctc_branch, enc_len = data_parallel(
+            self.nnet, (egs["src_pad"], egs["src_len"], tgt_pad, ssr),
+            device_ids=self.device_ids)
         # N x (To+1), pad -1
-        tgts = F.pad(egs["y_pad"], (0, 1), value=IGNORE_ID)
+        tgts = F.pad(egs["tgt_pad"], (0, 1), value=IGNORE_ID)
         # add eos
-        tgts = tgts.scatter(1, egs["y_len"][:, None], self.nnet.eos)
+        tgts = tgts.scatter(1, egs["tgt_len"][:, None], self.nnet.eos)
         # compute loss
         if self.lsm_factor > 0:
             loss = ls_loss(outs, tgts, lsm_factor=self.lsm_factor)
         else:
             loss = ce_loss(outs, tgts)
+
+        if self.ctc_coeff > 0:
+            # add log-softmax, N x T x V => T x N x V
+            log_prob = F.log_softmax(ctc_branch, dim=-1).transpose(0, 1)
+            ctc_loss = F.ctc_loss(log_prob,
+                                  tgt_pad,
+                                  enc_len,
+                                  egs["tgt_len"],
+                                  blank=self.ctc_blank,
+                                  reduction="mean",
+                                  zero_infinity=True)
+            loss = self.ctc_coeff * ctc_loss + (1 - self.ctc_coeff) * loss
         # compute accu
         accu = compute_accu(outs, tgts)
         return loss, accu
@@ -532,15 +552,15 @@ class LmTrainer(Trainer):
     def compute_loss(self, egs, idx=0, ssr=0):
         """
         Compute training loss, egs contains
-            x: N x T
-            y: N x T
+            src: N x T
+            tgt: N x T
         """
         if idx == 0:
             self.hidden = None
         # pred: N x T x V
-        pred, self.hidden = data_parallel(self.nnet, (egs["x"], self.hidden),
+        pred, self.hidden = data_parallel(self.nnet, (egs["src"], self.hidden),
                                           device_ids=self.device_ids)
-        loss = ce_loss(pred, egs["y"])
-        accu = compute_accu(pred, egs["y"])
+        loss = ce_loss(pred, egs["tgt"])
+        accu = compute_accu(pred, egs["tgt"])
 
         return loss, accu

@@ -3,6 +3,7 @@
 # wujian@2019
 
 import yaml
+import codecs
 import random
 import pprint
 import pathlib
@@ -51,12 +52,15 @@ def run(args):
         conf = yaml.load(f, Loader=yaml.FullLoader)
 
     # add dictionary info
-    with open(args.dict, "rb") as f:
-        token2idx = [line.decode("utf-8").split()[0] for line in f]
+    with codecs.open(args.dict, encoding="utf-8") as f:
+        vocab = {}
+        for line in f:
+            unit, idx = line.split()
+            vocab[unit] = int(idx)
 
-    conf["nnet_conf"]["sos"] = token2idx.index("<sos>")
-    conf["nnet_conf"]["eos"] = token2idx.index("<eos>")
-    conf["nnet_conf"]["vocab_size"] = len(token2idx)
+    conf["nnet_conf"]["sos"] = vocab["<sos>"]
+    conf["nnet_conf"]["eos"] = vocab["<eos>"]
+    conf["nnet_conf"]["vocab_size"] = len(vocab)
 
     if "nnet_type" not in conf:
         conf["nnet_type"] = "las"
@@ -65,9 +69,6 @@ def run(args):
             raise ValueError(f"Invalid configuration item: {key}")
 
     print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
-    # dump configurations
-    with open(checkpoint / "train.yaml", "w") as f:
-        yaml.dump(conf, f)
 
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
@@ -91,6 +92,22 @@ def run(args):
         asr_transform = support_transform("asr")(**conf["asr_transform"])
     if "enh_transform" in conf:
         enh_transform = support_transform("enh")(**conf["enh_transform"])
+
+    # CTC
+    if "ctc_coeff" in conf["trainer_conf"]:
+        if conf["trainer_conf"]["ctc_coeff"] > 0:
+            conf["nnet_conf"]["ctc"] = True
+            if "<blank>" not in vocab:
+                raise RuntimeError(
+                    "Missing <blank> in dictionary for CTC training")
+            conf["trainer_conf"]["ctc_blank"] = vocab["<blank>"]
+    else:
+        conf["nnet_conf"]["ctc"] = False
+
+    # dump configurations
+    with open(checkpoint / "train.yaml", "w") as f:
+        yaml.dump(conf, f)
+
     if enh_transform:
         nnet = asr_cls(enh_transform=enh_transform,
                        asr_transform=asr_transform,

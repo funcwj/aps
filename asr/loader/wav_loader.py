@@ -165,13 +165,13 @@ def egs_collate(egs):
         return pad_sequence(olist, batch_first=True, padding_value=value)
 
     return {
-        "x_pad":  # N x S
+        "src_pad":  # N x S
         pad_seq([th.from_numpy(eg["wav"]) for eg in egs], value=0),
-        "y_pad":  # N x T
+        "tgt_pad":  # N x T
         pad_seq([th.as_tensor(eg["token"]) for eg in egs], value=-1),
-        "x_len":  # N, number of the frames
+        "src_len":  # N, number of the frames
         th.tensor([eg["dur"] for eg in egs], dtype=th.int64),
-        "y_len":  # N, length of the tokens
+        "tgt_len":  # N, length of the tokens
         th.tensor([eg["len"] for eg in egs], dtype=th.int64)
     }
 

@@ -288,7 +288,7 @@ class TorchDecoder(nn.Module):
                                eos=-1,
                                normalized=True):
         """
-        Vectorized beam search algothrim (now inferior than normal beam search)
+        Vectorized beam search algothrim
         args
             enc_out: 1 x T x F
         """
@@ -449,7 +449,7 @@ class TorchDecoder(nn.Module):
                           eos=-1,
                           normalized=True):
         """
-        Vectorized beam search algothrim (now inferior than normal beam search)
+        Batch level vectorized beam search algothrim
         args
             enc_out: N x T x F
             enc_len: N

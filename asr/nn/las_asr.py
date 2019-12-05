@@ -26,7 +26,9 @@ class LasASR(nn.Module):
             vocab_size=30,
             sos=-1,
             eos=-1,
+            ctc=False,
             asr_transform=None,
+            # att
             att_type="ctx",
             att_kwargs=None,
             # encoder
@@ -49,6 +51,10 @@ class LasASR(nn.Module):
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         self.sos = sos
         self.eos = eos
+        # if use CTC, eos & sos should be V and V - 1
+        self.ctc = nn.Linear(encoder_proj, vocab_size -
+                             2 if sos != eos else vocab_size -
+                             1) if ctc else None
         self.asr_transform = asr_transform
 
     def forward(self, x_pad, x_len, y_pad, ssr=0):
@@ -73,7 +79,8 @@ class LasASR(nn.Module):
                                   y_pad,
                                   sos=self.sos,
                                   schedule_sampling=ssr)
-        return outs, alis
+        ctc_branch = self.ctc(enc_out) if self.ctc else None
+        return outs, alis, ctc_branch, enc_len
 
     def beam_search(self,
                     x,

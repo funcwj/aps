@@ -27,7 +27,7 @@ class BatchDecoder(Evaluator):
     """
     def __init__(self, cpt_dir, device_id=-1):
         nnet = self._load(cpt_dir)
-        super(BatchDecoder, self).__init__(nnet, cpt_dir, device_id=-1)
+        super(BatchDecoder, self).__init__(nnet, cpt_dir, device_id=device_id)
 
     def compute(self, src, xlen, **kwargs):
         src = pad_sequence([th.from_numpy(s) for s in src],
@@ -91,7 +91,7 @@ def run(args):
         n += args.batch_size
     random.shuffle(batches)
 
-    stdout_top1, top1 = io_wrapper(args.best, "w")
+    stdout_top1, top1 = io_wrapper(args.output, "w")
     topn = None
     if args.dump_nbest:
         stdout_topn, topn = io_wrapper(args.dump_nbest, "w")
@@ -111,7 +111,7 @@ def run(args):
                                       normalized=args.normalized)
         for key, nbest in zip(keys, batch_nbest):
             logger.info(f"Decoding utterance {key}...")
-            nbest = [f"{key}\n"]
+            nbest_hypos = [f"{key}\n"]
             for idx, hyp in enumerate(nbest):
                 score = hyp["score"]
                 # remove SOS/EOS
@@ -123,11 +123,11 @@ def run(args):
                     trans = "".join(trans).replace(args.space, " ")
                 else:
                     trans = " ".join(trans)
-                nbest.append(f"{score:.3f}\t{trans}\n")
+                nbest_hypos.append(f"{score:.3f}\t{trans}\n")
                 if idx == 0:
                     top1.write(f"{key}\t{trans}\n")
             if topn:
-                topn.write("".join(nbest))
+                topn.write("".join(nbest_hypos))
             top1.flush()
             if topn:
                 topn.flush()

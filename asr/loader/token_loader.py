@@ -84,6 +84,6 @@ class DataLoader(object):
                          self.chunk_size):
             end = beg + self.chunk_size
             yield {
-                "x": token_batch[:, beg:end],
-                "y": token_batch[:, beg + 1:end + 1]
+                "src": token_batch[:, beg:end],
+                "tgt": token_batch[:, beg + 1:end + 1]
             }

@@ -37,7 +37,7 @@ class FasterDecoder(Evaluator):
     """
     def __init__(self, cpt_dir, device_id=-1):
         nnet = self._load(cpt_dir)
-        super(FasterDecoder, self).__init__(nnet, cpt_dir, device_id=-1)
+        super(FasterDecoder, self).__init__(nnet, cpt_dir, device_id=device_id)
 
     def compute(self, src, **kwargs):
         src = th.from_numpy(src).to(self.device)
