@@ -162,10 +162,23 @@ class Dataset(dat.Dataset):
 
 def egs_collate(egs):
     def pad_seq(olist, value=0):
-        return pad_sequence(olist, batch_first=True, padding_value=value)
+        peek_dim = olist[0].dim()
+        if peek_dim not in [1, 2]:
+            raise RuntimeError(
+                "Now only supporting pad_sequence for 1/2D tensor")
+        if peek_dim == 1:
+            return pad_sequence(olist, batch_first=True, padding_value=value)
+        else:
+            olist = [o.transpose(0, 1) for o in olist]
+            # N x S x C
+            pad_obj = pad_sequence(olist,
+                                   batch_first=True,
+                                   padding_value=value)
+            # N x C x S
+            return pad_obj.transpose(1, 2)
 
     return {
-        "src_pad":  # N x S
+        "src_pad":  # N x S or N x C x S
         pad_seq([th.from_numpy(eg["wav"]) for eg in egs], value=0),
         "tgt_pad":  # N x T
         pad_seq([th.as_tensor(eg["token"]) for eg in egs], value=-1),

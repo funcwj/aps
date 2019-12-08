@@ -13,6 +13,8 @@ from .las_asr import LasASR
 from .las.encoder import TorchEncoder
 from .enh.beamformer import MvdrBeamformer
 
+support_non_linear = {"relu": F.relu, "sigmoid": th.sigmoid, "tanh": th.tanh}
+
 
 class EnhLasASR(nn.Module):
     """
@@ -28,10 +30,14 @@ class EnhLasASR(nn.Module):
             eos=-1,
             # feature transform
             asr_transform=None,
+            asr_cpt="",
+            ctc=False,
             # beamforming
             enh_transform=None,
             mvdr_att_dim=512,
             mask_net_kwargs=None,
+            mask_non_linear="sigmoid",
+            mask_norm=True,
             # attention
             att_type="ctx",
             att_kwargs=None,
@@ -45,6 +51,8 @@ class EnhLasASR(nn.Module):
         super(EnhLasASR, self).__init__()
         if enh_transform is None:
             raise RuntimeError("Enhancement feature transform can not be None")
+        if mask_non_linear not in support_non_linear:
+            raise RuntimeError("Unsupported non linear functions for TF-mask")
         # Front-end feature extraction
         self.enh_transform = enh_transform
         # Back-end feature transform
@@ -52,12 +60,16 @@ class EnhLasASR(nn.Module):
         # TF-mask estimation network
         self.mask_net = TorchEncoder(enh_input_size, num_bins,
                                      **mask_net_kwargs)
-        self.mvdr_net = MvdrBeamformer(num_bins, mvdr_att_dim)
+        self.mask_act = support_non_linear[mask_non_linear]
+        self.mvdr_net = MvdrBeamformer(num_bins,
+                                       mvdr_att_dim,
+                                       mask_norm=mask_norm)
         # LAS-based ASR
         self.las_asr = LasASR(input_size=asr_input_size,
                               vocab_size=vocab_size,
                               eos=eos,
                               sos=sos,
+                              ctc=ctc,
                               asr_transform=None,
                               att_type=att_type,
                               att_kwargs=att_kwargs,
@@ -66,6 +78,11 @@ class EnhLasASR(nn.Module):
                               encoder_kwargs=encoder_kwargs,
                               decoder_dim=decoder_dim,
                               decoder_kwargs=decoder_kwargs)
+        if asr_cpt:
+            las_cpt = th.load(asr_cpt, map_location="cpu")
+            self.las_asr.load_state_dict(las_cpt, strict=False)
+        self.sos = sos
+        self.eos = eos
 
     def _enhance(self, x_pad, x_len):
         """
@@ -77,11 +94,13 @@ class EnhLasASR(nn.Module):
         # enhancement feature transform
         x_pad, x_cplx, x_len = self.enh_transform(x_pad, x_len)
         # TF-mask estimation: N x T x F
-        x_mask = self.mask_net(x_pad, x_len)
+        x_mask, x_len = self.mask_net(x_pad, x_len)
+        # TF-mask non linear:
+        x_mask = self.mask_act(x_mask)
         # mvdr beamforming: N x Ti x F
-        x_beam = self.mvdr_net(x_mask, x_cplx)
+        x_beam = self.mvdr_net(x_mask, x_cplx, xlen=x_len)
         # asr feature transform
-        x_beam, x_len = self.asr_transform(x_beam, x_len)
+        x_beam, _ = self.asr_transform(x_beam, None)
         return x_beam, x_len
 
     def forward(self, x_pad, x_len, y_pad, ssr=0):

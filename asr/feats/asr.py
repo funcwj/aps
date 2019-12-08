@@ -51,8 +51,12 @@ class AbsTransform(nn.Module):
     """
     Absolute transform
     """
-    def __init__(self):
+    def __init__(self, eps=1e-5):
         super(AbsTransform, self).__init__()
+        self.eps = eps
+
+    def extra_repr(self):
+        return f"eps={self.eps:.3e}"
 
     def forward(self, x):
         """
@@ -61,6 +65,8 @@ class AbsTransform(nn.Module):
         return:
             y: enhanced N x T x F
         """
+        if not isinstance(x, th.Tensor):
+            x = x + self.eps
         return x.abs()
 
 
@@ -114,7 +120,7 @@ class LogTransform(nn.Module):
     """
     Transform linear domain to log domain
     """
-    def __init__(self, eps=EPSILON):
+    def __init__(self, eps=1e-5):
         super(LogTransform, self).__init__()
         self.eps = eps
 
@@ -122,7 +128,7 @@ class LogTransform(nn.Module):
         return 1
 
     def extra_repr(self):
-        return f"eps={self.eps:f}"
+        return f"eps={self.eps:.3e}"
 
     def forward(self, x):
         """
@@ -173,7 +179,7 @@ class CmvnTransform(nn.Module):
     """
     Utterance-level mean-variance normalization
     """
-    def __init__(self, norm_mean=True, norm_var=True, gcmvn=""):
+    def __init__(self, norm_mean=True, norm_var=True, gcmvn="", eps=1e-5):
         super(CmvnTransform, self).__init__()
         self.gmean, self.gstd = None, None
         if gcmvn:
@@ -183,9 +189,11 @@ class CmvnTransform(nn.Module):
         self.norm_mean = norm_mean
         self.norm_var = norm_var
         self.gcmvn = gcmvn
+        self.eps = eps
 
     def extra_repr(self):
-        return f"norm_mean={self.norm_mean}, norm_var={self.norm_var}, gcmvn_stats={self.gcmvn}"
+        return f"norm_mean={self.norm_mean}, norm_var={self.norm_var}, " + \
+            f"gcmvn_stats={self.gcmvn}, eps={self.eps:.3e}"
 
     def dim_scale(self):
         return 1
@@ -199,12 +207,17 @@ class CmvnTransform(nn.Module):
         """
         if not self.norm_mean and not self.norm_var:
             return x
-        m = th.mean(x, -1, keepdim=True) if self.gmean is None else self.gmean
-        s = th.std(x, -1, keepdim=True) if self.gstd is None else self.gstd
+        # over time axis
+        m = th.mean(x, -2, keepdim=True) if self.gmean is None else self.gmean
+        if self.gstd is None:
+            ms = th.mean(x**2, -2, keepdim=True)
+            s = (ms - m**2 + self.eps)**0.5
+        else:
+            s = self.gstd
         if self.norm_mean:
-            x -= m
+            x = x - m
         if self.norm_var:
-            x /= th.clamp(s, min=EPSILON)
+            x = x / s
         return x
 
 
@@ -313,7 +326,7 @@ class DeltaTransform(nn.Module):
             dx[..., i:, :] += -i * x[..., :-i, :]
             dx[..., -i:, :] += i * x[..., -1:, :]
             dx[..., :i, :] += -i * x[..., :1, :]
-        dx /= 2 * sum(i**2 for i in range(1, self.ctx + 1))
+        dx = dx / (2 * sum(i**2 for i in range(1, self.ctx + 1)))
         return dx
 
     def forward(self, x):
@@ -420,7 +433,7 @@ class FeatureTransform(nn.Module):
             elif tok == "log":
                 transform.append(LogTransform(eps=eps))
             elif tok == "abs":
-                transform.append(AbsTransform())
+                transform.append(AbsTransform(eps=eps))
             elif tok == "dct":
                 transform.append(
                     DiscreteCosineTransform(num_ceps=num_ceps,
@@ -431,7 +444,8 @@ class FeatureTransform(nn.Module):
                 transform.append(
                     CmvnTransform(norm_mean=norm_mean,
                                   norm_var=norm_var,
-                                  gcmvn=gcmvn))
+                                  gcmvn=gcmvn,
+                                  eps=eps))
             elif tok == "aug":
                 transform.append(
                     SpecAugTransform(p=aug_prob,
@@ -459,6 +473,9 @@ class FeatureTransform(nn.Module):
         """
         Work out number of frames
         """
+        if not isinstance(self.transform[0], SpectrogramTransform):
+            raise RuntimeError(
+                "0-th layer of transform is not SpectrogramTransform")
         return self.transform[0].len(x_len)
 
     def forward(self, x_pad, x_len):

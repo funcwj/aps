@@ -33,7 +33,7 @@ class TorchEncoder(nn.Module):
                  output_size,
                  rnn="lstm",
                  rnn_layers=3,
-                 rnn_size=512,
+                 rnn_hidden=512,
                  rnn_dropout=0.0,
                  rnn_bidir=False):
         super(TorchEncoder, self).__init__()
@@ -42,12 +42,12 @@ class TorchEncoder(nn.Module):
         if RNN not in supported_rnn:
             raise RuntimeError(f"Unknown RNN type: {RNN}")
         self.rnns = supported_rnn[RNN](input_size,
-                                       rnn_size,
+                                       rnn_hidden,
                                        rnn_layers,
                                        batch_first=True,
                                        dropout=rnn_dropout,
                                        bidirectional=rnn_bidir)
-        self.proj = nn.Linear(rnn_size if not rnn_bidir else rnn_size * 2,
+        self.proj = nn.Linear(rnn_hidden if not rnn_bidir else rnn_hidden * 2,
                               output_size)
 
     def flat(self):

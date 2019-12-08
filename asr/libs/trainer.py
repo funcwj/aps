@@ -1,6 +1,5 @@
 # wujian@2019
 
-import sys
 import math
 import random
 
@@ -99,12 +98,12 @@ class ProgressReporter(object):
         self.logger.info(f"{self.header}: {sstr}")
 
     def eval(self):
-        self.log("set eval mode...")
+        self.log(">> Set eval mode...")
         self.mode = "valid"
         self.reset()
 
     def train(self):
-        self.log("set train mode...")
+        self.log(">> Set train mode...")
         self.mode = "train"
         self.reset()
 
@@ -117,7 +116,7 @@ class ProgressReporter(object):
         N = len(self.stats[key])
         if not N % self.period:
             avg = sum(self.stats[key][-self.period:]) / self.period
-            self.log(f"processed {N:.2e} batches ({key} = {avg:+.2f})...")
+            self.log(f"Processed {N:.2e} batches ({key} = {avg:+.2f}) ...")
 
     def report(self, epoch, lr):
         N = len(self.stats["loss"])
@@ -143,10 +142,10 @@ class EarlyStopCriterion(object):
     """
     Early stop of the training
     """
-    def __init__(self, no_impr, order="min", init_criterion=math.inf):
+    def __init__(self, no_impr, mode="min", init_criterion=math.inf):
         self.max_no_impr = no_impr
         self.no_impr = 0
-        self.order = order
+        self.mode = mode
         self.best_criterion = init_criterion
 
     def reset(self, update_value):
@@ -156,8 +155,8 @@ class EarlyStopCriterion(object):
         return self.no_impr == self.max_no_impr
 
     def step(self, update_value):
-        c1 = self.best_criterion < update_value and self.order == "min"
-        c2 = self.best_criterion > update_value and self.order == "max"
+        c1 = self.best_criterion < update_value and self.mode == "min"
+        c2 = self.best_criterion > update_value and self.mode == "max"
         if c1 or c2:
             self.no_impr += 1
             return False
@@ -182,13 +181,14 @@ class Trainer(object):
                  ss_scheduler="const",
                  ss_prob=0,
                  ss_scheduler_kwargs=None,
-                 gradient_clip=None,
-                 gaussian_noise=None,
+                 grad_clip=None,
+                 grad_noise=None,
                  prog_interval=100,
                  save_interval=-1,
                  resume="",
                  init="",
                  tensorboard=False,
+                 stop_criterion="loss",
                  no_impr=6):
         self.device_ids = get_device_ids(device_ids)
         self.default_device = th.device(f"cuda:{self.device_ids[0]}")
@@ -199,17 +199,20 @@ class Trainer(object):
                                          period=prog_interval,
                                          tensorboard=tensorboard)
 
-        self.gradient_clip = gradient_clip
-        self.gaussian_noise = gaussian_noise
+        self.grad_clip = grad_clip
+        self.grad_noise = grad_noise
         self.cur_epoch = 0  # zero based
         self.save_interval = save_interval
         self.lsm_factor = lsm_factor
         self.ssr = 0
 
-        self.early_stop = EarlyStopCriterion(no_impr)
+        mode = "max" if stop_criterion == "accu" else "min"
+        self.stop_criterion = stop_criterion
+        self.early_stop = EarlyStopCriterion(no_impr, mode=mode)
         self.ss_scheduler = support_ss_scheduler(ss_scheduler, ss_prob,
                                                  **ss_scheduler_kwargs)
 
+        self.reporter.log(f"Model summary:\n{nnet}")
         if resume or init:
             cpt_path = resume if resume else init
             if not Path(cpt_path).exists():
@@ -233,21 +236,21 @@ class Trainer(object):
             self.nnet = nnet.to(self.default_device)
             self.optimizer = self.create_optimizer(optimizer, optimizer_kwargs)
         self.scheduler = ReduceLROnPlateau(self.optimizer,
+                                           mode=mode,
                                            **lr_scheduler_kwargs)
         self.num_params = sum(
             [param.nelement() for param in nnet.parameters()]) / 10.0**6
 
         # logging
-        self.reporter.log(f"Model summary:\n{nnet}")
         self.reporter.log(f"Loading model to GPUs:{self.device_ids}, " +
                           f"#param: {self.num_params:.2f}M")
         self.reporter.log(f"Schedule sampling strategy: {ss_scheduler}")
-        if gradient_clip:
+        self.reporter.log(f"Early stop criterion: {stop_criterion}")
+        if grad_clip:
+            self.reporter.log(f"Gradient clipping by {grad_clip}, default L2")
+        if grad_noise:
             self.reporter.log(
-                f"Gradient clipping by {gradient_clip}, default L2")
-        if gaussian_noise:
-            self.reporter.log(
-                f"Add gaussian noise to weights with std = {gaussian_noise}")
+                f"Add gaussian noise to weights with std = {grad_noise}")
 
     def save_checkpoint(self, epoch, best=True):
         """
@@ -260,7 +263,7 @@ class Trainer(object):
         }
         cpt_name = "{}.pt.tar".format("best" if best else "last")
         th.save(cpt, self.checkpoint / cpt_name)
-        self.reporter.log(f"save checkpoint {cpt_name}")
+        self.reporter.log(f"Save checkpoint {cpt_name}")
         if self.save_interval > 0 and epoch % self.save_interval == 0:
             th.save(cpt, self.checkpoint / f"{epoch}.pt.tar")
 
@@ -307,22 +310,21 @@ class Trainer(object):
             loss.backward()
 
             # clip gradient after backward
-            if self.gradient_clip:
-                norm = clip_grad_norm_(self.nnet.parameters(),
-                                       self.gradient_clip)
+            if self.grad_clip:
+                norm = clip_grad_norm_(self.nnet.parameters(), self.grad_clip)
 
-            loss_value = loss.item()
-            if math.isinf(norm) or math.isnan(loss_value):
+            loss = loss.item()
+            if math.isinf(norm) or math.isnan(loss):
                 self.reporter.log(f"Invalid gradient {norm} or " +
-                                  f"loss {loss_value}, skip...")
+                                  f"loss {loss}, skip...")
             else:
                 self.optimizer.step()
 
-                if self.gaussian_noise:
-                    add_gaussian_noise(self.nnet, std=self.gaussian_noise)
+                if self.grad_noise:
+                    add_gaussian_noise(self.nnet, std=self.grad_noise)
 
                 self.reporter.add("norm", norm)
-                self.reporter.add("loss", loss_value)
+                self.reporter.add("loss", loss)
                 self.reporter.add("accu", accu)
 
     def eval(self, data_loader):
@@ -351,10 +353,12 @@ class Trainer(object):
         best_loss, best_accu, _ = self.reporter.report(e, 0)
         self.ssr = self.ss_scheduler.step(e, best_accu)
         # make sure not inf
-        self.scheduler.best = best_loss
-        self.early_stop.reset(best_loss)
+        best_value = best_loss if self.stop_criterion == "loss" else best_accu
+        self.scheduler.best = best_value
+        self.early_stop.reset(best_value)
 
-        self.reporter.log(f"start from epoch {e:d}, loss = {best_loss:.4f}")
+        self.reporter.log(
+            f"Epoch {e:d}, loss = {best_loss:.4f}, accu = {best_accu:.2f}")
         while e < num_epoches:
             e += 1
             cur_lr = self.optimizer.param_groups[0]["lr"]
@@ -369,7 +373,8 @@ class Trainer(object):
             # schedule sampling for eval
             sstr += f" | ssr = {self.ssr:.3f}"
 
-            better = self.early_stop.step(cv_loss)
+            update_value = cv_loss if self.stop_criterion == "loss" else cv_accu
+            better = self.early_stop.step(update_value)
             if better:
                 self.save_checkpoint(e, best=True)
             else:
@@ -378,10 +383,8 @@ class Trainer(object):
             self.reporter.log(sstr)
             # << eval
             # schedule here
-            self.scheduler.step(cv_loss)
+            self.scheduler.step(update_value)
             self.ssr = self.ss_scheduler.step(e, cv_accu)
-            # flush scheduler info
-            sys.stdout.flush()
             # save last checkpoint
             self.save_checkpoint(e, best=False)
             # early stop
@@ -406,10 +409,12 @@ class Trainer(object):
 
         best_loss, best_accu, _ = self.reporter.report(e, 0)
         self.ssr = self.ss_scheduler.step(e, best_accu)
-        self.reporter.log(f"start from epoch {e:d}, loss = {best_loss:.4f}")
+        self.reporter.log(
+            f"Epoch {e:d}, loss = {best_loss:.4f}, accu = {best_accu:.2f}")
         # make sure not inf
-        self.scheduler.best = best_loss
-        self.early_stop.reset(best_loss)
+        update_value = best_loss if self.stop_criterion == "loss" else best_accu
+        self.scheduler.best = update_value
+        self.early_stop.reset(update_value)
 
         stop = False
         trained_batches = 0
@@ -427,18 +432,21 @@ class Trainer(object):
                 loss, accu = self.compute_loss(egs, idx=idx, ssr=self.ssr)
                 loss.backward()
 
-                if self.gradient_clip:
+                if self.grad_clip:
                     norm = clip_grad_norm_(self.nnet.parameters(),
-                                           self.gradient_clip)
-                loss_value = loss.item()
-                if math.isinf(norm) or math.isnan(loss_value):
+                                           self.grad_clip)
+                loss = loss.item()
+                if math.isinf(norm) or math.isnan(loss):
                     self.reporter.log(f"Invalid gradient {norm} or " +
-                                      f"loss {loss_value}, skip...")
+                                      f"loss {loss}, skip...")
                 else:
                     self.optimizer.step()
 
+                    if self.grad_noise:
+                        add_gaussian_noise(self.nnet, std=self.grad_noise)
+
                     self.reporter.add("norm", norm)
-                    self.reporter.add("loss", loss_value)
+                    self.reporter.add("loss", loss)
                     self.reporter.add("accu", accu)
 
                 # if trained on batches done, start evaluation
@@ -452,7 +460,8 @@ class Trainer(object):
                     # schedule sampling for eval
                     sstr += f" | ssr = {self.ssr:.3f}"
 
-                    better = self.early_stop.step(cv_loss)
+                    update_value = cv_loss if self.stop_criterion == "loss" else cv_accu
+                    better = self.early_stop.step(update_value)
                     if better:
                         self.save_checkpoint(e, best=True)
                     else:
@@ -460,10 +469,8 @@ class Trainer(object):
 
                     self.reporter.log(sstr)
                     # schedule here
-                    self.scheduler.step(cv_loss)
+                    self.scheduler.step(update_value)
                     self.ssr = self.ss_scheduler.step(e, cv_accu)
-                    # flush scheduler info
-                    sys.stdout.flush()
                     # save last checkpoint
                     self.save_checkpoint(e, best=False)
                     # reset reporter
@@ -493,11 +500,11 @@ class S2STrainer(Trainer):
     """
     def __init__(self, nnet, ctc_coeff=0, ctc_blank=0, **kwargs):
         super(S2STrainer, self).__init__(nnet, **kwargs)
-        self.ctc_coeff = ctc_coeff
-        self.ctc_blank = ctc_blank
         if ctc_coeff:
             self.reporter.log("Using CTC regularization (coeff = " +
                               f"{ctc_coeff:.2f}, blank = {ctc_blank})")
+        self.ctc_coeff = ctc_coeff
+        self.ctc_blank = ctc_blank
 
     def compute_loss(self, egs, idx=0, ssr=0):
         """
@@ -528,6 +535,7 @@ class S2STrainer(Trainer):
         if self.ctc_coeff > 0:
             # add log-softmax, N x T x V => T x N x V
             log_prob = F.log_softmax(ctc_branch, dim=-1).transpose(0, 1)
+            # CTC loss
             ctc_loss = F.ctc_loss(log_prob,
                                   tgt_pad,
                                   enc_len,

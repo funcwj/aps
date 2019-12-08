@@ -1,10 +1,8 @@
 # wujian@2019
 
 import yaml
-
+import pathlib
 import torch as th
-
-from pathlib import Path
 
 from .utils import get_logger
 
@@ -16,7 +14,7 @@ class Evaluator(object):
     A simple wrapper for model evaluation
     """
     def __init__(self, nnet, cpt_dir, device_id=-1):
-        cpt_dir = Path(cpt_dir)
+        cpt_dir = pathlib.Path(cpt_dir)
         # load checkpoint
         cpt = th.load(cpt_dir / "best.pt.tar", map_location="cpu")
         epoch = cpt["epoch"]

@@ -32,7 +32,7 @@ def run(args):
 
     # load configurations
     with open(args.conf, "r") as f:
-        conf = yaml.load(f, Loader=yaml.FullLoader)
+        conf = yaml.full_load(f)
 
     # add dictionary info
     with open(args.dict, "rb") as f:

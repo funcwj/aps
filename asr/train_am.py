@@ -49,7 +49,7 @@ def run(args):
 
     # load configurations
     with open(args.conf, "r") as f:
-        conf = yaml.load(f, Loader=yaml.FullLoader)
+        conf = yaml.full_load(f)
 
     # add dictionary info
     with codecs.open(args.dict, encoding="utf-8") as f:

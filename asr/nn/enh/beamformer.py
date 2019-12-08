@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch_complex.functional as cF
 from torch_complex.tensor import ComplexTensor
+from ..las.attention import padding_mask
 
 EPSILON = th.finfo(th.float32).min
 
@@ -116,9 +117,10 @@ class MvdrBeamformer(nn.Module):
     """
     MVDR (Minimum Variance Distortionless Response) Beamformer
     """
-    def __init__(self, num_bins, att_dim):
+    def __init__(self, num_bins, att_dim, mask_norm=True):
         super(MvdrBeamformer, self).__init__()
         self.ref = ChannelAttention(num_bins, att_dim)
+        self.mask_norm = mask_norm
 
     def _derive_weight(self, Rs, Rn, u, eps=EPSILON):
         """
@@ -129,9 +131,9 @@ class MvdrBeamformer(nn.Module):
         return:
             weight: N x F x C
         """
-        C = Rn.shape[-1]
-        I = th.eye(C, device=Rn.device, dtype=Rn.dtype)
-        Rn = Rn + I * eps
+        # C = Rn.shape[-1]
+        # I = th.eye(C, device=Rn.device, dtype=Rn.dtype)
+        # Rn = Rn + I * eps
         # N x F x C x C
         Rn_inv_Rs = cF.einsum("...ij,...jk->...ij", [Rn.inverse(), Rs])
         # N x F
@@ -142,7 +144,7 @@ class MvdrBeamformer(nn.Module):
         weight = Rn_inv_Rs_u / (tr_Rn_inv_Rs[..., None] + eps)
         return weight
 
-    def forward(self, m, x, norm=True):
+    def forward(self, m, x, xlen=None):
         """
         args:
             m: real TF-masks, N x T x F
@@ -150,9 +152,14 @@ class MvdrBeamformer(nn.Module):
         return:
             y: enhanced complex spectrogram N x T x F
         """
-        if norm:
-            max_abs, _ = th.max(m, dim=0, keepdim=True)
-            m = m / (max_abs + EPSILON)
+        if xlen is not None:
+            zero_mask = padding_mask(xlen)
+            m[zero_mask] = 0
+        if self.mask_norm:
+            # max_abs, _ = th.max(m, dim=0, keepdim=True)
+            # m = m / (max_abs + EPSILON)
+            max_abs = th.norm(m, float("inf"), dim=1, keepdim=True)
+            m = m / max_abs
         # N x T x F => N x F x T
         masks_s = th.transpose(m, 1, 2)
         # N x F x C x C

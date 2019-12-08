@@ -83,6 +83,7 @@ class FeatureTransform(nn.Module):
                  window="sqrthann",
                  round_pow_of_two=True,
                  sr=16000,
+                 gcmvn="",
                  norm_mean=True,
                  norm_var=True,
                  ipd_index="1,0",
@@ -107,7 +108,10 @@ class FeatureTransform(nn.Module):
                 transform.append(LogTransform(eps=EPSILON))
             elif tok == "cmvn":
                 transform.append(
-                    CmvnTransform(norm_mean=norm_mean, norm_var=norm_var))
+                    CmvnTransform(norm_mean=norm_mean,
+                                  norm_var=norm_var,
+                                  gcmvn=gcmvn,
+                                  eps=eps))
             elif tok == "ipd":
                 feats_ipd = IpdTransform(ipd_index=ipd_index,
                                          cos=cos_ipd,
@@ -118,8 +122,8 @@ class FeatureTransform(nn.Module):
                     feats_dim *= len(ipd_index) * 2
             else:
                 raise RuntimeError(f"Unknown token {tok} in {feats}")
-        self.spe = nn.Sequential(*transform)
-        self.ipd = feats_ipd
+        self.spe_transform = nn.Sequential(*transform)
+        self.ipd_transform = feats_ipd
         self.feats_dim = feats_dim
 
     def forward(self, x_pad, x_len):
@@ -137,12 +141,12 @@ class FeatureTransform(nn.Module):
         # N x F x T
         feats = cplx[:, 0].abs()
         # spectra features of CH0, N x T x F
-        feats = self.spe(feats.transpose(1, 2))
-        if self.ipd is not None:
+        feats = self.spe_transform(feats.transpose(1, 2))
+        if self.ipd_transform is not None:
             # N x C x F x T
             phase = cplx.angle()
             # N x T x ...
-            ipd = self.ipd(phase).transpose(1, 2)
+            ipd = self.ipd_transform(phase).transpose(1, 2)
             # N x T x ...
             feats = th.cat([feats, ipd], -1)
         f_len = self.STFT.num_frames(x_len) if x_len is not None else None
