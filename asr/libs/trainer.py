@@ -98,12 +98,12 @@ class ProgressReporter(object):
         self.logger.info(f"{self.header}: {sstr}")
 
     def eval(self):
-        self.log(">> Set eval mode...")
+        self.log(">> Set eval mode ...")
         self.mode = "valid"
         self.reset()
 
     def train(self):
-        self.log(">> Set train mode...")
+        self.log(">> Set train mode ...")
         self.mode = "train"
         self.reset()
 

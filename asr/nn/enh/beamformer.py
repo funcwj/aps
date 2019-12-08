@@ -8,9 +8,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch_complex.functional as cF
 from torch_complex.tensor import ComplexTensor
+
 from ..las.attention import padding_mask
 
-EPSILON = th.finfo(th.float32).min
+EPSILON = th.finfo(th.float32).eps
 
 
 def trace(cplx_mat):
@@ -131,17 +132,19 @@ class MvdrBeamformer(nn.Module):
         return:
             weight: N x F x C
         """
-        # C = Rn.shape[-1]
-        # I = th.eye(C, device=Rn.device, dtype=Rn.dtype)
-        # Rn = Rn + I * eps
+        C = Rn.shape[-1]
+        I = th.eye(C, device=Rn.device, dtype=Rn.dtype)
+        Rn = Rn + I * eps
         # N x F x C x C
-        Rn_inv_Rs = cF.einsum("...ij,...jk->...ij", [Rn.inverse(), Rs])
+        Rn_inv = Rn.inverse()
+        # N x F x C x C
+        Rn_inv_Rs = cF.einsum("...ij,...jk->...ik", [Rn_inv, Rs])
         # N x F
-        tr_Rn_inv_Rs = trace(Rn_inv_Rs)
+        tr_Rn_inv_Rs = trace(Rn_inv_Rs) + eps
         # N x F x C
         Rn_inv_Rs_u = cF.einsum("...fnc,...c->...fn", [Rn_inv_Rs, u])
         # N x F x C
-        weight = Rn_inv_Rs_u / (tr_Rn_inv_Rs[..., None] + eps)
+        weight = Rn_inv_Rs_u / tr_Rn_inv_Rs[..., None]
         return weight
 
     def forward(self, m, x, xlen=None):
@@ -153,13 +156,14 @@ class MvdrBeamformer(nn.Module):
             y: enhanced complex spectrogram N x T x F
         """
         if xlen is not None:
+            # N x T
             zero_mask = padding_mask(xlen)
-            m[zero_mask] = 0
+            m = th.masked_fill(m, zero_mask[..., None], 0)
         if self.mask_norm:
             # max_abs, _ = th.max(m, dim=0, keepdim=True)
             # m = m / (max_abs + EPSILON)
             max_abs = th.norm(m, float("inf"), dim=1, keepdim=True)
-            m = m / max_abs
+            m = m / (max_abs + EPSILON)
         # N x T x F => N x F x T
         masks_s = th.transpose(m, 1, 2)
         # N x F x C x C
