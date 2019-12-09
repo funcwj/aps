@@ -22,20 +22,16 @@ logger = get_logger(__name__)
 
 class Computer(Evaluator):
     """
-    Alignments computation wrapper
+    Mask computation wrapper
     """
     def __init__(self, cpt_dir, device_id=-1):
         nnet = self._load(cpt_dir)
         super(Computer, self).__init__(nnet, cpt_dir, device_id=device_id)
 
-    def compute(self, src, token):
-        src = th.from_numpy(src).to(self.device)
-        token = th.tensor(token, dtype=th.int64, device=self.device)
-        prob, alis, _, _ = self.nnet(src[None, :], None, token[None, :], ssr=1)
-        pred = th.argmax(prob.detach().squeeze(0), -1)[:-1]
-        accu = th.sum(pred == token).float() / token.size(-1)
-        logger.info(f"Accu = {accu.item():.2f}")
-        return alis.detach().cpu().squeeze().numpy()
+    def compute(self, wav):
+        wav = th.from_numpy(wav).to(self.device)
+        mask, _, _ = self.nnet.speech_mask(wav, None)
+        return mask.detach().cpu().squeeze().numpy()
 
     def _load(self, cpt_dir):
         with open(pathlib.Path(cpt_dir) / "train.yaml", "r") as f:
@@ -62,40 +58,26 @@ class Computer(Evaluator):
 
 
 def run(args):
-    token_reader = BaseReader(args.token,
-                              value_processor=lambda l: [int(n) for n in l],
-                              num_tokens=-1,
-                              restrict=False)
     computer = Computer(args.checkpoint, device_id=args.device_id)
-    if computer.raw_waveform:
-        src_reader = WaveReader(args.feats_or_wav_scp, sr=16000)
-    else:
-        src_reader = ScriptReader(args.feats_or_wav_scp)
-
+    wav_reader = WaveReader(args.wav_scp, sr=16000)
     dump_dir = pathlib.Path(args.dump_dir)
     dump_dir.mkdir(parents=True, exist_ok=True)
 
-    for key, src in src_reader:
+    for key, wav in wav_reader:
         logger.info(f"Processing utterance {key}...")
-        alis = computer.compute(src, token_reader[key])
-        np.save(dump_dir / key, alis)
-    logger.info(f"Processed {len(src_reader)} utterance done")
+        mask = computer.compute(wav)
+        np.save(dump_dir / key, mask)
+    logger.info(f"Processed {len(wav_reader)} utterance done")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Command to compute attention alignments",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("feats_or_wav_scp",
+    parser.add_argument("checkpoint",
                         type=str,
-                        help="Feature/Wave scripts")
-    parser.add_argument("token",
-                        type=str,
-                        help="Rspecifier for evaluation transcriptions")
-    parser.add_argument("--checkpoint",
-                        type=str,
-                        required=True,
-                        help="Checkpoint of the E2E model")
+                        help="Checkpoint of the multi-channel AM")
+    parser.add_argument("wav_scp", type=str, help="Feature/Wave scripts")
     parser.add_argument("--device-id",
                         type=int,
                         default=-1,
@@ -103,7 +85,7 @@ if __name__ == "__main__":
                         "-1 means running on CPU")
     parser.add_argument("--dump-dir",
                         type=str,
-                        default="att_ali",
-                        help="Output directory for alignments")
+                        default="mask",
+                        help="Output directory for TF-masks")
     args = parser.parse_args()
     run(args)

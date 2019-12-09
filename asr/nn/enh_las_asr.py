@@ -86,22 +86,33 @@ class EnhLasASR(nn.Module):
 
     def _enhance(self, x_pad, x_len):
         """
-        Feature extraction and enhancement
+        Mvdr beamforming and asr feature transform
+        """
+        # TF-mask
+        x_mask, x_len, x_cplx = self.speech_mask(x_pad, x_len)
+        # mvdr beamforming: N x Ti x F
+        x_beam = self.mvdr_net(x_mask, x_cplx, xlen=x_len)
+        # asr feature transform
+        x_beam, _ = self.asr_transform(x_beam, None)
+        return x_beam, x_len
+
+    def speech_mask(self, x_pad, x_len):
+        """
+        Output speech masks
         """
         # N x C x S
-        if x_pad.dim() != 3:
-            raise RuntimeError(f"Expect 3D tensor, got {x_pad.dim()} instead")
+        if x_pad.dim() not in [2, 3]:
+            raise RuntimeError(
+                f"Expect 2/3D tensor, got {x_pad.dim()} instead")
+        if x_pad.dim() == 2:
+            x_pad = x_pad[None, ...]
         # enhancement feature transform
         x_pad, x_cplx, x_len = self.enh_transform(x_pad, x_len)
         # TF-mask estimation: N x T x F
         x_mask, x_len = self.mask_net(x_pad, x_len)
         # TF-mask non linear:
         x_mask = self.mask_act(x_mask)
-        # mvdr beamforming: N x Ti x F
-        x_beam = self.mvdr_net(x_mask, x_cplx, xlen=x_len)
-        # asr feature transform
-        x_beam, _ = self.asr_transform(x_beam, None)
-        return x_beam, x_len
+        return x_mask, x_len, x_cplx
 
     def forward(self, x_pad, x_len, y_pad, ssr=0):
         """
@@ -128,13 +139,13 @@ class EnhLasASR(nn.Module):
                     normalized=True):
         """
         args
-            x: S or Ti x F
+            x: C x S
         """
         with th.no_grad():
-            if x.dim() != 1:
+            if x.dim() != 2:
                 raise RuntimeError("Now only support for one utterance")
             x_beam, _ = self._enhance(x[None, ...], None)
-            return self.las_asr.beam_search(x_beam,
+            return self.las_asr.beam_search(x_beam[0],
                                             beam=beam,
                                             nbest=nbest,
                                             max_len=max_len,

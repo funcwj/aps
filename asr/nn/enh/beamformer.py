@@ -123,7 +123,7 @@ class MvdrBeamformer(nn.Module):
         self.ref = ChannelAttention(num_bins, att_dim)
         self.mask_norm = mask_norm
 
-    def _derive_weight(self, Rs, Rn, u, eps=EPSILON):
+    def _derive_weight(self, Rs, Rn, u, eps=1e-5):
         """
         Compute mvdr beam weights
         args:

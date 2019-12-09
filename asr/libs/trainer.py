@@ -314,10 +314,7 @@ class Trainer(object):
                 norm = clip_grad_norm_(self.nnet.parameters(), self.grad_clip)
 
             loss = loss.item()
-            if math.isinf(norm) or math.isnan(loss):
-                self.reporter.log(f"Invalid gradient {norm} or " +
-                                  f"loss {loss}, skip...")
-            else:
+            if math.isfinite(norm) and math.isfinite(loss):
                 self.optimizer.step()
 
                 if self.grad_noise:
@@ -326,6 +323,9 @@ class Trainer(object):
                 self.reporter.add("norm", norm)
                 self.reporter.add("loss", loss)
                 self.reporter.add("accu", accu)
+            else:
+                self.reporter.log(f"Invalid gradient {norm} or " +
+                                  f"loss {loss}, skip...")
 
     def eval(self, data_loader):
         self.nnet.eval()
@@ -436,10 +436,7 @@ class Trainer(object):
                     norm = clip_grad_norm_(self.nnet.parameters(),
                                            self.grad_clip)
                 loss = loss.item()
-                if math.isinf(norm) or math.isnan(loss):
-                    self.reporter.log(f"Invalid gradient {norm} or " +
-                                      f"loss {loss}, skip...")
-                else:
+                if math.isfinite(norm) and math.isfinite(loss):
                     self.optimizer.step()
 
                     if self.grad_noise:
@@ -448,6 +445,9 @@ class Trainer(object):
                     self.reporter.add("norm", norm)
                     self.reporter.add("loss", loss)
                     self.reporter.add("accu", accu)
+                else:
+                    self.reporter.log(f"Invalid gradient {norm} or " +
+                                      f"loss {loss}, skip...")
 
                 # if trained on batches done, start evaluation
                 if trained_batches == 0:
