@@ -1,33 +1,35 @@
-# CER: 9.50 on aishell_v1 test set
+# default conf
 
 nnet_type: "las"
 
 nnet_conf:
-  input_size: 240
-  encoder_type: "pyramid"
-  encoder_proj: 256
+  input_size: 80
+  encoder_type: "tdnn"
+  encoder_proj: 512
   encoder_kwargs: 
-    hidden_size: 256
-    num_layers: 3
-    dropout: 0.2
-    pyramid: True
-    layernorm: False
-    bidirectional: True
-    add_forward_backward: False
-  decoder_dim: 256
+    tdnn_dim: 512
+    tdnn_layers: 3
+    tdnn_stride: "2,2,2"
+    tdnn_dilats: "1,1,2"
+    rnn: "lstm"
+    rnn_layers: 3
+    rnn_bidir: True
+    rnn_dropout: 0.2
+    rnn_hidden: 320
+  decoder_dim: 512
   decoder_kwargs:
     rnn: "lstm"
     num_layers: 2
-    hidden_size: 256  # must eq decoder_dim
+    hidden_size: 512  # must eq decoder_dim
     dropout: 0
     input_feeding: True
     vocab_embeded: True
-  att_type: "dot"
+  att_type: "ctx"
   att_kwargs:
     att_dim: 512
 
 asr_transform:
-  feats: "fbank-log-cmvn-aug-delta"
+  feats: "fbank-log-cmvn"
   frame_len: 400
   frame_hop: 160
   window: "hamm"
@@ -36,10 +38,6 @@ asr_transform:
   num_mels: 80
   norm_mean: True
   norm_var: True
-  delta_ctx: 2
-  delta_order: 2
-  aug_prob: 0.8
-  wrap_step: 4
 
 trainer_conf:
   optimizer: "adam"
@@ -50,10 +48,17 @@ trainer_conf:
     min_lr: 1.0e-8
     patience: 1
     factor: 0.5
-  gradient_clip: 5
-  no_impr: 4
+  ss_scheduler: "linear"
+  ss_prob: 0.2
+  ss_scheduler_kwargs:
+    epoch_beg: 10
+    epoch_end: 26
+    update_interval: 4 
+  no_impr: 6
   lsm_factor: 0.1
-  schedule_sampling: 0.2
+  grad_clip: 5
+  ctc_coeff: 0.2
+  stop_criterion: "accu"
 
 data_conf:
   fmt: "wav"  # or "kaldi"
@@ -62,12 +67,12 @@ data_conf:
     adapt_token_num: 150
     max_dur: 30 # (s)
     min_dur: 0.4 # (s)
-    adapt_dur: 8 # (s)
+    adapt_dur: 10 # (s)
   train:
-    wav_scp: "data/aishell_v1/train/wav.scp"
-    utt2dur: "data/aishell_v1/train/utt2dur"
-    token: "data/aishell_v1/train/token"
+    wav_scp: "data/aishell_v2/train/wav.scp"
+    utt2dur: "data/aishell_v2/train/utt2dur"
+    token: "data/aishell_v2/train/token"
   valid:
-    wav_scp: "data/aishell_v1/dev/wav.scp"
-    utt2dur: "data/aishell_v1/dev/utt2dur"
-    token: "data/aishell_v1/dev/token"
+    wav_scp: "data/aishell_v2/dev/wav.scp"
+    utt2dur: "data/aishell_v2/dev/utt2dur"
+    token: "data/aishell_v2/dev/token"

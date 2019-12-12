@@ -123,7 +123,7 @@ class ProgressReporter(object):
         if self.mode == "valid":
             sstr = ",".join(
                 map(lambda f: "{:.2f}".format(f), self.stats["loss"]))
-            self.log(f"loss on {N:d} batches: {sstr}")
+            self.log(f"Loss on {N:d} batches: {sstr}")
 
         if N == 0:
             raise RuntimeError("No statistics to report")
@@ -339,15 +339,15 @@ class Trainer(object):
                 self.reporter.add("loss", loss.item())
                 self.reporter.add("accu", accu)
 
-    def run(self, train_loader, valid_loader, num_epoches=50):
+    def _prep_train(self, valid_loader):
         """
-        Run on whole training set and evaluate
+        Prepare for training
         """
         # avoid alloc memory from gpu0
         th.cuda.set_device(self.default_device)
         # make dilated conv faster
         th.backends.cudnn.benchmark = True
-
+        # eval
         self.eval(valid_loader)
         e = self.cur_epoch
         best_loss, best_accu, _ = self.reporter.report(e, 0)
@@ -356,9 +356,16 @@ class Trainer(object):
         best_value = best_loss if self.stop_criterion == "loss" else best_accu
         self.scheduler.best = best_value
         self.early_stop.reset(best_value)
-
+        # log here
         self.reporter.log(
             f"Epoch {e:d}, loss = {best_loss:.4f}, accu = {best_accu:.2f}")
+        return e
+
+    def run(self, train_loader, valid_loader, num_epoches=50):
+        """
+        Run on whole training set and evaluate
+        """
+        e = self._prep_train(valid_loader)
         while e < num_epoches:
             e += 1
             cur_lr = self.optimizer.param_groups[0]["lr"]
@@ -399,23 +406,10 @@ class Trainer(object):
                             valid_loader,
                             num_epoches=100,
                             eval_interval=4000):
-        # avoid alloc memory from gpu0
-        th.cuda.set_device(self.default_device)
-        # make dilated conv faster
-        th.backends.cudnn.benchmark = True
-
-        e = self.cur_epoch
-        self.eval(valid_loader)
-
-        best_loss, best_accu, _ = self.reporter.report(e, 0)
-        self.ssr = self.ss_scheduler.step(e, best_accu)
-        self.reporter.log(
-            f"Epoch {e:d}, loss = {best_loss:.4f}, accu = {best_accu:.2f}")
-        # make sure not inf
-        update_value = best_loss if self.stop_criterion == "loss" else best_accu
-        self.scheduler.best = update_value
-        self.early_stop.reset(update_value)
-
+        """
+        Run on several batches and evaluate
+        """
+        e = self._prep_train(valid_loader)
         stop = False
         trained_batches = 0
         # set train mode

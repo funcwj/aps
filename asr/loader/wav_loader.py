@@ -153,7 +153,7 @@ class Dataset(dat.Dataset):
             "dur": wav.shape[-1],
             "len": tok["len"],
             "wav": wav,
-            "token": tok["tok"]
+            "tok": tok["tok"]
         }
 
     def __len__(self):
@@ -181,7 +181,7 @@ def egs_collate(egs):
         "src_pad":  # N x S or N x C x S
         pad_seq([th.from_numpy(eg["wav"]) for eg in egs], value=0),
         "tgt_pad":  # N x T
-        pad_seq([th.as_tensor(eg["token"]) for eg in egs], value=-1),
+        pad_seq([th.as_tensor(eg["tok"]) for eg in egs], value=-1),
         "src_len":  # N, number of the frames
         th.tensor([eg["dur"] for eg in egs], dtype=th.int64),
         "tgt_len":  # N, length of the tokens

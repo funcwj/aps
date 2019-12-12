@@ -67,7 +67,7 @@ def run(args):
                               num_tokens=-1,
                               restrict=False)
     computer = Computer(args.checkpoint, device_id=args.device_id)
-    if computer.raw_waveform:
+    if computer.accept_raw:
         src_reader = WaveReader(args.feats_or_wav_scp, sr=16000)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint",
                         type=str,
                         required=True,
-                        help="Checkpoint of the E2E model")
+                        help="Checkpoint of the acoustic model")
     parser.add_argument("--device-id",
                         type=int,
                         default=-1,

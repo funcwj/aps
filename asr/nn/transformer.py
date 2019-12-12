@@ -139,7 +139,7 @@ class TransformerASR(nn.Module):
                  sos=-1,
                  eos=-1,
                  ctc=False,
-                 transform=None,
+                 asr_transform=None,
                  input_embed="conv2d",
                  att_dim=512,
                  nhead=8,
@@ -172,9 +172,9 @@ class TransformerASR(nn.Module):
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         self.sos = sos
         self.eos = eos
-        self.transform = transform
+        self.asr_transform = asr_transform
         # if use CTC, eos & sos should be V and V - 1
-        self.ctc = nn.Linear(encoder_proj, vocab_size -
+        self.ctc = nn.Linear(att_dim, vocab_size -
                              2 if sos != eos else vocab_size -
                              1) if ctc else None
         self.output = nn.Linear(att_dim, vocab_size, bias=False)
@@ -216,8 +216,8 @@ class TransformerASR(nn.Module):
             outs: N x (To+1) x V
         """
         # feature transform
-        if self.transform:
-            x_pad, x_len = self.transform(x_pad, x_len)
+        if self.asr_transform:
+            x_pad, x_len = self.asr_transform(x_pad, x_len)
 
         # generate padding masks (True/False)
         y_pad, src_pad_mask, tgt_pad_mask = self._prep_pad_mask(x_len, y_pad)
