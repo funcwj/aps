@@ -22,6 +22,7 @@ EPSILON = np.finfo(np.float32).eps
 
 
 def make_wave_loader(train=True,
+                     distributed=False,
                      wav_scp="",
                      sr=16000,
                      token="",
@@ -43,6 +44,7 @@ def make_wave_loader(train=True,
                       min_wav_dur=min_dur)
     return DataLoader(dataset,
                       shuffle=train,
+                      distributed=distributed,
                       num_workers=num_workers,
                       adapt_wav_dur=adapt_dur,
                       adapt_token_num=adapt_token_num,
@@ -196,6 +198,7 @@ class DataLoader(object):
     def __init__(self,
                  dataset,
                  shuffle=True,
+                 distributed=False,
                  num_workers=0,
                  adapt_wav_dur=8,
                  adapt_token_num=150,
@@ -204,6 +207,7 @@ class DataLoader(object):
         sampler = BatchSampler(dataset,
                                batch_size,
                                shuffle=shuffle,
+                               distributed=distributed,
                                adapt_dur=adapt_wav_dur,
                                adapt_token_num=adapt_token_num,
                                min_batch_size=min_batch_size)

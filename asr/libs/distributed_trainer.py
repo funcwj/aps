@@ -1,174 +1,23 @@
 # wujian@2019
 
+import os
 import math
-import random
+import pathlib
 
-from pathlib import Path
-from collections import defaultdict
-
-import numpy as np
 import torch as th
+import torch.distributed as dist
+import torch.multiprocessing as mp
 import torch.nn.functional as F
 
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.utils import clip_grad_norm_
-from torch.nn.parallel import data_parallel
-from torch.utils.tensorboard import SummaryWriter
+from torch.nn.parallel import DistributedDataParallel
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from .utils import get_logger, load_obj, get_device_ids, SimpleTimer
+from .utils import load_obj
+from .trainer import ProgressReporter, EarlyStopCriterion, IGNORE_ID
+from .trainer import get_device_ids, add_gaussian_noise
+from .trainer import ce_loss, ls_loss, compute_accu
 from .scheduler import support_ss_scheduler
-
-IGNORE_ID = -1
-
-
-def ce_loss(outs, tgts):
-    """
-    Cross entropy loss
-    """
-    _, _, V = outs.shape
-    # N(To+1) x V
-    outs = outs.view(-1, V)
-    # N(To+1)
-    tgts = tgts.view(-1)
-    ce_loss = F.cross_entropy(outs, tgts, ignore_index=-1, reduction="mean")
-    return ce_loss
-
-
-def ls_loss(outs, tgts, lsm_factor=0.1):
-    """
-    Label smooth loss (using KL)
-    """
-    _, _, V = outs.shape
-    # NT x V
-    outs = outs.view(-1, V)
-    # NT
-    tgts = tgts.view(-1)
-    mask = (tgts != IGNORE_ID)
-    # M x V
-    outs = th.masked_select(outs, mask.unsqueeze(-1)).view(-1, V)
-    # M
-    tgts = th.masked_select(tgts, mask)
-    # M x V
-    dist = outs.new_full(outs.size(), lsm_factor / (V - 1))
-    dist = dist.scatter_(1, tgts.unsqueeze(-1), 1 - lsm_factor)
-    # KL distance
-    loss = F.kl_div(F.log_softmax(outs, -1), dist, reduction="batchmean")
-    return loss
-
-
-def compute_accu(outs, tgts):
-    """
-    Compute frame-level accuracy
-    """
-    # N x (To+1)
-    pred = th.argmax(outs.detach(), dim=-1)
-    # ignore mask, -1
-    mask = (tgts != IGNORE_ID)
-    ncorr = th.sum(pred[mask] == tgts[mask]).item()
-    total = th.sum(mask).item()
-    return float(ncorr) / total
-
-
-def add_gaussian_noise(nnet, std=0.075):
-    """
-    Add gaussian noise to updated weights
-    """
-    for p in nnet.parameters():
-        if p.requires_grad:
-            noise = th.randn(p.data.shape, device=nnet.device)
-            p.data += noise * std
-
-
-class ProgressReporter(object):
-    """
-    A simple progress reporter
-    """
-    def __init__(self, checkpoint, period=100, tensorboard=True, rank=None):
-        self.period = period
-        if rank is None:
-            logger_loc = (checkpoint / "trainer.log").as_posix()
-            self.header = "Trainer"
-        else:
-            logger_loc = (checkpoint / f"trainer.rank{rank}log").as_posix()
-            self.header = f"Rank {rank}"
-
-        self.logger = get_logger(logger_loc, file=True)
-        if tensorboard:
-            self.board_writer = SummaryWriter(checkpoint)
-        else:
-            self.board_writer = None
-        self.reset()
-
-    def log(self, sstr):
-        self.logger.info(f"{self.header}: {sstr}")
-
-    def eval(self):
-        self.log(">> Set eval mode ...")
-        self.mode = "valid"
-        self.reset()
-
-    def train(self):
-        self.log(">> Set train mode ...")
-        self.mode = "train"
-        self.reset()
-
-    def reset(self):
-        self.stats = defaultdict(list)
-        self.timer = SimpleTimer()
-
-    def add(self, key, value):
-        self.stats[key].append(value)
-        N = len(self.stats[key])
-        if not N % self.period:
-            avg = sum(self.stats[key][-self.period:]) / self.period
-            self.log(f"Processed {N:.2e} batches ({key} = {avg:+.2f}) ...")
-
-    def report(self, epoch, lr):
-        N = len(self.stats["loss"])
-        if self.mode == "valid":
-            sstr = ",".join(
-                map(lambda f: "{:.2f}".format(f), self.stats["loss"]))
-            self.log(f"Loss on {N:d} batches: {sstr}")
-
-        if N == 0:
-            raise RuntimeError("No statistics to report")
-        loss = sum(self.stats["loss"]) / N
-        accu = sum(self.stats["accu"]) * 100 / N
-        if self.board_writer:
-            self.board_writer.add_scalar(f"loss/{self.mode}", loss, epoch)
-            self.board_writer.add_scalar(f"accu/{self.mode}", accu, epoch)
-        cost = self.timer.elapsed()
-        hstr = f"Loss/Accu(time/N, lr={lr:.3e}) - Epoch {epoch:2d}: "
-        cstr = f"{self.mode} = {loss:.4f}/{accu:.2f}({cost:.2f}m/{N:d})"
-        return loss, accu, hstr + cstr
-
-
-class EarlyStopCriterion(object):
-    """
-    Early stop of the training
-    """
-    def __init__(self, no_impr, mode="min", init_criterion=math.inf):
-        self.max_no_impr = no_impr
-        self.no_impr = 0
-        self.mode = mode
-        self.best_criterion = init_criterion
-
-    def reset(self, update_value):
-        self.best_criterion = update_value
-
-    def stop(self):
-        return self.no_impr == self.max_no_impr
-
-    def step(self, update_value):
-        c1 = self.best_criterion < update_value and self.mode == "min"
-        c2 = self.best_criterion > update_value and self.mode == "max"
-        if c1 or c2:
-            self.no_impr += 1
-            return False
-        else:
-            self.best_criterion = update_value
-            self.no_impr = 0
-            return True
 
 
 class Trainer(object):
@@ -176,10 +25,12 @@ class Trainer(object):
     A PyTorch base trainer
     """
     def __init__(self,
+                 rank,
                  nnet,
+                 cuda_devices=1,
+                 dist_url="env://",
                  checkpoint="cpt",
                  optimizer="adam",
-                 device_ids=0,
                  optimizer_kwargs=None,
                  lr_scheduler_kwargs=None,
                  lsm_factor=0,
@@ -195,15 +46,29 @@ class Trainer(object):
                  tensorboard=False,
                  stop_criterion="loss",
                  no_impr=6):
-        self.device_ids = get_device_ids(device_ids)
-        self.default_device = th.device(f"cuda:{self.device_ids[0]}")
+        if rank >= cuda_devices:
+            raise ValueError("rank value exceeds number of GPUs: " +
+                             f"{rank} vs {cuda_devices}")
+        if dist_url == "env://":
+            if int(os.environ.get("RANK")) != rank:
+                raise RuntimeError(
+                    f"rank value {rank} mismatch with env[RANK]")
+            if int(os.environ.get("WORLD_SIZE")) != cuda_devices:
+                raise RuntimeError(
+                    f"world size {cuda_devices} mismatch with env[WORLD_SIZE]")
 
-        self.checkpoint = Path(checkpoint)
+        self.eos = nnet.eos
+        self.rank = rank
+        self.cuda_devices = cuda_devices
+        self.default_device = th.device(f"cuda:{rank:d}")
+
+        self.checkpoint = pathlib.Path(checkpoint)
         self.checkpoint.mkdir(parents=True, exist_ok=True)
         self.reporter = ProgressReporter(self.checkpoint,
+                                         rank=rank,
                                          period=prog_interval,
                                          tensorboard=tensorboard)
-        self.eos = nnet.eos
+
         self.grad_clip = grad_clip
         self.grad_noise = grad_noise
         self.cur_epoch = 0  # zero based
@@ -220,13 +85,13 @@ class Trainer(object):
         self.reporter.log(f"Model summary:\n{nnet}")
         if resume or init:
             cpt_path = resume if resume else init
-            if not Path(cpt_path).exists():
+            if not pathlib.Path(cpt_path).exists():
                 raise FileNotFoundError(
                     f"Could not find checkpoint: {cpt_path}")
             cpt = th.load(cpt_path, map_location="cpu")
             self.cur_epoch = cpt["epoch"]
             nnet.load_state_dict(cpt["model_state_dict"])
-            self.nnet = nnet.to(self.default_device)
+            self.nnet = self.setup_distributed(nnet, dist_url)
             if resume:
                 self.reporter.log(f"Resume from checkpoint {cpt_path}: " +
                                   f"epoch {self.cur_epoch}")
@@ -238,7 +103,7 @@ class Trainer(object):
                 self.optimizer = self.create_optimizer(optimizer,
                                                        optimizer_kwargs)
         else:
-            self.nnet = nnet.to(self.default_device)
+            self.nnet = self.setup_distributed(nnet, dist_url)
             self.optimizer = self.create_optimizer(optimizer, optimizer_kwargs)
         self.scheduler = ReduceLROnPlateau(self.optimizer,
                                            mode=mode,
@@ -247,8 +112,9 @@ class Trainer(object):
             [param.nelement() for param in nnet.parameters()]) / 10.0**6
 
         # logging
-        self.reporter.log(f"Loading model to GPUs:{self.device_ids}, " +
-                          f"#param: {self.num_params:.2f}M")
+        self.reporter.log(
+            f"running process {rank} on GPU-{rank}/{self.cuda_devices}, " +
+            f"#param: {self.num_params:.2f}M")
         self.reporter.log(f"Schedule sampling strategy: {ss_scheduler}")
         self.reporter.log(f"Early stop criterion: {stop_criterion}")
         if grad_clip:
@@ -257,20 +123,44 @@ class Trainer(object):
             self.reporter.log(
                 f"Add gaussian noise to weights with std = {grad_noise}")
 
+    def setup_distributed(self, nnet, dist_url):
+        """
+        Setup environment for distributed training
+        """
+        th.backends.cudnn.benchmark = True
+        th.cuda.set_device(self.default_device)
+        # offload to cuda device
+        nnet.to(self.default_device)
+        if self.cuda_devices >= 2:
+            self.distributed = True
+            # do distributed
+            dist.init_process_group(backend="nccl",
+                                    init_method=dist_url,
+                                    rank=self.rank,
+                                    world_size=self.cuda_devices)
+            self.reporter.log(
+                f"init process group, rank={self.rank}, " +
+                f"world_size={self.cuda_devices}, init_method={dist_url}")
+            return DistributedDataParallel(nnet, device_ids=[self.rank])
+        else:
+            self.distributed = False
+            return nnet
+
     def save_checkpoint(self, epoch, best=True):
         """
         Save checkpoint (epoch, model, optimizer)
         """
-        cpt = {
-            "epoch": epoch,
-            "model_state_dict": self.nnet.state_dict(),
-            "optim_state_dict": self.optimizer.state_dict()
-        }
-        cpt_name = "{}.pt.tar".format("best" if best else "last")
-        th.save(cpt, self.checkpoint / cpt_name)
-        self.reporter.log(f"Save checkpoint {cpt_name}")
-        if self.save_interval > 0 and epoch % self.save_interval == 0:
-            th.save(cpt, self.checkpoint / f"{epoch}.pt.tar")
+        if self.rank == 0:
+            cpt = {
+                "epoch": epoch,
+                "model_state_dict": self.nnet.state_dict(),
+                "optim_state_dict": self.optimizer.state_dict()
+            }
+            cpt_name = "{}.pt.tar".format("best" if best else "last")
+            th.save(cpt, self.checkpoint / cpt_name)
+            self.reporter.log(f"Save checkpoint {cpt_name}")
+            if self.save_interval > 0 and epoch % self.save_interval == 0:
+                th.save(cpt, self.checkpoint / f"{epoch}.pt.tar")
 
     def create_optimizer(self, optimizer, kwargs, state=None):
         """
@@ -497,8 +387,8 @@ class S2STrainer(Trainer):
     """
     E2E ASR Trainer (CE)
     """
-    def __init__(self, nnet, ctc_coeff=0, ctc_blank=0, **kwargs):
-        super(S2STrainer, self).__init__(nnet, **kwargs)
+    def __init__(self, rank, nnet, ctc_coeff=0, ctc_blank=0, **kwargs):
+        super(S2STrainer, self).__init__(rank, nnet, **kwargs)
         if ctc_coeff:
             self.reporter.log("Using CTC regularization (coeff = " +
                               f"{ctc_coeff:.2f}, blank = {ctc_blank})")
@@ -518,9 +408,8 @@ class S2STrainer(Trainer):
         tgt_pad = egs["tgt_pad"].masked_fill(ignored_mask, self.eos)
         # outs: N x (To+1) x V
         # alis: N x (To+1) x Ti
-        outs, _, ctc_branch, enc_len = data_parallel(
-            self.nnet, (egs["src_pad"], egs["src_len"], tgt_pad, ssr),
-            device_ids=self.device_ids)
+        outs, _, ctc_branch, enc_len = self.nnet(egs["src_pad"],
+                                                 egs["src_len"], tgt_pad, ssr)
         # N x (To+1), pad -1
         tgts = F.pad(egs["tgt_pad"], (0, 1), value=IGNORE_ID)
         # add eos
@@ -545,29 +434,4 @@ class S2STrainer(Trainer):
             loss = self.ctc_coeff * ctc_loss + (1 - self.ctc_coeff) * loss
         # compute accu
         accu = compute_accu(outs, tgts)
-        return loss, accu
-
-
-class LmTrainer(Trainer):
-    """
-    E2E ASR Trainer (CE)
-    """
-    def __init__(self, *args, **kwargs):
-        super(LmTrainer, self).__init__(*args, **kwargs)
-        self.hidden = None
-
-    def compute_loss(self, egs, idx=0, ssr=0):
-        """
-        Compute training loss, egs contains
-            src: N x T
-            tgt: N x T
-        """
-        if idx == 0:
-            self.hidden = None
-        # pred: N x T x V
-        pred, self.hidden = data_parallel(self.nnet, (egs["src"], self.hidden),
-                                          device_ids=self.device_ids)
-        loss = ce_loss(pred, egs["tgt"])
-        accu = compute_accu(pred, egs["tgt"])
-
         return loss, accu

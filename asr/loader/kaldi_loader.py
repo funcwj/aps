@@ -19,6 +19,7 @@ from .utils import process_token, BatchSampler
 
 
 def make_kaldi_loader(train=True,
+                      distributed=False,
                       feats_scp="",
                       token="",
                       utt2dur="",
@@ -38,6 +39,7 @@ def make_kaldi_loader(train=True,
                       min_frame_num=min_dur)
     return DataLoader(dataset,
                       shuffle=train,
+                      distributed=distributed,
                       num_workers=num_workers,
                       adapt_frame_num=adapt_dur,
                       adapt_token_num=adapt_token_num,
@@ -101,6 +103,7 @@ class DataLoader(object):
     def __init__(self,
                  dataset,
                  shuffle=True,
+                 distributed=False,
                  num_workers=0,
                  adapt_frame_num=800,
                  adapt_token_num=150,
@@ -109,6 +112,7 @@ class DataLoader(object):
         sampler = BatchSampler(dataset,
                                batch_size,
                                shuffle=shuffle,
+                               distributed=distributed,
                                adapt_dur=adapt_frame_num,
                                adapt_token_num=adapt_token_num,
                                min_batch_size=min_batch_size)
