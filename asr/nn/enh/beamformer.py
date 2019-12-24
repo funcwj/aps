@@ -114,6 +114,137 @@ class FixedBeamformer(nn.Module):
             return br, bi
 
 
+class _FsBeamformer(nn.Module):
+    """
+    FS (filter and sum) beamformer
+    """
+    def __init__(self, frame_len, frame_hop):
+        super(_FsBeamformer, self).__init__()
+        self.unfold = nn.Unfold((frame_len, 1), stride=frame_hop)
+        self.frame_len, self.frame_hop = frame_len, frame_hop
+
+    def num_frames(self, s):
+        """
+        Work out number of frames
+        """
+        return (s - self.frame_len) // self.frame_hop + 1
+
+
+class UnfactedFsBeamformer(_FsBeamformer):
+    """
+    Unfacted form of FS (filter and sum) beamformer
+    """
+    def __init__(self,
+                 num_taps=400,
+                 win_size=560,
+                 num_channels=4,
+                 num_filters=256,
+                 log_compress=True):
+        super(UnfactedFsBeamformer, self).__init__(win_size,
+                                                   win_size - num_taps)
+        self.num_channels = num_channels
+        self.log_compress = log_compress
+        # fs beamformer
+        self.filter = nn.Conv2d(num_channels,
+                                num_filters * num_channels, (num_taps, 1),
+                                stride=(1, 1),
+                                groups=num_channels)
+
+    def forward(self, x):
+        """
+        args:
+            x: multi-channel audio utterances, N x C x S
+        return:
+            y: N x P x T, enhanced features
+        """
+        if x.dim() not in [2, 3]:
+            raise RuntimeError(f"Expect 2/3D tensor, got {x.dim()} instead")
+        if x.dim() == 2:
+            x = x[None, ...]
+        # N x C x S x 1
+        x = x[..., None]
+        # chunks: N x C x S x 1 => N x CM x T
+        c = self.unfold(x)
+        # N x C x M x T
+        c = c.view(x.shape[0], self.num_channels, self.frame_len, -1)
+        # N x CF x M' x T
+        f = self.filter(c)
+        # N x F x M' x T
+        f = sum(th.chunk(f, self.num_channels, 1))
+        # max pool, N x F x 1 x T
+        y = F.max_pool2d(f, (self.frame_hop + 1, 1), stride=1)
+        # non-linear
+        y = th.relu(y.squeeze(-2))
+        # log
+        if self.log_compress:
+            y = th.log(y + 0.01)
+        return y
+
+
+class FactedFsBeamformer(_FsBeamformer):
+    """
+    Facted form of FS (filter and sum) beamformer
+    """
+    def __init__(self,
+                 num_taps=81,
+                 win_size=560,
+                 num_channels=4,
+                 spatial_filters=10,
+                 spectra_filters=128,
+                 spectra_kernels=400,
+                 log_compress=True):
+        super(FactedFsBeamformer, self).__init__(win_size,
+                                                 win_size - spectra_kernels)
+        self.num_channels = num_channels
+        self.log_compress = log_compress
+        # spatial filter
+        self.spatial = nn.Conv2d(num_channels,
+                                 spatial_filters * num_channels, (num_taps, 1),
+                                 stride=(1, 1),
+                                 groups=num_channels,
+                                 padding=((num_taps - 1) // 2, 0))
+        # spectra filter
+        self.spectra = nn.Conv2d(1,
+                                 spectra_filters, (spectra_kernels, 1),
+                                 stride=(1, 1))
+
+    def forward(self, x):
+        """
+        args:
+            x: multi-channel audio utterances, N x C x S
+        return:
+            y: N x P x F x T, enhanced features
+        """
+        if x.dim() not in [2, 3]:
+            raise RuntimeError(f"Expect 2/3D tensor, got {x.dim()} instead")
+        if x.dim() == 2:
+            x = x[None, ...]
+        # N x C x S x 1
+        x = x[..., None]
+        # chunks: N x C x S x 1 => N x CM x T
+        c = self.unfold(x)
+        # N x C x M x T
+        c = c.view(x.shape[0], self.num_channels, self.frame_len, -1)
+        # spatial filter: N x CP x M x T
+        f = self.spatial(c)
+        # N x P x M x T
+        f = sum(th.chunk(f, self.num_channels, 1))
+        N, P, M, T = f.shape
+        # NP x 1 x M x T
+        f = f.view(N * P, 1, M, T)
+        # spectra filter: NP x F x M' x T
+        w = self.spectra(f)
+        # max pool, NP x F x 1 x T
+        y = F.max_pool2d(w, (self.frame_hop + 1, 1), stride=1)
+        # non-linear
+        y = th.relu(y.squeeze(-2))
+        # log
+        if self.log_compress:
+            y = th.log(y + 0.01)
+        y = y.view(N, P, -1, T)
+        return y
+
+
 class MvdrBeamformer(nn.Module):
     """
     MVDR (Minimum Variance Distortionless Response) Beamformer

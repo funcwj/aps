@@ -11,33 +11,23 @@ from torch.nn.utils.rnn import pack_padded_sequence
 
 from .las_asr import LasASR
 from .las.encoder import TorchEncoder
-from .enh.beamformer import MvdrBeamformer
-
-support_non_linear = {"relu": F.relu, "sigmoid": th.sigmoid, "tanh": th.tanh}
+from .enh.beamformer import MvdrBeamformer, UnfactedFsBeamformer, FactedFsBeamformer
 
 
 class EnhLasASR(nn.Module):
     """
-    Mvdr beamformer + LAS-based ASR model
+    LasASR with enhancement front-end
     """
     def __init__(
             self,
             asr_input_size=80,
             vocab_size=30,
-            enh_input_size=257,
-            num_bins=257,
             sos=-1,
             eos=-1,
             # feature transform
             asr_transform=None,
             asr_cpt="",
             ctc=False,
-            # beamforming
-            enh_transform=None,
-            mvdr_att_dim=512,
-            mask_net_kwargs=None,
-            mask_non_linear="sigmoid",
-            mask_norm=True,
             # attention
             att_type="ctx",
             att_kwargs=None,
@@ -49,21 +39,8 @@ class EnhLasASR(nn.Module):
             decoder_dim=512,
             decoder_kwargs=None):
         super(EnhLasASR, self).__init__()
-        if enh_transform is None:
-            raise RuntimeError("Enhancement feature transform can not be None")
-        if mask_non_linear not in support_non_linear:
-            raise RuntimeError("Unsupported non linear functions for TF-mask")
-        # Front-end feature extraction
-        self.enh_transform = enh_transform
         # Back-end feature transform
         self.asr_transform = asr_transform
-        # TF-mask estimation network
-        self.mask_net = TorchEncoder(enh_input_size, num_bins,
-                                     **mask_net_kwargs)
-        self.mask_act = support_non_linear[mask_non_linear]
-        self.mvdr_net = MvdrBeamformer(num_bins,
-                                       mvdr_att_dim,
-                                       mask_norm=mask_norm)
         # LAS-based ASR
         self.las_asr = LasASR(input_size=asr_input_size,
                               vocab_size=vocab_size,
@@ -83,6 +60,86 @@ class EnhLasASR(nn.Module):
             self.las_asr.load_state_dict(las_cpt, strict=False)
         self.sos = sos
         self.eos = eos
+
+    def _enhance(self, x_pad, x_len):
+        """
+        Enhancement and asr feature transform
+        """
+        raise NotImplementedError
+
+    def forward(self, x_pad, x_len, y_pad, ssr=0):
+        """
+        args:
+            x_pad: N x Ti x D or N x S
+            x_len: N or None
+            y_pad: N x To
+            ssr: schedule sampling rate
+        return:
+            outs: N x (To+1) x V
+            alis: N x (To+1) x T
+            ...
+        """
+        # mvdr beamforming: N x Ti x F
+        x_enh, x_len = self._enhance(x_pad, x_len)
+        # outs, alis, ctc_branch, ...
+        return self.las_asr(x_enh, x_len, y_pad, ssr=ssr)
+
+    def beam_search(self,
+                    x,
+                    beam=8,
+                    nbest=1,
+                    max_len=-1,
+                    vectorized=False,
+                    normalized=True):
+        """
+        args
+            x: C x S
+        """
+        with th.no_grad():
+            if x.dim() != 2:
+                raise RuntimeError("Now only support for one utterance")
+            x_enh, _ = self._enhance(x[None, ...], None)
+            return self.las_asr.beam_search(x_enh[0],
+                                            beam=beam,
+                                            nbest=nbest,
+                                            max_len=max_len,
+                                            vectorized=vectorized,
+                                            normalized=normalized)
+
+
+support_non_linear = {"relu": F.relu, "sigmoid": th.sigmoid, "tanh": th.tanh}
+
+
+class MvdrLasASR(EnhLasASR):
+    """
+    Mvdr beamformer + LAS-based ASR model
+    """
+    def __init__(
+            self,
+            enh_input_size=257,
+            num_bins=257,
+            # beamforming
+            enh_transform=None,
+            mvdr_att_dim=512,
+            mask_net_kwargs=None,
+            mask_non_linear="sigmoid",
+            mask_norm=True,
+            **kwargs):
+        super(MvdrLasASR, self).__init__(**kwargs)
+        if enh_transform is None:
+            raise RuntimeError("Enhancement feature transform can not be None")
+        if mask_non_linear not in support_non_linear:
+            raise RuntimeError("Unsupported non linear functions for TF-mask")
+        # Front-end feature extraction
+        self.enh_transform = enh_transform
+        # TF-mask estimation network
+        self.mask_net = TorchEncoder(enh_input_size, num_bins,
+                                     **mask_net_kwargs)
+        self.mask_act = support_non_linear[mask_non_linear]
+        # MVDR beamformer
+        self.mvdr_net = MvdrBeamformer(num_bins,
+                                       mvdr_att_dim,
+                                       mask_norm=mask_norm)
 
     def _enhance(self, x_pad, x_len):
         """
@@ -114,40 +171,26 @@ class EnhLasASR(nn.Module):
         x_mask = self.mask_act(x_mask)
         return x_mask, x_len, x_cplx
 
-    def forward(self, x_pad, x_len, y_pad, ssr=0):
-        """
-        args:
-            x_pad: N x Ti x D or N x S
-            x_len: N or None
-            y_pad: N x To
-            ssr: schedule sampling rate
-        return:
-            outs: N x (To+1) x V
-            alis: N x (To+1) x T
-        """
-        # mvdr beamforming: N x Ti x F
-        x_beam, x_len = self._enhance(x_pad, x_len)
-        # outs, alis
-        return self.las_asr(x_beam, x_len, y_pad, ssr=ssr)
 
-    def beam_search(self,
-                    x,
-                    beam=8,
-                    nbest=1,
-                    max_len=-1,
-                    vectorized=False,
-                    normalized=True):
+class FsLasASR(EnhLasASR):
+    """
+    FS beamformer + LAS-based ASR model
+    """
+    def __init__(self, mode="unfacted", fs_conf=None, **kwargs):
+        super(FsLasASR, self).__init__(**kwargs)
+        fs_beamformer = {
+            "facted": FactedFsBeamformer,
+            "unfacted": UnfactedFsBeamformer
+        }
+        if mode not in fs_beamformer:
+            raise RuntimeError(f"Unknown fs mode: {mode}")
+        self.fs = fs_beamformer[mode](**fs_conf)
+
+    def _enhance(self, x_pad, x_len):
         """
-        args
-            x: C x S
+        FS beamforming
         """
-        with th.no_grad():
-            if x.dim() != 2:
-                raise RuntimeError("Now only support for one utterance")
-            x_beam, _ = self._enhance(x[None, ...], None)
-            return self.las_asr.beam_search(x_beam[0],
-                                            beam=beam,
-                                            nbest=nbest,
-                                            max_len=max_len,
-                                            vectorized=vectorized,
-                                            normalized=normalized)
+        # N x F x T or N x P x F x T
+        x_enh = self.fs(x_pad)
+        x_len = self.fs.num_frames(x_len)
+        return x_enh, x_len

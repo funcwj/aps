@@ -41,7 +41,7 @@ simulation configuration looks like
 "iso": {
     "snr": 17.316,
     "beg": 186993,
-    "loc": "/hdfs/ipgsp/t-jianwu/data/iso_pma_sph_hoth_2018-08-07/iso_noise_751.wav"
+    "loc": "/path/to/dir/iso_noise_XXXX.wav"
 }
 }
 """

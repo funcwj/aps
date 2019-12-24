@@ -152,9 +152,13 @@ class Trainer(object):
         """
         if self.rank == 0:
             cpt = {
-                "epoch": epoch,
-                "model_state_dict": self.nnet.state_dict(),
-                "optim_state_dict": self.optimizer.state_dict()
+                "epoch":
+                epoch,
+                "model_state_dict":
+                self.nnet.module.state_dict()
+                if self.distributed else self.nnet.state_dict(),
+                "optim_state_dict":
+                self.optimizer.state_dict()
             }
             cpt_name = "{}.pt.tar".format("best" if best else "last")
             th.save(cpt, self.checkpoint / cpt_name)

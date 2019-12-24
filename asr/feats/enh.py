@@ -140,8 +140,11 @@ class FeatureTransform(nn.Module):
         cplx = ComplexTensor(real, imag)
         # N x F x T
         feats = cplx[:, 0].abs()
-        # spectra features of CH0, N x T x F
-        feats = self.spe_transform(feats.transpose(1, 2))
+        if len(self.spe_transform):
+            # spectra features of CH0, N x T x F
+            feats = self.spe_transform(feats.transpose(1, 2))
+        else:
+            feats = None
         if self.ipd_transform is not None:
             # N x C x F x T
             phase = cplx.angle()
