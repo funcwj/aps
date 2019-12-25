@@ -11,7 +11,8 @@ from torch.nn.utils.rnn import pack_padded_sequence
 
 from .las_asr import LasASR
 from .las.encoder import TorchEncoder
-from .enh.beamformer import MvdrBeamformer, UnfactedFsBeamformer, FactedFsBeamformer
+from .enh.beamformer import MvdrBeamformer
+from .enh.beamformer import UnfactedFsBeamformer, FactedFsBeamformer, CLPFsBeamformer
 
 
 class EnhLasASR(nn.Module):
@@ -176,21 +177,41 @@ class FsLasASR(EnhLasASR):
     """
     FS beamformer + LAS-based ASR model
     """
-    def __init__(self, mode="unfacted", fs_conf=None, **kwargs):
+    def __init__(self,
+                 mode="unfacted",
+                 enh_transform=None,
+                 fs_conf=None,
+                 **kwargs):
         super(FsLasASR, self).__init__(**kwargs)
         fs_beamformer = {
             "facted": FactedFsBeamformer,
-            "unfacted": UnfactedFsBeamformer
+            "unfacted": UnfactedFsBeamformer,
+            "clp": CLPFsBeamformer
         }
         if mode not in fs_beamformer:
             raise RuntimeError(f"Unknown fs mode: {mode}")
         self.fs = fs_beamformer[mode](**fs_conf)
+        self.enh_transform = enh_transform
+        if mode == "clp" and enh_transform is None:
+            raise RuntimeError("enh_transform can not be None if mode == clp")
+        if mode != "clp" and enh_transform is not None:
+            raise RuntimeError("enh_transform must be None if mode != clp")
 
     def _enhance(self, x_pad, x_len):
         """
         FS beamforming
         """
+        if self.enh_transform:
+            _, x_pad, x_len = self.enh_transform(x_pad, x_len)
+        else:
+            x_len = self.fs.num_frames(x_len)
         # N x F x T or N x P x F x T
         x_enh = self.fs(x_pad)
-        x_len = self.fs.num_frames(x_len)
+        # N x T x F or N x T x F x P
+        x_enh = x_enh.transpose(1, -1)
+        x_enh = x_enh.contiguous()
+        if x_enh.dim() == 4:
+            # N x T x FP
+            N, T, _, _ = x_enh.shape
+            x_enh = x_enh.view(N, T, -1)
         return x_enh, x_len

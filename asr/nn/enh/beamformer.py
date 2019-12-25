@@ -2,6 +2,7 @@
 
 # wujian@2019
 
+import math
 import torch as th
 import torch.nn as nn
 
@@ -60,10 +61,19 @@ class FixedBeamformer(nn.Module):
     """
     Fixed beamformer as a layer
     """
-    def __init__(self, weight, requires_grad=False):
+    def __init__(self,
+                 num_beams,
+                 num_channels,
+                 num_bins,
+                 weight=None,
+                 requires_grad=False):
         super(FixedBeamformer, self).__init__()
-        # (2, 18, 7, 257)
-        w = th.load(weight)
+        if weight:
+            # (2, 18, 7, 257)
+            w = th.load(weight)
+        else:
+            w = th.zeros(2, num_beams, num_channels, num_bins)
+            nn.init.kaiming_uniform_(w, a=math.sqrt(5))
         # (18, 7, 257, 1)
         self.real = nn.Parameter(w[0].unsqueeze(-1),
                                  requires_grad=requires_grad)
@@ -76,14 +86,15 @@ class FixedBeamformer(nn.Module):
         return (f"num_beams={B}, num_channels={M}, " +
                 f"num_bins={F}, requires_grad={self.requires_grad}")
 
-    def forward(self, r, i, beam=None, squeeze=False, trans=False, cplx=True):
+    def forward(self, x, beam=None, squeeze=False, trans=False, cplx=True):
         """
         args
-            r, i: N x C x F x T
+            x: N x C x F x T, complex tensor
             beam: N
         return
             br, bi: N x B x F x T or N x F x T
         """
+        r, i = x.real, x.imag
         if r.dim() != i.dim() and r.dim() != 4:
             raise RuntimeError(
                 f"FixBeamformer accept 4D tensor, got {r.dim()}")
@@ -148,7 +159,8 @@ class UnfactedFsBeamformer(_FsBeamformer):
         self.filter = nn.Conv2d(num_channels,
                                 num_filters * num_channels, (num_taps, 1),
                                 stride=(1, 1),
-                                groups=num_channels)
+                                groups=num_channels,
+                                bias=False)
 
     def forward(self, x):
         """
@@ -202,11 +214,13 @@ class FactedFsBeamformer(_FsBeamformer):
                                  spatial_filters * num_channels, (num_taps, 1),
                                  stride=(1, 1),
                                  groups=num_channels,
+                                 bias=False,
                                  padding=((num_taps - 1) // 2, 0))
         # spectra filter
         self.spectra = nn.Conv2d(1,
                                  spectra_filters, (spectra_kernels, 1),
-                                 stride=(1, 1))
+                                 stride=(1, 1),
+                                 bias=False)
 
     def forward(self, x):
         """
@@ -243,6 +257,71 @@ class FactedFsBeamformer(_FsBeamformer):
             y = th.log(y + 0.01)
         y = y.view(N, P, -1, T)
         return y
+
+
+class ComplexLinear(nn.Module):
+    """
+    Complex linear layer
+    """
+    def __init__(self, in_features, out_features, bias=True):
+        super(ComplexLinear, self).__init__()
+        self.real = nn.Linear(in_features, out_features, bias=bias)
+        self.imag = nn.Linear(in_features, out_features, bias=bias)
+
+    def forward(self, x):
+        """
+        args:
+            x: complex tensor
+        return:
+            y: complex tensor
+        """
+        if not isinstance(x, ComplexTensor):
+            raise RuntimeError(
+                f"Expect ComplexTensor object, got {type(x)} instead")
+        r = self.real(x.real) - self.imag(x.imag)
+        i = self.real(x.imag) + self.imag(x.real)
+        return ComplexTensor(r, i)
+
+
+class CLPFsBeamformer(nn.Module):
+    """
+    Complex Linear Projection (CLP) model on frequency-domain
+    """
+    def __init__(self,
+                 num_bins=257,
+                 num_channels=4,
+                 spatial_filters=5,
+                 spectra_filters=128):
+        super(CLPFsBeamformer, self).__init__()
+        self.beam = FixedBeamformer(spatial_filters,
+                                    num_channels,
+                                    num_bins,
+                                    requires_grad=True)
+        self.proj = ComplexLinear(num_bins, spectra_filters, bias=False)
+
+    def forward(self, x):
+        """
+        args:
+            x: N x C x F x T, complex tensor
+        return:
+            y: N x P x G x T, enhanced features
+        """
+        if not isinstance(x, ComplexTensor):
+            raise RuntimeError(
+                f"Expect ComplexTensor object, got {type(x)} instead")
+        if x.dim() not in [3, 4]:
+            raise RuntimeError(f"Expect 3/4D tensor, got {x.dim()} instead")
+        if x.dim() == 3:
+            x = x[None, ...]
+        # N x P x T x F
+        b = self.beam(x, trans=True, cplx=True)
+        # N x P x T x G
+        w = self.proj(b)
+        # log + abs: N x P x T x G
+        w = (w + 1e-5).abs()
+        z = th.log(w)
+        # N x P x G x T
+        return z.transpose(-1, -2)
 
 
 class MvdrBeamformer(nn.Module):

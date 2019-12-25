@@ -329,8 +329,8 @@ class Trainer(object):
                 self.reporter.add("loss", loss)
                 self.reporter.add("accu", accu)
             else:
-                self.reporter.log(f"Invalid gradient {norm} or " +
-                                  f"loss {loss}, skip...")
+                self.reporter.log(f"Invalid gradient {norm:.3f} or " +
+                                  f"loss {loss:.3f}, skip...")
 
     def eval(self, data_loader):
         self.nnet.eval()
@@ -445,8 +445,8 @@ class Trainer(object):
                     self.reporter.add("loss", loss)
                     self.reporter.add("accu", accu)
                 else:
-                    self.reporter.log(f"Invalid gradient {norm} or " +
-                                      f"loss {loss}, skip...")
+                    self.reporter.log(f"Invalid gradient {norm:.3f} or " +
+                                      f"loss {loss:.3f}, skip...")
 
                 # if trained on batches done, start evaluation
                 if trained_batches == 0:

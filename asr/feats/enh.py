@@ -95,13 +95,13 @@ class FeatureTransform(nn.Module):
                          frame_hop,
                          window=window,
                          round_pow_of_two=round_pow_of_two)
-        trans_tokens = feats.split("-")
+        trans_tokens = feats.split("-") if feats else []
         transform = []
         feats_dim = 0
         feats_ipd = None
         for i, tok in enumerate(trans_tokens):
             if i == 0:
-                if tok != "spectrogram":
+                if tok != "spectrogram" and tok != "ipd":
                     raise RuntimeError("Now only support spectrogram features")
                 feats_dim = self.STFT.num_bins
             elif tok == "log":
@@ -116,10 +116,11 @@ class FeatureTransform(nn.Module):
                 feats_ipd = IpdTransform(ipd_index=ipd_index,
                                          cos=cos_ipd,
                                          sin=sin_ipd)
+                base = 0 if i == 0 else 1
                 if cos_ipd and sin_ipd:
-                    feats_dim *= len(ipd_index) * 3
+                    feats_dim *= len(ipd_index) * (2 + base)
                 else:
-                    feats_dim *= len(ipd_index) * 2
+                    feats_dim *= len(ipd_index) * (1 + base)
             else:
                 raise RuntimeError(f"Unknown token {tok} in {feats}")
         self.spe_transform = nn.Sequential(*transform)
@@ -138,19 +139,26 @@ class FeatureTransform(nn.Module):
         real, imag = self.STFT(x_pad, cplx=True)
         # complex spectrogram of CH 0~(C-1), N x C x F x T
         cplx = ComplexTensor(real, imag)
-        # N x F x T
-        feats = cplx[:, 0].abs()
+        # spectra transform
         if len(self.spe_transform):
+            # N x F x T
+            feats = cplx[:, 0].abs()
+            # N x T x F
+            feats = feats.transpose(-1, -2)
             # spectra features of CH0, N x T x F
-            feats = self.spe_transform(feats.transpose(1, 2))
+            feats = self.spe_transform(feats)
         else:
             feats = None
+        # ipd transform
         if self.ipd_transform is not None:
             # N x C x F x T
             phase = cplx.angle()
             # N x T x ...
             ipd = self.ipd_transform(phase).transpose(1, 2)
             # N x T x ...
-            feats = th.cat([feats, ipd], -1)
+            if feats is not None:
+                feats = th.cat([feats, ipd], -1)
+            else:
+                feats = ipd
         f_len = self.STFT.num_frames(x_len) if x_len is not None else None
         return feats, cplx, f_len
