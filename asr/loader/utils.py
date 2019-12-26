@@ -116,6 +116,7 @@ class BatchSampler(dat.Sampler):
             self.num_batches = len(batches)
         self.batches = batches
         self.shuffle = shuffle
+        self.epoch = 0
 
     def _work_batch_index(self,
                           dataset,
@@ -138,14 +139,20 @@ class BatchSampler(dat.Sampler):
         return idx_bz
 
     def __iter__(self):
-        if self.shuffle or self.distributed:
-            order = th.randperm(self.num_batches)
-            if self.distributed:
-                order = order[self.rank:self.num_batches *
-                              self.world_size:self.world_size]
+        if self.distributed:
+            # deterministically shuffle based on epoch
+            g = th.Generator()
+            g.manual_seed(self.epoch)
+            N = self.num_batches * self.world_size
+            indices = th.randperm(N, generator=g).tolist()
+            indices = indices[self.rank:N:self.world_size]
         else:
-            order = th.arange(0, self.num_batches - 1, dtype=th.int32)
-        for i in order.tolist():
+            if self.shuffle:
+                indices = th.randperm(self.num_batches).tolist()
+            else:
+                indices = th.arange(self.num_batches).tolist()
+        self.epoch += 1
+        for i in indices:
             yield list(range(*self.batches[i]))
 
     def __len__(self):

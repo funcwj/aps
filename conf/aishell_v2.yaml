@@ -29,7 +29,7 @@ nnet_conf:
     att_dim: 512
 
 asr_transform:
-  feats: "fbank-log-cmvn"
+  feats: "fbank-log-cmvn-aug"
   frame_len: 400
   frame_hop: 160
   window: "hamm"
@@ -38,6 +38,7 @@ asr_transform:
   num_mels: 80
   norm_mean: True
   norm_var: True
+  aug_prob: 0.5
 
 trainer_conf:
   optimizer: "adam"
