@@ -2,7 +2,7 @@
 
 # wujian@2019
 """
-Dataloader for raw waveforms
+Dataloader for raw waveforms in asr tasks
 """
 import numpy as np
 import torch as th
@@ -21,20 +21,20 @@ MAX_INT16 = np.iinfo(np.int16).max
 EPSILON = np.finfo(np.float32).eps
 
 
-def make_wave_loader(train=True,
-                     distributed=False,
-                     wav_scp="",
-                     sr=16000,
-                     token="",
-                     utt2dur="",
-                     max_token_num=400,
-                     max_dur=30,
-                     min_dur=0.4,
-                     adapt_dur=8,
-                     adapt_token_num=150,
-                     batch_size=32,
-                     num_workers=0,
-                     min_batch_size=4):
+def make_wav_loader(train=True,
+                    distributed=False,
+                    wav_scp="",
+                    sr=16000,
+                    token="",
+                    utt2dur="",
+                    max_token_num=400,
+                    max_dur=30,
+                    min_dur=0.4,
+                    adapt_dur=8,
+                    adapt_token_num=150,
+                    batch_size=32,
+                    num_workers=0,
+                    min_batch_size=4):
     dataset = Dataset(wav_scp,
                       token,
                       utt2dur,

@@ -70,12 +70,17 @@ class FixedBeamformer(nn.Module):
                  requires_grad=False):
         super(FixedBeamformer, self).__init__()
         if weight:
-            # (2, 18, 7, 257)
+            # (2, num_directions, num_channels, num_bins)
             w = th.load(weight)
+            if w.shape[1] != num_beams:
+                raise RuntimeError(f"Number of beam got from {w.shape[1]} " +
+                                   f"don't match parameter {num_beams}")
+            self.init_weight = weight
         else:
+            self.init_weight = None
             w = th.zeros(2, num_beams, num_channels, num_bins)
             nn.init.kaiming_uniform_(w, a=math.sqrt(5))
-        # (18, 7, 257, 1)
+        # (num_directions, num_channels, num_bins, 1)
         self.real = nn.Parameter(w[0].unsqueeze(-1),
                                  requires_grad=requires_grad)
         self.imag = nn.Parameter(w[1].unsqueeze(-1),
@@ -85,7 +90,8 @@ class FixedBeamformer(nn.Module):
     def extra_repr(self):
         B, M, F, _ = self.real.shape
         return (f"num_beams={B}, num_channels={M}, " +
-                f"num_bins={F}, requires_grad={self.requires_grad}")
+                f"num_bins={F}, init_weight={self.init_weight}, " +
+                f"requires_grad={self.requires_grad}")
 
     def forward(self, x, beam=None, squeeze=False, trans=False, cplx=True):
         """
@@ -290,17 +296,26 @@ class CLPFsBeamformer(nn.Module):
     """
     def __init__(self,
                  num_bins=257,
+                 weight=None,
                  num_channels=4,
                  spatial_filters=5,
-                 spectra_filters=128):
+                 spectra_filters=128,
+                 spectra_complex=True,
+                 spatial_maxpool=False):
         super(CLPFsBeamformer, self).__init__()
         self.beam = FixedBeamformer(spatial_filters,
                                     num_channels,
                                     num_bins,
+                                    weight=weight,
                                     requires_grad=True)
-        self.proj = ComplexLinear(num_bins, spectra_filters, bias=False)
+        if spectra_complex:
+            self.proj = ComplexLinear(num_bins, spectra_filters, bias=False)
+        else:
+            self.proj = nn.Linear(num_bins, spectra_filters, bias=False)
+        self.spectra_complex = spectra_complex
+        self.spatial_maxpool = spatial_maxpool
 
-    def forward(self, x):
+    def forward(self, x, eps=1e-5):
         """
         args:
             x: N x C x F x T, complex tensor
@@ -316,12 +331,21 @@ class CLPFsBeamformer(nn.Module):
             x = x[None, ...]
         # N x P x T x F
         b = self.beam(x, trans=True, cplx=True)
-        # N x P x T x G
-        w = self.proj(b)
-        # log + abs: N x P x T x G
-        w = (w + 1e-5).abs()
+        if self.spectra_complex:
+            # N x P x T x G
+            w = self.proj(b)
+            # log + abs: N x P x T x G
+            w = (w + eps).abs()
+        else:
+            # N x P x T x G
+            p = (b + eps).abs()
+            # N x T x F
+            if self.spatial_maxpool:
+                p, _ = th.max(p, 1)
+            # N x T x G
+            w = th.relu(self.proj(p)) + eps
         z = th.log(w)
-        # N x P x G x T
+        # N x P x G x T or N x G x T
         return z.transpose(-1, -2)
 
 

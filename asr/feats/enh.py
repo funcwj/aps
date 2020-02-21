@@ -123,7 +123,10 @@ class FeatureTransform(nn.Module):
                     feats_dim *= len(ipd_index) * (1 + base)
             else:
                 raise RuntimeError(f"Unknown token {tok} in {feats}")
-        self.spe_transform = nn.Sequential(*transform)
+        if len(transform):
+            self.spe_transform = nn.Sequential(*transform)
+        else:
+            self.spe_transform = None
         self.ipd_transform = feats_ipd
         self.feats_dim = feats_dim
 
@@ -140,7 +143,7 @@ class FeatureTransform(nn.Module):
         # complex spectrogram of CH 0~(C-1), N x C x F x T
         cplx = ComplexTensor(real, imag)
         # spectra transform
-        if len(self.spe_transform):
+        if self.spe_transform:
             # N x F x T
             feats = cplx[:, 0].abs()
             # N x T x F
