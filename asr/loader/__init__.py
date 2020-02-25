@@ -3,7 +3,7 @@
 from .kaldi_loader import make_kaldi_loader
 from .wav_loader import make_wav_loader
 from .enh_loader import make_enh_loader
-from .token_loader import make_token_loader
+from .tok_loader import make_tok_loader
 from .conf_loader import make_online_loader
 
 loader_templ = {
@@ -11,7 +11,7 @@ loader_templ = {
     "online": make_online_loader,
     "wav": make_wav_loader,
     "enh": make_enh_loader,
-    "token": make_token_loader
+    "tok": make_tok_loader
 }
 
 

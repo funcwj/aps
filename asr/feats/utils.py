@@ -97,7 +97,6 @@ def load_gcmvn_stats(cmvn_mat):
     var = cmvn[1, :-1] / N - mean**2
     return mean, var**0.5
 
-
 class STFTBase(nn.Module):
     """
     Base layer for (i)STFT
@@ -171,10 +170,10 @@ class STFT(STFTBase):
             # N x C x F x T
             r, i = th.chunk(c, 2, dim=2)
         if cplx:
-            return r, i
+            return (r, i)
         m = (r**2 + i**2)**0.5
         p = th.atan2(i, r)
-        return m, p
+        return (m, p)
 
 
 class iSTFT(STFTBase):

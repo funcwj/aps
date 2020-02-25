@@ -12,7 +12,7 @@ import torch.nn as nn
 from torch_complex.tensor import ComplexTensor
 
 from .utils import STFT, EPSILON
-from .asr import LogTransform, CmvnTransform
+from .asr import LogTransform, CmvnTransform, SpecAugTransform
 
 MATH_PI = math.pi
 
@@ -86,6 +86,11 @@ class FeatureTransform(nn.Module):
                  gcmvn="",
                  norm_mean=True,
                  norm_var=True,
+                 aug_prob=0,
+                 aug_max_bands=30,
+                 aug_max_frame=40,
+                 num_aug_bands=2,
+                 num_aug_frame=2,
                  ipd_index="1,0",
                  cos_ipd=True,
                  sin_ipd=False,
@@ -128,6 +133,14 @@ class FeatureTransform(nn.Module):
         else:
             self.spe_transform = None
         self.ipd_transform = feats_ipd
+        if aug_prob > 0:
+            self.aug_transform = SpecAugTransform(p=aug_prob,
+                                                  max_bands=aug_max_bands,
+                                                  max_frame=aug_max_frame,
+                                                  num_freq_masks=num_aug_bands,
+                                                  num_time_masks=num_aug_frame)
+        else:
+            self.aug_transform = None
         self.feats_dim = feats_dim
 
     def forward(self, x_pad, x_len):
@@ -139,25 +152,31 @@ class FeatureTransform(nn.Module):
             feats: spatial+spectral features: N x T x ...
             f_len: N or None
         """
-        real, imag = self.STFT(x_pad, cplx=True)
+        # N x C x F x T
+        mag, pha = self.STFT(x_pad)
+        # spectra augmentation if needed
+        if self.aug_transform:
+            mag = self.aug_transform(mag)
         # complex spectrogram of CH 0~(C-1), N x C x F x T
+        real = mag * th.cos(pha)
+        imag = mag * th.sin(pha)
         cplx = ComplexTensor(real, imag)
         # spectra transform
         if self.spe_transform:
-            # N x F x T
-            feats = cplx[:, 0].abs()
             # N x T x F
-            feats = feats.transpose(-1, -2)
+            feats = mag[:, 0].transpose(-1, -2)
             # spectra features of CH0, N x T x F
             feats = self.spe_transform(feats)
+            # spectra augmentation if needed
+            feats = self.aug_transform(feats)
         else:
             feats = None
         # ipd transform
-        if self.ipd_transform is not None:
-            # N x C x F x T
-            phase = cplx.angle()
+        if self.ipd_transform:
             # N x T x ...
-            ipd = self.ipd_transform(phase).transpose(1, 2)
+            ipd = self.ipd_transform(pha)
+            # N x ... x T
+            ipd = ipd.transpose(1, 2)
             # N x T x ...
             if feats is not None:
                 feats = th.cat([feats, ipd], -1)

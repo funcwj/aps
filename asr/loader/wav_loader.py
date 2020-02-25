@@ -7,7 +7,6 @@ Dataloader for raw waveforms in asr tasks
 import numpy as np
 import torch as th
 import soundfile as sf
-import scipy.io.wavfile as wf
 import torch.utils.data as dat
 
 from io import BytesIO
@@ -52,25 +51,23 @@ def make_wav_loader(train=True,
                       min_batch_size=min_batch_size)
 
 
-def read_wav(fname, beg=None, end=None, norm=True, return_sr=False):
+def read_wav(fname, beg=0, end=None, norm=True, return_sr=False):
     """
     Read wave files using scipy.io.wavfile (support multi-channel)
     """
-    # samps_int16: N x C or N
+    # samps: N x C or N
     #   N: number of samples
     #   C: number of channels
-    if beg is not None:
-        samps_int16, sr = sf.read(fname, start=beg, stop=end, dtype="int16")
-    else:
-        sr, samps_int16 = wf.read(fname)
-    # N x C => C x N
-    samps = samps_int16.astype(np.float32)
+    samps, sr = sf.read(fname,
+                        start=beg,
+                        stop=end,
+                        dtype="float32" if norm else "int16")
+    if not norm:
+        samps = samps.astype("float32")
     # put channel axis first
+    # N x C => C x N
     if samps.ndim != 1:
         samps = np.transpose(samps)
-    # normalize like MATLAB and librosa
-    if norm:
-        samps = samps / MAX_INT16
     if return_sr:
         return sr, samps
     return samps
