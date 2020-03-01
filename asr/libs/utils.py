@@ -51,8 +51,10 @@ def io_wrapper(io_str, mode):
         std = True
         if mode not in ["r", "w"]:
             raise RuntimeError(f"Unknown IO mode: {mode}")
-        buffer = {"w": sys.stdout.buffer, "r": sys.stdin.buffer}
-        stream = codecs.getwriter("utf-8")(buffer[mode])
+        if mode == "w":
+            stream = codecs.getwriter("utf-8")(sys.stdout.buffer)
+        else:
+            stream = codecs.getreader("utf-8")(sys.stdin.buffer)
     return std, stream
 
 

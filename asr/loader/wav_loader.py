@@ -24,6 +24,7 @@ def make_wav_loader(train=True,
                     distributed=False,
                     wav_scp="",
                     sr=16000,
+                    channel=-1,
                     token="",
                     utt2dur="",
                     max_token_num=400,
@@ -38,6 +39,7 @@ def make_wav_loader(train=True,
                       token,
                       utt2dur,
                       sr=sr,
+                      channel=channel,
                       max_token_num=max_token_num,
                       max_wav_dur=max_dur,
                       min_wav_dur=min_dur)
@@ -83,9 +85,10 @@ class WaveReader(BaseReader):
             key1 sox /home/data/key1.wav -t wav - remix 1 |
             ...
     """
-    def __init__(self, wav_scp, sr=16000, norm=True):
+    def __init__(self, wav_scp, sr=16000, norm=True, channel=-1):
         super(WaveReader, self).__init__(wav_scp, num_tokens=2)
         self.sr = sr
+        self.ch = channel
         self.norm = norm
 
     def _load(self, key):
@@ -95,9 +98,12 @@ class WaveReader(BaseReader):
             shell, _ = run_command(fname[:-1], wait=True)
             fname = BytesIO(shell)
         sr, samps = read_wav(fname, norm=self.norm, return_sr=True)
-        # if given samp_rate, check it
-        if self.sr is not None and sr != self.sr:
+        # if given sample rate, check it
+        if sr != self.sr:
             raise RuntimeError(f"Sample rate mismatch: {sr:d} vs {self.sr:d}")
+        # get one channel
+        if self.ch >= 0 and samps.ndim == 2:
+            samps = samps[self.ch]
         return samps
 
     def nsamps(self, key):
@@ -132,12 +138,13 @@ class Dataset(dat.Dataset):
                  token="",
                  utt2dur="",
                  sr=16000,
+                 channel=-1,
                  max_token_num=400,
                  max_wav_dur=30,
                  min_wav_dur=0.4,
                  adapt_wav_dur=8,
                  adapt_token_num=150):
-        self.wav_reader = WaveReader(wav_scp, sr=sr)
+        self.wav_reader = WaveReader(wav_scp, sr=sr, channel=channel)
         self.token_reader = process_token(token,
                                           utt2dur,
                                           max_token_num=max_token_num,

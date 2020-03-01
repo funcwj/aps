@@ -40,8 +40,10 @@ def process_token(token,
         })
     # long -> short
     token_set = sorted(token_set, key=lambda d: d["dur"], reverse=True)
-    if len(token_set) < 10:
-        raise RuntimeError("Too less utterances, check data configurations")
+    N = len(token_set)
+    if N < 10:
+        raise RuntimeError(
+            f"Too less utterances: {N}, check data configurations")
     return token_set
 
 
@@ -77,7 +79,7 @@ def run_command(command, wait=True):
 
     if wait:
         [stdout, stderr] = p.communicate()
-        if p.returncode is not 0:
+        if p.returncode != 0:
             stderr_str = bytes.decode(stderr)
             raise Exception("There was an error while running the " +
                             f"command \"{command}\":\n{stderr_str}\n")

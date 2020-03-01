@@ -7,7 +7,7 @@ import torch.nn as nn
 
 import torch.nn.functional as tf
 
-from torch.nn.utils.rnn import PackedSequence, pad_packed_sequence, pack_padded_sequence
+from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 
 def encoder_instance(encoder_type, input_size, output_size, **kwargs):
@@ -17,7 +17,8 @@ def encoder_instance(encoder_type, input_size, output_size, **kwargs):
     supported_encoder = {
         "common": TorchEncoder,
         "custom": CustomEncoder,
-        "tdnn": TdnnRnnEncoder
+        "tdnn": TdnnRnnEncoder,
+        "fsmn": TdnnFsmnEncoder
     }
     if encoder_type not in supported_encoder:
         raise RuntimeError(f"Unknown encoder type: {encoder_type}")
@@ -55,8 +56,9 @@ class TorchEncoder(nn.Module):
 
     def forward(self, x_pad, x_len):
         """
-        x_pad: (N) x Ti x F
-        x_len: (N) x Ti
+        args:
+            x_pad: (N) x Ti x F
+            x_len: (N) x Ti
         """
         max_len = x_pad.size(1)
         if x_len is not None:
@@ -115,8 +117,9 @@ class CustomRnnLayer(nn.Module):
 
     def forward(self, x_pad, x_len):
         """
-        x_pad: (N) x Ti x F
-        x_len: (N) x Ti
+        args:
+            x_pad: (N) x Ti x F
+            x_len: (N) x Ti
         """
         max_len = x_pad.size(1)
         if x_len is not None:
@@ -240,20 +243,27 @@ class TdnnLayer(nn.Module):
                  output_size,
                  kernel_size=3,
                  steps=2,
-                 dilat=1):
+                 dilat=1,
+                 norm="BN"):
         super(TdnnLayer, self).__init__()
+        if norm not in ["BN", "LN"]:
+            raise ValueError(f"Unsupported normalization layers: {norm}")
         self.conv1d = nn.Conv1d(input_size,
                                 output_size,
                                 kernel_size,
                                 stride=steps,
                                 dilation=dilat,
                                 padding=(dilat * (kernel_size - 1)) // 2)
-        self.norm = nn.BatchNorm1d(output_size)
+        if norm == "BN":
+            self.norm = nn.BatchNorm1d(output_size)
+        else:
+            self.norm = nn.LayerNorm(output_size)
         self.ds = steps
 
     def forward(self, x):
         """
-        x: N x T x F
+        args:
+            x: (N) x T x F
         """
         if x.dim() not in [2, 3]:
             raise RuntimeError(
@@ -266,20 +276,121 @@ class TdnnLayer(nn.Module):
         y = self.conv1d(x)
         y = y[..., :x.shape[-1] // self.ds]
         y = tf.relu(y)
-        y = self.norm(y)
-        # N x F x T => N x T x F
-        y = y.transpose(1, 2)
+        # N x F x T
+        if isinstance(self.norm, nn.BatchNorm1d):
+            # N x F x T => N x T x F
+            y = self.norm(y)
+            y = y.transpose(1, 2)
+        else:
+            y = y.transpose(1, 2)
+            y = self.norm(y)
         return y
+
+
+class FsmnLayer(nn.Module):
+    """
+    Implement layer of feedforward sequential memory networks (FSMN)
+    """
+    def __init__(self,
+                 input_size,
+                 output_size,
+                 proj_size,
+                 lctx=3,
+                 rctx=3,
+                 dilat=0):
+        super(FsmnLayer, self).__init__()
+        self.inp_proj = nn.Linear(input_size, proj_size, bias=False)
+        self.ctx_size = lctx + rctx + 1
+        self.ctx_conv = nn.Conv1d(proj_size,
+                                  proj_size,
+                                  kernel_size=self.ctx_size,
+                                  dilation=dilat,
+                                  groups=proj_size,
+                                  padding=(self.ctx_size - 1) // 2,
+                                  bias=False)
+        self.out_proj = nn.Linear(proj_size, output_size)
+
+    def forward(self, x, m=None):
+        """
+        args:
+            x: N x T x F, current input
+            m: N x T x F, memory blocks from previous layer
+        """
+        if x.dim() not in [2, 3]:
+            raise RuntimeError(f"FsmnLayer expect 2/3D input, got {x.dim()}")
+        if x.dim() == 2:
+            x = x[None, ...]
+        # N x T x P
+        p = self.inp_proj(x)
+        # N x T x P => N x P x T => N x T x P
+        p = p.transpose(1, 2)
+        p = self.ctx_conv(p)
+        p = p.transpose(1, 2)
+        # add memory block
+        if m is not None:
+            p = p + m
+        # N x T x O
+        o = tf.relu(self.out_proj(p))
+        # N x T x O
+        return o, p
+
+
+class FsmnEncoder(nn.Module):
+    """
+    Stack of FsmnLayers, with optional residual connection
+    """
+    def __init__(self,
+                 input_size,
+                 output_size,
+                 proj_size,
+                 num_layers=4,
+                 residual=True,
+                 lctx=3,
+                 rctx=3,
+                 dilats="1,1,1,1"):
+        super(FsmnEncoder, self).__init__()
+        dilats = [int(t) for t in dilats.split(",")]
+        if len(dilats) != num_layers:
+            raise RuntimeError(
+                "Number of layers do not match dilation configurations" +
+                f"{num_layers} vs {dilats}")
+        self.layers = nn.ModuleList([
+            FsmnLayer(input_size,
+                      output_size,
+                      proj_size,
+                      lctx=lctx,
+                      rctx=rctx,
+                      dilat=dilats[i]) for i in range(num_layers)
+        ])
+        self.res = residual
+
+    def forward(self, x):
+        """
+        args:
+            x: N x T x F, input
+        """
+        if x.dim() not in [2, 3]:
+            raise RuntimeError(f"FsmnEncoder expect 2/3D input, got {x.dim()}")
+        if x.dim() == 2:
+            x = x[None, ...]
+        m = None
+        for fsmn in self.layers:
+            if self.res:
+                x, m = fsmn(x, m=m)
+            else:
+                x, _ = fsmn(x, m=m)
+        return x
 
 
 class TdnnRnnEncoder(nn.Module):
     """
-    Using TDNN (1D-conv) to downsample input sequences
+    TDNN + RNN encoder (Using TDNN for subsampling and RNN for sequence modeling )
     """
     def __init__(self,
                  input_size,
                  output_size,
                  tdnn_dim=512,
+                 tdnn_norm="BN",
                  tdnn_layers=2,
                  tdnn_stride="2,2",
                  tdnn_dilats="1,1",
@@ -296,15 +407,17 @@ class TdnnRnnEncoder(nn.Module):
         if len(stride_conf) != len(dilats_conf) or len(
                 stride_conf) != tdnn_layers:
             raise RuntimeError("Errors in tdnn_stride/tdnn_dilats existed")
-        tdnn_list = []
+        tdnns = []
+        self.tdnn_layers = tdnn_layers
         for i in range(tdnn_layers):
-            tdnn_list.append(
+            tdnns.append(
                 TdnnLayer(input_size if i == 0 else tdnn_dim,
                           tdnn_dim,
                           kernel_size=3,
+                          norm=tdnn_norm,
                           steps=stride_conf[i],
                           dilat=dilats_conf[i]))
-        self.tdnn = nn.Sequential(*tdnn_list)
+        self.tdnn = nn.Sequential(*tdnns)
         self.rnns = CustomEncoder(tdnn_dim,
                                   output_size,
                                   rnn=rnn,
@@ -316,11 +429,70 @@ class TdnnRnnEncoder(nn.Module):
 
     def forward(self, x_pad, x_len):
         """
-        x_pad: (N) x Ti x F
-        x_len: (N) x Ti
+        args:
+            x_pad: (N) x Ti x F
+            x_len: (N) x Ti
         """
         if x_len is not None:
-            div = 2**len(self.tdnn)
-            x_len = x_len // div
+            x_len = x_len // (self.tdnn_layers**2)
         x_pad = self.tdnn(x_pad)
         return self.rnns(x_pad, x_len)
+
+
+class TdnnFsmnEncoder(nn.Module):
+    """
+    TDNN + FSMN encoder (Using TDNN for subsampling and FSMN for sequence modeling )
+    """
+    def __init__(self,
+                 input_size,
+                 output_size,
+                 tdnn_dim=512,
+                 tdnn_norm="BN",
+                 tdnn_layers=2,
+                 tdnn_stride="2,2",
+                 tdnn_dilats="1,1",
+                 fsmn_layers=4,
+                 fsmn_residual=True,
+                 fsmn_lctx=3,
+                 fsmn_rctx=3,
+                 fsmn_proj=512,
+                 fsmn_dilats="1,1,1,1"):
+        super(TdnnFsmnEncoder, self).__init__()
+        stride_conf = [int(t) for t in tdnn_stride.split(",")]
+        dilats_conf = [int(t) for t in tdnn_dilats.split(",")]
+        if len(stride_conf) != len(dilats_conf) or len(
+                stride_conf) != tdnn_layers:
+            raise RuntimeError("Errors in tdnn_stride/tdnn_dilats existed")
+        tdnns = []
+        self.tdnn_layers = tdnn_layers
+        for i in range(tdnn_layers):
+            tdnns.append(
+                TdnnLayer(input_size if i == 0 else tdnn_dim,
+                          tdnn_dim,
+                          kernel_size=3,
+                          norm=tdnn_norm,
+                          steps=stride_conf[i],
+                          dilat=dilats_conf[i]))
+        self.tdnn = nn.Sequential(*tdnns)
+        self.fsmn = FsmnEncoder(
+            tdnn_dim,
+            output_size,
+            fsmn_proj,
+            lctx=fsmn_lctx,
+            rctx=fsmn_rctx,
+            dilats=fsmn_dilats,
+            residual=fsmn_residual,
+            num_layers=fsmn_layers,
+        )
+
+    def forward(self, x_pad, x_len):
+        """
+        args:
+            x_pad: (N) x Ti x F
+            x_len: (N) x Ti
+        """
+        if x_len is not None:
+            x_len = x_len // (self.tdnn_layers**2)
+        x_pad = self.tdnn(x_pad)
+        x_pad = self.fsmn(x_pad)
+        return x_pad, x_len
