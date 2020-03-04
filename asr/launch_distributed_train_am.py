@@ -19,6 +19,7 @@ from loader import support_loader
 from feats import support_transform
 from nn import support_nnet
 
+ctc_blank_sym = "<blank>"
 constrained_conf_keys = [
     "nnet_type", "nnet_conf", "data_conf", "trainer_conf", "asr_transform",
     "enh_transform"
@@ -67,6 +68,45 @@ def train_worker(rank, nnet, conf, args):
         trainer.run(trn_loader, dev_loader, num_epoches=args.epoches)
 
 
+def load_conf(yaml_conf, dict_path):
+    """
+    Load yaml configurations
+    """
+    # load configurations
+    with open(yaml_conf, "r") as f:
+        conf = yaml.full_load(f)
+
+    # add dictionary info
+    with codecs.open(dict_path, encoding="utf-8") as f:
+        vocab = {}
+        for line in f:
+            unit, idx = line.split()
+            vocab[unit] = int(idx)
+
+    conf["nnet_conf"]["sos"] = vocab["<sos>"]
+    conf["nnet_conf"]["eos"] = vocab["<eos>"]
+    conf["nnet_conf"]["vocab_size"] = len(vocab)
+
+    if "nnet_type" not in conf:
+        conf["nnet_type"] = "las"
+    for key in conf.keys():
+        if key not in constrained_conf_keys:
+            raise ValueError(f"Invalid configuration item: {key}")
+    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
+    # for CTC
+    trainer_conf = conf["trainer_conf"]
+    # for CTC
+    if "ctc_coeff" in trainer_conf and trainer_conf["ctc_coeff"] > 0:
+        if ctc_blank_sym not in vocab:
+            raise RuntimeError(
+                f"Missing {ctc_blank_sym} in dictionary for CTC training")
+        conf["nnet_conf"]["ctc"] = True
+        trainer_conf["ctc_blank"] = vocab[ctc_blank_sym]
+    else:
+        conf["nnet_conf"]["ctc"] = False
+    return conf
+
+
 def run(args):
     # set random seed
     random.seed(args.seed)
@@ -88,29 +128,7 @@ def run(args):
     if last_checkpoint.exists():
         args.resume = last_checkpoint.as_posix()
 
-    # load configurations
-    with open(args.conf, "r") as f:
-        conf = yaml.full_load(f)
-
-    # add dictionary info
-    with codecs.open(args.dict, encoding="utf-8") as f:
-        vocab = {}
-        for line in f:
-            unit, idx = line.split()
-            vocab[unit] = int(idx)
-
-    conf["nnet_conf"]["sos"] = vocab["<sos>"]
-    conf["nnet_conf"]["eos"] = vocab["<eos>"]
-    conf["nnet_conf"]["vocab_size"] = len(vocab)
-
-    if "nnet_type" not in conf:
-        conf["nnet_type"] = "las"
-    for key in conf.keys():
-        if key not in constrained_conf_keys:
-            raise ValueError(f"Invalid configuration item: {key}")
-
-    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
-
+    conf = load_conf(args.conf, args.dict)
     asr_cls = support_nnet(conf["nnet_type"])
     asr_transform = None
     enh_transform = None
@@ -118,17 +136,6 @@ def run(args):
         asr_transform = support_transform("asr")(**conf["asr_transform"])
     if "enh_transform" in conf:
         enh_transform = support_transform("enh")(**conf["enh_transform"])
-
-    # CTC
-    if "ctc_coeff" in conf["trainer_conf"]:
-        if conf["trainer_conf"]["ctc_coeff"] > 0:
-            conf["nnet_conf"]["ctc"] = True
-            if "<blank>" not in vocab:
-                raise RuntimeError(
-                    "Missing <blank> in dictionary for CTC training")
-            conf["trainer_conf"]["ctc_blank"] = vocab["<blank>"]
-    else:
-        conf["nnet_conf"]["ctc"] = False
 
     # dump configurations
     with open(checkpoint / "train.yaml", "w") as f:

@@ -1,10 +1,10 @@
 # wujian@2019
 
-from .kaldi_loader import make_kaldi_loader
 from .wav_loader import make_wav_loader
 from .enh_loader import make_enh_loader
 from .tok_loader import make_tok_loader
 from .conf_loader import make_online_loader
+from .kaldi_loader import make_kaldi_loader
 
 loader_templ = {
     "kaldi": make_kaldi_loader,

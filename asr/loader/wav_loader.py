@@ -53,9 +53,22 @@ def make_wav_loader(train=True,
                       min_batch_size=min_batch_size)
 
 
-def read_wav(fname, beg=0, end=None, norm=True, return_sr=False):
+def read_wav(fname,
+             beg=0,
+             end=None,
+             norm=True,
+             transpose=True,
+             return_sr=False):
     """
-    Read wave files using scipy.io.wavfile (support multi-channel)
+    Read wave files using soundfile (support multi-channel)
+    args:
+        fname: file name or object
+        beg, end: begin and end index for chunk-level reading
+        norm: normalized samples between -1 and 1
+        return_sr: return audio sample rate
+    return:
+        samps: in shape C x N
+        sr: sample rate
     """
     # samps: N x C or N
     #   N: number of samples
@@ -68,7 +81,7 @@ def read_wav(fname, beg=0, end=None, norm=True, return_sr=False):
         samps = samps.astype("float32")
     # put channel axis first
     # N x C => C x N
-    if samps.ndim != 1:
+    if samps.ndim != 1 and transpose:
         samps = np.transpose(samps)
     if return_sr:
         return sr, samps
@@ -90,14 +103,28 @@ class WaveReader(BaseReader):
         self.sr = sr
         self.ch = channel
         self.norm = norm
+        self.mngr = {}
 
     def _load(self, key):
         fname = self.index_dict[key]
         # return C x N or N
-        if fname[-1] == "|":
-            shell, _ = run_command(fname[:-1], wait=True)
-            fname = BytesIO(shell)
-        sr, samps = read_wav(fname, norm=self.norm, return_sr=True)
+        if ":" in fname:
+            tokens = fname.split(":")
+            if len(tokens) != 2:
+                raise RuntimeError(f"Value format error: {fname}")
+            fname, offset = tokens[0], int(tokens[1])
+            # get ark object
+            if fname not in self.mngr:
+                self.mngr[fname] = open(fname, "rb")
+            wav_ark = self.mngr[fname]
+            # seek and read
+            wav_ark.seek(offset)
+            sr, samps = read_wav(wav_ark, norm=self.norm, return_sr=True)
+        else:
+            if fname[-1] == "|":
+                shell, _ = run_command(fname[:-1], wait=True)
+                fname = BytesIO(shell)
+            sr, samps = read_wav(fname, norm=self.norm, return_sr=True)
         # if given sample rate, check it
         if sr != self.sr:
             raise RuntimeError(f"Sample rate mismatch: {sr:d} vs {self.sr:d}")
@@ -144,7 +171,10 @@ class Dataset(dat.Dataset):
                  min_wav_dur=0.4,
                  adapt_wav_dur=8,
                  adapt_token_num=150):
-        self.wav_reader = WaveReader(wav_scp, sr=sr, channel=channel)
+        self.wav_reader = WaveReader(wav_scp,
+                                     sr=sr,
+                                     channel=channel,
+                                     norm=True)
         self.token_reader = process_token(token,
                                           utt2dur,
                                           max_token_num=max_token_num,
@@ -167,21 +197,19 @@ class Dataset(dat.Dataset):
 
 
 def egs_collate(egs):
-    def pad_seq(olist, value=0):
-        peek_dim = olist[0].dim()
+    def pad_seq(seq, value=0):
+        peek_dim = seq[0].dim()
         if peek_dim not in [1, 2]:
             raise RuntimeError(
                 "Now only supporting pad_sequence for 1/2D tensor")
-        if peek_dim == 1:
-            return pad_sequence(olist, batch_first=True, padding_value=value)
-        else:
-            olist = [o.transpose(0, 1) for o in olist]
-            # N x S x C
-            pad_obj = pad_sequence(olist,
-                                   batch_first=True,
-                                   padding_value=value)
-            # N x C x S
-            return pad_obj.transpose(1, 2)
+        if peek_dim == 2:
+            # C x S => S x C
+            seq = [s.transpose(0, 1) for s in seq]
+        # N x S x C
+        pad_mat = pad_sequence(seq, batch_first=True, padding_value=value)
+        if peek_dim == 2:
+            pad_mat = pad_mat.transpose(1, 2)
+        return pad_mat
 
     return {
         "src_pad":  # N x S or N x C x S
