@@ -14,6 +14,8 @@ from .las.encoder import TorchEncoder
 from .enh.beamformer import MvdrBeamformer
 from .enh.beamformer import UnfactedFsBeamformer, FactedFsBeamformer, CLPFsBeamformer
 
+from .enh.conv import TimeInvariantFE, TimeVariantFE
+
 
 class EnhLasASR(nn.Module):
     """
@@ -214,4 +216,31 @@ class FsLasASR(EnhLasASR):
             # N x T x FP
             N, T, _, _ = x_enh.shape
             x_enh = x_enh.view(N, T, -1)
+        return x_enh, x_len
+
+
+class ConvFeLasASR(nn.Module):
+    """
+    Convolutional front-end + LAS ASR
+    """
+    def __init__(self, mode="tv", enh_transform=None, fe_conf=None, **kwargs):
+        super(ConvFeLasASR, self).__init__()
+        conv_fe = {
+            "ti": TimeInvariantFE,
+            "tv": TimeVariantFE
+        }
+        if mode not in conv_fe:
+            raise RuntimeError(f"Unknown fs mode: {mode}")
+        if enh_transform is None:
+            raise RuntimeError("enh_transform can not be None")
+        self.fe = conv_fe[mode](**fe_conf)
+        self.enh_transform = enh_transform
+
+    def _enhance(self, x_pad, x_len):
+        """
+        FE processing
+        """
+        _, x_pad, x_len = self.enh_transform(x_pad, x_len)
+        # N x T x ...
+        x_enh = self.fe(x_pad)
         return x_enh, x_len

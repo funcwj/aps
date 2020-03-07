@@ -244,7 +244,8 @@ class TdnnLayer(nn.Module):
                  kernel_size=3,
                  steps=2,
                  dilat=1,
-                 norm="BN"):
+                 norm="BN",
+                 dropout=0):
         super(TdnnLayer, self).__init__()
         if norm not in ["BN", "LN"]:
             raise ValueError(f"Unsupported normalization layers: {norm}")
@@ -258,6 +259,7 @@ class TdnnLayer(nn.Module):
             self.norm = nn.BatchNorm1d(output_size)
         else:
             self.norm = nn.LayerNorm(output_size)
+        self.dropout = nn.Dropout(p=dropout) if dropout > 0 else None
         self.ds = steps
 
     def forward(self, x):
@@ -284,6 +286,8 @@ class TdnnLayer(nn.Module):
         else:
             y = y.transpose(1, 2)
             y = self.norm(y)
+        if self.dropout:
+            y = self.dropout(y)
         return y
 
 
@@ -297,8 +301,12 @@ class FsmnLayer(nn.Module):
                  proj_size,
                  lctx=3,
                  rctx=3,
-                 dilat=0):
+                 norm="BN",
+                 dilat=0,
+                 dropout=0):
         super(FsmnLayer, self).__init__()
+        if norm not in ["BN", "LN"]:
+            raise ValueError(f"Unsupported normalization layers: {norm}")
         self.inp_proj = nn.Linear(input_size, proj_size, bias=False)
         self.ctx_size = lctx + rctx + 1
         self.ctx_conv = nn.Conv1d(proj_size,
@@ -309,6 +317,11 @@ class FsmnLayer(nn.Module):
                                   padding=(self.ctx_size - 1) // 2,
                                   bias=False)
         self.out_proj = nn.Linear(proj_size, output_size)
+        if norm == "BN":
+            self.norm = nn.BatchNorm1d(output_size)
+        else:
+            self.norm = nn.LayerNorm(output_size)
+        self.out_drop = nn.Dropout(p=dropout) if dropout > 0 else None
 
     def forward(self, x, m=None):
         """
@@ -331,6 +344,15 @@ class FsmnLayer(nn.Module):
             p = p + m
         # N x T x O
         o = tf.relu(self.out_proj(p))
+
+        if isinstance(self.norm, nn.LayerNorm):
+            o = self.norm(o)
+        else:
+            o = o.transpose(1, 2)
+            o = self.norm(o)
+            o = o.transpose(1, 2)
+        if self.out_drop:
+            o = self.out_drop(o)
         # N x T x O
         return o, p
 
@@ -347,7 +369,9 @@ class FsmnEncoder(nn.Module):
                  residual=True,
                  lctx=3,
                  rctx=3,
-                 dilats="1,1,1,1"):
+                 norm="BN",
+                 dilats="1,1,1,1",
+                 dropout=0):
         super(FsmnEncoder, self).__init__()
         dilats = [int(t) for t in dilats.split(",")]
         if len(dilats) != num_layers:
@@ -360,7 +384,9 @@ class FsmnEncoder(nn.Module):
                       proj_size,
                       lctx=lctx,
                       rctx=rctx,
-                      dilat=dilats[i]) for i in range(num_layers)
+                      norm=norm,
+                      dilat=dilats[i],
+                      dropout=dropout) for i in range(num_layers)
         ])
         self.res = residual
 
@@ -394,6 +420,7 @@ class TdnnRnnEncoder(nn.Module):
                  tdnn_layers=2,
                  tdnn_stride="2,2",
                  tdnn_dilats="1,1",
+                 tdnn_dropout=0,
                  rnn="lstm",
                  rnn_layers=3,
                  rnn_bidir=True,
@@ -416,7 +443,8 @@ class TdnnRnnEncoder(nn.Module):
                           kernel_size=3,
                           norm=tdnn_norm,
                           steps=stride_conf[i],
-                          dilat=dilats_conf[i]))
+                          dilat=dilats_conf[i],
+                          dropout=tdnn_dropout))
         self.tdnn = nn.Sequential(*tdnns)
         self.rnns = CustomEncoder(tdnn_dim,
                                   output_size,
@@ -434,7 +462,7 @@ class TdnnRnnEncoder(nn.Module):
             x_len: (N) x Ti
         """
         if x_len is not None:
-            x_len = x_len // (self.tdnn_layers**2)
+            x_len = x_len // (2**self.tdnn_layers)
         x_pad = self.tdnn(x_pad)
         return self.rnns(x_pad, x_len)
 
@@ -451,12 +479,15 @@ class TdnnFsmnEncoder(nn.Module):
                  tdnn_layers=2,
                  tdnn_stride="2,2",
                  tdnn_dilats="1,1",
+                 tdnn_dropout=0,
                  fsmn_layers=4,
                  fsmn_residual=True,
                  fsmn_lctx=3,
                  fsmn_rctx=3,
                  fsmn_proj=512,
-                 fsmn_dilats="1,1,1,1"):
+                 fsmn_norm="LN",
+                 fsmn_dilats="1,1,1,1",
+                 fsmn_dropout=0):
         super(TdnnFsmnEncoder, self).__init__()
         stride_conf = [int(t) for t in tdnn_stride.split(",")]
         dilats_conf = [int(t) for t in tdnn_dilats.split(",")]
@@ -472,18 +503,19 @@ class TdnnFsmnEncoder(nn.Module):
                           kernel_size=3,
                           norm=tdnn_norm,
                           steps=stride_conf[i],
-                          dilat=dilats_conf[i]))
+                          dilat=dilats_conf[i],
+                          dropout=tdnn_dropout))
         self.tdnn = nn.Sequential(*tdnns)
-        self.fsmn = FsmnEncoder(
-            tdnn_dim,
-            output_size,
-            fsmn_proj,
-            lctx=fsmn_lctx,
-            rctx=fsmn_rctx,
-            dilats=fsmn_dilats,
-            residual=fsmn_residual,
-            num_layers=fsmn_layers,
-        )
+        self.fsmn = FsmnEncoder(tdnn_dim,
+                                output_size,
+                                fsmn_proj,
+                                lctx=fsmn_lctx,
+                                rctx=fsmn_rctx,
+                                norm=fsmn_norm,
+                                dilats=fsmn_dilats,
+                                residual=fsmn_residual,
+                                num_layers=fsmn_layers,
+                                dropout=fsmn_dropout)
 
     def forward(self, x_pad, x_len):
         """
@@ -492,7 +524,7 @@ class TdnnFsmnEncoder(nn.Module):
             x_len: (N) x Ti
         """
         if x_len is not None:
-            x_len = x_len // (self.tdnn_layers**2)
+            x_len = x_len // (2**self.tdnn_layers)
         x_pad = self.tdnn(x_pad)
         x_pad = self.fsmn(x_pad)
         return x_pad, x_len

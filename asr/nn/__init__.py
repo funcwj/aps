@@ -1,5 +1,5 @@
 from .las_asr import LasASR
-from .enh_las_asr import MvdrLasASR, FsLasASR
+from .enh_las_asr import MvdrLasASR, FsLasASR, ConvFeLasASR
 from .transformer import TransformerASR
 from .lm.rnnlm import RNNLM
 
@@ -8,6 +8,7 @@ nnet_templ = {
     "las": LasASR,
     "mvdr_las": MvdrLasASR,
     "fs_las": FsLasASR,
+    "conv_fe_las": ConvFeLasASR,
     "transformer": TransformerASR
 }
 
