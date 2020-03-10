@@ -87,7 +87,7 @@ class FeatureTransform(nn.Module):
                  norm_mean=True,
                  norm_var=True,
                  aug_prob=0,
-                 aug_max_bands=30,
+                 aug_max_bands=90,
                  aug_max_frame=40,
                  num_aug_bands=2,
                  num_aug_frame=2,

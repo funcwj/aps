@@ -219,16 +219,13 @@ class FsLasASR(EnhLasASR):
         return x_enh, x_len
 
 
-class ConvFeLasASR(nn.Module):
+class ConvFeLasASR(EnhLasASR):
     """
     Convolutional front-end + LAS ASR
     """
     def __init__(self, mode="tv", enh_transform=None, fe_conf=None, **kwargs):
-        super(ConvFeLasASR, self).__init__()
-        conv_fe = {
-            "ti": TimeInvariantFE,
-            "tv": TimeVariantFE
-        }
+        super(ConvFeLasASR, self).__init__(**kwargs)
+        conv_fe = {"ti": TimeInvariantFE, "tv": TimeVariantFE}
         if mode not in conv_fe:
             raise RuntimeError(f"Unknown fs mode: {mode}")
         if enh_transform is None:
