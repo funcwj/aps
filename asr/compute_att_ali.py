@@ -9,7 +9,7 @@ import numpy as np
 
 from libs.evaluator import Evaluator
 from libs.utils import get_logger
-from loader.wav_loader import WaveReader
+from loader.wave import WaveReader
 
 from kaldi_python_io import ScriptReader
 from kaldi_python_io import Reader as BaseReader

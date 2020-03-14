@@ -13,7 +13,7 @@ import scipy.signal as ss
 import torch as th
 import torch.utils.data as dat
 
-from .wav_loader import read_wav, DataLoader, EPSILON
+from .wave import read_wav, DataLoader, EPSILON
 from .utils import BatchSampler
 
 from kaldi_python_io import Reader as BaseReader
@@ -47,20 +47,20 @@ simulation configuration looks like
 """
 
 
-def make_online_loader(simu_conf="",
-                       token="",
-                       train=True,
-                       single_channel=False,
-                       add_rir=True,
-                       sr=16000,
-                       max_token_num=400,
-                       max_dur=30,
-                       min_dur=0.4,
-                       adapt_dur=8,
-                       adapt_token_num=150,
-                       batch_size=32,
-                       num_workers=4,
-                       min_batch_size=4):
+def conf_loader(simu_conf="",
+                token="",
+                train=True,
+                single_channel=False,
+                add_rir=True,
+                sr=16000,
+                max_token_num=400,
+                max_dur=30,
+                min_dur=0.4,
+                adapt_dur=8,
+                adapt_token_num=150,
+                batch_size=32,
+                num_workers=4,
+                min_batch_size=4):
     dataset = SimulationDataset(simu_conf,
                                 token,
                                 single_channel=single_channel,

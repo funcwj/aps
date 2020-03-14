@@ -18,19 +18,19 @@ from kaldi_python_io import ScriptReader
 from .utils import process_token, BatchSampler
 
 
-def make_kaldi_loader(train=True,
-                      distributed=False,
-                      feats_scp="",
-                      token="",
-                      utt2dur="",
-                      max_token_num=400,
-                      max_dur=3000,
-                      min_dur=40,
-                      adapt_dur=800,
-                      adapt_token_num=150,
-                      batch_size=32,
-                      num_workers=0,
-                      min_batch_size=4):
+def kaldi_loader(train=True,
+                 distributed=False,
+                 feats_scp="",
+                 token="",
+                 utt2dur="",
+                 max_token_num=400,
+                 max_dur=3000,
+                 min_dur=40,
+                 adapt_dur=800,
+                 adapt_token_num=150,
+                 batch_size=32,
+                 num_workers=0,
+                 min_batch_size=4):
     dataset = Dataset(feats_scp,
                       token,
                       utt2dur,

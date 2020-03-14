@@ -147,9 +147,14 @@ class EarlyStopCriterion(object):
     """
     Early stop of the training
     """
-    def __init__(self, no_impr, mode="min", init_criterion=math.inf):
+    def __init__(self,
+                 no_impr,
+                 mode="min",
+                 init_criterion=math.inf,
+                 no_impr_thres=0.2):
         self.max_no_impr = no_impr
         self.no_impr = 0
+        self.no_impr_thres = no_impr_thres
         self.mode = mode
         self.best_criterion = init_criterion
 
@@ -160,8 +165,10 @@ class EarlyStopCriterion(object):
         return self.no_impr == self.max_no_impr
 
     def step(self, update_value):
-        c1 = self.best_criterion < update_value and self.mode == "min"
-        c2 = self.best_criterion > update_value and self.mode == "max"
+        # loss
+        c1 = self.best_criterion < update_value + self.no_impr_thres and self.mode == "min"
+        # accu
+        c2 = self.best_criterion > update_value - self.no_impr_thres and self.mode == "max"
         if c1 or c2:
             self.no_impr += 1
             return False
@@ -194,7 +201,8 @@ class Trainer(object):
                  init="",
                  tensorboard=False,
                  stop_criterion="loss",
-                 no_impr=6):
+                 no_impr=6,
+                 no_impr_thres=0):
         self.device_ids = get_device_ids(device_ids)
         self.default_device = th.device(f"cuda:{self.device_ids[0]}")
 
@@ -213,7 +221,9 @@ class Trainer(object):
 
         mode = "max" if stop_criterion == "accu" else "min"
         self.stop_criterion = stop_criterion
-        self.early_stop = EarlyStopCriterion(no_impr, mode=mode)
+        self.early_stop = EarlyStopCriterion(no_impr,
+                                             mode=mode,
+                                             no_impr_thres=no_impr_thres)
         self.ss_scheduler = support_ss_scheduler(ss_scheduler, ss_prob,
                                                  **ss_scheduler_kwargs)
 

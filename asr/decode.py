@@ -12,7 +12,7 @@ import torch as th
 
 from libs.evaluator import Evaluator
 from libs.utils import get_logger, io_wrapper, StrToBoolAction
-from loader.wav_loader import WaveReader
+from loader.wave import WaveReader
 from nn import support_nnet
 from feats import support_transform
 from kaldi_python_io import ScriptReader

@@ -15,20 +15,20 @@ import torch.utils.data as dat
 from torch.utils.data.dataloader import default_collate
 from kaldi_python_io import Reader as BaseReader
 
-from .wav_loader import WaveReader
+from .wave import WaveReader
 
 type_seq = (list, tuple)
 
 
-def make_enh_loader(train=True,
-                    sr=16000,
-                    mix_scp="",
-                    doa_scp="",
-                    ref_scp="",
-                    emb_scp="",
-                    chunk_size=64000,
-                    batch_size=16,
-                    num_workers=4):
+def enhan_loader(train=True,
+                 sr=16000,
+                 mix_scp="",
+                 doa_scp="",
+                 ref_scp="",
+                 emb_scp="",
+                 chunk_size=64000,
+                 batch_size=16,
+                 num_workers=4):
     """
     Return a online-chunk dataloader for enhancement/separation tasks
     args

@@ -13,8 +13,8 @@ import torch.utils.data as dat
 from kaldi_python_io import Reader as BaseReader
 
 
-def make_tok_loader(train=True, eos=-1, token="", batch_size=64,
-                    chunk_size=20):
+def token_loader(train=True, eos=-1, token="", batch_size=64,
+                 chunk_size=20):
     dataset = Dataset(token, eos=eos)
     return DataLoader(dataset,
                       shuffle=train,

@@ -7,6 +7,12 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
+try:
+    from torch.nn import TransformerEncoder, TransformerEncoderLayer
+    from torch.nn import TransformerDecoder, TransformerDecoderLayer
+except:
+    raise ImportError("import Transformer module failed")
+
 from .las.attention import padding_mask
 
 IGNORE_ID = -1
@@ -32,8 +38,10 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x):
         """
-        x: N x T x D 
-        return T x N x D (keep same as transformer definition)
+        args:
+            x: N x T x D 
+        return:
+            y: T x N x D (keep same as transformer definition)
         """
         _, T, _ = x.shape
         x = x.transpose(0, 1)
@@ -53,7 +61,8 @@ class LinearEmbedding(nn.Module):
 
     def forward(self, x):
         """
-        x: N x T x F (from asr transform)
+        args:
+            x: N x T x F (from asr transform)
         """
         x = self.norm(self.proj(x))
         x = F.relu(x)
@@ -73,13 +82,15 @@ class Conv2dEmbedding(nn.Module):
         input_size = (input_size - 1) // 2 + 1
         self.proj = nn.Linear(input_size * embed_dim, embed_dim)
 
-    def forward(self, x, mask=None):
+    def forward(self, x):
         """
-        x: N x T x F (from asr transform)
+        args:
+            x: N x T x F (from asr transform)
         """
         if x.dim() != 3:
             raise RuntimeError(
                 f"Conv2dEmbedding expect 3D tensor, got {x.dim()} instead")
+        L = x.size(1)
         # N x 1 x T x F => N x A x T' x F'
         x = F.relu(self.conv1(x[:, None]))
         # N x A x T' x F'
@@ -90,10 +101,8 @@ class Conv2dEmbedding(nn.Module):
         x = x.contiguous()
         x = x.view(N, T, -1)
         # N x T' x D
-        x = self.proj(x)
-        if mask is not None:
-            mask = mask[..., 2::4]
-        return x, mask
+        x = self.proj(x[:, :L // 4])
+        return x
 
 
 class IOEmbedding(nn.Module):
@@ -114,19 +123,17 @@ class IOEmbedding(nn.Module):
         else:
             raise RuntimeError(f"Unsupported embedding type: {embed_type}")
         self.posencode = PositionalEncoding(embed_dim, dropout=dropout)
-        self.embed_type = embed_type
 
-    def forward(self, x, mask=None):
+    def forward(self, x):
         """
-        x: N x T x F (from asr transform)
-        y: T' x N x F (feed transformer)
+        args:
+            x: N x T x F (from asr transform)
+        return:
+            y: T' x N x F (to feed transformer)
         """
-        if self.embed_type == "conv2d":
-            y, mask = self.embed(x, mask)
-        else:
-            y = self.embed(x)
+        y = self.embed(x)
         y = self.posencode(y)
-        return y, mask
+        return y
 
 
 class TransformerASR(nn.Module):
@@ -155,24 +162,25 @@ class TransformerASR(nn.Module):
         self.tgt_embed = IOEmbedding("sparse",
                                      vocab_size,
                                      embed_dim=att_dim,
-                                     dropout=pos_dropout)
-        encoder_layer = nn.TransformerEncoderLayer(
+                                     dropout=0)
+        encoder_layer = TransformerEncoderLayer(
             att_dim,
             nhead,
             dim_feedforward=feedforward_dim,
             dropout=att_dropout)
-        decoder_layer = nn.TransformerDecoderLayer(
+        decoder_layer = TransformerDecoderLayer(
             att_dim,
             nhead,
             dim_feedforward=feedforward_dim,
             dropout=att_dropout)
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers)
-        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers)
+        self.encoder = TransformerEncoder(encoder_layer, num_layers)
+        self.decoder = TransformerDecoder(decoder_layer, num_layers)
         if not eos or not sos:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         self.sos = sos
         self.eos = eos
         self.asr_transform = asr_transform
+        self.input_embed = input_embed
         # if use CTC, eos & sos should be V and V - 1
         self.ctc = nn.Linear(att_dim, vocab_size -
                              2 if sos != eos else vocab_size -
@@ -218,20 +226,27 @@ class TransformerASR(nn.Module):
         # feature transform
         if self.asr_transform:
             x_pad, x_len = self.asr_transform(x_pad, x_len)
-
+        if self.input_embed == "conv2d":
+            x_len = x_len // 4
         # generate padding masks (True/False)
         y_pad, src_pad_mask, tgt_pad_mask = self._prep_pad_mask(x_len, y_pad)
         # genrarte target masks (-inf/0)
         tgt_mask = self._prep_sub_mask(y_pad)
         # x_emb: N x Ti x D => Ti x N x D
         # src_pad_mask: N x Ti
-        x_emb, src_pad_mask = self.src_embed(x_pad, mask=src_pad_mask)
+        x_emb = self.src_embed(x_pad)
         # To+1 x N x E
-        y_tgt, _ = self.tgt_embed(y_pad)
+        y_tgt = self.tgt_embed(y_pad)
         # Ti x N x D
-        enc_out = self.encoder(x_emb, src_key_padding_mask=src_pad_mask)
+        enc_out = self.encoder(x_emb,
+                               mask=None,
+                               src_key_padding_mask=src_pad_mask)
         # CTC
-        ctc_branch = self.ctc(enc_out) if self.ctc else None
+        if self.ctc:
+            ctc_branch = self.ctc(enc_out)
+            ctc_branch = ctc_branch.transpose(0, 1)
+        else:
+            ctc_branch = None
         # To+1 x N x D
         dec_out = self.decoder(y_tgt,
                                enc_out,

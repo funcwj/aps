@@ -1,17 +1,17 @@
 # wujian@2019
 
-from .wav_loader import make_wav_loader
-from .enh_loader import make_enh_loader
-from .tok_loader import make_tok_loader
-from .conf_loader import make_online_loader
-from .kaldi_loader import make_kaldi_loader
+from .conf import conf_loader
+from .wave import wave_loader
+from .enhan import enhan_loader
+from .kaldi import kaldi_loader
+from .token import token_loader
 
 loader_templ = {
-    "kaldi": make_kaldi_loader,
-    "online": make_online_loader,
-    "wav": make_wav_loader,
-    "enh": make_enh_loader,
-    "tok": make_tok_loader
+    "kaldi": kaldi_loader,
+    "conf": conf_loader,
+    "wav": wave_loader,
+    "enh": enhan_loader,
+    "tok": token_loader
 }
 
 
