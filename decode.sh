@@ -7,6 +7,7 @@ set -eu
 dict=""
 stage=1
 space=""
+channel=-1
 max_len=100
 beam_size=16
 batch_size=1
@@ -35,6 +36,7 @@ if [ $stage -eq 1 ]; then
       $python asr/decode.py \
       $data_dir/tst/wav.scp \
       $exp_dir/beam${beam_size}_decode.token \
+      --channel $channel \
       --beam-size $beam_size \
       --checkpoint $exp_dir \
       --device-id 0 \
@@ -49,6 +51,7 @@ if [ $stage -eq 1 ]; then
       $python asr/batch_decode.py \
       $data_dir/tst/wav.scp \
       $exp_dir/beam${beam_size}_decode.token \
+      --channel $channel \
       --beam-size $beam_size \
       --batch-size $batch_size \
       --checkpoint $exp_dir \

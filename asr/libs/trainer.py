@@ -89,7 +89,7 @@ class ProgressReporter(object):
             logger_loc = (checkpoint / "trainer.log").as_posix()
             self.header = "Trainer"
         else:
-            logger_loc = (checkpoint / f"trainer.rank{rank}log").as_posix()
+            logger_loc = (checkpoint / f"trainer.rank{rank}.log").as_posix()
             self.header = f"Rank {rank}"
 
         self.logger = get_logger(logger_loc, file=True)

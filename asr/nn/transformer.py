@@ -14,6 +14,7 @@ except:
     raise ImportError("import Transformer module failed")
 
 from .las.attention import padding_mask
+from .las.decoder import NEG_INF
 
 IGNORE_ID = -1
 
@@ -36,7 +37,7 @@ class PositionalEncoding(nn.Module):
         self.register_buffer("pos_enc", pos_enc[:, None])
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, x):
+    def forward(self, x, t=0):
         """
         args:
             x: N x T x D 
@@ -45,7 +46,7 @@ class PositionalEncoding(nn.Module):
         """
         _, T, _ = x.shape
         x = x.transpose(0, 1)
-        x = x + self.pos_enc[:T, :]
+        x = x + self.pos_enc[t:t + T, :]
         x = self.dropout(x)
         return x
 
@@ -124,7 +125,7 @@ class IOEmbedding(nn.Module):
             raise RuntimeError(f"Unsupported embedding type: {embed_type}")
         self.posencode = PositionalEncoding(embed_dim, dropout=dropout)
 
-    def forward(self, x):
+    def forward(self, x, t=0):
         """
         args:
             x: N x T x F (from asr transform)
@@ -132,7 +133,7 @@ class IOEmbedding(nn.Module):
             y: T' x N x F (to feed transformer)
         """
         y = self.embed(x)
-        y = self.posencode(y)
+        y = self.posencode(y, t=t)
         return y
 
 
@@ -181,6 +182,7 @@ class TransformerASR(nn.Module):
         self.eos = eos
         self.asr_transform = asr_transform
         self.input_embed = input_embed
+        self.vocab_size = vocab_size
         # if use CTC, eos & sos should be V and V - 1
         self.ctc = nn.Linear(att_dim, vocab_size -
                              2 if sos != eos else vocab_size -
@@ -190,14 +192,11 @@ class TransformerASR(nn.Module):
     def _prep_pad_mask(self, x_len, y_pad):
         """
         Prepare source and target padding masks (-inf/0)
-        src_pad_mask: N x Ti
-        tgt_pad_mask: N x To+1
+            src_pad_mask: N x Ti
+            tgt_pad_mask: N x To+1
         """
-        if x_len is not None:
-            src_mask = padding_mask(x_len)
-            src_mask = (src_mask == 1)  # padding position = True
-        else:
-            src_mask = None
+        # padding position = True
+        src_mask = None if x_len is None else (padding_mask(x_len) == 1)
         # pad sos to y_pad N x To+1
         y_pad = F.pad(y_pad, (1, 0), value=self.sos)
         tgt_mask = y_pad == IGNORE_ID
@@ -207,6 +206,15 @@ class TransformerASR(nn.Module):
     def _prep_sub_mask(self, mat):
         """
         Prepare a square sub-sequence masks (-inf/0)
+        egs: for N = 8, output
+        tensor([[0., -inf, -inf, -inf, -inf, -inf, -inf, -inf],
+            [0., 0., -inf, -inf, -inf, -inf, -inf, -inf],
+            [0., 0., 0., -inf, -inf, -inf, -inf, -inf],
+            [0., 0., 0., 0., -inf, -inf, -inf, -inf],
+            [0., 0., 0., 0., 0., -inf, -inf, -inf],
+            [0., 0., 0., 0., 0., 0., -inf, -inf],
+            [0., 0., 0., 0., 0., 0., 0., -inf],
+            [0., 0., 0., 0., 0., 0., 0., 0.]])
         """
         _, T = mat.shape
         mask = (th.triu(th.ones(T, T, device=mat.device),
@@ -258,3 +266,150 @@ class TransformerASR(nn.Module):
         # N x To+1 x D
         dec_out = dec_out.transpose(0, 1).contiguous()
         return dec_out, None, ctc_branch, x_len
+
+    def beam_search(self,
+                    x,
+                    beam=16,
+                    nbest=8,
+                    max_len=-1,
+                    vectorized=True,
+                    normalized=True):
+        """
+        Beam search for Transformer
+        """
+        def _trace_back_hypos(point,
+                              back_point,
+                              hist_token,
+                              score,
+                              sos=1,
+                              eos=2):
+            """
+            Trace back from current time point
+            """
+            trans = []
+            score = score.item()
+            for ptr, tok in zip(back_point[::-1], hist_token[::-1]):
+                trans.append(tok[point].item())
+                point = ptr[point]
+            return {"score": score, "trans": [sos] + trans[::-1] + [eos]}
+
+        with th.no_grad():
+            # raw wave
+            if self.asr_transform:
+                if x.dim() != 1:
+                    raise RuntimeError("Now only support for one utterance")
+                x, _ = self.asr_transform(x[None, ...], None)
+            else:
+                if x.dim() != 2:
+                    raise RuntimeError("Now only support for one utterance")
+                x = x[None, ...]
+            # 1 x Ti x D => Ti x 1 x D
+            x_emb = self.src_embed(x)
+            T, _, _ = x_emb.shape
+            # Ti x 1 x D
+            enc_out = self.encoder(x_emb)
+            # Ti x beam x D
+            enc_out = th.repeat_interleave(enc_out, beam, 1)
+
+            if max_len <= 0:
+                max_len = T
+            else:
+                max_len = max(T, max_len)
+
+            nbest = min(beam, nbest)
+            if beam > self.vocab_size:
+                raise RuntimeError(f"Beam size({beam}) > vocabulary size")
+
+            dev = enc_out.device
+            accu_score = th.zeros(beam, device=dev)
+            hist_token = []
+            back_point = []
+
+            hypos = []
+            # step by step
+            for t in range(max_len):
+                # beam
+                if t:
+                    out = hist_token[-1]
+                    point = back_point[-1]
+                else:
+                    out = th.tensor([self.sos] * beam,
+                                    dtype=th.int64,
+                                    device=dev)
+                    point = th.arange(0, beam, dtype=th.int64, device=dev)
+                # beam x E
+                out_emb = self.tgt_embed(out[..., None], t=t)
+                # beam x D
+                dec_out = self.decoder(out_emb, enc_out)[0]
+                # beam x V
+                dec_out = self.output(dec_out)
+                # compute prob: beam x V, nagetive
+                prob = F.log_softmax(dec_out, dim=-1)
+                # local pruning: beam x beam
+                topk_score, topk_token = th.topk(prob, beam, dim=-1)
+
+                if t == 0:
+                    # beam
+                    accu_score += topk_score[0]
+                    token = topk_token[0]
+                else:
+                    # beam x beam = beam x 1 + beam x beam
+                    accu_score = accu_score[..., None] + topk_score
+                    # beam*beam => beam
+                    accu_score, topk_index = th.topk(accu_score.view(-1),
+                                                     beam,
+                                                     dim=-1)
+                    # point to father's node
+                    point = topk_index // beam
+
+                    # beam*beam
+                    topk_token = topk_token.view(-1)
+                    token = topk_token[topk_index]
+
+                # continue flags
+                not_end = (token != self.eos).tolist()
+
+                # process eos nodes
+                for i, go_on in enumerate(not_end):
+                    if not go_on:
+                        hyp = _trace_back_hypos(point[i],
+                                                back_point,
+                                                hist_token,
+                                                accu_score[i],
+                                                sos=self.sos,
+                                                eos=self.eos)
+                        accu_score[i] = NEG_INF
+                        hypos.append(hyp)
+
+                # all True
+                if sum(not_end) == 0:
+                    break
+
+                if len(hypos) >= beam:
+                    break
+
+                # add best token
+                hist_token.append(token)
+                back_point.append(point)
+
+                # process non-eos nodes at the final step
+                if t == max_len - 1:
+                    for i, go_on in enumerate(not_end):
+                        if go_on:
+                            hyp = _trace_back_hypos(i,
+                                                    back_point,
+                                                    hist_token,
+                                                    accu_score[i],
+                                                    sos=self.sos,
+                                                    eos=self.eos)
+                            hypos.append(hyp)
+            if normalized:
+                nbest_hypos = sorted(hypos,
+                                     key=lambda n: n["score"] /
+                                     (len(n["trans"]) - 1),
+                                     reverse=True)
+            else:
+                nbest_hypos = sorted(hypos,
+                                     key=lambda n: n["score"],
+                                     reverse=True)
+            return nbest_hypos[:nbest]

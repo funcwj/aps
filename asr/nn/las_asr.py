@@ -84,8 +84,8 @@ class LasASR(nn.Module):
 
     def beam_search(self,
                     x,
-                    beam=8,
-                    nbest=5,
+                    beam=16,
+                    nbest=8,
                     max_len=-1,
                     vectorized=False,
                     normalized=True):
@@ -129,8 +129,8 @@ class LasASR(nn.Module):
     def beam_search_batch(self,
                           x,
                           x_len,
-                          beam=8,
-                          nbest=5,
+                          beam=16,
+                          nbest=8,
                           max_len=-1,
                           normalized=True):
         """

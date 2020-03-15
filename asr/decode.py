@@ -81,7 +81,9 @@ def run(args):
         vocab = None
     decoder = FasterDecoder(args.checkpoint, device_id=args.device_id)
     if decoder.accept_raw:
-        src_reader = WaveReader(args.feats_or_wav_scp, sr=16000)
+        src_reader = WaveReader(args.feats_or_wav_scp,
+                                sr=16000,
+                                channel=args.channel)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
@@ -140,6 +142,10 @@ if __name__ == "__main__":
     parser.add_argument("best",
                         type=str,
                         help="Wspecifier for decoded results (1-best)")
+    parser.add_argument("--channel",
+                        type=int,
+                        default=-1,
+                        help="Channel index for wav.scp")
     parser.add_argument("--checkpoint",
                         type=str,
                         required=True,
