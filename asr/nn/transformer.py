@@ -45,7 +45,9 @@ class PositionalEncoding(nn.Module):
             y: T x N x D (keep same as transformer definition)
         """
         _, T, _ = x.shape
+        # T x N x D
         x = x.transpose(0, 1)
+        # Tmax x 1 x D
         x = x + self.pos_enc[t:t + T, :]
         x = self.dropout(x)
         return x
@@ -203,7 +205,7 @@ class TransformerASR(nn.Module):
         y_pad = y_pad.masked_fill(tgt_mask, self.eos)
         return y_pad, src_mask, tgt_mask
 
-    def _prep_sub_mask(self, mat):
+    def _prep_sub_mask(self, T, device="cpu"):
         """
         Prepare a square sub-sequence masks (-inf/0)
         egs: for N = 8, output
@@ -216,9 +218,7 @@ class TransformerASR(nn.Module):
             [0., 0., 0., 0., 0., 0., 0., -inf],
             [0., 0., 0., 0., 0., 0., 0., 0.]])
         """
-        _, T = mat.shape
-        mask = (th.triu(th.ones(T, T, device=mat.device),
-                        diagonal=1) == 1).float()
+        mask = (th.triu(th.ones(T, T, device=device), diagonal=1) == 1).float()
         mask = mask.masked_fill(mask == 1, float("-inf"))
         return mask
 
@@ -239,7 +239,7 @@ class TransformerASR(nn.Module):
         # generate padding masks (True/False)
         y_pad, src_pad_mask, tgt_pad_mask = self._prep_pad_mask(x_len, y_pad)
         # genrarte target masks (-inf/0)
-        tgt_mask = self._prep_sub_mask(y_pad)
+        tgt_mask = self._prep_sub_mask(y_pad.shape[-1], device=y_pad.device)
         # x_emb: N x Ti x D => Ti x N x D
         # src_pad_mask: N x Ti
         x_emb = self.src_embed(x_pad)
@@ -324,23 +324,28 @@ class TransformerASR(nn.Module):
             accu_score = th.zeros(beam, device=dev)
             hist_token = []
             back_point = []
+            pre_emb = None
 
             hypos = []
             # step by step
             for t in range(max_len):
+                # target mask
+                tgt_mask = self._prep_sub_mask(t + 1, device=dev)
                 # beam
                 if t:
-                    out = hist_token[-1]
                     point = back_point[-1]
+                    cur_emb = self.tgt_embed(hist_token[-1][point][..., None],
+                                             t=t)
+                    pre_emb = th.cat([pre_emb, cur_emb], dim=0)
                 else:
+                    point = th.arange(0, beam, dtype=th.int64, device=dev)
                     out = th.tensor([self.sos] * beam,
                                     dtype=th.int64,
                                     device=dev)
-                    point = th.arange(0, beam, dtype=th.int64, device=dev)
-                # beam x E
-                out_emb = self.tgt_embed(out[..., None], t=t)
-                # beam x D
-                dec_out = self.decoder(out_emb, enc_out)[0]
+                    # 1 x beam x E
+                    pre_emb = self.tgt_embed(out[..., None])
+                # Tcur - 1 x beam x D
+                dec_out = self.decoder(pre_emb, enc_out, tgt_mask=tgt_mask)[-1]
                 # beam x V
                 dec_out = self.output(dec_out)
                 # compute prob: beam x V, nagetive

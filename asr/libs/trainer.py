@@ -202,7 +202,7 @@ class Trainer(object):
                  tensorboard=False,
                  stop_criterion="loss",
                  no_impr=6,
-                 no_impr_thres=0):
+                 no_impr_thres=1e-3):
         self.device_ids = get_device_ids(device_ids)
         self.default_device = th.device(f"cuda:{self.device_ids[0]}")
 
@@ -252,6 +252,7 @@ class Trainer(object):
             self.optimizer = self.create_optimizer(optimizer, optimizer_kwargs)
         self.scheduler = ReduceLROnPlateau(self.optimizer,
                                            mode=mode,
+                                           threshold=no_impr_thres,
                                            **lr_scheduler_kwargs)
         self.num_params = sum(
             [param.nelement() for param in nnet.parameters()]) / 10.0**6
