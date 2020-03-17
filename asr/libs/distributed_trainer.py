@@ -18,6 +18,7 @@ from .trainer import ProgressReporter, EarlyStopCriterion, IGNORE_ID
 from .trainer import get_device_ids, add_gaussian_noise
 from .trainer import ce_loss, ls_loss, compute_accu
 from .scheduler import support_ss_scheduler
+from .noamopt import NoamOpt
 
 
 class Trainer(object):
@@ -45,7 +46,8 @@ class Trainer(object):
                  init="",
                  tensorboard=False,
                  stop_criterion="loss",
-                 no_impr=6):
+                 no_impr=6,
+                 no_impr_thres=1e-3):
         if rank >= cuda_devices:
             raise ValueError("rank value exceeds number of GPUs: " +
                              f"{rank} vs {cuda_devices}")
@@ -105,9 +107,13 @@ class Trainer(object):
         else:
             self.nnet = self.setup_distributed(nnet, dist_url)
             self.optimizer = self.create_optimizer(optimizer, optimizer_kwargs)
-        self.scheduler = ReduceLROnPlateau(self.optimizer,
-                                           mode=mode,
-                                           **lr_scheduler_kwargs)
+        if optimizer == "noam":
+            self.lr_scheduler = None
+        else:
+            self.lr_scheduler = ReduceLROnPlateau(self.optimizer,
+                                                  mode=mode,
+                                                  threshold=no_impr_thres,
+                                                  **lr_scheduler_kwargs)
         self.num_params = sum(
             [param.nelement() for param in nnet.parameters()]) / 10.0**6
 
@@ -177,7 +183,8 @@ class Trainer(object):
             "adadelta": th.optim.Adadelta,  # weight_decay, lr
             "adagrad": th.optim.Adagrad,  # lr, lr_decay, weight_decay
             "adamax": th.optim.Adamax,  # lr, weight_decay
-            "adamw": th.optim.AdamW  # lr, weight_decay
+            "adamw": th.optim.AdamW,  # lr, weight_decay
+            "noam": NoamOpt
             # ...
         }
         if optimizer not in supported_optimizer:
@@ -253,7 +260,8 @@ class Trainer(object):
         self.ssr = self.ss_scheduler.step(e, best_accu)
         # make sure not inf
         best_value = best_loss if self.stop_criterion == "loss" else best_accu
-        self.scheduler.best = best_value
+        if self.lr_scheduler:
+            self.lr_scheduler.best = best_value
         self.early_stop.reset(best_value)
         # log here
         self.reporter.log(
@@ -284,12 +292,16 @@ class Trainer(object):
             if better:
                 self.save_checkpoint(e, best=True)
             else:
-                sstr += f" | no impr, best = {self.scheduler.best:.4f}"
+                if self.lr_scheduler:
+                    sstr += f" | no impr, best = {self.lr_scheduler.best:.4f}"
+                else:
+                    sstr += " | no impr"
 
             self.reporter.log(sstr)
             # << eval
             # schedule here
-            self.scheduler.step(update_value)
+            if self.lr_scheduler:
+                self.lr_scheduler.step(update_value)
             self.ssr = self.ss_scheduler.step(e, cv_accu)
             # save last checkpoint
             self.save_checkpoint(e, best=False)
@@ -358,11 +370,15 @@ class Trainer(object):
                     if better:
                         self.save_checkpoint(e, best=True)
                     else:
-                        sstr += f" | no impr, best = {self.scheduler.best:.4f}"
+                        if self.lr_scheduler:
+                            sstr += f" | no impr, best = {self.lr_scheduler.best:.4f}"
+                        else:
+                            sstr += " | no impr"
 
                     self.reporter.log(sstr)
                     # schedule here
-                    self.scheduler.step(update_value)
+                    if self.lr_scheduler:
+                        self.lr_scheduler.step(update_value)
                     self.ssr = self.ss_scheduler.step(e, cv_accu)
                     # save last checkpoint
                     self.save_checkpoint(e, best=False)

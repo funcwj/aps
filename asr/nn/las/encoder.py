@@ -337,7 +337,8 @@ class FsmnLayer(nn.Module):
         p = self.inp_proj(x)
         # N x T x P => N x P x T => N x T x P
         p = p.transpose(1, 2)
-        p = self.ctx_conv(p)
+        # add context
+        p = p + self.ctx_conv(p)
         p = p.transpose(1, 2)
         # add memory block
         if m is not None:

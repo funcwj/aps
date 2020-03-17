@@ -211,8 +211,8 @@ class FsLasASR(EnhLasASR):
         # N x T x F or N x T x F x P
         x_enh = x_enh.transpose(1, -1)
         x_enh = x_enh.contiguous()
+        # N x T x F x P => N x T x FP
         if x_enh.dim() == 4:
-            # N x T x FP
             N, T, _, _ = x_enh.shape
             x_enh = x_enh.view(N, T, -1)
         return x_enh, x_len
@@ -220,7 +220,7 @@ class FsLasASR(EnhLasASR):
 
 class ConvFeLasASR(EnhLasASR):
     """
-    Convolutional front-end + LAS ASR
+    Convolution-based front-end + LAS ASR
     """
     def __init__(self, mode="tv", enh_transform=None, fe_conf=None, **kwargs):
         super(ConvFeLasASR, self).__init__(**kwargs)
