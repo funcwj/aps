@@ -53,7 +53,8 @@ def load_conf(yaml_conf, dict_path):
     print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
     trainer_conf = conf["trainer_conf"]
     # for CTC
-    if "ctc_coeff" in trainer_conf and trainer_conf["ctc_coeff"] > 0:
+    if "ctc_regularization" in trainer_conf and trainer_conf[
+            "ctc_regularization"] > 0:
         if ctc_blank_sym not in vocab:
             raise RuntimeError(
                 f"Missing {ctc_blank_sym} in dictionary for CTC training")
