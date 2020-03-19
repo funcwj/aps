@@ -77,8 +77,8 @@ class Trainer(object):
         mode = "max" if stop_criterion == "accu" else "min"
         self.stop_on = stop_criterion
         self.stop_criterion = StopCriterion(no_impr,
-                                        mode=mode,
-                                        no_impr_thres=no_impr_thres)
+                                            mode=mode,
+                                            no_impr_thres=no_impr_thres)
 
         self.reporter.log(f"Model summary:\n{nnet}")
         if resume or init:
@@ -193,7 +193,7 @@ class Trainer(object):
             # ...
         }
         if optimizer not in supported_optimizer:
-            raise ValueError(f"Now only support optimizer {optimizer}")
+            raise ValueError(f"Unknown optimizer: {optimizer}")
         opt = supported_optimizer[optimizer](self.nnet.parameters(), **kwargs)
         self.reporter.log(f"Create optimizer {optimizer}: {kwargs}")
         if state is not None:
@@ -280,6 +280,9 @@ class Trainer(object):
         """
         Run on whole training set and evaluate
         """
+        self.reporter.log(
+            f"Rank {self.rank}: Number of batches (train/valid) = " +
+            f"{len(train_loader)}/{len(valid_loader)}")
         e = self._prep_train(valid_loader)
         while e < num_epoches:
             e += 1
@@ -330,6 +333,9 @@ class Trainer(object):
         """
         Run on several batches and evaluate
         """
+        self.reporter.log(
+            f"Rank {self.rank}: Number of batches (train/valid) = " +
+            f"{len(train_loader)}/{len(valid_loader)}")
         e = self._prep_train(valid_loader)
         stop = False
         trained_batches = 0

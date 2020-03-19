@@ -34,6 +34,7 @@ def load_conf(yaml_conf, dict_path):
     with open(yaml_conf, "r") as f:
         conf = yaml.full_load(f)
 
+    nnet_conf = conf["nnet_conf"]
     # add dictionary info
     with codecs.open(dict_path, encoding="utf-8") as f:
         vocab = {}
@@ -41,9 +42,9 @@ def load_conf(yaml_conf, dict_path):
             unit, idx = line.split()
             vocab[unit] = int(idx)
 
-    conf["nnet_conf"]["sos"] = vocab["<sos>"]
-    conf["nnet_conf"]["eos"] = vocab["<eos>"]
-    conf["nnet_conf"]["vocab_size"] = len(vocab)
+    nnet_conf["sos"] = vocab["<sos>"]
+    nnet_conf["eos"] = vocab["<eos>"]
+    nnet_conf["vocab_size"] = len(vocab)
 
     if "nnet_type" not in conf:
         conf["nnet_type"] = "las"
@@ -52,16 +53,14 @@ def load_conf(yaml_conf, dict_path):
             raise ValueError(f"Invalid configuration item: {key}")
     print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
     trainer_conf = conf["trainer_conf"]
+    nnet_conf["ctc"] = "ctc_regularization" in trainer_conf and trainer_conf[
+        "ctc_regularization"] > 0
     # for CTC
-    if "ctc_regularization" in trainer_conf and trainer_conf[
-            "ctc_regularization"] > 0:
+    if conf["nnet_conf"]["ctc"]:
         if ctc_blank_sym not in vocab:
             raise RuntimeError(
                 f"Missing {ctc_blank_sym} in dictionary for CTC training")
-        conf["nnet_conf"]["ctc"] = True
         trainer_conf["ctc_blank"] = vocab[ctc_blank_sym]
-    else:
-        conf["nnet_conf"]["ctc"] = False
     return conf
 
 
@@ -93,15 +92,14 @@ def run(args):
                                 train=True,
                                 fmt=data_conf["fmt"],
                                 batch_size=args.batch_size,
+                                num_workers=args.num_workers,
                                 **data_conf["loader"])
     dev_loader = support_loader(**data_conf["valid"],
                                 train=False,
                                 fmt=data_conf["fmt"],
                                 batch_size=args.batch_size,
+                                num_workers=args.num_workers,
                                 **data_conf["loader"])
-    print("Number of batches (train/valid) = " +
-          f"{len(trn_loader)}/{len(dev_loader)}",
-          flush=True)
 
     asr_cls = support_nnet(conf["nnet_type"])
     asr_transform = None
@@ -128,6 +126,7 @@ def run(args):
                          device_ids=device_ids,
                          checkpoint=args.checkpoint,
                          resume=resume,
+                         init=args.init,
                          save_interval=args.save_interval,
                          prog_interval=args.prog_interval,
                          tensorboard=args.tensorboard,

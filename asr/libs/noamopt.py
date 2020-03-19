@@ -10,12 +10,11 @@ class NoamOpt(object):
     def __init__(self,
                  parameters,
                  transformer_dim=512,
-                 factor=10,
-                 warmup=25000):
+                 factor=1,
+                 warmup=8000):
         self.cur_step = 1
         self.warmup = warmup
-        self.factor = factor
-        self.transformer_dim = transformer_dim
+        self.const = factor * transformer_dim**(-0.5)
         self.cur_lr = self._lr()
         self.optimizer = th.optim.Adam(parameters,
                                        lr=self.cur_lr,
@@ -26,9 +25,22 @@ class NoamOpt(object):
     def param_groups(self):
         return self.optimizer.param_groups
 
-    def _lr(self):
-        return self.factor * self.transformer_dim**(-0.5) * min(
-            self.cur_step**(-0.5), self.cur_step * self.warmup**(-1.5))
+    def info(self):
+        beg_lr = self._lr(1)
+        top_lr = self._lr(self.warmup)
+        return f"learning rate at step 1: {beg_lr:.3e} and " + \
+            f"step {self.warmup:d}: {top_lr:.3e}"
+
+    def _lr(self, step=None):
+        """
+        const = factor * transformer_dim^{-0.5}
+        1) cur_step > warmup:   const * cur_step**(-0.5)
+        2) cur_step < warmup:   const * cur_step * warmup**(-1.5)
+        3) cur_step = warmup:   const * warmup**(-0.5)
+        """
+        if step is None:
+            step = self.cur_step
+        return self.const * min(step**(-0.5), step * self.warmup**(-1.5))
 
     def step(self):
         self.cur_lr = self._lr()
@@ -44,9 +56,7 @@ class NoamOpt(object):
         return {
             "cur_step": self.cur_step,
             "cur_lr": self.cur_lr,
-            "warmup": self.warmup,
-            "factor": self.factor,
-            "transformer_dim": self.transformer_dim,
+            "const": self.const,
             "optimizer": self.optimizer.state_dict()
         }
 
