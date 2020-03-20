@@ -30,7 +30,7 @@ class TransformerASR(nn.Module):
                  encoder_layers=6,
                  decoder_layers=6):
         super(TransformerASR, self).__init__()
-        if not eos or not sos:
+        if eos < 0 or sos < 0:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         self.encoder = TorchTransformerEncoder(input_size,
                                                input_embed=input_embed,

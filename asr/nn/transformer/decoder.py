@@ -69,6 +69,8 @@ class TorchTransformerDecoder(nn.Module):
         return:
             dec_out: To+1 x N x D
         """
+        if sos < 0:
+            raise ValueError(f"Invalid sos value: {sos}")
         # N x Ti
         memory_mask = None if enc_len is None else (padding_mask(enc_len) == 1)
         # N x To+1

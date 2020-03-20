@@ -2,7 +2,7 @@
 
 # wujian@2019
 """
-Dataloader for online simulation
+Dataloader for online simulation (slow, need to be optimized)
 """
 import json
 import glob
@@ -18,40 +18,47 @@ from .utils import BatchSampler
 
 from kaldi_python_io import Reader as BaseReader
 """
-simulation configuration looks like
+Configuration egs: (Generate by setk/scripts/sptk/create_data_conf.py)
 {
-"key": "000ce6fa-2fac-4976-b3a0-8e252fd8517c",
-"len": 85632,   # number of samples
-"dur": 7.025,   # duration
-"scl": 0.64,    # scale
-"spk": {
-    "doa": 165.935,
-    "key": "XXXXXXXXXXX",
-    "rir": /path/to/rir/spkXXXXX.wav",
-    "loc": /path/to/spk/spkXXXXX.wav",
-}
-"dir": {
-    "doa": 42.231,
-    "rir": "/path/to/rir/dirXXXX.wav",
-    "loc": "/path/to/dir/dirXXXX.wav",
-    "len": 85632,   # length of the noise
-    "snr": 3.672,
-    "off": 0        # offset to add to the source speaker
-}
+"key": "f36d634d-b5f3-492b-888b-0d30269f39e4",
+"len": 96350,
+"nch": 4,
+"dur": 6.022,
+"scl": 0.65,
+"spk": [
+    {
+    "doa": 117.927,
+    "rir": "/home/work_nfs3/jwu/workspace/far_simu/gpu_rir/Room194-28.wav",
+    "loc": "/home/work_nfs/common/data/AIShell-2-Eval-Test/TEST/IOS/T0023/IT0023W0269.wav",
+    "txt": "3619 2028 4172 897 4608 136 608 1542 153 3504 2123 1598 1615 3079 58 2978 462",
+    "len": 96350,
+    "sdr": 0,
+    "off": 0
+    }
+],
 "iso": {
-    "snr": 17.316,
-    "beg": 186993,
-    "loc": "/path/to/dir/iso_noise_XXXX.wav"
+    "snr": 17.789,
+    "beg": 349312,
+    "end": 445662,
+    "loc": "/home/work_nfs3/jwu/workspace/far_simu/iso/iso3.wav",
+    "off": 0
+},
+"ptn": {
+    "snr": 7.71,
+    "beg": 41229,
+    "end": 137579,
+    "loc": "/home/backup_nfs/data-ASR/NoiseAndRIRs/Musan/noise/noise/free-sound/noise-free-sound-0250.wav",
+    "off": 0,
+    "rir": "/home/work_nfs3/jwu/workspace/far_simu/gpu_rir/Room194-19.wav",
+    "doa": 273.506
 }
 }
 """
 
 
 def conf_loader(simu_conf="",
-                token="",
                 train=True,
-                single_channel=False,
-                add_rir=True,
+                channel=-1,
                 sr=16000,
                 max_token_num=400,
                 max_dur=30,
@@ -62,10 +69,8 @@ def conf_loader(simu_conf="",
                 num_workers=4,
                 min_batch_size=4):
     dataset = SimulationDataset(simu_conf,
-                                token,
-                                single_channel=single_channel,
+                                channel=channel,
                                 sr=sr,
-                                add_rir=add_rir,
                                 max_token_num=max_token_num,
                                 max_wav_dur=max_dur,
                                 min_wav_dur=min_dur)
@@ -88,7 +93,8 @@ def add_room_response(spk, rir, early_energy=True, sr=16000):
         revb: N x S
     """
     S = spk.shape[-1]
-    revb = [ss.fftconvolve(spk, r)[:S] for r in rir]
+    # revb = [ss.fftconvolve(spk, r)[:S] for r in rir]
+    revb = ss.fftconvolve(spk[None, ...], rir)[..., :S]
     revb = np.asarray(revb)
 
     if early_energy:
@@ -102,54 +108,54 @@ def add_room_response(spk, rir, early_energy=True, sr=16000):
     else:
         return revb, np.mean(revb[0]**2)
 
+def snr_coeff(sig_pow, ref_pow, snr):
+    """
+    Compute signal scale factor according to snr
+    """
+    return (ref_pow / (sig_pow * 10**(snr / 10) + EPSILON))**0.5
 
-def process_token(token_reader,
-                  simu_conf,
-                  max_token_num=400,
-                  min_token_num=2,
-                  max_dur=30,
-                  min_dur=0.4):
-    token_set = []
+
+def process_conf(simu_conf,
+                 max_token_num=400,
+                 min_token_num=2,
+                 max_dur=30,
+                 min_dur=0.4):
+    conf_set = []
     for idx, conf in enumerate(simu_conf):
-        tok_key = conf["spk"]["key"]
-        token = token_reader[tok_key]
+        # speaker token
+        token_str = conf["spk"][0]["txt"]
+        token = [int(n) for n in token_str.split()]
         num_tokens = len(token)
         if num_tokens > max_token_num or num_tokens <= min_token_num:
             continue
-        cur_dur = conf["len"]
+        # mixture duration
+        cur_dur = conf["dur"]
         if cur_dur < min_dur or cur_dur > max_dur:
             continue
-        token_set.append({
-            "key": idx,
+        conf_set.append({
+            "idx": idx,
             "dur": cur_dur,
             "tok": token,
             "len": num_tokens
         })
     # long -> short
-    token_set = sorted(token_set, key=lambda d: d["dur"], reverse=True)
-    if len(token_set) < 10:
+    conf_set = sorted(conf_set, key=lambda d: d["dur"], reverse=True)
+    if len(conf_set) < 10:
         raise RuntimeError("Too less utterances, check data configurations")
-    return token_set
+    return conf_set
 
 
 class SimulationDataset(dat.Dataset):
     """
-    A specific dataset performing the online data simulation, configured by a yaml file
+    A specific dataset performing online data simulation, configured by a json file
     """
     def __init__(self,
                  simu_conf,
-                 token,
-                 single_channel=False,
+                 channel=-1,
                  sr=16000,
-                 add_rir=True,
                  max_token_num=400,
                  max_wav_dur=30,
                  min_wav_dur=0.4):
-        self.token_reader = BaseReader(
-            token,
-            value_processor=lambda l: [int(n) for n in l],
-            num_tokens=-1,
-            restrict=False)
         # fetch matched configurations
         self.epoch_conf = sorted(glob.glob(simu_conf))
         self.epoch = 0
@@ -162,112 +168,107 @@ class SimulationDataset(dat.Dataset):
             "max_dur": max_wav_dur,
             "min_dur": min_wav_dur
         }
-        with open(self.epoch_conf[0], "r") as f:
-            self.cur_simu_conf = json.load(f)
-        self.token_set = process_token(self.token_reader, self.cur_simu_conf,
-                                       **self.proc_kwargs)
         self.sr = sr
-        # Add rir or not (must single channel)
-        self.add_rir = add_rir
-        # keep multi-channel signal or not
-        self.single_channel = single_channel
+        self.ch = channel
+        self.step()
 
     def step(self):
         cur_conf = self.epoch_conf[self.epoch]
         with open(cur_conf, "r") as f:
             self.cur_simu_conf = json.load(f)
-        print(f"Got dataset from configuration: {cur_conf}", flush=True)
-        self.token_set = process_token(self.token_reader, self.cur_simu_conf,
-                                       **self.proc_kwargs)
-        # step to next one
-        self.epoch = (self.epoch + 1) % len(self.epoch_conf)
+            self.token_reader = process_conf(self.cur_simu_conf, **self.proc_kwargs)
+            self.epoch = (self.epoch + 1) % len(self.epoch_conf)
+        print("Got dataset from configuration: " + 
+                f"{cur_conf}, {len(self.token_reader)} utterances", flush=True)
 
     def __len__(self):
         # make sure that each conf has same utterances
-        return len(self.token_set)
-
-    def _load(self, conf):
-        """
-        Read wav data, partially or fully
-        """
-        if "beg" in conf:
-            # patial
-            if "len" not in conf:
-                raise RuntimeError(f"Missing key => \"len\" in conf: {conf}")
-            beg = conf["beg"]
-            wav = read_wav(conf["loc"], beg=beg, end=beg + conf["len"])
-        else:
-            wav = read_wav(conf["loc"])
-        return wav
-
-    def _conv(self, conf):
-        """
-        Return convolved signals
-        """
-        src = self._load(conf["loc"])
-        # if use rir
-        if self.add_rir:
-            rir = self._load(conf["rir"])
-            # single-channel, just use ch0
-            if self.single_channel:
-                if rir.ndim == 2:
-                    rir = rir[0:1]
-                else:
-                    rir = rir[None, ...]
-            # make sure rir in N x R
-            src_reverb, src_pow = add_room_response(src, rir, sr=self.sr)
-        else:
-            src_reverb = src
-            src_pow = np.mean(src**2)
-        return src_reverb, src_pow
+        return len(self.token_reader)
 
     def _simu(self, conf):
-        # convolved (or not) speaker
-        spk_reverb, spk_pow = self._conv(conf["spk"])
-        # convolved (or not) noise
-        if "dir" in cur_dir:
-            cur_dir = conf["dir"]
-            dir_reverb, dir_pow = self._conv(cur_dir)
-            # add noise
-            dir_snr = cur_dir["snr"]
-            dir_beg = cur_dir["off"]
-            dir_scl = (spk_pow / (dir_pow * 10**(dir_snr / 10) + EPSILON))**0.5
-            spk_reverb[:, dir_beg:dir_beg +
-                       cur_dir["len"]] += dir_scl * dir_reverb
-        # add isotropic noise if needed
-        if "iso" in conf:
-            cur_iso = conf["iso"]
-            mix_len = conf["len"]
-            iso = self._load(cur_iso)
-            if self.single_channel:
-                iso = iso[0:1]
-            # prepare iso noise
-            pad_size = mix_len - iso.shape[-1]
-            if pad_size > 0:
-                pad_width = ((0, 0), (0, pad_size))
-                iso_pad = np.pad(iso, pad_width, mode="wrap")
+        mix_len = conf["len"]
+        spk_image = []
+        spk_power = []
+        spk_meta = conf["spk"]
+
+        for sconf in spk_meta:
+            rir = None
+            spk = read_wav(sconf["loc"])
+            # if has rir
+            if "rir" in sconf:
+                rir = read_wav(sconf["rir"])
+                if self.ch >= 0:
+                    if rir.ndim == 2:
+                        rir = rir[self.ch:self.ch + 1]
+                    else:
+                        rir = rir[None, ...]
+                revb, p = add_room_response(spk, rir, sr=self.sr)
+                spk_image.append(revb)
+                spk_power.append(p)
             else:
-                iso_pad = iso[:, :mix_len]
-            # add noise
-            iso_pow = np.mean(iso_pad[0]**2)
-            iso_scl = (spk_pow /
-                       (iso_pow * 10**(cur_iso["snr"] / 10) + EPSILON))**0.5
-            spk_reverb += iso_scl * iso_pad
-        spk_scale = conf["scl"] / (np.max(np.abs(spk_reverb[0])) + EPSILON)
-        spk_reverb = spk_reverb * spk_scale
-        if self.single_channel:
-            return spk_reverb[0]
+                spk_image.append(spk)
+                spk_power.append(np.mean(spk**2))
+
+        # reference power, use ch0
+        ref_pow = spk_power[0]
+        ref = []
+        pad_shape = (conf["nch"] if not self.ch >= 0 else 1, mix_len)
+        # scale spk{1..N} by sdr
+        for i, s in enumerate(spk_meta):
+            spk_pad = np.zeros(pad_shape, dtype=np.float32)
+            spk_len = min(spk_image[i].shape[-1], mix_len)
+            if i == 0:
+                spk_pad[:, :spk_len] = spk_image[i][:, :spk_len]
+            else:
+                cur_pow = spk_power[i]
+                coeff = snr_coeff(cur_pow, ref_pow, s["sdr"])
+                beg = s["off"]
+                spk_pad[:, beg:beg +
+                        spk_len] = coeff * spk_image[i][:, :spk_len]
+            ref.append(spk_pad)
+        # mixed
+        mix = sum(ref)
+        # add noise
+        for noise_type in ["iso", "ptn"]:
+            if noise_type in conf:
+                cfg = conf[noise_type]
+                # read a segment (make IO efficient)
+                ptn = read_wav(cfg["loc"], beg=cfg["beg"], end=cfg["end"])
+                if noise_type == "ptn":
+                    # convolve rir
+                    if "rir" in cfg:
+                        rir = read_wav(cfg["rir"])
+                        if self.ch >= 0:
+                            if rir.ndim == 2:
+                                rir = rir[self.ch:self.ch + 1]
+                            else:
+                                rir = rir[None, ...]
+                        ptn, ptn_pow = add_room_response(ptn, rir, sr=self.sr)
+                    else:
+                        ptn_pow = np.mean(ptn**2)
+                        ptn = ptn[None, ...]
+                else:
+                    ptn_pow = np.mean(ptn[0]**2)
+                if self.ch >= 0:
+                    ptn = ptn[0:1]
+                coeff = snr_coeff(ptn_pow, ref_pow, cfg["snr"])
+                ptn_len = ptn.shape[-1]
+                ptn_off = cfg["off"]
+                mix[:, ptn_off:ptn_off + ptn_len] += coeff * ptn
+
+        factor = conf["scl"] / max(np.max(np.abs(mix[0])), EPSILON)
+        if self.ch >= 0:
+            return mix[0] * factor
         else:
-            return spk_reverb
+            return mix * factor
 
     def __getitem__(self, idx):
-        tok = self.token_reader[idx]
-        key = tok["key"]
-        cur_conf = self.cur_simu_conf[key]
-        wav = self._simu(cur_conf)
+        token = self.token_reader[idx]
+        conf = self.cur_simu_conf[token["idx"]]
+        wav = self._simu(conf)
         return {
             "dur": wav.shape[-1],
-            "len": tok["len"],
+            "len": token["len"],
             "wav": wav,
-            "tok": tok["tok"]
+            "tok": token["tok"]
         }

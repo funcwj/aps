@@ -72,7 +72,6 @@ class EnhTransformerASR(nn.Module):
             ssr: schedule sampling rate
         return:
             outs: N x (To+1) x V
-            alis: N x (To+1) x T
             ...
         """
         # mvdr beamforming: N x Ti x F
