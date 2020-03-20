@@ -255,6 +255,7 @@ class Trainer(object):
         else:
             self.lr_scheduler = ReduceLROnPlateau(self.optimizer,
                                                   mode=mode,
+                                                  threshold_mode="abs",
                                                   threshold=no_impr_thres,
                                                   **lr_scheduler_kwargs)
         if ss_scheduler_kwargs:
@@ -367,7 +368,7 @@ class Trainer(object):
                 self.reporter.add("loss", loss.item())
                 self.reporter.add("accu", accu)
 
-    def _prep_train(self, valid_loader):
+    def _prep_train(self, dev_loader):
         """
         Prepare for training
         """
@@ -376,7 +377,7 @@ class Trainer(object):
         # make dilated conv faster
         th.backends.cudnn.benchmark = True
         # eval
-        self.eval(valid_loader)
+        self.eval(dev_loader)
         e = self.cur_epoch
         best_loss, best_accu, _ = self.reporter.report(e, 0)
         if self.ss_scheduler:
@@ -391,23 +392,24 @@ class Trainer(object):
             f"Epoch {e:d}, loss = {best_loss:.4f}, accu = {best_accu:.2f}")
         return e
 
-    def run(self, train_loader, valid_loader, num_epoches=50):
+    def run(self, trn_loader, dev_loader, num_epoches=50):
         """
         Run on whole training set and evaluate
         """
-        self.reporter.log("Number of batches (train/valid) = " +
-                          f"{len(train_loader)}/{len(valid_loader)}")
-        e = self._prep_train(valid_loader)
+        self.reporter.log(
+            f"Number of batches (train/valid) = {len(trn_loader)}/{len(dev_loader)}"
+        )
+        e = self._prep_train(dev_loader)
         while e < num_epoches:
             e += 1
             cur_lr = self.optimizer.param_groups[0]["lr"]
             # >> train
-            self.train(train_loader)
+            self.train(trn_loader)
             _, _, sstr = self.reporter.report(e, cur_lr)
             self.reporter.log(sstr)
             # << train
             # >> eval
-            self.eval(valid_loader)
+            self.eval(dev_loader)
             cv_loss, cv_accu, sstr = self.reporter.report(e, cur_lr)
             # schedule sampling for eval
             if self.ss_scheduler:
@@ -440,16 +442,17 @@ class Trainer(object):
         self.reporter.log(f"Training for {e:d}/{num_epoches:d} epoches done!")
 
     def run_batch_per_epoch(self,
-                            train_loader,
-                            valid_loader,
+                            trn_loader,
+                            dev_loader,
                             num_epoches=100,
                             eval_interval=4000):
         """
         Run on several batches and evaluate
         """
-        self.reporter.log("Number of batches (train/valid) = " +
-                          f"{len(train_loader)}/{len(valid_loader)}")
-        e = self._prep_train(valid_loader)
+        self.reporter.log(
+            f"Number of batches (train/valid) = {len(trn_loader)}/{len(dev_loader)}"
+        )
+        e = self._prep_train(dev_loader)
         stop = False
         trained_batches = 0
         # set train mode
@@ -457,7 +460,7 @@ class Trainer(object):
         self.reporter.train()
         while True:
             # trained on several batches
-            for idx, egs in enumerate(train_loader):
+            for idx, egs in enumerate(trn_loader):
                 trained_batches = (trained_batches + 1) % eval_interval
                 # update per-batch
                 egs = load_obj(egs, self.default_device)
@@ -549,8 +552,8 @@ class S2STrainer(Trainer):
         super(S2STrainer, self).__init__(nnet, **kwargs)
         if ctc_regularization:
             self.reporter.log(
-                f"Using CTC regularization (factor = {ctc_regularization:.2f}, "
-                + f"blank = {ctc_blank})")
+                f"Using CTC regularization (factor = {ctc_regularization:.2f}"
+                + f", blank = {ctc_blank})")
         self.ctc_blank = ctc_blank
         self.ctc_factor = ctc_regularization
         self.lsm_factor = lsm_factor

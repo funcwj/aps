@@ -116,6 +116,7 @@ class Trainer(object):
         else:
             self.lr_scheduler = ReduceLROnPlateau(self.optimizer,
                                                   mode=mode,
+                                                  threshold_mode="abs",
                                                   threshold=no_impr_thres,
                                                   **lr_scheduler_kwargs)
         self.num_params = sum(
