@@ -7,7 +7,7 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
-from .transformer import TransformerASR
+from .transformer_asr import TransformerASR
 from .enh.conv import TimeInvariantFE, TimeVariantFE
 
 
@@ -31,12 +31,13 @@ class EnhTransformerASR(nn.Module):
             feedforward_dim=1024,
             pos_dropout=0.1,
             att_dropout=0.1,
-            num_layers=6):
+            encoder_layers=6,
+            decoder_layers=6):
         super(EnhTransformerASR, self).__init__()
         # Back-end feature transform
         self.asr_transform = asr_transform
         # LAS-based ASR
-        self.transformer_asr = TransformerASR(input_dim=asr_input_size,
+        self.transformer_asr = TransformerASR(input_size=asr_input_size,
                                               vocab_size=vocab_size,
                                               sos=sos,
                                               eos=eos,
@@ -48,7 +49,8 @@ class EnhTransformerASR(nn.Module):
                                               feedforward_dim=feedforward_dim,
                                               pos_dropout=pos_dropout,
                                               att_dropout=att_dropout,
-                                              num_layers=num_layers)
+                                              encoder_layers=encoder_layers,
+                                              decoder_layers=decoder_layers)
         if asr_cpt:
             transformer_cpt = th.load(asr_cpt, map_location="cpu")
             self.transformer_asr.load_state_dict(transformer_cpt, strict=False)
