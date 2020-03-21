@@ -89,6 +89,8 @@ class TorchTransformerDecoder(nn.Module):
                                memory_mask=None,
                                tgt_key_padding_mask=None,
                                memory_key_padding_mask=memory_mask)
+        # To+1 x N x V
+        dec_out = self.output(dec_out)
         return dec_out
 
     def beam_search(self,
