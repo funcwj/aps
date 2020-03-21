@@ -42,6 +42,8 @@ class TorchTransformerDecoder(nn.Module):
             dim_feedforward=feedforward_dim,
             dropout=att_dropout)
         self.decoder = TransformerDecoder(decoder_layer, num_layers)
+        self.output = nn.Linear(att_dim, vocab_size, bias=False)
+        self.vocab_size = vocab_size
 
     def _prep_sub_mask(self, T, device="cpu"):
         """
@@ -186,7 +188,7 @@ class TorchTransformerDecoder(nn.Module):
                     token = topk_token[topk_index]
 
                 # continue flags
-                not_end = (token != self.eos).tolist()
+                not_end = (token != eos).tolist()
 
                 # process eos nodes
                 for i, go_on in enumerate(not_end):

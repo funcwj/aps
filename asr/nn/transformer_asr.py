@@ -54,7 +54,6 @@ class TransformerASR(nn.Module):
         self.ctc = nn.Linear(att_dim, vocab_size -
                              2 if sos != eos else vocab_size -
                              1) if ctc else None
-        self.output = nn.Linear(att_dim, vocab_size, bias=False)
 
     def forward(self, x_pad, x_len, y_pad, ssr=0):
         """
@@ -78,7 +77,6 @@ class TransformerASR(nn.Module):
             ctc_branch = None
         # To+1 x N x D
         dec_out = self.decoder(enc_out, enc_len, y_pad, sos=self.sos)
-        dec_out = self.output(dec_out)
         # N x To+1 x D
         dec_out = dec_out.transpose(0, 1).contiguous()
         return dec_out, None, ctc_branch, enc_len
