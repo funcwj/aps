@@ -1,0 +1,129 @@
+#!/usr/bin/env python
+
+# wujian@2020
+
+import math
+
+import torch as th
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class PositionalEncoding(nn.Module):
+    """
+    Positional Encoding
+    Reference: https://github.com/pytorch/examples/blob/master/word_language_model/model.py
+    """
+    def __init__(self, embed_dim, dropout=0.1, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        pos_enc = th.zeros(max_len, embed_dim)
+        position = th.arange(0, max_len, dtype=th.float32)
+        div_term = th.exp(
+            th.arange(0, embed_dim, 2, dtype=th.float32) *
+            (-math.log(10000.0) / embed_dim))
+        pos_enc[:, 0::2] = th.sin(position[:, None] * div_term)
+        pos_enc[:, 1::2] = th.cos(position[:, None] * div_term)
+        # Tmax x 1 x D
+        self.register_buffer("pos_enc", pos_enc[:, None])
+        self.dropout = nn.Dropout(p=dropout)
+
+    def forward(self, x, t=0):
+        """
+        args:
+            x: N x T x D 
+        return:
+            y: T x N x D (keep same as transformer definition)
+        """
+        _, T, _ = x.shape
+        # T x N x D
+        x = x.transpose(0, 1)
+        # Tmax x 1 x D
+        x = x + self.pos_enc[t:t + T, :]
+        x = self.dropout(x)
+        return x
+
+
+class LinearEmbedding(nn.Module):
+    """
+    Linear projection embedding
+    """
+    def __init__(self, input_size, embed_dim=512):
+        super(LinearEmbedding, self).__init__()
+        self.proj = nn.Linear(input_size, embed_dim)
+        self.norm = nn.LayerNorm(embed_dim)
+
+    def forward(self, x):
+        """
+        args:
+            x: N x T x F (from asr transform)
+        """
+        x = self.norm(self.proj(x))
+        x = F.relu(x)
+        return x
+
+
+class Conv2dEmbedding(nn.Module):
+    """
+    2d-conv embedding described in:
+        Speech-transformer: A no-recurrence sequence-to-sequence model for speech recognition
+    """
+    def __init__(self, input_size, embed_dim=512):
+        super(Conv2dEmbedding, self).__init__()
+        self.conv1 = nn.Conv2d(1, embed_dim, 3, stride=2, padding=1)
+        input_size = (input_size - 1) // 2 + 1
+        self.conv2 = nn.Conv2d(embed_dim, embed_dim, 3, stride=2, padding=1)
+        input_size = (input_size - 1) // 2 + 1
+        self.proj = nn.Linear(input_size * embed_dim, embed_dim)
+
+    def forward(self, x):
+        """
+        args:
+            x: N x T x F (from asr transform)
+        """
+        if x.dim() != 3:
+            raise RuntimeError(
+                f"Conv2dEmbedding expect 3D tensor, got {x.dim()} instead")
+        L = x.size(1)
+        # N x 1 x T x F => N x A x T' x F'
+        x = F.relu(self.conv1(x[:, None]))
+        # N x A x T' x F'
+        x = F.relu(self.conv2(x))
+        # N x T' x A x F'
+        x = x.transpose(1, 2)
+        N, T, _, _ = x.shape
+        x = x.contiguous()
+        x = x.view(N, T, -1)
+        # N x T' x D
+        x = self.proj(x[:, :L // 4])
+        return x
+
+
+class IOEmbedding(nn.Module):
+    """
+    Kinds of feature embedding layer for ASR tasks
+        1) Linear transform
+        2) Conv2d transform
+        3) Sparse transform
+    """
+    def __init__(self, embed_type, feature_dim, embed_dim=512, dropout=0.1):
+        super(IOEmbedding, self).__init__()
+        if embed_type == "linear":
+            self.embed = LinearEmbedding(feature_dim, embed_dim=embed_dim)
+        elif embed_type == "conv2d":
+            self.embed = Conv2dEmbedding(feature_dim, embed_dim=embed_dim)
+        elif embed_type == "sparse":
+            self.embed = nn.Embedding(feature_dim, embed_dim)
+        else:
+            raise RuntimeError(f"Unsupported embedding type: {embed_type}")
+        self.posencode = PositionalEncoding(embed_dim, dropout=dropout)
+
+    def forward(self, x, t=0):
+        """
+        args:
+            x: N x T x F (from asr transform)
+        return:
+            y: T' x N x F (to feed transformer)
+        """
+        y = self.embed(x)
+        y = self.posencode(y, t=t)
+        return y

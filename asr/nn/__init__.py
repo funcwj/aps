@@ -1,7 +1,7 @@
 from .las_asr import LasASR
 from .enh_las_asr import MvdrLasASR, FsLasASR, ConvFeLasASR
-from .transformer import TransformerASR
-from .enh_transformer import ConvFeTransformerASR
+from .transformer_asr import TransformerASR
+from .enh_transformer_asr import ConvFeTransformerASR
 from .lm.rnnlm import RNNLM
 
 nnet_templ = {

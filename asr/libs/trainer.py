@@ -156,7 +156,7 @@ class StopCriterion(object):
                  no_impr,
                  mode="min",
                  init_criterion=math.inf,
-                 no_impr_thres=0.2):
+                 no_impr_thres=2e-3):
         self.max_no_impr = no_impr
         self.no_impr = 0
         self.no_impr_thres = no_impr_thres
@@ -170,17 +170,20 @@ class StopCriterion(object):
         return self.no_impr == self.max_no_impr
 
     def step(self, update_value):
+        is_better = True
         # loss
-        c1 = self.best_criterion < update_value + self.no_impr_thres and self.mode == "min"
+        if self.mode == "min":
+            is_better = self.best_criterion > update_value + self.no_impr_thres
         # accu
-        c2 = self.best_criterion > update_value - self.no_impr_thres and self.mode == "max"
-        if c1 or c2:
-            self.no_impr += 1
-            return False
-        else:
+        if self.mode == "max":
+            is_better = self.best_criterion < update_value - self.no_impr_thres
+        if is_better:
             self.best_criterion = update_value
             self.no_impr = 0
             return True
+        else:
+            self.no_impr += 1
+            return False
 
 
 class Trainer(object):
