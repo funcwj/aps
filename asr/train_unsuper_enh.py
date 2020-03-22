@@ -24,7 +24,7 @@ constrained_conf_keys = [
 ]
 
 
-def load_conf(yaml_conf, dict_path):
+def load_conf(yaml_conf):
     """
     Load yaml configurations
     """
@@ -65,7 +65,7 @@ def run(args):
     if last_checkpoint.exists():
         resume = last_checkpoint.as_posix()
 
-    conf = load_conf(args.conf, args.dict)
+    conf = load_conf(args.conf)
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
                                 train=True,

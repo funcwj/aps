@@ -274,6 +274,9 @@ class DataLoader(object):
         rn = N % self.batch_size
         return blist, chunk_list[-rn:] if rn else []
 
+    def __len__(self):
+        return 0
+
     def __iter__(self):
         chunk_list = []
         for chunks in self.eg_loader:

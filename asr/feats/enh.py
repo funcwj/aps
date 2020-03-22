@@ -154,9 +154,20 @@ class FeatureTransform(nn.Module):
         """
         # N x C x F x T
         mag, pha = self.STFT(x_pad)
-        # spectra augmentation if needed
-        if self.aug_transform:
-            mag = self.aug_transform(mag)
+        # spectra transform
+        if self.spe_transform:
+            # N x T x F
+            feats = mag[:, 0].transpose(-1, -2)
+            # spectra features of CH0, N x T x F
+            feats = self.spe_transform(feats)
+            if self.aug_transform:
+                # spectra augmentation if needed
+                feats = self.aug_transform(feats)
+        else:
+            feats = None
+            # spectra augmentation if needed
+            if self.aug_transform:
+                mag = self.aug_transform(mag)
         # complex spectrogram of CH 0~(C-1), N x C x F x T
         if norm_obs:
             mag_norm = th.norm(mag, p=2, dim=1, keepdim=True)
@@ -164,16 +175,6 @@ class FeatureTransform(nn.Module):
         real = mag * th.cos(pha)
         imag = mag * th.sin(pha)
         cplx = ComplexTensor(real, imag)
-        # spectra transform
-        if self.spe_transform:
-            # N x T x F
-            feats = mag[:, 0].transpose(-1, -2)
-            # spectra features of CH0, N x T x F
-            feats = self.spe_transform(feats)
-            # spectra augmentation if needed
-            feats = self.aug_transform(feats)
-        else:
-            feats = None
         # ipd transform
         if self.ipd_transform:
             # N x T x ...

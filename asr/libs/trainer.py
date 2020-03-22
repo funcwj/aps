@@ -338,7 +338,6 @@ class Trainer(object):
     def train(self, data_loader):
         self.nnet.train()
         self.reporter.train()
-
         for idx, egs in enumerate(data_loader):
             # load to gpu
             egs = load_obj(egs, self.default_device)
@@ -402,8 +401,10 @@ class Trainer(object):
             self.lr_scheduler.best = best_value
         self.stop_criterion.reset(best_value)
         # log here
-        self.reporter.log(
-            f"Epoch {e:d}, loss = {best_loss:.4f}, accu = {best_accu:.2f}")
+        sstr = f"Epoch {e:d}, loss = {best_loss:.4f}"
+        if best_accu is not None:
+            sstr += f", accu = {best_accu:.2f}"
+        self.reporter.log(sstr)
         return e
 
     def run(self, trn_loader, dev_loader, num_epoches=50):
@@ -735,4 +736,4 @@ class MlTrainer(Trainer):
         # N x F x T
         log_pdf = th.log((th.exp(ps) + th.exp(pn)) * 0.5)
         # to maxinmum log_pdf
-        return -th.mean(log_pdf)
+        return -th.mean(log_pdf), None

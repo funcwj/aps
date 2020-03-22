@@ -50,5 +50,5 @@ class UnsupervisedEnh(TorchEncoder):
         feats, cspec, _ = self.enh_transform(s, None, norm_obs=True)
         feats, _ = self.rnns(feats)
         # N x T x F
-        masks = F.sigmoid(self.proj(feats))
+        masks = th.sigmoid(self.proj(feats))
         return cspec, masks
