@@ -2,6 +2,7 @@ from .las_asr import LasASR
 from .enh_las_asr import MvdrLasASR, FsLasASR, ConvFeLasASR
 from .transformer_asr import TransformerASR
 from .enh_transformer_asr import ConvFeTransformerASR
+from .unsupervised_enh import UnsupervisedEnh
 from .lm.rnnlm import RNNLM
 
 nnet_templ = {
@@ -11,7 +12,8 @@ nnet_templ = {
     "fs_las": FsLasASR,
     "conv_fe_las": ConvFeLasASR,
     "transformer": TransformerASR,
-    "conv_fe_transformer": ConvFeTransformerASR
+    "conv_fe_transformer": ConvFeTransformerASR,
+    "unsupervised_enh": UnsupervisedEnh
 }
 
 

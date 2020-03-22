@@ -13,6 +13,7 @@ except:
 from .embedding import IOEmbedding
 from ..las.attention import padding_mask
 
+
 class TorchTransformerEncoder(nn.Module):
     """
     Wrapper for pytorch's Transformer Decoder
@@ -47,7 +48,7 @@ class TorchTransformerEncoder(nn.Module):
         return:
             enc_out: Ti x N x D
         """
-        if self.input_embed == "conv2d" and x_len is not None:
+        if self.input_embed[:4] == "conv" and x_len is not None:
             x_len = x_len // 4
         # x_emb: N x Ti x D => Ti x N x D
         x_emb = self.src_embed(x_pad)

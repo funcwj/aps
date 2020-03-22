@@ -15,11 +15,14 @@ from torch.nn.utils import clip_grad_norm_
 from torch.nn.parallel import data_parallel
 from torch.utils.tensorboard import SummaryWriter
 
+import torch_complex.functional as cF
+
 from .utils import get_logger, load_obj, get_device_ids, SimpleTimer
 from .scheduler import support_ss_scheduler
 from .noamopt import NoamOpt
 
 IGNORE_ID = -1
+EPSILON = np.finfo(np.float32).eps
 
 
 def ce_loss(outs, tgts):
@@ -138,13 +141,19 @@ class ProgressReporter(object):
         if N == 0:
             raise RuntimeError("No statistics to report")
         loss = sum(self.stats["loss"]) / N
-        accu = sum(self.stats["accu"]) * 100 / N
+        accu = sum(
+            self.stats["accu"]) * 100 / N if "accu" in self.stats else None
         if self.board_writer:
             self.board_writer.add_scalar(f"loss/{self.mode}", loss, epoch)
-            self.board_writer.add_scalar(f"accu/{self.mode}", accu, epoch)
+            if accu is not None:
+                self.board_writer.add_scalar(f"accu/{self.mode}", accu, epoch)
         cost = self.timer.elapsed()
-        hstr = f"Loss/Accu(time/N, lr={lr:.3e}) - Epoch {epoch:2d}: "
-        cstr = f"{self.mode} = {loss:.4f}/{accu:.2f}({cost:.2f}m/{N:d})"
+        if accu is not None:
+            hstr = f"Loss/Accu(time/N, lr={lr:.3e}) - Epoch {epoch:2d}: "
+            cstr = f"{self.mode} = {loss:.4f}/{accu:.2f}({cost:.2f}m/{N:d})"
+        else:
+            hstr = f"Loss(time/N, lr={lr:.3e}) - Epoch {epoch:2d}: "
+            cstr = f"{self.mode} = {loss:.4f}({cost:.2f}m/{N:d})"
         return loss, accu, hstr + cstr
 
 
@@ -353,7 +362,8 @@ class Trainer(object):
 
                 self.reporter.add("norm", norm)
                 self.reporter.add("loss", loss)
-                self.reporter.add("accu", accu)
+                if accu is not None:
+                    self.reporter.add("accu", accu)
                 self.reporter.add("rate", self.optimizer.param_groups[0]["lr"])
             else:
                 self.reporter.log(f"Invalid gradient {norm:.3f} or " +
@@ -369,7 +379,8 @@ class Trainer(object):
                 # ssr = 0, use ground truth
                 loss, accu = self.compute_loss(egs, idx=idx, ssr=0)
                 self.reporter.add("loss", loss.item())
-                self.reporter.add("accu", accu)
+                if accu is not None:
+                    self.reporter.add("accu", accu)
 
     def _prep_train(self, dev_loader):
         """
@@ -485,7 +496,8 @@ class Trainer(object):
 
                     self.reporter.add("norm", norm)
                     self.reporter.add("loss", loss)
-                    self.reporter.add("accu", accu)
+                    if accu is not None:
+                        self.reporter.add("accu", accu)
                     self.reporter.add("rate",
                                       self.optimizer.param_groups[0]["lr"])
                 else:
@@ -562,7 +574,7 @@ class S2STrainer(Trainer):
         self.lsm_factor = lsm_factor
         self.eos = nnet.eos
 
-    def compute_loss(self, egs, idx=0, ssr=0):
+    def compute_loss(self, egs, ssr=0, **kwargs):
         """
         Compute training loss, egs contains
             src_pad: N x Ti x F
@@ -575,9 +587,9 @@ class S2STrainer(Trainer):
         tgt_pad = egs["tgt_pad"].masked_fill(ignored_mask, self.eos)
         # outs: N x (To+1) x V
         # alis: N x (To+1) x Ti
+        pack = (egs["src_pad"], egs["src_len"], tgt_pad, ssr)
         outs, _, ctc_branch, enc_len = data_parallel(
-            self.nnet, (egs["src_pad"], egs["src_len"], tgt_pad, ssr),
-            device_ids=self.device_ids)
+            self.nnet, pack, device_ids=self.device_ids)
         # N x (To+1), pad -1
         tgts = F.pad(egs["tgt_pad"], (0, 1), value=IGNORE_ID)
         # add eos
@@ -607,13 +619,13 @@ class S2STrainer(Trainer):
 
 class LmTrainer(Trainer):
     """
-    E2E ASR Trainer (CE)
+    LM Trainer (CE)
     """
     def __init__(self, *args, **kwargs):
         super(LmTrainer, self).__init__(*args, **kwargs)
         self.hidden = None
 
-    def compute_loss(self, egs, idx=0, ssr=0):
+    def compute_loss(self, egs, idx=0, **kwargs):
         """
         Compute training loss, egs contains
             src: N x T
@@ -622,9 +634,105 @@ class LmTrainer(Trainer):
         if idx == 0:
             self.hidden = None
         # pred: N x T x V
-        pred, self.hidden = data_parallel(self.nnet, (egs["src"], self.hidden),
+        pack = (egs["src"], self.hidden)
+        pred, self.hidden = data_parallel(self.nnet,
+                                          pack,
                                           device_ids=self.device_ids)
         loss = ce_loss(pred, egs["tgt"])
         accu = compute_accu(pred, egs["tgt"])
 
         return loss, accu
+
+
+class MlTrainer(Trainer):
+    """
+    Unsupervised trainer using max-likelihood functions
+    """
+    def __init__(self, *args, **kwargs):
+        super(MlTrainer, self).__init__(*args, **kwargs)
+
+    def estimate_covar(self, mask, obs, eps=EPSILON):
+        """
+        Covariance matrices estimation
+        args:
+            mask: TF-masks (real), N x F x T
+            obs: complex, N x F x C x T
+        return:
+            covar: complex, N x F x C x C
+        """
+        _, _, C, _ = obs.shape
+        # N x F x 1 x T
+        mask = mask.unsqueeze(-2)
+        # N x F x C x C
+        nominator = cF.einsum("...it,...jt->...ij", [obs * mask, obs.conj()])
+        # N x F x 1 x 1
+        denominator = th.clamp(mask.sum(-1, keepdims=True), min=eps)
+        # N x F x C x C
+        Bk = C * nominator / denominator
+        # N x F x C x C
+        Bk = (Bk + Bk.transpose(-1, -2).conj()) / 2
+        return Bk
+
+    def det(self, Bk, eps=EPSILON):
+        """
+        Compute determinant of the hermitian matrices
+        args:
+            Bk: N x F x C x C
+        return:
+            det: N x F
+        """
+        # N x F x C x 2C
+        m = th.cat([Bk.real, -Bk.imag], -1)
+        # N x F x C x 2C
+        n = th.cat([Bk.imag, Bk.real], -1)
+        # N x F x 2C x 2C
+        Rk = th.cat([m, n], -2)
+        # N x F x 2C
+        # eigenvectors=False can not backward error
+        ev, _ = th.symeig(Rk, eigenvectors=True)
+        # N x F x C
+        det = th.cumprod(ev[..., ::2], dim=-1)
+        # N x F, non-negative
+        det = th.clamp(det[..., -1], min=eps)
+        return det
+
+    def log_pdf(self, mask, obs, eps=EPSILON):
+        """
+        Compute log-pdf of the cacgmm distributions
+        args:
+            mask: TF-masks (real), N x F x T
+            obs: complex, N x F x C x T
+        """
+        _, _, C, _ = obs.shape
+        # N x F x C x C
+        Bk = self.estimate_covar(mask, obs, eps=eps)
+        # add to diag
+        I = th.eye(C, device=Bk.device, dtype=Bk.dtype)
+        Bk = Bk + I * eps
+        # N x F
+        Dk = self.det(Bk, eps=eps)
+        # N x F x C x C
+        Bk_inv = Bk.inverse()
+        # N x F x T
+        K = cF.einsum("...xt,...xy,...yt->...t", [obs.conj(), Bk_inv, obs])
+        K = th.clamp(K.real, min=eps)
+        # N x F x T
+        log_pdf = -C * th.log(K) - th.log(Dk[..., None])
+        # N x F x T
+        return log_pdf
+
+    def compute_loss(self, egs, eps=1e-6, **kwargs):
+        # mag, pha: N x C x F x T
+        # ms: N x T x F
+        obs, ms = self.nnet(egs["mix"])
+        # N x F x C x T
+        obs = obs.transpose(1, 2)
+        # N x F x T
+        ms = ms.transpose(-1, -2)
+        # N x F x T
+        ps = self.log_pdf(ms, obs, eps=eps)
+        pn = self.log_pdf(1 - ms, obs, eps=eps)
+        # N x F x T
+        log_pdf = th.log((th.exp(ps) + th.exp(pn)) * 0.5)
+        # to maxinmum log_pdf
+        return -th.mean(log_pdf)

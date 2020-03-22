@@ -143,7 +143,7 @@ class FeatureTransform(nn.Module):
             self.aug_transform = None
         self.feats_dim = feats_dim
 
-    def forward(self, x_pad, x_len):
+    def forward(self, x_pad, x_len, norm_obs=False):
         """
         args:
             x_pad: raw waveform: N x C x S or N x S
@@ -158,6 +158,9 @@ class FeatureTransform(nn.Module):
         if self.aug_transform:
             mag = self.aug_transform(mag)
         # complex spectrogram of CH 0~(C-1), N x C x F x T
+        if norm_obs:
+            mag_norm = th.norm(mag, p=2, dim=1, keepdim=True)
+            mag = mag / th.clamp(mag_norm, min=EPSILON)
         real = mag * th.cos(pha)
         imag = mag * th.sin(pha)
         cplx = ComplexTensor(real, imag)

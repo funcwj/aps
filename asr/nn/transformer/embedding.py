@@ -62,10 +62,34 @@ class LinearEmbedding(nn.Module):
         return x
 
 
+class Conv1dEmbedding(nn.Module):
+    """
+    1d-conv embedding
+    """
+    def __init__(self, input_size, embed_dim=512):
+        super(Conv1dEmbedding, self).__init__()
+        self.conv1 = nn.Conv1d(input_size, input_size, 3, stride=2, padding=1)
+        self.conv2 = nn.Conv1d(input_size, embed_dim, 3, stride=2, padding=1)
+
+    def forward(self, x):
+        """
+        args:
+            x: N x T x F (from front-end or asr transform)
+        """
+        _, T, _ = x.shape
+        # N x T x F => N x F x T
+        x = x.transpose(1, 2)
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        # N x F x T/4 => N x T/4 x F
+        x = x.transpose(1, 2)
+        return x[:, :T // 4]
+
+
 class Conv2dEmbedding(nn.Module):
     """
     2d-conv embedding described in:
-        Speech-transformer: A no-recurrence sequence-to-sequence model for speech recognition
+    Speech-transformer: A no-recurrence sequence-to-sequence model for speech recognition
     """
     def __init__(self, input_size, embed_dim=512):
         super(Conv2dEmbedding, self).__init__()
@@ -102,8 +126,9 @@ class IOEmbedding(nn.Module):
     """
     Kinds of feature embedding layer for ASR tasks
         1) Linear transform
-        2) Conv2d transform
-        3) Sparse transform
+        2) Conv1d transform
+        3) Conv2d transform
+        4) Sparse transform
     """
     def __init__(self, embed_type, feature_dim, embed_dim=512, dropout=0.1):
         super(IOEmbedding, self).__init__()
@@ -111,6 +136,8 @@ class IOEmbedding(nn.Module):
             self.embed = LinearEmbedding(feature_dim, embed_dim=embed_dim)
         elif embed_type == "conv2d":
             self.embed = Conv2dEmbedding(feature_dim, embed_dim=embed_dim)
+        elif embed_type == "conv1d":
+            self.embed = Conv1dEmbedding(feature_dim, embed_dim=embed_dim)
         elif embed_type == "sparse":
             self.embed = nn.Embedding(feature_dim, embed_dim)
         else:
