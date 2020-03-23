@@ -73,6 +73,7 @@ class Trainer(object):
         self.cur_epoch = 0  # zero based
         self.save_interval = save_interval
         self.ssr = 0
+        self.no_impr = no_impr
 
         mode = "max" if stop_criterion == "accu" else "min"
         self.stop_on = stop_criterion
@@ -235,7 +236,8 @@ class Trainer(object):
 
                 self.reporter.add("norm", norm)
                 self.reporter.add("loss", loss)
-                self.reporter.add("accu", accu)
+                if accu is not None:
+                    self.reporter.add("accu", accu)
                 self.reporter.add("rate", self.optimizer.param_groups[0]["lr"])
             else:
                 self.reporter.log(f"Invalid gradient {norm:.3f} or " +
@@ -251,7 +253,8 @@ class Trainer(object):
                 # ssr = 0, use ground truth
                 loss, accu = self.compute_loss(egs, idx=idx, ssr=0)
                 self.reporter.add("loss", loss.item())
-                self.reporter.add("accu", accu)
+                if accu is not None:
+                    self.reporter.add("accu", accu)
 
     def _prep_train(self, valid_loader):
         """
@@ -273,8 +276,10 @@ class Trainer(object):
             self.lr_scheduler.best = best_value
         self.stop_criterion.reset(best_value)
         # log here
-        self.reporter.log(
-            f"Epoch {e:d}, loss = {best_loss:.4f}, accu = {best_accu:.2f}")
+        sstr = f"Epoch {e:d}, loss = {best_loss:.4f}"
+        if best_accu is not None:
+            sstr += f", accu = {best_accu:.2f}"
+        self.reporter.log(sstr)
         return e
 
     def run(self, train_loader, valid_loader, num_epoches=50):
@@ -322,7 +327,7 @@ class Trainer(object):
             # early stop
             if self.stop_criterion.stop():
                 self.reporter.log("Stop training cause no impr for " +
-                                  f"{self.stop_criterion.no_impr:d} epochs")
+                                  f"{self.no_impr:d} epochs")
                 break
         self.reporter.log(f"Training for {e:d}/{num_epoches:d} epoches done!")
 
@@ -367,7 +372,9 @@ class Trainer(object):
 
                     self.reporter.add("norm", norm)
                     self.reporter.add("loss", loss)
-                    self.reporter.add("accu", accu)
+                    if accu is not None:
+                        self.reporter.add("accu", accu)
+                    self.reporter.add("rate", self.optimizer.param_groups[0]["lr"])
                 else:
                     self.reporter.log(f"Invalid gradient {norm} or " +
                                       f"loss {loss}, skip...")
@@ -406,9 +413,8 @@ class Trainer(object):
                     self.reporter.reset()
                     # early stop or not
                     if self.stop_criterion.stop():
-                        self.reporter.log(
-                            "Stop training cause no impr for " +
-                            f"{self.stop_criterion.no_impr:d} epochs")
+                        self.reporter.log("Stop training cause no impr for " +
+                                          f"{self.no_impr:d} epochs")
                         stop = True
                         break
                     if e == num_epoches:

@@ -231,6 +231,7 @@ class Trainer(object):
         self.cur_epoch = 0  # zero based
         self.save_interval = save_interval
         self.ssr = 0
+        self.no_impr = no_impr
 
         mode = "max" if stop_criterion == "accu" else "min"
         self.stop_on = stop_criterion
@@ -452,7 +453,7 @@ class Trainer(object):
             # early stop
             if self.stop_criterion.stop():
                 self.reporter.log("Stop training cause no impr for " +
-                                  f"{self.stop_criterion.no_impr} epochs")
+                                  f"{self.no_impr} epochs")
                 break
         self.reporter.log(f"Training for {e:d}/{num_epoches:d} epoches done!")
 
@@ -538,9 +539,8 @@ class Trainer(object):
                     self.reporter.reset()
                     # early stop or not
                     if self.stop_criterion.stop():
-                        self.reporter.log(
-                            "Stop training cause no impr for " +
-                            f"{self.stop_criterion.no_impr} epochs")
+                        self.reporter.log("Stop training cause no impr for " +
+                                          f"{self.no_impr} epochs")
                         stop = True
                         break
                     if e == num_epoches:
