@@ -54,6 +54,9 @@ class TorchTransformerDecoder(nn.Module):
                 raise RuntimeError(
                     "Must set enc_dim when proj_dim is assigned")
         self.vocab_size = vocab_size
+        self.output = nn.Linear(cmb_dim if cmb_dim else att_dim,
+                                vocab_size,
+                                bias=False)
 
     def forward(self, enc_out, enc_len, tgt_pad, sos=-1):
         """
@@ -90,4 +93,4 @@ class TorchTransformerDecoder(nn.Module):
         # To+1 x Ti x N x J
         output = self.output(add_out)
         # N x Ti x To+1 x J
-        return output.transpose(0, 2)
+        return output.transpose(0, 2).contiguous()

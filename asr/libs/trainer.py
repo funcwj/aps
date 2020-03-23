@@ -73,14 +73,26 @@ def compute_accu(outs, tgts):
     return float(ncorr) / total
 
 
+def process_tgts(tgt_pad, tgt_len, eos=0, ignore_id=IGNORE_ID):
+    """
+    Process target labels for inference and loss computation
+    """
+    # N x To, -1 => EOS
+    tgt_v1 = tgt_pad.masked_fill(tgt_pad == ignore_id, eos)
+    # N x (To+1), pad -1
+    tgt_v2 = F.pad(tgt_pad, (0, 1), value=ignore_id)
+    # add eos
+    tgt_v2 = tgt_v2.scatter(1, tgt_len[:, None], eos)
+    return tgt_v1, tgt_v2
+
+
 def add_gaussian_noise(nnet, std=0.075):
     """
     Add gaussian noise to updated weights
     """
     for p in nnet.parameters():
         if p.requires_grad:
-            noise = th.randn(p.data.shape, device=nnet.device)
-            p.data += noise * std
+            p.data += th.randn(p.data.shape, device=nnet.device) * std
 
 
 class ProgressReporter(object):
@@ -573,28 +585,23 @@ class CtcXentHybridTrainer(Trainer):
         self.ctc_blank = ctc_blank
         self.ctc_factor = ctc_regularization
         self.lsm_factor = lsm_factor
-        self.eos = nnet.eos
 
     def compute_loss(self, egs, ssr=0, **kwargs):
         """
-        Compute training loss, egs contains
+        Compute training loss, egs contains:
             src_pad: N x Ti x F
             src_len: N
             tgt_pad: N x To
             tgt_len: N
         """
-        # N x To, -1 => EOS
-        ignored_mask = egs["tgt_pad"] == IGNORE_ID
-        tgt_pad = egs["tgt_pad"].masked_fill(ignored_mask, self.eos)
+        tgt_pad, tgts = process_tgts(egs["tgt_pad"],
+                                     egs["tgt_len"],
+                                     eos=self.nnet.eos)
         # outs: N x (To+1) x V
         # alis: N x (To+1) x Ti
         pack = (egs["src_pad"], egs["src_len"], tgt_pad, ssr)
         outs, _, ctc_branch, enc_len = data_parallel(
             self.nnet, pack, device_ids=self.device_ids)
-        # N x (To+1), pad -1
-        tgts = F.pad(egs["tgt_pad"], (0, 1), value=IGNORE_ID)
-        # add eos
-        tgts = tgts.scatter(1, egs["tgt_len"][:, None], self.eos)
         # compute loss
         if self.lsm_factor > 0:
             loss = ls_loss(outs, tgts, lsm_factor=self.lsm_factor)
@@ -628,33 +635,34 @@ class TransducerTrainer(Trainer):
     def __init__(self, nnet, transducer_blank=0, **kwargs):
         super(TransducerTrainer, self).__init__(nnet, **kwargs)
         self.blank = transducer_blank
-        self.eos = nnet.eos
         self.reporter.log(
-            f"Initialized Transducer trainer, blank = {transducer_blank})")
+            f"Got Transducer trainer, blank = {transducer_blank}")
 
     def compute_loss(self, egs, **kwargs):
         """
-        Compute training loss, egs contains
+        Compute training loss, egs contains:
             src_pad: N x Ti x F
             src_len: N
             tgt_pad: N x To
             tgt_len: N
         """
-        # N x To, -1 => EOS
-        ignored_mask = egs["tgt_pad"] == IGNORE_ID
-        tgt_pad = egs["tgt_pad"].masked_fill(ignored_mask, self.eos)
+        tgt_pad, tgts = process_tgts(egs["tgt_pad"],
+                                     egs["tgt_len"],
+                                     eos=self.nnet.eos)
         pack = (egs["src_pad"], egs["src_len"], tgt_pad)
         # N x Ti x To+1 x V
-        outs = data_parallel(self.nnet, pack, device_ids=self.device_ids)
-        # N x (To+1), pad -1
-        tgts = F.pad(egs["tgt_pad"], (0, 1), value=IGNORE_ID)
-        # add eos
-        tgts = tgts.scatter(1, egs["tgt_len"][:, None], self.eos)
+        outs, enc_len = data_parallel(self.nnet,
+                                      pack,
+                                      device_ids=self.device_ids)
+        # to int32
+        tgts = tgts.to(th.int32)
+        enc_len = enc_len.to(th.int32)
+        tgt_len = egs["tgt_len"].to(th.int32)
         # compute loss
         loss = rnnt_loss(outs,
                          tgts,
-                         egs["src_len"],
-                         egs["tgt_len"] + 1,
+                         enc_len,
+                         tgt_len,
                          blank=self.blank,
                          reduction="mean")
         return loss, None

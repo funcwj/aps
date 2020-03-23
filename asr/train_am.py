@@ -53,8 +53,7 @@ def load_conf(yaml_conf, dict_path):
     trainer_conf = conf["trainer_conf"]
     use_ctc = "ctc_regularization" in trainer_conf and trainer_conf[
         "ctc_regularization"] > 0
-    nnet_conf["ctc"] = use_ctc
-    is_transducer = conf["nnet_type"][:-10] == "transducer"
+    is_transducer = conf["nnet_type"][-10:] == "transducer"
     # for CTC/RNNT
     if use_ctc or is_transducer:
         if blank_sym not in vocab:
@@ -64,6 +63,7 @@ def load_conf(yaml_conf, dict_path):
             trainer_conf["transducer_blank"] = vocab[blank_sym]
         else:
             trainer_conf["ctc_blank"] = vocab[blank_sym]
+            nnet_conf["ctc"] = use_ctc
     return conf, is_transducer
 
 

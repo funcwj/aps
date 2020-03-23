@@ -8,6 +8,7 @@ import torch.nn.functional as F
 
 from .transformer.decoder import TorchTransformerDecoder
 from .transformer.encoder import TorchTransformerEncoder
+from .las.encoder import encoder_instance
 
 
 class TransformerASR(nn.Module):
@@ -21,37 +22,31 @@ class TransformerASR(nn.Module):
                  eos=-1,
                  ctc=False,
                  asr_transform=None,
-                 input_embed="conv2d",
-                 att_dim=512,
-                 nhead=8,
-                 feedforward_dim=2048,
-                 pos_dropout=0.1,
-                 att_dropout=0.1,
-                 encoder_layers=6,
-                 decoder_layers=6):
+                 encoder_type="transformer",
+                 encoder_proj=None,
+                 encoder_kwargs=None,
+                 decoder_type="transformer",
+                 decoder_kwargs=None):
         super(TransformerASR, self).__init__()
         if eos < 0 or sos < 0:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
-        self.encoder = TorchTransformerEncoder(input_size,
-                                               input_embed=input_embed,
-                                               att_dim=att_dim,
-                                               nhead=nhead,
-                                               feedforward_dim=feedforward_dim,
-                                               pos_dropout=pos_dropout,
-                                               att_dropout=att_dropout,
-                                               num_layers=encoder_layers)
+        if encoder_type == "transformer":
+            self.encoder = TorchTransformerEncoder(input_size,
+                                                   **encoder_kwargs)
+        else:
+            if encoder_proj is None:
+                raise ValueError("For non-transformer encoder, "
+                                 "encoder_proj can not be None")
+            self.encoder = encoder_instance(encoder_type, input_size,
+                                            encoder_proj, **encoder_proj)
         self.decoder = TorchTransformerDecoder(vocab_size,
-                                               att_dim=att_dim,
-                                               nhead=nhead,
-                                               feedforward_dim=feedforward_dim,
-                                               pos_dropout=pos_dropout,
-                                               att_dropout=att_dropout,
-                                               num_layers=decoder_layers)
+                                               enc_dim=encoder_proj,
+                                               **decoder_kwargs)
         self.sos = sos
         self.eos = eos
         self.asr_transform = asr_transform
         # if use CTC, eos & sos should be V and V - 1
-        self.ctc = nn.Linear(att_dim, vocab_size -
+        self.ctc = nn.Linear(decoder_kwargs["att_dim"], vocab_size -
                              2 if sos != eos else vocab_size -
                              1) if ctc else None
 

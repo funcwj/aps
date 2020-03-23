@@ -69,4 +69,4 @@ class TransformerTransducerASR(nn.Module):
             enc_out = enc_out.transpose(0, 1)
         # N x Ti x To+1 x V
         dec_out = self.decoder(enc_out, enc_len, y_pad, sos=self.sos)
-        return dec_out
+        return dec_out, enc_len
