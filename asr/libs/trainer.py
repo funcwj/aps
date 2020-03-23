@@ -555,9 +555,9 @@ class Trainer(object):
         self.reporter.log(f"Training for {e:d}/{num_epoches:d} epoches done!")
 
 
-class S2STrainer(Trainer):
+class CtcXentHybridTrainer(Trainer):
     """
-    E2E ASR Trainer (CE)
+    ASR Trainer (CTC & CE)
     """
     def __init__(self,
                  nnet,
@@ -565,7 +565,7 @@ class S2STrainer(Trainer):
                  ctc_regularization=0,
                  ctc_blank=0,
                  **kwargs):
-        super(S2STrainer, self).__init__(nnet, **kwargs)
+        super(CtcXentHybridTrainer, self).__init__(nnet, **kwargs)
         if ctc_regularization:
             self.reporter.log(
                 f"Using CTC regularization (factor = {ctc_regularization:.2f}"
@@ -616,6 +616,48 @@ class S2STrainer(Trainer):
         # compute accu
         accu = compute_accu(outs, tgts)
         return loss, accu
+
+
+from warprnnt_pytorch import rnnt_loss
+
+
+class TransducerTrainer(Trainer):
+    """
+    ASR Trainer (Transducer)
+    """
+    def __init__(self, nnet, transducer_blank=0, **kwargs):
+        super(TransducerTrainer, self).__init__(nnet, **kwargs)
+        self.blank = transducer_blank
+        self.eos = nnet.eos
+        self.reporter.log(
+            f"Initialized Transducer trainer, blank = {transducer_blank})")
+
+    def compute_loss(self, egs, **kwargs):
+        """
+        Compute training loss, egs contains
+            src_pad: N x Ti x F
+            src_len: N
+            tgt_pad: N x To
+            tgt_len: N
+        """
+        # N x To, -1 => EOS
+        ignored_mask = egs["tgt_pad"] == IGNORE_ID
+        tgt_pad = egs["tgt_pad"].masked_fill(ignored_mask, self.eos)
+        pack = (egs["src_pad"], egs["src_len"], tgt_pad)
+        # N x Ti x To+1 x V
+        outs = data_parallel(self.nnet, pack, device_ids=self.device_ids)
+        # N x (To+1), pad -1
+        tgts = F.pad(egs["tgt_pad"], (0, 1), value=IGNORE_ID)
+        # add eos
+        tgts = tgts.scatter(1, egs["tgt_len"][:, None], self.eos)
+        # compute loss
+        loss = rnnt_loss(outs,
+                         tgts,
+                         egs["src_len"],
+                         egs["tgt_len"] + 1,
+                         blank=self.blank,
+                         reduction="mean")
+        return loss, None
 
 
 class LmTrainer(Trainer):
