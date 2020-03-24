@@ -66,19 +66,37 @@ class Conv1dEmbedding(nn.Module):
     """
     1d-conv embedding
     """
-    def __init__(self, input_size, embed_dim=512):
+    def __init__(self, input_size, embed_dim=512, inner_channels=256):
         super(Conv1dEmbedding, self).__init__()
-        self.conv1 = nn.Conv1d(input_size, input_size, 3, stride=2, padding=1)
-        self.conv2 = nn.Conv1d(input_size, embed_dim, 3, stride=2, padding=1)
+        self.conv1 = nn.Conv1d(input_size,
+                               inner_channels,
+                               3,
+                               stride=2,
+                               padding=1)
+        self.conv2 = nn.Conv1d(inner_channels,
+                               embed_dim,
+                               3,
+                               stride=2,
+                               padding=1)
 
     def forward(self, x):
         """
         args:
-            x: N x T x F (from front-end or asr transform)
+            x: N x B x T x F or N x T x F (from front-end or asr transform)
         """
-        _, T, _ = x.shape
-        # N x T x F => N x F x T
-        x = x.transpose(1, 2)
+        if x.dim() not in [3, 4]:
+            raise RuntimeError(
+                f"Conv1dEmbedding expect 3/4D tensor, got {x.dim()} instead")
+        if x.dim() == 3:
+            _, T, _ = x.shape
+            # N x T x F => N x F x T
+            x = x.transpose(1, 2)
+        else:
+            N, _, T, _ = x.shape
+            # N x T x B x D
+            x = x.transpose(1, 2)
+            # N x T x BD
+            x = x.view(N, T, -1)
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         # N x F x T/4 => N x T/4 x F
@@ -91,9 +109,13 @@ class Conv2dEmbedding(nn.Module):
     2d-conv embedding described in:
     Speech-transformer: A no-recurrence sequence-to-sequence model for speech recognition
     """
-    def __init__(self, input_size, embed_dim=512):
+    def __init__(self, input_size, embed_dim=512, input_channels=1):
         super(Conv2dEmbedding, self).__init__()
-        self.conv1 = nn.Conv2d(1, embed_dim, 3, stride=2, padding=1)
+        self.conv1 = nn.Conv2d(input_channels,
+                               embed_dim,
+                               3,
+                               stride=2,
+                               padding=1)
         input_size = (input_size - 1) // 2 + 1
         self.conv2 = nn.Conv2d(embed_dim, embed_dim, 3, stride=2, padding=1)
         input_size = (input_size - 1) // 2 + 1
@@ -102,14 +124,15 @@ class Conv2dEmbedding(nn.Module):
     def forward(self, x):
         """
         args:
-            x: N x T x F (from asr transform)
+            x: N x T x F (from asr transform) or 
+               N x C x T x F (from front-end processing)
         """
-        if x.dim() != 3:
+        if x.dim() not in [3, 4]:
             raise RuntimeError(
-                f"Conv2dEmbedding expect 3D tensor, got {x.dim()} instead")
-        L = x.size(1)
+                f"Conv2dEmbedding expect 3/4D tensor, got {x.dim()} instead")
+        L = x.size(-2)
         # N x 1 x T x F => N x A x T' x F'
-        x = F.relu(self.conv1(x[:, None]))
+        x = F.relu(self.conv1(x[:, None] if x.dim() == 3 else x))
         # N x A x T' x F'
         x = F.relu(self.conv2(x))
         # N x T' x A x F'
@@ -130,14 +153,25 @@ class IOEmbedding(nn.Module):
         3) Conv2d transform
         4) Sparse transform
     """
-    def __init__(self, embed_type, feature_dim, embed_dim=512, dropout=0.1):
+    def __init__(self,
+                 embed_type,
+                 feature_dim,
+                 embed_dim=512,
+                 dropout=0.1,
+                 other_opts=-1):
         super(IOEmbedding, self).__init__()
         if embed_type == "linear":
             self.embed = LinearEmbedding(feature_dim, embed_dim=embed_dim)
         elif embed_type == "conv2d":
-            self.embed = Conv2dEmbedding(feature_dim, embed_dim=embed_dim)
+            self.embed = Conv2dEmbedding(
+                feature_dim,
+                embed_dim=embed_dim,
+                input_channels=1 if other_opts <= 0 else other_opts)
         elif embed_type == "conv1d":
-            self.embed = Conv1dEmbedding(feature_dim, embed_dim=embed_dim)
+            self.embed = Conv1dEmbedding(
+                feature_dim,
+                embed_dim=embed_dim,
+                inner_channels=embed_dim if other_opts <= 0 else other_opts)
         elif embed_type == "sparse":
             self.embed = nn.Embedding(feature_dim, embed_dim)
         else:

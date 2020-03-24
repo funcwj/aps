@@ -9,6 +9,7 @@ import torch.nn.functional as F
 
 from .transformer_asr import TransformerASR
 from .enh.conv import TimeInvariantFE, TimeVariantFE
+from .enh.beamformer import MvdrBeamformer, CLPFsBeamformer
 
 
 class EnhTransformerASR(nn.Module):
@@ -96,13 +97,17 @@ class EnhTransformerASR(nn.Module):
                                                     normalized=normalized)
 
 
-class ConvFeTransformerASR(EnhTransformerASR):
+class BeamTransformerASR(EnhTransformerASR):
     """
-    Convolution-based front-end + Transformer ASR
+    Beamformer-based front-end + LAS ASR
     """
     def __init__(self, mode="tv", enh_transform=None, enh_conf=None, **kwargs):
-        super(ConvFeTransformerASR, self).__init__(**kwargs)
-        conv_enh = {"ti": TimeInvariantFE, "tv": TimeVariantFE}
+        super(BeamTransformerASR, self).__init__(**kwargs)
+        conv_enh = {
+            "ti": TimeInvariantFE,
+            "tv": TimeVariantFE,
+            "clp": CLPFsBeamformer
+        }
         if mode not in conv_enh:
             raise RuntimeError(f"Unknown fs mode: {mode}")
         if enh_transform is None:
@@ -112,9 +117,9 @@ class ConvFeTransformerASR(EnhTransformerASR):
 
     def _enhance(self, x_pad, x_len):
         """
-        Front-end processing
+        FE processing
         """
         _, x_pad, x_len = self.enh_transform(x_pad, x_len)
-        # N x T x ...
+        # N x B x T x ...
         x_enh = self.enh(x_pad)
         return x_enh, x_len

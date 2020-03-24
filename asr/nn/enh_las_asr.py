@@ -11,8 +11,7 @@ from torch.nn.utils.rnn import pack_padded_sequence
 
 from .las_asr import LasASR
 from .las.encoder import TorchEncoder
-from .enh.beamformer import MvdrBeamformer
-from .enh.beamformer import UnfactedFsBeamformer, FactedFsBeamformer, CLPFsBeamformer
+from .enh.beamformer import MvdrBeamformer, CLPFsBeamformer
 from .enh.conv import TimeInvariantFE, TimeVariantFE
 
 
@@ -174,57 +173,17 @@ class MvdrLasASR(EnhLasASR):
         return x_mask, x_len, x_cplx
 
 
-class FsLasASR(EnhLasASR):
+class BeamLasASR(EnhLasASR):
     """
-    FS beamformer + LAS-based ASR model
-    """
-    def __init__(self,
-                 mode="unfacted",
-                 enh_transform=None,
-                 enh_conf=None,
-                 **kwargs):
-        super(FsLasASR, self).__init__(**kwargs)
-        fs_beamformer = {
-            "facted": FactedFsBeamformer,
-            "unfacted": UnfactedFsBeamformer,
-            "clp": CLPFsBeamformer
-        }
-        if mode not in fs_beamformer:
-            raise RuntimeError(f"Unknown fs mode: {mode}")
-        self.fs = fs_beamformer[mode](**enh_conf)
-        self.enh_transform = enh_transform
-        if mode == "clp" and enh_transform is None:
-            raise RuntimeError("enh_transform can not be None if mode == clp")
-        if mode != "clp" and enh_transform is not None:
-            raise RuntimeError("enh_transform must be None if mode != clp")
-
-    def _enhance(self, x_pad, x_len):
-        """
-        FS beamforming
-        """
-        if self.enh_transform:
-            _, x_pad, x_len = self.enh_transform(x_pad, x_len)
-        else:
-            x_len = self.fs.num_frames(x_len)
-        # N x F x T or N x P x F x T
-        x_enh = self.fs(x_pad)
-        # N x T x F or N x T x F x P
-        x_enh = x_enh.transpose(1, -1)
-        x_enh = x_enh.contiguous()
-        # N x T x F x P => N x T x FP
-        if x_enh.dim() == 4:
-            N, T, _, _ = x_enh.shape
-            x_enh = x_enh.view(N, T, -1)
-        return x_enh, x_len
-
-
-class ConvFeLasASR(EnhLasASR):
-    """
-    Convolution-based front-end + LAS ASR
+    Beamformer-based front-end + LAS ASR
     """
     def __init__(self, mode="tv", enh_transform=None, enh_conf=None, **kwargs):
-        super(ConvFeLasASR, self).__init__(**kwargs)
-        conv_enh = {"ti": TimeInvariantFE, "tv": TimeVariantFE}
+        super(BeamLasASR, self).__init__(**kwargs)
+        conv_enh = {
+            "ti": TimeInvariantFE,
+            "tv": TimeVariantFE,
+            "clp": CLPFsBeamformer
+        }
         if mode not in conv_enh:
             raise RuntimeError(f"Unknown fs mode: {mode}")
         if enh_transform is None:
@@ -237,6 +196,6 @@ class ConvFeLasASR(EnhLasASR):
         FE processing
         """
         _, x_pad, x_len = self.enh_transform(x_pad, x_len)
-        # N x T x ...
+        # N x B x T x ...
         x_enh = self.enh(x_pad)
         return x_enh, x_len

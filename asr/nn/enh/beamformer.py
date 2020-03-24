@@ -297,6 +297,7 @@ class CLPFsBeamformer(nn.Module):
     def __init__(self,
                  num_bins=257,
                  weight=None,
+                 batchnorm=True,
                  num_channels=4,
                  spatial_filters=5,
                  spectra_filters=128,
@@ -312,8 +313,9 @@ class CLPFsBeamformer(nn.Module):
             self.proj = ComplexLinear(num_bins, spectra_filters, bias=False)
         else:
             self.proj = nn.Linear(num_bins, spectra_filters, bias=False)
+        self.norm = nn.BatchNorm2d(spatial_filters) if batchnorm else None
         self.spectra_complex = spectra_complex
-        self.spatial_maxpool = spatial_maxpool
+        # self.spatial_maxpool = spatial_maxpool
 
     def forward(self, x, eps=1e-5):
         """
@@ -337,16 +339,16 @@ class CLPFsBeamformer(nn.Module):
             # log + abs: N x P x T x G
             w = (w + eps).abs()
         else:
-            # N x P x T x G
+            # N x P x T x F
             p = (b + eps).abs()
-            # N x T x F
-            if self.spatial_maxpool:
-                p, _ = th.max(p, 1)
-            # N x T x G
+            # N x P x T x G
             w = th.relu(self.proj(p)) + eps
         z = th.log(w)
-        # N x P x G x T or N x G x T
-        return z.transpose(-1, -2)
+        # N x P x T x G
+        if self.norm:
+            z = self.norm(z)
+        # N x P x T x G
+        return z
 
 
 class MvdrBeamformer(nn.Module):

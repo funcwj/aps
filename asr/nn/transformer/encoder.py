@@ -21,6 +21,7 @@ class TorchTransformerEncoder(nn.Module):
     def __init__(self,
                  input_size,
                  input_embed="conv2d",
+                 embed_other_opts=-1,
                  att_dim=512,
                  nhead=8,
                  feedforward_dim=2048,
@@ -31,7 +32,8 @@ class TorchTransformerEncoder(nn.Module):
         self.src_embed = IOEmbedding(input_embed,
                                      input_size,
                                      embed_dim=att_dim,
-                                     dropout=pos_dropout)
+                                     dropout=pos_dropout,
+                                     other_opts=embed_other_opts)
         encoder_layer = TransformerEncoderLayer(
             att_dim,
             nhead,

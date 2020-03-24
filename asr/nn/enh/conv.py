@@ -95,14 +95,12 @@ class TimeInvariantFE(nn.Module):
         f = th.log(tf.relu(f) + eps)
         # N x T x B x D
         f = f.view(N, T, self.B, -1)
+        # N x B x T x D
+        f = f.transpose(1, 2)
         if self.norm:
-            # N x B x T x D
-            f = f.transpose(1, 2)
             f = self.norm(f)
-            f = f.transpose(1, 2)
-        # N x T x BD
+        # N x B x T x D
         f = f.contiguous()
-        f = f.view(N, T, -1)
         return f
 
 
@@ -151,14 +149,12 @@ class TimeVariantFE(nn.Module):
         f = self.proj(b)
         # N x T x B x D
         f = th.log(tf.relu(f) + eps)
+        # N x B x T x D
+        f = f.transpose(1, 2)
         if self.norm:
-            # N x B x T x D
-            f = f.transpose(1, 2)
             f = self.norm(f)
-            f = f.transpose(1, 2)
-        # N x T x BD
+        # N x B x T x D
         f = f.contiguous()
-        f = f.view(N, T, -1)
         return f
 
 
