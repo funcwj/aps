@@ -25,14 +25,11 @@ class EnhTransformerASR(nn.Module):
             asr_transform=None,
             asr_cpt="",
             ctc=False,
-            input_embed="conv2d",
-            att_dim=512,
-            nhead=8,
-            feedforward_dim=1024,
-            pos_dropout=0.1,
-            att_dropout=0.1,
-            encoder_layers=6,
-            decoder_layers=6):
+            encoder_type="transformer",
+            encoder_proj=None,
+            encoder_kwargs=None,
+            decoder_type="transformer",
+            decoder_kwargs=None):
         super(EnhTransformerASR, self).__init__()
         # Back-end feature transform
         self.asr_transform = asr_transform
@@ -43,14 +40,11 @@ class EnhTransformerASR(nn.Module):
                                               eos=eos,
                                               ctc=ctc,
                                               asr_transform=None,
-                                              input_embed=input_embed,
-                                              att_dim=att_dim,
-                                              nhead=nhead,
-                                              feedforward_dim=feedforward_dim,
-                                              pos_dropout=pos_dropout,
-                                              att_dropout=att_dropout,
-                                              encoder_layers=encoder_layers,
-                                              decoder_layers=decoder_layers)
+                                              encoder_type=encoder_type,
+                                              encoder_proj=encoder_proj,
+                                              encoder_kwargs=encoder_kwargs,
+                                              decoder_type=decoder_type,
+                                              decoder_kwargs=decoder_kwargs)
         if asr_cpt:
             transformer_cpt = th.load(asr_cpt, map_location="cpu")
             self.transformer_asr.load_state_dict(transformer_cpt, strict=False)
@@ -106,14 +100,14 @@ class ConvFeTransformerASR(EnhTransformerASR):
     """
     Convolution-based front-end + Transformer ASR
     """
-    def __init__(self, mode="tv", enh_transform=None, fe_conf=None, **kwargs):
+    def __init__(self, mode="tv", enh_transform=None, enh_conf=None, **kwargs):
         super(ConvFeTransformerASR, self).__init__(**kwargs)
-        conv_fe = {"ti": TimeInvariantFE, "tv": TimeVariantFE}
-        if mode not in conv_fe:
+        conv_enh = {"ti": TimeInvariantFE, "tv": TimeVariantFE}
+        if mode not in conv_enh:
             raise RuntimeError(f"Unknown fs mode: {mode}")
         if enh_transform is None:
             raise RuntimeError("enh_transform can not be None")
-        self.fe = conv_fe[mode](**fe_conf)
+        self.enh = conv_enh[mode](**enh_conf)
         self.enh_transform = enh_transform
 
     def _enhance(self, x_pad, x_len):
@@ -122,5 +116,5 @@ class ConvFeTransformerASR(EnhTransformerASR):
         """
         _, x_pad, x_len = self.enh_transform(x_pad, x_len)
         # N x T x ...
-        x_enh = self.fe(x_pad)
+        x_enh = self.enh(x_pad)
         return x_enh, x_len

@@ -1,25 +1,26 @@
 # default conf
 
-nnet_type: "transformer"
+nnet_type: "transformer_transducer"
 
 nnet_conf:
-  input_dim: 80
+  input_size: 80
   encoder_type: "transformer"
   encoder_kwargs:
+    input_embed: "conv2d"
     att_dim: 256
-    att_dropout: 0.2
     nhead: 4
-    input_embed: conv1d
-    pos_dropout: 0.2
-    num_layers: 6
     feedforward_dim: 512
+    pos_dropout: 0.1
+    att_dropout: 0.2
+    num_layers: 6
+  decoder_type: "transformer"
   decoder_kwargs:
     att_dim: 256
-    att_dropout: 0.2
     nhead: 4
-    pos_dropout: 0.2
-    num_layers: 6
     feedforward_dim: 512
+    pos_dropout: 0.1
+    att_dropout: 0.2
+    num_layers: 6
 
 asr_transform:
   feats: "fbank-log-cmvn-aug"
@@ -44,10 +45,8 @@ trainer_conf:
     factor: 0.5
   no_impr: 6
   no_impr_thres: 0.002
-  lsm_factor: 0.1
-  clip_gradient: 5
-  ctc_regularization: 0.2
-  stop_criterion: "accu"
+  clip_gradient: 10
+  stop_criterion: "loss"
 
 data_conf:
   fmt: "wav"  # or "kaldi"
@@ -57,7 +56,6 @@ data_conf:
     max_dur: 30 # (s)
     min_dur: 0.4 # (s)
     adapt_dur: 10 # (s)
-    channel: 0
   train:
     wav_scp: "data/aishell_v2/train/wav.scp"
     utt2dur: "data/aishell_v2/train/utt2dur"

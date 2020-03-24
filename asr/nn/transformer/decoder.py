@@ -161,7 +161,7 @@ class TorchTransformerDecoder(nn.Module):
             # step by step
             for t in range(max_len):
                 # target mask
-                tgt_mask = self._prep_sub_mask(t + 1, device=dev)
+                tgt_mask = prep_sub_mask(t + 1, device=dev)
                 # beam
                 if t:
                     point = back_point[-1]

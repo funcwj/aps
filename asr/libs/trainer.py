@@ -625,6 +625,7 @@ class CtcXentHybridTrainer(Trainer):
         return loss, accu
 
 
+# from https://github.com/HawkAaron/warp-transducer
 from warprnnt_pytorch import rnnt_loss
 
 
@@ -649,20 +650,16 @@ class TransducerTrainer(Trainer):
         tgt_pad, tgts = process_tgts(egs["tgt_pad"],
                                      egs["tgt_len"],
                                      eos=self.nnet.eos)
-        pack = (egs["src_pad"], egs["src_len"], tgt_pad)
+        pack = (egs["src_pad"], egs["src_len"], tgt_pad, egs["tgt_len"] + 1)
         # N x Ti x To+1 x V
         outs, enc_len = data_parallel(self.nnet,
                                       pack,
                                       device_ids=self.device_ids)
-        # to int32
-        tgts = tgts.to(th.int32)
-        enc_len = enc_len.to(th.int32)
-        tgt_len = egs["tgt_len"].to(th.int32)
         # compute loss
         loss = rnnt_loss(outs,
-                         tgts,
-                         enc_len,
-                         tgt_len,
+                         tgts.to(th.int32),
+                         enc_len.to(th.int32),
+                         egs["tgt_len"].to(th.int32),
                          blank=self.blank,
                          reduction="mean")
         return loss, None

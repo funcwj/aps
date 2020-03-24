@@ -50,12 +50,13 @@ class TransformerTransducerASR(nn.Module):
         self.asr_transform = asr_transform
         self.encoder_type = encoder_type
 
-    def forward(self, x_pad, x_len, y_pad):
+    def forward(self, x_pad, x_len, y_pad, y_len):
         """
         args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
             y_pad: N x To
+            y_len: N or None
         return:
             outs: N x (To+1) x V
         """
@@ -68,5 +69,5 @@ class TransformerTransducerASR(nn.Module):
             # N x Ti x D => Ti x N x D
             enc_out = enc_out.transpose(0, 1)
         # N x Ti x To+1 x V
-        dec_out = self.decoder(enc_out, enc_len, y_pad, sos=self.sos)
+        dec_out = self.decoder(enc_out, y_pad, y_len, sos=self.sos)
         return dec_out, enc_len
