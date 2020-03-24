@@ -13,13 +13,13 @@ import torch as th
 import numpy as np
 
 from libs.utils import StrToBoolAction
-from libs.trainer import S2STrainer
+from libs.trainer import CtcXentHybridTrainer, TransducerTrainer
 
 from loader import support_loader
 from feats import support_transform
 from nn import support_nnet
 
-ctc_blank_sym = "<blank>"
+blank_sym = "<blank>"
 constrained_conf_keys = [
     "nnet_type", "nnet_conf", "data_conf", "trainer_conf", "asr_transform",
     "enh_transform"
@@ -46,22 +46,25 @@ def load_conf(yaml_conf, dict_path):
     nnet_conf["eos"] = vocab["<eos>"]
     nnet_conf["vocab_size"] = len(vocab)
 
-    if "nnet_type" not in conf:
-        conf["nnet_type"] = "las"
     for key in conf.keys():
         if key not in constrained_conf_keys:
             raise ValueError(f"Invalid configuration item: {key}")
     print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
     trainer_conf = conf["trainer_conf"]
-    nnet_conf["ctc"] = "ctc_regularization" in trainer_conf and trainer_conf[
+    use_ctc = "ctc_regularization" in trainer_conf and trainer_conf[
         "ctc_regularization"] > 0
-    # for CTC
-    if conf["nnet_conf"]["ctc"]:
-        if ctc_blank_sym not in vocab:
+    is_transducer = conf["nnet_type"][-10:] == "transducer"
+    # for CTC/RNNT
+    if use_ctc or is_transducer:
+        if blank_sym not in vocab:
             raise RuntimeError(
-                f"Missing {ctc_blank_sym} in dictionary for CTC training")
-        trainer_conf["ctc_blank"] = vocab[ctc_blank_sym]
-    return conf
+                f"Missing {blank_sym} in dictionary for CTC/RNNT training")
+        if is_transducer:
+            trainer_conf["transducer_blank"] = vocab[blank_sym]
+        else:
+            trainer_conf["ctc_blank"] = vocab[blank_sym]
+            nnet_conf["ctc"] = use_ctc
+    return conf, is_transducer
 
 
 def run(args):
@@ -86,7 +89,7 @@ def run(args):
     if last_checkpoint.exists():
         resume = last_checkpoint.as_posix()
 
-    conf = load_conf(args.conf, args.dict)
+    conf, is_transducer = load_conf(args.conf, args.dict)
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
                                 train=True,
@@ -122,15 +125,19 @@ def run(args):
     else:
         nnet = asr_cls(**conf["nnet_conf"])
 
-    trainer = S2STrainer(nnet,
-                         device_ids=device_ids,
-                         checkpoint=args.checkpoint,
-                         resume=resume,
-                         init=args.init,
-                         save_interval=args.save_interval,
-                         prog_interval=args.prog_interval,
-                         tensorboard=args.tensorboard,
-                         **conf["trainer_conf"])
+    if is_transducer:
+        TrainerC = TransducerTrainer
+    else:
+        TrainerC = CtcXentHybridTrainer
+    trainer = TrainerC(nnet,
+                       device_ids=device_ids,
+                       checkpoint=args.checkpoint,
+                       resume=resume,
+                       init=args.init,
+                       save_interval=args.save_interval,
+                       prog_interval=args.prog_interval,
+                       tensorboard=args.tensorboard,
+                       **conf["trainer_conf"])
 
     if args.eval_interval > 0:
         trainer.run_batch_per_epoch(trn_loader,

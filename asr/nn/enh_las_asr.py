@@ -181,7 +181,7 @@ class FsLasASR(EnhLasASR):
     def __init__(self,
                  mode="unfacted",
                  enh_transform=None,
-                 fs_conf=None,
+                 enh_conf=None,
                  **kwargs):
         super(FsLasASR, self).__init__(**kwargs)
         fs_beamformer = {
@@ -191,7 +191,7 @@ class FsLasASR(EnhLasASR):
         }
         if mode not in fs_beamformer:
             raise RuntimeError(f"Unknown fs mode: {mode}")
-        self.fs = fs_beamformer[mode](**fs_conf)
+        self.fs = fs_beamformer[mode](**enh_conf)
         self.enh_transform = enh_transform
         if mode == "clp" and enh_transform is None:
             raise RuntimeError("enh_transform can not be None if mode == clp")
@@ -222,14 +222,14 @@ class ConvFeLasASR(EnhLasASR):
     """
     Convolution-based front-end + LAS ASR
     """
-    def __init__(self, mode="tv", enh_transform=None, fe_conf=None, **kwargs):
+    def __init__(self, mode="tv", enh_transform=None, enh_conf=None, **kwargs):
         super(ConvFeLasASR, self).__init__(**kwargs)
-        conv_fe = {"ti": TimeInvariantFE, "tv": TimeVariantFE}
-        if mode not in conv_fe:
+        conv_enh = {"ti": TimeInvariantFE, "tv": TimeVariantFE}
+        if mode not in conv_enh:
             raise RuntimeError(f"Unknown fs mode: {mode}")
         if enh_transform is None:
             raise RuntimeError("enh_transform can not be None")
-        self.fe = conv_fe[mode](**fe_conf)
+        self.enh = conv_enh[mode](**enh_conf)
         self.enh_transform = enh_transform
 
     def _enhance(self, x_pad, x_len):
@@ -238,5 +238,5 @@ class ConvFeLasASR(EnhLasASR):
         """
         _, x_pad, x_len = self.enh_transform(x_pad, x_len)
         # N x T x ...
-        x_enh = self.fe(x_pad)
+        x_enh = self.enh(x_pad)
         return x_enh, x_len

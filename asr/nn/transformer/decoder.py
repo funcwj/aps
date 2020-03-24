@@ -19,6 +19,24 @@ from ..las.decoder import NEG_INF
 IGNORE_ID = -1
 
 
+def prep_sub_mask(T, device="cpu"):
+    """
+    Prepare a square sub-sequence masks (-inf/0)
+    egs: for N = 8, output
+    tensor([[0., -inf, -inf, -inf, -inf, -inf, -inf, -inf],
+        [0., 0., -inf, -inf, -inf, -inf, -inf, -inf],
+        [0., 0., 0., -inf, -inf, -inf, -inf, -inf],
+        [0., 0., 0., 0., -inf, -inf, -inf, -inf],
+        [0., 0., 0., 0., 0., -inf, -inf, -inf],
+        [0., 0., 0., 0., 0., 0., -inf, -inf],
+        [0., 0., 0., 0., 0., 0., 0., -inf],
+        [0., 0., 0., 0., 0., 0., 0., 0.]])
+    """
+    mask = (th.triu(th.ones(T, T, device=device), diagonal=1) == 1).float()
+    mask = mask.masked_fill(mask == 1, float("-inf"))
+    return mask
+
+
 class TorchTransformerDecoder(nn.Module):
     """
     Wrapper for pytorch's Transformer Decoder
@@ -26,6 +44,7 @@ class TorchTransformerDecoder(nn.Module):
     def __init__(self,
                  vocab_size,
                  att_dim=512,
+                 enc_dim=None,
                  nhead=8,
                  feedforward_dim=2048,
                  pos_dropout=0.1,
@@ -42,25 +61,12 @@ class TorchTransformerDecoder(nn.Module):
             dim_feedforward=feedforward_dim,
             dropout=att_dropout)
         self.decoder = TransformerDecoder(decoder_layer, num_layers)
+        if enc_dim and enc_dim != att_dim:
+            self.enc_proj = nn.Linear(enc_dim, att_dim)
+        else:
+            self.enc_proj = None
         self.output = nn.Linear(att_dim, vocab_size, bias=False)
         self.vocab_size = vocab_size
-
-    def _prep_sub_mask(self, T, device="cpu"):
-        """
-        Prepare a square sub-sequence masks (-inf/0)
-        egs: for N = 8, output
-        tensor([[0., -inf, -inf, -inf, -inf, -inf, -inf, -inf],
-            [0., 0., -inf, -inf, -inf, -inf, -inf, -inf],
-            [0., 0., 0., -inf, -inf, -inf, -inf, -inf],
-            [0., 0., 0., 0., -inf, -inf, -inf, -inf],
-            [0., 0., 0., 0., 0., -inf, -inf, -inf],
-            [0., 0., 0., 0., 0., 0., -inf, -inf],
-            [0., 0., 0., 0., 0., 0., 0., -inf],
-            [0., 0., 0., 0., 0., 0., 0., 0.]])
-        """
-        mask = (th.triu(th.ones(T, T, device=device), diagonal=1) == 1).float()
-        mask = mask.masked_fill(mask == 1, float("-inf"))
-        return mask
 
     def forward(self, enc_out, enc_len, tgt_pad, sos=-1):
         """
@@ -78,10 +84,12 @@ class TorchTransformerDecoder(nn.Module):
         # N x To+1
         tgt_pad = F.pad(tgt_pad, (1, 0), value=sos)
         # genrarte target masks (-inf/0)
-        tgt_mask = self._prep_sub_mask(tgt_pad.shape[-1],
-                                       device=tgt_pad.device)
+        tgt_mask = prep_sub_mask(tgt_pad.shape[-1], device=tgt_pad.device)
         # To+1 x N x E
         tgt_pad = self.tgt_embed(tgt_pad)
+        # Ti x N x D
+        if self.enc_proj:
+            enc_out = self.enc_proj(enc_out)
         # To+1 x N x D
         dec_out = self.decoder(tgt_pad,
                                enc_out,
@@ -137,6 +145,9 @@ class TorchTransformerDecoder(nn.Module):
             raise RuntimeError(f"Beam size({beam}) > vocabulary size")
 
         with th.no_grad():
+            # Ti x N x D
+            if self.enc_proj:
+                enc_out = self.enc_proj(enc_out)
             # Ti x beam x D
             enc_out = th.repeat_interleave(enc_out, beam, 1)
 
@@ -150,7 +161,7 @@ class TorchTransformerDecoder(nn.Module):
             # step by step
             for t in range(max_len):
                 # target mask
-                tgt_mask = self._prep_sub_mask(t + 1, device=dev)
+                tgt_mask = prep_sub_mask(t + 1, device=dev)
                 # beam
                 if t:
                     point = back_point[-1]
