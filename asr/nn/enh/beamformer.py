@@ -6,6 +6,8 @@ import math
 import torch as th
 import torch.nn as nn
 
+import librosa.filters as filters
+
 import torch.nn.functional as F
 import torch_complex.functional as cF
 
@@ -56,6 +58,22 @@ def estimate_covar(mask, spectrogram):
     denominator = th.clamp(mask.sum(-1, keepdims=True), min=EPSILON)
     # N x F x C x C
     return nominator / denominator
+
+
+def init_melfilter(num_bins, sr=16000, num_mels=80, fmin=0.0, fmax=None):
+    """
+    Return mel-filters
+    """
+    # fmin & fmax
+    fmax = sr // 2 if fmax is None else min(fmax, sr // 2)
+    # mel-matrix
+    mel = filters.mel(sr, (num_bins - 1) * 2,
+                      n_mels=num_mels,
+                      fmax=fmax,
+                      fmin=fmin,
+                      htk=True)
+    # num_mels x (N // 2 + 1)
+    return th.tensor(mel, dtype=th.float32)
 
 
 class FixedBeamformer(nn.Module):
@@ -301,9 +319,12 @@ class CLPFsBeamformer(nn.Module):
                  num_channels=4,
                  spatial_filters=5,
                  spectra_filters=128,
+                 spectra_init="random",
                  spectra_complex=True,
                  spatial_maxpool=False):
         super(CLPFsBeamformer, self).__init__()
+        if spectra_init not in ["mel", "random"]:
+            raise ValueError(f"Unsupported init method: {spectra_init}")
         self.beam = FixedBeamformer(spatial_filters,
                                     num_channels,
                                     num_bins,
@@ -313,6 +334,9 @@ class CLPFsBeamformer(nn.Module):
             self.proj = ComplexLinear(num_bins, spectra_filters, bias=False)
         else:
             self.proj = nn.Linear(num_bins, spectra_filters, bias=False)
+            if spectra_init == "mel":
+                mel_filter = init_melfilter(num_bins)
+                self.proj.weight.data = mel_filter
         self.norm = nn.BatchNorm2d(spatial_filters) if batchnorm else None
         self.spectra_complex = spectra_complex
         # self.spatial_maxpool = spatial_maxpool

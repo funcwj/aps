@@ -39,6 +39,8 @@ class TransformerASR(nn.Module):
                                  "encoder_proj can not be None")
             self.encoder = encoder_instance(encoder_type, input_size,
                                             encoder_proj, **encoder_proj)
+        if decoder_type != "transformer":
+            raise ValueError("TransformerASR: decoder must be transformer")
         self.decoder = TorchTransformerDecoder(vocab_size,
                                                enc_dim=encoder_proj,
                                                **decoder_kwargs)

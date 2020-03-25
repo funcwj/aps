@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from torch_complex.tensor import ComplexTensor
+from .beamformer import init_melfilter
 
 
 class ComplexConv(nn.Module):
@@ -21,6 +22,9 @@ class ComplexConv(nn.Module):
 
     def forward(self, x, add_abs=False, eps=1e-5):
         # x: complex tensor
+        if not isinstance(x, ComplexTensor):
+            raise RuntimeError(
+                f"Expect ComplexTensor object, got {type(x)} instead")
         xr, xi = x.real, x.imag
         br = self.real(xr) - self.imag(xi)
         bi = self.real(xi) + self.imag(xr)
@@ -52,18 +56,43 @@ class TimeInvariantFE(nn.Module):
     """
     def __init__(self,
                  num_bins=257,
+                 weight=None,
                  num_channels=4,
                  spatial_filters=8,
                  spectra_filters=80,
+                 spectra_init="random",
                  batchnorm=True):
         super(TimeInvariantFE, self).__init__()
+        if spectra_init not in ["mel", "random"]:
+            raise ValueError(f"Unsupported init method: {spectra_init}")
+        # conv.weight: spatial_filters*num_bins x num_channels
         self.conv = ComplexConv1d(num_bins,
-                                  num_bins * spatial_filters,
+                                  spatial_filters * num_bins,
                                   num_channels,
                                   groups=num_bins,
                                   padding=0,
                                   bias=False)
+        if weight:
+            # weight: 2 x spatial_filters x num_channels x num_bins
+            w = th.load(weight)
+            if w.shape[1] != spatial_filters:
+                raise RuntimeError(f"Number of beam got from {w.shape[1]} " +
+                                   f"don't match parameter {spatial_filters}")
+            if w.shape[2] != num_channels:
+                raise RuntimeError(
+                    f"Number of channels got from {w.shape[2]} " +
+                    f"don't match parameter {num_channels}")
+            # weight: 2 x spatial_filters x num_bins x num_channels
+            w = w.transpose(-1, -2)
+            # 2 x spatial_filters*num_bins x 1 x num_channels
+            w = w.view(2, -1, 1, num_channels)
+            # init
+            self.conv.real.data = w[0]
+            self.conv.imag.data = w[1]
         self.proj = nn.Linear(num_bins, spectra_filters, bias=False)
+        if spectra_init == "mel":
+            mel_filter = init_melfilter(num_bins)
+            self.proj.weight.data = mel_filter
         self.norm = nn.BatchNorm2d(spatial_filters) if batchnorm else None
         self.B = spatial_filters
         self.C = num_channels

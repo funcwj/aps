@@ -108,7 +108,7 @@ class STFTBase(nn.Module):
     def __init__(self,
                  frame_len,
                  frame_hop,
-                 window="sqrt_hann",
+                 window="sqrthann",
                  round_pow_of_two=True):
         super(STFTBase, self).__init__()
         K = init_kernel(frame_len,

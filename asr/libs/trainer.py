@@ -580,8 +580,8 @@ class CtcXentHybridTrainer(Trainer):
         super(CtcXentHybridTrainer, self).__init__(nnet, **kwargs)
         if ctc_regularization:
             self.reporter.log(
-                f"Using CTC regularization (factor = {ctc_regularization:.2f}"
-                + f", blank = {ctc_blank})")
+                f"Use CTC regularization (factor = {ctc_regularization:.2f}" +
+                f", blank = {ctc_blank})")
         self.ctc_blank = ctc_blank
         self.ctc_factor = ctc_regularization
         self.lsm_factor = lsm_factor
