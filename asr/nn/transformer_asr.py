@@ -95,8 +95,8 @@ class TransformerASR(nn.Module):
                     raise RuntimeError("Now only support for one utterance")
                 x, _ = self.asr_transform(x[None, ...], None)
             else:
-                if x.dim() != 2:
-                    raise RuntimeError("Now only support for one utterance")
+                if x.dim() not in [2, 3]:
+                    raise RuntimeError(f"Expect 2/3D tensor, but got {x.dim()}")
                 x = x[None, ...]
             # Ti x N x D
             enc_out, _ = self.encoder(x, None)

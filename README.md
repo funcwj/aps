@@ -1,3 +1,3 @@
-## End2End ASR
+# End2End ASR
 
-work in progress...
+My repository to train the E2E acoustic models.

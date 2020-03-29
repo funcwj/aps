@@ -93,10 +93,11 @@ class Conv1dEmbedding(nn.Module):
             x = x.transpose(1, 2)
         else:
             N, _, T, _ = x.shape
-            # N x T x B x D
-            x = x.transpose(1, 2)
-            # N x T x BD
-            x = x.view(N, T, -1)
+            # N x B x D x T
+            x = x.transpose(-1, -2)
+            x = x.contiguous()
+            # N x BD x T
+            x = x.view(N, -1, T)
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         # N x F x T/4 => N x T/4 x F

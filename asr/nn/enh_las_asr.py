@@ -12,7 +12,7 @@ from torch.nn.utils.rnn import pack_padded_sequence
 from .las_asr import LasASR
 from .las.encoder import TorchEncoder
 from .enh.beamformer import MvdrBeamformer, CLPFsBeamformer
-from .enh.conv import TimeInvariantFE, TimeVariantFE
+from .enh.conv import TimeInvariantEnh, TimeVariantEnh, TimeInvariantAttEnh
 
 
 class EnhLasASR(nn.Module):
@@ -180,8 +180,9 @@ class BeamLasASR(EnhLasASR):
     def __init__(self, mode="tv", enh_transform=None, enh_conf=None, **kwargs):
         super(BeamLasASR, self).__init__(**kwargs)
         conv_enh = {
-            "ti": TimeInvariantFE,
-            "tv": TimeVariantFE,
+            "ti": TimeInvariantEnh,
+            "tv": TimeVariantEnh,
+            "ti_att": TimeInvariantAttEnh,
             "clp": CLPFsBeamformer
         }
         if mode not in conv_enh:

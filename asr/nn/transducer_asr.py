@@ -33,6 +33,9 @@ class TransformerTransducerASR(nn.Module):
         super(TransformerTransducerASR, self).__init__()
         if eos < 0 or sos < 0:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
+        if decoder_type != "transformer":
+            raise ValueError(
+                "TransformerTransducerASR: decoder must be transformer")
         if encoder_type == "transformer":
             self.encoder = TorchTransformerEncoder(input_size,
                                                    **encoder_kwargs)
@@ -42,9 +45,6 @@ class TransformerTransducerASR(nn.Module):
                                  "encoder_proj can not be None")
             self.encoder = encoder_instance(encoder_type, input_size,
                                             encoder_proj, **encoder_proj)
-        if decoder_type != "transformer":
-            raise ValueError(
-                "TransformerTransducerASR: decoder must be transformer")
         self.decoder = TorchTransformerDecoder(vocab_size,
                                                enc_dim=encoder_proj,
                                                **decoder_kwargs)

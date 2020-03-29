@@ -35,7 +35,7 @@ class TorchEncoder(nn.Module):
                  rnn="lstm",
                  rnn_layers=3,
                  rnn_hidden=512,
-                 rnn_dropout=0.0,
+                 rnn_dropout=0.2,
                  rnn_bidir=False):
         super(TorchEncoder, self).__init__()
         RNN = rnn.upper()

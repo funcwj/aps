@@ -11,12 +11,12 @@ from torch_complex.tensor import ComplexTensor
 from .beamformer import init_melfilter
 
 
-class ComplexConv(nn.Module):
+class ComplexConvXd(nn.Module):
     """
     Complex convolution layer
     """
     def __init__(self, conv_ins, *args, **kwargs):
-        super(ComplexConv, self).__init__()
+        super(ComplexConvXd, self).__init__()
         self.real = conv_ins(*args, **kwargs)
         self.imag = conv_ins(*args, **kwargs)
 
@@ -34,7 +34,7 @@ class ComplexConv(nn.Module):
             return (br**2 + bi**2 + eps)**0.5
 
 
-class ComplexConv1d(ComplexConv):
+class ComplexConv1d(ComplexConvXd):
     """
     Complex 1D convolution layer
     """
@@ -42,7 +42,7 @@ class ComplexConv1d(ComplexConv):
         super(ComplexConv1d, self).__init__(nn.Conv1d, *args, **kwargs)
 
 
-class ComplexConv2d(ComplexConv):
+class ComplexConv2d(ComplexConvXd):
     """
     Complex 2D convolution layer
     """
@@ -50,7 +50,7 @@ class ComplexConv2d(ComplexConv):
         super(ComplexConv2d, self).__init__(nn.Conv2d, *args, **kwargs)
 
 
-class TimeInvariantFE(nn.Module):
+class TimeInvariantEnh(nn.Module):
     """
     Time invariant convolutional front-end (eq beamformer)
     """
@@ -62,7 +62,7 @@ class TimeInvariantFE(nn.Module):
                  spectra_filters=80,
                  spectra_init="random",
                  batchnorm=True):
-        super(TimeInvariantFE, self).__init__()
+        super(TimeInvariantEnh, self).__init__()
         if spectra_init not in ["mel", "random"]:
             raise ValueError(f"Unsupported init method: {spectra_init}")
         # conv.weight: spatial_filters*num_bins x num_channels
@@ -102,7 +102,7 @@ class TimeInvariantFE(nn.Module):
         args:
             x: N x C x F x T, complex tensor
         return:
-            y: N x T x ..., enhanced features
+            y: N x B x T x ..., enhanced features
         """
         N, C, F, T = x.shape
         if C != self.C:
@@ -133,7 +133,127 @@ class TimeInvariantFE(nn.Module):
         return f
 
 
-class TimeVariantFE(nn.Module):
+from ..las.encoder import TorchEncoder
+
+
+class TimeInvariantAttEnh(nn.Module):
+    """
+    Time invariant convolutional front-end with attention
+    """
+    def __init__(self,
+                 num_bins=257,
+                 weight=None,
+                 num_channels=4,
+                 spatial_filters=8,
+                 spectra_filters=80,
+                 spectra_init="random",
+                 query_type="rnn",
+                 batchnorm=True):
+        super(TimeInvariantAttEnh, self).__init__()
+        if spectra_init not in ["mel", "random"]:
+            raise ValueError(f"Unsupported init method: {spectra_init}")
+        if query_type not in ["rnn", "conv"]:
+            raise ValueError(f"Unsupported query type: {query_type}")
+
+        def beamformer(beam):
+            return ComplexConv1d(num_bins,
+                                 beam * num_bins,
+                                 num_channels,
+                                 groups=num_bins,
+                                 padding=0,
+                                 bias=False)
+
+        if query_type == "rnn":
+            self.pred_q = TorchEncoder(num_bins,
+                                       num_bins,
+                                       rnn_dropout=0.2,
+                                       rnn_hidden=512)
+        else:
+            self.pred_q = beamformer(1)
+        self.conv_k = beamformer(spatial_filters)
+        self.conv_v = beamformer(spatial_filters)
+
+        if weight:
+            # weight: 2 x spatial_filters x num_channels x num_bins
+            w = th.load(weight)
+            if w.shape[1] != spatial_filters:
+                raise RuntimeError(f"Number of beam got from {w.shape[1]} " +
+                                   f"don't match parameter {spatial_filters}")
+            if w.shape[2] != num_channels:
+                raise RuntimeError(
+                    f"Number of channels got from {w.shape[2]} " +
+                    f"don't match parameter {num_channels}")
+            # weight: 2 x spatial_filters x num_bins x num_channels
+            w = w.transpose(-1, -2)
+            # 2 x spatial_filters*num_bins x 1 x num_channels
+            w = w.view(2, -1, 1, num_channels)
+            # init
+            self.conv_v.real.data = w[0]
+            self.conv_v.imag.data = w[1]
+
+        self.proj = nn.Linear(num_bins, spectra_filters, bias=False)
+        if spectra_init == "mel":
+            mel_filter = init_melfilter(num_bins)
+            self.proj.weight.data = mel_filter
+        self.norm = nn.BatchNorm1d(spectra_filters) if batchnorm else None
+        self.B = spatial_filters
+        self.C = num_channels
+
+    def forward(self, x, eps=1e-5):
+        """
+        args:
+            x: N x C x F x T, complex tensor
+        return:
+            y: N x T x ..., enhanced features
+        """
+        N, C, F, T = x.shape
+        if C != self.C:
+            raise RuntimeError(f"Expect input channel {self.C}, but {C}")
+        # N x C x F x T => N x T x F x C
+        x = x.transpose(1, 3)
+        x = x.contiguous()
+        # NT x F x C
+        x_for_conv = x.view(-1, F, C)
+        if isinstance(self.pred_q, ComplexConv1d):
+            # NT x F x 1
+            bq = self.pred_q(x_for_conv, add_abs=True, eps=eps)
+            # N x T x F
+            bq = bq.view(N, T, F)
+        else:
+            # N x T x F
+            x_ch0 = (x[..., 0] + eps).abs()
+            bq, _ = self.pred_q(x_ch0, None)
+            # abs
+            bq = tf.relu(bq)
+        # NT x FB x 1
+        bv = self.conv_v(x_for_conv, add_abs=True, eps=eps)
+        bk = self.conv_k(x_for_conv, add_abs=True, eps=eps)
+        # N x T x F x B
+        bv = bv.view(N, T, F, self.B)
+        bk = bk.view(N, T, F, self.B)
+        # score: N x T x B
+        s = th.sum(bq[..., None] * bk, -2)
+        # score: N x 1 x B
+        s = th.mean(s, -2, keepdim=True)
+        # softmax: N x 1 x B
+        w = th.softmax(s, -1)
+        # value: N x T x F
+        v = th.sum(w[:, None] * bv, -1)
+        # proj
+        f = self.proj(v)
+        # log
+        f = th.log(tf.relu(f) + eps)
+        # norm
+        if self.norm:
+            f = f.transpose(1, 2)
+            f = self.norm(f)
+            f = f.transpose(1, 2)
+        # N x T x F
+        f = f.contiguous()
+        return f
+
+
+class TimeVariantEnh(nn.Module):
     """
     Time variant convolutional front-end
     """
@@ -144,7 +264,7 @@ class TimeVariantFE(nn.Module):
                  spatial_filters=8,
                  spectra_filters=80,
                  batchnorm=True):
-        super(TimeVariantFE, self).__init__()
+        super(TimeVariantEnh, self).__init__()
         self.conv = ComplexConv2d(num_bins,
                                   num_bins * spatial_filters,
                                   (time_reception, num_channels),
@@ -188,7 +308,7 @@ class TimeVariantFE(nn.Module):
 
 
 def foo():
-    nnet = TimeInvariantFE(num_bins=257)
+    nnet = TimeInvariantEnh(num_bins=257)
     N, C, F, T = 10, 4, 257, 100
     r = th.rand(N, C, F, T)
     i = th.rand(N, C, F, T)

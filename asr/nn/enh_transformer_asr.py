@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .transformer_asr import TransformerASR
-from .enh.conv import TimeInvariantFE, TimeVariantFE
+from .enh.conv import TimeInvariantEnh, TimeVariantEnh, TimeInvariantAttEnh
 from .enh.beamformer import MvdrBeamformer, CLPFsBeamformer
 
 
@@ -104,8 +104,9 @@ class BeamTransformerASR(EnhTransformerASR):
     def __init__(self, mode="tv", enh_transform=None, enh_conf=None, **kwargs):
         super(BeamTransformerASR, self).__init__(**kwargs)
         conv_enh = {
-            "ti": TimeInvariantFE,
-            "tv": TimeVariantFE,
+            "ti": TimeInvariantEnh,
+            "tv": TimeVariantEnh,
+            "ti_att": TimeInvariantAttEnh,
             "clp": CLPFsBeamformer
         }
         if mode not in conv_enh:

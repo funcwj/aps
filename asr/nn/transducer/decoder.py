@@ -26,7 +26,7 @@ class TorchTransformerDecoder(nn.Module):
     def __init__(self,
                  vocab_size,
                  enc_dim=None,
-                 cmb_dim=None,
+                 cmb_dim=512,
                  att_dim=512,
                  nhead=8,
                  feedforward_dim=2048,
@@ -47,7 +47,9 @@ class TorchTransformerDecoder(nn.Module):
         self.enc_proj = None
         self.dec_proj = None
         if enc_dim:
-            self.enc_proj = nn.Linear(enc_dim, cmb_dim if cmb_dim else att_dim)
+            self.enc_proj = nn.Linear(enc_dim,
+                                      cmb_dim if cmb_dim else att_dim,
+                                      bias=False)
         if cmb_dim:
             self.dec_proj = nn.Linear(att_dim, cmb_dim)
             if enc_dim is None:

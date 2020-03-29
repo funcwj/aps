@@ -39,7 +39,7 @@ class UnsupervisedEnh(TorchEncoder):
             s: N x C x S
         return
             cspec: N x C x F x T
-            masks: N x T x F            
+            masks: N x T x F
         """
         if s.dim() not in [2, 3]:
             raise RuntimeError(f"Expect 1/2D tensor, got {s.dim()} instead")
