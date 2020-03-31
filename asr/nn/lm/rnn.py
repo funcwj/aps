@@ -6,18 +6,32 @@ import torch.nn as nn
 from ..las.decoder import OneHotEmbedding
 
 
-class RNNLM(nn.Module):
+def repackage_hidden(h):
     """
-    A simple RNN language model
+    detach variable from graph
+    """
+    if isinstance(h, th.Tensor):
+        return h.detach()
+    elif isinstance(h, tuple):
+        return tuple(repackage_hidden(v) for v in h)
+    elif isinstance(h, list):
+        return list(repackage_hidden(v) for v in h)
+    else:
+        raise TypeError(f"Unsupport type: {type(h)}")
+
+
+class TorchLM(nn.Module):
+    """
+    A simple Torch RNN LM
     """
     def __init__(self,
                  embed_size=256,
                  vocab_size=40,
                  rnn="lstm",
-                 num_layers=3,
-                 hidden_size=512,
-                 dropout=0.0):
-        super(RNNLM, self).__init__()
+                 rnn_layers=3,
+                 rnn_hidden=512,
+                 rnn_dropout=0.2):
+        super(TorchLM, self).__init__()
         RNN = rnn.upper()
         supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
         if RNN not in supported_rnn:
@@ -27,25 +41,16 @@ class RNNLM(nn.Module):
         else:
             self.vocab_embed = OneHotEmbedding(vocab_size)
         # uni-directional RNNs
-        self.rnns = supported_rnn[RNN](embed_size,
-                                       hidden_size,
-                                       num_layers,
+        self.pred = supported_rnn[RNN](embed_size,
+                                       rnn_hidden,
+                                       rnn_layers,
                                        batch_first=True,
-                                       dropout=dropout,
+                                       dropout=rnn_dropout,
                                        bidirectional=False)
         # output distribution
-        self.dist = nn.Linear(hidden_size, vocab_size)
+        self.dist = nn.Linear(rnn_hidden, vocab_size)
 
-    def repackage_hidden(self, h):
-        """
-        detach variable from graph
-        """
-        if isinstance(h, th.Tensor):
-            return h.detach()
-        else:
-            return tuple(self.repackage_hidden(v) for v in h)
-
-    def forward(self, x, h=None):
+    def forward(self, x, h=None, detach_h=True):
         """
         args:
             x: N x T
@@ -53,11 +58,11 @@ class RNNLM(nn.Module):
         return:
             y: N x T x V
         """
-        if h is not None:
-            h = self.repackage_hidden(h)
+        if h is not None and detach_h:
+            h = repackage_hidden(h)
         # N x T => N x T x V
         x = self.vocab_embed(x)
-        y, h = self.rnns(x, h)
+        y, h = self.pred(x, h)
         # N x T x V
         y = self.dist(y)
         return y, h

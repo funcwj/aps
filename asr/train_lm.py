@@ -127,7 +127,7 @@ if __name__ == "__main__":
                         help="Bptt size used during training")
     parser.add_argument("--eval-interval",
                         type=int,
-                        default=3000,
+                        default=-1,
                         help="Number of batches trained per epoch "
                         "(for larger training dataset)")
     parser.add_argument("--save-interval",

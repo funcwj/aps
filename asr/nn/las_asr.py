@@ -41,12 +41,9 @@ class LasASR(nn.Module):
         super(LasASR, self).__init__()
         self.encoder = encoder_instance(encoder_type, input_size, encoder_proj,
                                         **encoder_kwargs)
-        attend = att_instance(att_type, encoder_proj, decoder_dim,
-                              **att_kwargs)
-        self.decoder = TorchDecoder(encoder_proj,
-                                    vocab_size,
-                                    attention=attend,
-                                    **decoder_kwargs)
+        decoder_kwargs["attend"] = att_instance(att_type, encoder_proj,
+                                                decoder_dim, **att_kwargs)
+        self.decoder = TorchDecoder(encoder_proj, vocab_size, **decoder_kwargs)
         if eos < 0 or sos < 0:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         self.sos = sos

@@ -319,8 +319,10 @@ class FsmnLayer(nn.Module):
         self.out_proj = nn.Linear(proj_size, output_size)
         if norm == "BN":
             self.norm = nn.BatchNorm1d(output_size)
-        else:
+        elif norm == "LN":
             self.norm = nn.LayerNorm(output_size)
+        else:
+            self.norm = None
         self.out_drop = nn.Dropout(p=dropout) if dropout > 0 else None
 
     def forward(self, x, m=None):
@@ -345,13 +347,13 @@ class FsmnLayer(nn.Module):
             p = p + m
         # N x T x O
         o = tf.relu(self.out_proj(p))
-
-        if isinstance(self.norm, nn.LayerNorm):
-            o = self.norm(o)
-        else:
-            o = o.transpose(1, 2)
-            o = self.norm(o)
-            o = o.transpose(1, 2)
+        if self.norm:
+            if isinstance(self.norm, nn.LayerNorm):
+                o = self.norm(o)
+            else:
+                o = o.transpose(1, 2)
+                o = self.norm(o)
+                o = o.transpose(1, 2)
         if self.out_drop:
             o = self.out_drop(o)
         # N x T x O
@@ -385,7 +387,7 @@ class FsmnEncoder(nn.Module):
                       proj_size,
                       lctx=lctx,
                       rctx=rctx,
-                      norm=norm,
+                      norm=None if i == num_layers - 1 else norm,
                       dilat=dilats[i],
                       dropout=dropout) for i in range(num_layers)
         ])
