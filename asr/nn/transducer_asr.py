@@ -2,10 +2,6 @@
 
 # wujian@2020
 
-#!/usr/bin/env python
-
-# wujian@2019
-
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
@@ -29,6 +25,7 @@ class TorchTransducerASR(nn.Module):
                  encoder_proj=None,
                  encoder_kwargs=None,
                  decoder_kwargs=None):
+        super(TorchTransducerASR, self).__init__()
         if eos < 0 or sos < 0:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         if encoder_type == "transformer":
@@ -39,7 +36,7 @@ class TorchTransducerASR(nn.Module):
                 raise ValueError("For non-transformer encoder, "
                                  "encoder_proj can not be None")
             self.encoder = encoder_instance(encoder_type, input_size,
-                                            encoder_proj, **encoder_proj)
+                                            encoder_proj, **encoder_kwargs)
         decoder_kwargs["enc_dim"] = encoder_proj
         self.decoder = TorchRNNDecoder(vocab_size, **decoder_kwargs)
         self.sos = sos
@@ -95,7 +92,7 @@ class TransformerTransducerASR(nn.Module):
                 raise ValueError("For non-transformer encoder, "
                                  "encoder_proj can not be None")
             self.encoder = encoder_instance(encoder_type, input_size,
-                                            encoder_proj, **encoder_proj)
+                                            encoder_proj, **encoder_kwargs)
         decoder_kwargs["enc_dim"] = encoder_proj
         self.decoder = TorchTransformerDecoder(vocab_size, **decoder_kwargs)
         self.sos = sos

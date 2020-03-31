@@ -164,8 +164,8 @@ class CustomEncoder(nn.Module):
                  rnn_layers=3,
                  rnn_bidir=True,
                  rnn_dropout=0.0,
-                 hidden_size=512,
-                 proj_size=None,
+                 rnn_hidden=512,
+                 rnn_proj=None,
                  layernorm=False,
                  use_pyramid=False,
                  add_forward_backward=False):
@@ -178,10 +178,10 @@ class CustomEncoder(nn.Module):
             if layer_idx == 0:
                 in_size = input_size
             else:
-                if proj_size:
-                    return proj_size
+                if rnn_proj:
+                    return rnn_proj
                 else:
-                    in_size = hidden_size
+                    in_size = rnn_hidden
                     if rnn_bidir and not add_forward_backward:
                         in_size = in_size * 2
                 if use_pyramid:
@@ -191,15 +191,15 @@ class CustomEncoder(nn.Module):
         rnn_list = []
         for i in range(rnn_layers):
             rnn_list.append(
-                CustomRnnLayer(derive_in_size(i),
-                               hidden_size=hidden_size,
-                               rnn=rnn,
-                               proj_size=proj_size
-                               if i != rnn_layers - 1 else output_size,
-                               layernorm=layernorm,
-                               dropout=rnn_dropout,
-                               bidirectional=rnn_bidir,
-                               add_forward_backward=add_forward_backward))
+                CustomRnnLayer(
+                    derive_in_size(i),
+                    hidden_size=rnn_hidden,
+                    rnn=rnn,
+                    proj_size=rnn_proj if i != rnn_layers - 1 else output_size,
+                    layernorm=layernorm,
+                    dropout=rnn_dropout,
+                    bidirectional=rnn_bidir,
+                    add_forward_backward=add_forward_backward))
         self.rnns = nn.ModuleList(rnn_list)
         self.use_pyramid = use_pyramid
 
@@ -305,8 +305,6 @@ class FsmnLayer(nn.Module):
                  dilat=0,
                  dropout=0):
         super(FsmnLayer, self).__init__()
-        if norm not in ["BN", "LN"]:
-            raise ValueError(f"Unsupported normalization layers: {norm}")
         self.inp_proj = nn.Linear(input_size, proj_size, bias=False)
         self.ctx_size = lctx + rctx + 1
         self.ctx_conv = nn.Conv1d(proj_size,
@@ -387,7 +385,7 @@ class FsmnEncoder(nn.Module):
                       proj_size,
                       lctx=lctx,
                       rctx=rctx,
-                      norm=None if i == num_layers - 1 else norm,
+                      norm="" if i == num_layers - 1 else norm,
                       dilat=dilats[i],
                       dropout=dropout) for i in range(num_layers)
         ])
@@ -455,8 +453,8 @@ class TdnnRnnEncoder(nn.Module):
                                   rnn_layers=rnn_layers,
                                   rnn_bidir=rnn_bidir,
                                   rnn_dropout=rnn_dropout,
-                                  proj_size=rnn_proj,
-                                  hidden_size=rnn_hidden)
+                                  rnn_proj=rnn_proj,
+                                  rnn_hidden=rnn_hidden)
 
     def forward(self, x_pad, x_len):
         """
@@ -482,11 +480,11 @@ class TdnnFsmnEncoder(nn.Module):
                  tdnn_layers=2,
                  tdnn_stride="2,2",
                  tdnn_dilats="1,1",
-                 tdnn_dropout=0,
+                 tdnn_dropout=0.2,
                  fsmn_layers=4,
                  fsmn_residual=True,
-                 fsmn_lctx=3,
-                 fsmn_rctx=3,
+                 fsmn_lctx=10,
+                 fsmn_rctx=10,
                  fsmn_proj=512,
                  fsmn_norm="LN",
                  fsmn_dilats="1,1,1,1",
