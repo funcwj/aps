@@ -1,12 +1,12 @@
 
-nnet_type: "rnnlm"
+nnet_type: "torch_lm"
 
 nnet_conf:
   embed_size: 256
   rnn: "lstm"
-  num_layers: 3
-  hidden_size: 512
-  dropout: 0.1
+  rnn_layers: 3
+  rnn_hidden: 512
+  rnn_dropout: 0.1
 
 trainer_conf:
   optimizer: "adam"
@@ -17,15 +17,14 @@ trainer_conf:
     min_lr: 1.0e-8
     patience: 1
     factor: 0.5
-  logging_period: 100
-  gradient_clip: 5
   no_impr: 4
-  lsm_factor: 0
-  schedule_sampling: 0
+  no_impr_thres: 0.2
+  clip_gradient: 10
+  stop_criterion: "accu"
 
 data_conf:
   fmt: "token"
   train:
-    token: "data/aishell_v1/train/token"
+    token: "data/aishell_v2/train/token"
   valid:
-    token: "data/aishell_v1/dev/token"
+    token: "data/aishell_v2/dev/token"

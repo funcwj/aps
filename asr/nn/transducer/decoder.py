@@ -7,6 +7,8 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
+from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
+
 try:
     from torch.nn import TransformerEncoder, TransformerEncoderLayer
 except:
@@ -60,7 +62,6 @@ class TorchRNNDecoder(nn.Module):
         args:
             enc_out: N x Ti x D
             tgt_pad: N x To
-            tgt_len: N or None
         return:
             output: N x Ti x To+1 x V
         """
@@ -77,7 +78,7 @@ class TorchRNNDecoder(nn.Module):
         # N x To+1 x J
         dec_out = self.dec_proj(dec_out)
         # N x Ti x To+1 x J
-        add_out = th.tanh(enc_out[..., None, :] + dec_out[:, None])
+        add_out = th.tanh(enc_out.unsqueeze(-2) + dec_out.unsqueeze(-1))
         # N x Ti x To+1 x V
         return self.output(add_out)
 

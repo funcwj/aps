@@ -379,10 +379,11 @@ class MvdrBeamformer(nn.Module):
     """
     MVDR (Minimum Variance Distortionless Response) Beamformer
     """
-    def __init__(self, num_bins, att_dim, mask_norm=True):
+    def __init__(self, num_bins, att_dim=512, mask_norm=True, eps=1e-5):
         super(MvdrBeamformer, self).__init__()
         self.ref = ChannelAttention(num_bins, att_dim)
         self.mask_norm = mask_norm
+        self.eps = eps
 
     def _derive_weight(self, Rs, Rn, u, eps=1e-5):
         """
@@ -433,7 +434,7 @@ class MvdrBeamformer(nn.Module):
         # N x C
         u = self.ref(Rs)
         # N x F x C
-        weight = self._derive_weight(Rs, Rn, u)
+        weight = self._derive_weight(Rs, Rn, u, eps=self.eps)
         # N x C x F
         weight = weight.transpose(1, 2)
         # N x F x T

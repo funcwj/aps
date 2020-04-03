@@ -21,7 +21,7 @@ from .utils import get_logger, load_obj, get_device_ids, SimpleTimer
 from .scheduler import support_ss_scheduler
 from .noamopt import NoamOpt
 
-IGNORE_ID = -1
+IGNORE_ID = -1  # in data loader
 EPSILON = np.finfo(np.float32).eps
 
 

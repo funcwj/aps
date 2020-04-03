@@ -1,7 +1,7 @@
 from .las_asr import LasASR
 from .enh_las_asr import MvdrLasASR, BeamLasASR
 from .transformer_asr import TransformerASR
-from .enh_transformer_asr import BeamTransformerASR
+from .enh_transformer_asr import BeamTransformerASR, MvdrTransformerASR
 from .unsupervised_enh import UnsupervisedEnh
 from .transducer_asr import TransformerTransducerASR, TorchTransducerASR
 from .lm.rnn import TorchLM
@@ -13,6 +13,7 @@ nnet_templ = {
     "beam_las": BeamLasASR,
     "transformer": TransformerASR,
     "beam_transformer": BeamTransformerASR,
+    "mvdr_transformer": MvdrTransformerASR,
     "transformer_transducer": TransformerTransducerASR,
     "common_transducer": TorchTransducerASR,
     "unsupervised_enh": UnsupervisedEnh

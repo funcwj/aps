@@ -108,9 +108,6 @@ class EnhLasASR(nn.Module):
                                             normalized=normalized)
 
 
-support_non_linear = {"relu": F.relu, "sigmoid": th.sigmoid, "tanh": th.tanh}
-
-
 class MvdrLasASR(EnhLasASR):
     """
     Mvdr beamformer + LAS-based ASR model
@@ -121,26 +118,19 @@ class MvdrLasASR(EnhLasASR):
             num_bins=257,
             # beamforming
             enh_transform=None,
-            mvdr_att_dim=512,
             mask_net_kwargs=None,
-            mask_non_linear="sigmoid",
-            mask_norm=True,
+            mvdr_kwargs=None,
             **kwargs):
         super(MvdrLasASR, self).__init__(**kwargs)
         if enh_transform is None:
             raise RuntimeError("Enhancement feature transform can not be None")
-        if mask_non_linear not in support_non_linear:
-            raise RuntimeError("Unsupported non linear functions for TF-mask")
         # Front-end feature extraction
         self.enh_transform = enh_transform
         # TF-mask estimation network
         self.mask_net = TorchEncoder(enh_input_size, num_bins,
                                      **mask_net_kwargs)
-        self.mask_act = support_non_linear[mask_non_linear]
         # MVDR beamformer
-        self.mvdr_net = MvdrBeamformer(num_bins,
-                                       mvdr_att_dim,
-                                       mask_norm=mask_norm)
+        self.mvdr_net = MvdrBeamformer(num_bins, **mvdr_kwargs)
 
     def _enhance(self, x_pad, x_len):
         """
@@ -157,19 +147,14 @@ class MvdrLasASR(EnhLasASR):
     def speech_mask(self, x_pad, x_len):
         """
         Output speech masks
+        args:
+            x_pad: Tensor, N x C x S
+            x_len: Tensor, N or None
         """
-        # N x C x S
-        if x_pad.dim() not in [2, 3]:
-            raise RuntimeError(
-                f"Expect 2/3D tensor, got {x_pad.dim()} instead")
-        if x_pad.dim() == 2:
-            x_pad = x_pad[None, ...]
         # enhancement feature transform
         x_pad, x_cplx, x_len = self.enh_transform(x_pad, x_len)
         # TF-mask estimation: N x T x F
         x_mask, x_len = self.mask_net(x_pad, x_len)
-        # TF-mask non linear:
-        x_mask = self.mask_act(x_mask)
         return x_mask, x_len, x_cplx
 
 

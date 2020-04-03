@@ -25,6 +25,14 @@ def encoder_instance(encoder_type, input_size, output_size, **kwargs):
     return supported_encoder[encoder_type](input_size, output_size, **kwargs)
 
 
+support_encoder_act = {
+    "relu": tf.relu,
+    "sigmoid": th.sigmoid,
+    "tanh": th.tanh,
+    "": None
+}
+
+
 class TorchEncoder(nn.Module):
     """
     PyTorch's RNN encoder
@@ -36,12 +44,16 @@ class TorchEncoder(nn.Module):
                  rnn_layers=3,
                  rnn_hidden=512,
                  rnn_dropout=0.2,
-                 rnn_bidir=False):
+                 rnn_bidir=False,
+                 output_act=""):
         super(TorchEncoder, self).__init__()
         RNN = rnn.upper()
         supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
         if RNN not in supported_rnn:
             raise RuntimeError(f"Unknown RNN type: {RNN}")
+        if output_act not in support_encoder_act:
+            raise ValueError(
+                f"Unsupported output non-linear function: {output_act}")
         self.rnns = supported_rnn[RNN](input_size,
                                        rnn_hidden,
                                        rnn_layers,
@@ -50,6 +62,7 @@ class TorchEncoder(nn.Module):
                                        bidirectional=rnn_bidir)
         self.proj = nn.Linear(rnn_hidden if not rnn_bidir else rnn_hidden * 2,
                               output_size)
+        self.oact = support_encoder_act[output_act]
 
     def flat(self):
         self.rnn.flatten_parameters()
@@ -78,6 +91,9 @@ class TorchEncoder(nn.Module):
                                        batch_first=True,
                                        total_length=max_len)
         y = self.proj(y)
+        # pass through non-linear
+        if self.oact:
+            y = self.oact(y)
         return y, x_len
 
 

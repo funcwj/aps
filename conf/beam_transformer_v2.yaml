@@ -1,0 +1,74 @@
+nnet_type: beam_transformer
+
+enh_transform:
+  aug_max_bands: 90
+  aug_max_frame: 40
+  aug_prob: 0.5
+  feats: ''
+  frame_hop: 160
+  frame_len: 512
+  num_aug_bands: 2
+  num_aug_frame: 2
+  window: hann
+
+nnet_conf:
+  asr_input_size: 80
+  encoder_type: "transformer"
+  encoder_kwargs:
+    att_dim: 256
+    att_dropout: 0.2
+    nhead: 4
+    input_embed: conv2d
+    pos_dropout: 0.2
+    num_layers: 6
+    feedforward_dim: 512
+  decoder_kwargs:
+    att_dim: 256
+    att_dropout: 0.2
+    nhead: 4
+    pos_dropout: 0.2
+    num_layers: 6
+    feedforward_dim: 512
+  mode: "ti_att"
+  enh_conf:
+    weight: "exp/far_simu_iso_asv2/weight.pt"
+    num_bins: 257
+    num_channels: 4
+    spatial_filters: 8
+    spectra_filters: 80
+    spectra_init: "mel"
+    query_type: "rnn"
+
+trainer_conf:
+  clip_gradient: 5
+  ctc_regularization: 0.2
+  lr_scheduler_kwargs:
+    factor: 0.5
+    min_lr: 1.0e-08
+    patience: 1
+  lsm_factor: 0.1
+  no_impr: 6
+  no_impr_thres: 0.2
+  optimizer: adam
+  optimizer_kwargs:
+    lr: 0.0001
+    weight_decay: 1.0e-05
+  stop_criterion: accu
+
+data_conf:
+  fmt: wav
+  loader:
+    adapt_dur: 10
+    adapt_token_num: 150
+    channel: -1
+    max_dur: 30
+    max_token_num: 400
+    min_dur: 0.4
+  train:
+    token: data/far_simu_iso_asv2/train/token
+    utt2dur: data/far_simu_iso_asv2/train/utt2dur
+    wav_scp: data/far_simu_iso_asv2/train/wav.scp
+  valid:
+    token: data/far_simu_iso_asv2/dev/token
+    utt2dur: data/far_simu_iso_asv2/dev/utt2dur
+    wav_scp: data/far_simu_iso_asv2/dev/wav.scp

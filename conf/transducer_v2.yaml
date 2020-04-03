@@ -1,25 +1,31 @@
 # default conf
 
-nnet_type: "transformer"
+nnet_type: "common_transducer"
 
 nnet_conf:
-  input_dim: 80
-  encoder_type: "transformer"
+  input_size: 80
+  encoder_type: "fsmn"
+  encoder_proj: 512
   encoder_kwargs:
-    att_dim: 256
-    att_dropout: 0.2
-    nhead: 4
-    input_embed: conv1d
-    pos_dropout: 0.2
-    num_layers: 6
-    feedforward_dim: 512
+    tdnn_dim: 512
+    tdnn_layers: 3
+    tdnn_stride: "2,2,2"
+    tdnn_dilats: "1,1,2"
+    fsmn_layers: 6
+    fsmn_residual: True
+    fsmn_lctx: 10
+    fsmn_rctx: 10
+    fsmn_proj: 512
+    fsmn_norm: "LN"
+    fsmn_dilats: "1,1,1,1,1,1"
+    fsmn_dropout: 0.2
   decoder_kwargs:
-    att_dim: 256
-    att_dropout: 0.2
-    nhead: 4
-    pos_dropout: 0.2
-    num_layers: 6
-    feedforward_dim: 512
+    embed_size: 512
+    jot_dim: 512
+    dec_rnn: "lstm"
+    dec_layers: 3
+    dec_hidden: 512
+    dec_dropout: 0.2
 
 asr_transform:
   feats: "fbank-log-cmvn-aug"
@@ -36,7 +42,7 @@ asr_transform:
 trainer_conf:
   optimizer: "adam"
   optimizer_kwargs:
-    lr: 1.0e-4
+    lr: 1.0e-3
     weight_decay: 1.0e-5
   lr_scheduler_kwargs:
     min_lr: 1.0e-8
@@ -44,10 +50,8 @@ trainer_conf:
     factor: 0.5
   no_impr: 6
   no_impr_thres: 0.2
-  lsm_factor: 0.1
-  clip_gradient: 5
-  ctc_regularization: 0.2
-  stop_criterion: "accu"
+  clip_gradient: 10
+  stop_criterion: "loss"
 
 data_conf:
   fmt: "wav"  # or "kaldi"
@@ -57,7 +61,6 @@ data_conf:
     max_dur: 30 # (s)
     min_dur: 0.4 # (s)
     adapt_dur: 10 # (s)
-    channel: 0
   train:
     wav_scp: "data/aishell_v2/train/wav.scp"
     utt2dur: "data/aishell_v2/train/utt2dur"

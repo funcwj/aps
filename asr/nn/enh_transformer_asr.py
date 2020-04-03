@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .transformer_asr import TransformerASR
+from .las.encoder import TorchEncoder
 from .enh.conv import TimeInvariantEnh, TimeVariantEnh, TimeInvariantAttEnh
 from .enh.beamformer import MvdrBeamformer, CLPFsBeamformer
 
@@ -124,3 +125,56 @@ class BeamTransformerASR(EnhTransformerASR):
         # N x B x T x ...
         x_enh = self.enh(x_pad)
         return x_enh, x_len
+
+
+class MvdrTransformerASR(EnhTransformerASR):
+    """
+    Mvdr beamformer + Transformer-based ASR model
+    """
+    def __init__(
+            self,
+            enh_input_size=257,
+            num_bins=257,
+            # beamforming
+            enh_transform=None,
+            mask_net_kwargs=None,
+            mvdr_kwargs=None,
+            **kwargs):
+        super(MvdrTransformerASR, self).__init__(**kwargs)
+        if enh_transform is None:
+            raise RuntimeError("Enhancement feature transform can not be None")
+        # Front-end feature extraction
+        self.enh_transform = enh_transform
+        # TF-mask estimation network
+        self.mask_net = TorchEncoder(enh_input_size, num_bins,
+                                     **mask_net_kwargs)
+        # MVDR beamformer
+        self.mvdr_net = MvdrBeamformer(num_bins, **mvdr_kwargs)
+
+    def _enhance(self, x_pad, x_len):
+        """
+        Mvdr beamforming and asr feature transform
+        args:
+            x_pad: Tensor, N x C x S
+            x_len: Tensor, N or None
+        """
+        # TF-mask
+        x_mask, x_len, x_cplx = self.speech_mask(x_pad, x_len)
+        # mvdr beamforming: N x Ti x F
+        x_beam = self.mvdr_net(x_mask, x_cplx, xlen=x_len)
+        # asr feature transform
+        x_beam, _ = self.asr_transform(x_beam, None)
+        return x_beam, x_len
+
+    def speech_mask(self, x_pad, x_len):
+        """
+        Output speech masks
+        args:
+            x_pad: Tensor, N x C x S
+            x_len: Tensor, N or None
+        """
+        # enhancement feature transform
+        x_pad, x_cplx, x_len = self.enh_transform(x_pad, x_len)
+        # TF-mask estimation: N x T x F
+        x_mask, x_len = self.mask_net(x_pad, x_len)
+        return x_mask, x_len, x_cplx

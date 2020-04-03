@@ -64,9 +64,6 @@ def run(args):
                                 batch_size=args.batch_size,
                                 chunk_size=args.chunk_size,
                                 eos=eos)
-    print("Number of batches (train/valid) = " +
-          f"{len(trn_loader)}/{len(dev_loader)}",
-          flush=True)
 
     asr_cls = support_nnet(conf["nnet_type"])
     nnet = asr_cls(**conf["nnet_conf"])

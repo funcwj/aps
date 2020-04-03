@@ -46,31 +46,31 @@ class TorchDecoder(nn.Module):
                  enc_proj,
                  vocab_size,
                  dec_rnn="lstm",
-                 dec_layers=3,
-                 dec_hidden=512,
-                 dec_dropout=0.0,
+                 rnn_layers=3,
+                 rnn_hidden=512,
+                 rnn_dropout=0.0,
                  attention=None,
                  input_feeding=False,
                  vocab_embeded=True):
         super(TorchDecoder, self).__init__()
-        RNN = rnn.upper()
+        RNN = dec_rnn.upper()
         supported_rnn = {"RNN": nn.RNN, "GRU": nn.GRU, "LSTM": nn.LSTM}
         if RNN not in supported_rnn:
             raise RuntimeError(f"unknown RNN type: {RNN}")
         if vocab_embeded:
-            self.vocab_embed = nn.Embedding(vocab_size, dec_hidden)
-            input_size = enc_proj + dec_hidden
+            self.vocab_embed = nn.Embedding(vocab_size, rnn_hidden)
+            input_size = enc_proj + rnn_hidden
         else:
             self.vocab_embed = OneHotEmbedding(vocab_size)
             input_size = enc_proj + vocab_size
         self.decoder = supported_rnn[RNN](input_size,
-                                          dec_hidden,
-                                          dec_layers,
+                                          rnn_hidden,
+                                          rnn_layers,
                                           batch_first=True,
-                                          dropout=dec_dropout,
+                                          dropout=rnn_dropout,
                                           bidirectional=False)
         self.attend = attention
-        self.proj = nn.Linear(dec_hidden + enc_proj, enc_proj)
+        self.proj = nn.Linear(rnn_hidden + enc_proj, enc_proj)
         self.pred = nn.Linear(enc_proj, vocab_size)
         self.input_feeding = input_feeding
         self.vocab_size = vocab_size
