@@ -180,11 +180,6 @@ if __name__ == "__main__":
                         type=str,
                         default="",
                         help="If not empty, dump n-best hypothesis")
-    parser.add_argument("--nnet",
-                        type=str,
-                        default="las",
-                        choices=["las", "enh_las", "transformer"],
-                        help="Network type used")
     parser.add_argument("--vectorized",
                         action=StrToBoolAction,
                         default="false",

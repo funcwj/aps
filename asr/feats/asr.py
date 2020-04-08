@@ -80,7 +80,8 @@ class MelTransform(nn.Module):
                  sr=16000,
                  num_mels=80,
                  fmin=0.0,
-                 fmax=None):
+                 fmax=None,
+                 requires_grad=False):
         super(MelTransform, self).__init__()
         # num_mels x (N // 2 + 1)
         filters = init_melfilter(frame_len,
@@ -90,7 +91,7 @@ class MelTransform(nn.Module):
                                  fmax=fmax,
                                  fmin=fmin)
         self.num_mels, self.num_bins = filters.shape
-        self.filters = nn.Parameter(filters, requires_grad=False)
+        self.filters = nn.Parameter(filters, requires_grad=requires_grad)
         self.fmin = fmin
         self.fmax = sr // 2 if fmax is None else fmax
 
@@ -380,6 +381,7 @@ class FeatureTransform(nn.Module):
                  rctx=1,
                  delta_ctx=2,
                  delta_order=2,
+                 requires_grad=False,
                  eps=EPSILON):
         super(FeatureTransform, self).__init__()
         trans_tokens = feats.split("-")
@@ -403,7 +405,8 @@ class FeatureTransform(nn.Module):
                     MelTransform(frame_len,
                                  round_pow_of_two=round_pow_of_two,
                                  sr=sr,
-                                 num_mels=num_mels)
+                                 num_mels=num_mels,
+                                 requires_grad=requires_grad)
                 ]
                 transform += fbank
                 feats_dim = transform[-1].dim()

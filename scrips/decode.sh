@@ -40,7 +40,6 @@ if [ $stage -eq 1 ]; then
       --beam-size $beam_size \
       --checkpoint $exp_dir \
       --device-id 0 \
-      --nnet "las" \
       --dict "$dict" \
       --space "\"$space\"" \
       --max-len $max_len \
@@ -56,7 +55,6 @@ if [ $stage -eq 1 ]; then
       --batch-size $batch_size \
       --checkpoint $exp_dir \
       --device-id 0 \
-      --nnet "las" \
       --dict "$dict" \
       --space "\"$space\"" \
       --max-len $max_len \
