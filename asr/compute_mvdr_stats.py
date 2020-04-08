@@ -28,10 +28,14 @@ class Computer(Evaluator):
         nnet = self._load(cpt_dir)
         super(Computer, self).__init__(nnet, cpt_dir, device_id=device_id)
 
-    def compute(self, wav):
-        wav = th.from_numpy(wav).to(self.device)
-        mask, _, _ = self.nnet.speech_mask(wav, None)
-        return mask.detach().cpu().squeeze().numpy()
+    def compute(self, wav, stats="mask"):
+        wav = th.from_numpy(wav).to(self.device)[None, ...]
+        if stats == "mask":
+            out, _, _ = self.nnet.speech_mask(wav, None)
+        else:
+            out, _ = self.nnet.mvdr_beam(wav, None)
+            out = out.abs()
+        return out.detach().cpu().squeeze().numpy()
 
     def _load(self, cpt_dir):
         with open(pathlib.Path(cpt_dir) / "train.yaml", "r") as f:
@@ -65,7 +69,7 @@ def run(args):
 
     for key, wav in wav_reader:
         logger.info(f"Processing utterance {key}...")
-        mask = computer.compute(wav)
+        mask = computer.compute(wav, stats=args.stats)
         np.save(dump_dir / key, mask)
     logger.info(f"Processed {len(wav_reader)} utterance done")
 
@@ -78,6 +82,10 @@ if __name__ == "__main__":
                         type=str,
                         help="Checkpoint of the multi-channel AM")
     parser.add_argument("wav_scp", type=str, help="Feature/Wave scripts")
+    parser.add_argument("--stats",
+                        type=str,
+                        choices=["beam", "mask"],
+                        help="Type of the output statistics")
     parser.add_argument("--device-id",
                         type=int,
                         default=-1,

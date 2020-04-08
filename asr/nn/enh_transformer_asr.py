@@ -158,12 +158,23 @@ class MvdrTransformerASR(EnhTransformerASR):
             x_pad: Tensor, N x C x S
             x_len: Tensor, N or None
         """
+        # mvdr beamforming: N x Ti x F
+        x_beam, x_len = self.mvdr_beam(x_pad, x_len)
+        # asr feature transform
+        x_beam, _ = self.asr_transform(x_beam, None)
+        return x_beam, x_len
+
+    def mvdr_beam(self, x_pad, x_len):
+        """
+        Mvdr beamforming and asr feature transform
+        args:
+            x_pad: Tensor, N x C x S
+            x_len: Tensor, N or None
+        """
         # TF-mask
         x_mask, x_len, x_cplx = self.speech_mask(x_pad, x_len)
         # mvdr beamforming: N x Ti x F
         x_beam = self.mvdr_net(x_mask, x_cplx, xlen=x_len)
-        # asr feature transform
-        x_beam, _ = self.asr_transform(x_beam, None)
         return x_beam, x_len
 
     def speech_mask(self, x_pad, x_len):
