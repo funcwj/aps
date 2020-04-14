@@ -594,6 +594,8 @@ class CtcXentHybridTrainer(Trainer):
             tgt_pad: N x To
             tgt_len: N
         """
+        # tgt_pad: N x To (replace ignore_id with eos)
+        # tgts: N x To+1 (add eos)
         tgt_pad, tgts = process_tgts(egs["tgt_pad"],
                                      egs["tgt_len"],
                                      eos=self.nnet.eos)
@@ -626,7 +628,9 @@ class CtcXentHybridTrainer(Trainer):
 
 
 # from https://github.com/HawkAaron/warp-transducer
-from warprnnt_pytorch import rnnt_loss
+# from warprnnt_pytorch import rnnt_loss
+# https://github.com/1ytic/warp-rnnt
+from warp_rnnt import rnnt_loss
 
 
 class TransducerTrainer(Trainer):
@@ -647,17 +651,19 @@ class TransducerTrainer(Trainer):
             tgt_pad: N x To
             tgt_len: N
         """
-        tgt_pad, tgts = process_tgts(egs["tgt_pad"],
-                                     egs["tgt_len"],
-                                     eos=self.nnet.eos)
-        pack = (egs["src_pad"], egs["src_len"], tgt_pad, egs["tgt_len"] + 1)
+        # tgt_pad: N x To (replace ignore_id with eos)
+        # tgts: N x To+1 (add eos)
+        tgt_pad, _ = process_tgts(egs["tgt_pad"],
+                                  egs["tgt_len"],
+                                  eos=self.nnet.eos)
+        pack = (egs["src_pad"], egs["src_len"], tgt_pad, egs["tgt_len"])
         # N x Ti x To+1 x V
         outs, enc_len = data_parallel(self.nnet,
                                       pack,
                                       device_ids=self.device_ids)
         # compute loss
         loss = rnnt_loss(outs,
-                         tgts.to(th.int32),
+                         tgt_pad.to(th.int32),
                          enc_len.to(th.int32),
                          egs["tgt_len"].to(th.int32),
                          blank=self.blank,

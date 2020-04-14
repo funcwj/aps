@@ -61,7 +61,8 @@ class TimeInvariantEnh(nn.Module):
                  spatial_filters=8,
                  spectra_filters=80,
                  spectra_init="random",
-                 batchnorm=True):
+                 batchnorm=True,
+                 apply_log=True):
         super(TimeInvariantEnh, self).__init__()
         if spectra_init not in ["mel", "random"]:
             raise ValueError(f"Unsupported init method: {spectra_init}")
@@ -96,6 +97,7 @@ class TimeInvariantEnh(nn.Module):
         self.norm = nn.BatchNorm2d(spatial_filters) if batchnorm else None
         self.B = spatial_filters
         self.C = num_channels
+        self.apply_log = apply_log
 
     def forward(self, x, eps=1e-5):
         """
@@ -119,9 +121,10 @@ class TimeInvariantEnh(nn.Module):
         # NT x B x F
         b = b.transpose(1, 2)
         # NT x B x D
-        f = self.proj(b)
-        # NT x B x D
-        f = th.log(tf.relu(f) + eps)
+        f = tf.relu(self.proj(b))
+        if self.apply_log:
+            # NT x B x D
+            f = th.log(f + eps)
         # N x T x B x D
         f = f.view(N, T, self.B, -1)
         # N x B x T x D
@@ -148,7 +151,8 @@ class TimeInvariantAttEnh(nn.Module):
                  spectra_filters=80,
                  spectra_init="random",
                  query_type="rnn",
-                 batchnorm=True):
+                 batchnorm=True,
+                 apply_log=True):
         super(TimeInvariantAttEnh, self).__init__()
         if spectra_init not in ["mel", "random"]:
             raise ValueError(f"Unsupported init method: {spectra_init}")
@@ -198,6 +202,7 @@ class TimeInvariantAttEnh(nn.Module):
         self.norm = nn.BatchNorm1d(spectra_filters) if batchnorm else None
         self.B = spatial_filters
         self.C = num_channels
+        self.apply_log = apply_log
 
     def forward(self, x, eps=1e-5):
         """
@@ -240,9 +245,10 @@ class TimeInvariantAttEnh(nn.Module):
         # value: N x T x F
         v = th.sum(w[:, None] * bv, -1)
         # proj
-        f = self.proj(v)
+        f = tf.relu(self.proj(v))
         # log
-        f = th.log(tf.relu(f) + eps)
+        if self.apply_log:
+            f = th.log(f + eps)
         # norm
         if self.norm:
             f = f.transpose(1, 2)

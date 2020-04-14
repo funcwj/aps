@@ -11,7 +11,8 @@ from torch.nn.utils.rnn import pack_padded_sequence
 
 from .las_asr import LasASR
 from .las.encoder import TorchEncoder
-from .enh.beamformer import MvdrBeamformer, CLPFsBeamformer
+from .enh.mvdr import MvdrBeamformer
+from .enh.google import CLPFsBeamformer  # same as TimeInvariantEnh
 from .enh.conv import TimeInvariantEnh, TimeVariantEnh, TimeInvariantAttEnh
 
 
@@ -119,6 +120,7 @@ class MvdrLasASR(EnhLasASR):
             # beamforming
             enh_transform=None,
             mask_net_kwargs=None,
+            mask_net_noise=True,
             mvdr_kwargs=None,
             **kwargs):
         super(MvdrLasASR, self).__init__(**kwargs)
@@ -127,8 +129,10 @@ class MvdrLasASR(EnhLasASR):
         # Front-end feature extraction
         self.enh_transform = enh_transform
         # TF-mask estimation network
-        self.mask_net = TorchEncoder(enh_input_size, num_bins,
-                                     **mask_net_kwargs)
+        self.mask_net = TorchEncoder(
+            enh_input_size, num_bins * 2 if mask_net_noise else num_bins,
+            **mask_net_kwargs)
+        self.mask_net_noise = mask_net_noise
         # MVDR beamformer
         self.mvdr_net = MvdrBeamformer(num_bins, **mvdr_kwargs)
 
@@ -137,7 +141,7 @@ class MvdrLasASR(EnhLasASR):
         Mvdr beamforming and asr feature transform
         """
         # mvdr beamforming: N x Ti x F
-        x_beam = self.mvdr_beam(x_pad, x_len)
+        x_beam, x_len = self.mvdr_beam(x_pad, x_len)
         # asr feature transform
         x_beam, _ = self.asr_transform(x_beam, None)
         return x_beam, x_len
@@ -152,7 +156,11 @@ class MvdrLasASR(EnhLasASR):
         # TF-mask
         x_mask, x_len, x_cplx = self.speech_mask(x_pad, x_len)
         # mvdr beamforming: N x Ti x F
-        x_beam = self.mvdr_net(x_mask, x_cplx, xlen=x_len)
+        if self.mask_net_noise:
+            mask_s, mask_n = th.chunk(x_mask, 2, dim=-1)
+            x_beam = self.mvdr_net(mask_s, x_cplx, xlen=x_len, mask_n=mask_n)
+        else:
+            x_beam = self.mvdr_net(x_mask, x_cplx, xlen=x_len)
         return x_beam, x_len
 
     def speech_mask(self, x_pad, x_len):

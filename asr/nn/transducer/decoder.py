@@ -127,7 +127,8 @@ class TorchTransformerDecoder(nn.Module):
         if sos < 0:
             raise ValueError(f"Invalid sos value: {sos}")
         # N x Ti
-        pad_mask = None if tgt_len is None else (padding_mask(tgt_len) == 1)
+        pad_mask = None if tgt_len is None else (padding_mask(tgt_len +
+                                                              1) == 1)
         # N x To+1
         tgt_pad = F.pad(tgt_pad, (1, 0), value=sos)
         # genrarte target masks (-inf/0)
