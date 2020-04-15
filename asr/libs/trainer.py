@@ -73,14 +73,14 @@ def compute_accu(outs, tgts):
     return float(ncorr) / total
 
 
-def process_tgts(tgt_pad, tgt_len, eos=0, ignore_id=IGNORE_ID):
+def process_tgts(tgt_pad, tgt_len, eos=0):
     """
     Process target labels for inference and loss computation
     """
     # N x To, -1 => EOS
-    tgt_v1 = tgt_pad.masked_fill(tgt_pad == ignore_id, eos)
+    tgt_v1 = tgt_pad.masked_fill(tgt_pad == IGNORE_ID, eos)
     # N x (To+1), pad -1
-    tgt_v2 = F.pad(tgt_pad, (0, 1), value=ignore_id)
+    tgt_v2 = F.pad(tgt_pad, (0, 1), value=IGNORE_ID)
     # add eos
     tgt_v2 = tgt_v2.scatter(1, tgt_len[:, None], eos)
     return tgt_v1, tgt_v2
@@ -661,13 +661,16 @@ class TransducerTrainer(Trainer):
         outs, enc_len = data_parallel(self.nnet,
                                       pack,
                                       device_ids=self.device_ids)
+        # add log_softmax if use https://github.com/1ytic/warp-rnnt
+        outs = F.log_softmax(outs, -1)
         # compute loss
         loss = rnnt_loss(outs,
                          tgt_pad.to(th.int32),
                          enc_len.to(th.int32),
                          egs["tgt_len"].to(th.int32),
                          blank=self.blank,
-                         reduction="mean")
+                         reduction="mean",
+                         gather=True)
         return loss, None
 
 
@@ -677,20 +680,17 @@ class LmTrainer(Trainer):
     """
     def __init__(self, *args, **kwargs):
         super(LmTrainer, self).__init__(*args, **kwargs)
-        self.hidden = None
 
-    def compute_loss(self, egs, idx=0, **kwargs):
+    def compute_loss(self, egs, **kwargs):
         """
         Compute training loss, egs contains
-            src: N x T
-            tgt: N x T
+            src: N x T+1
+            tgt: N x T+1
+            len: N
         """
-        if idx == 0:
-            self.hidden = None
-        # pred: N x T x V
-        pack = (egs["src"], self.hidden)
+        # pred: N x T+1 x V
         pred, self.hidden = data_parallel(self.nnet,
-                                          pack,
+                                          egs["src"],
                                           device_ids=self.device_ids)
         loss = ce_loss(pred, egs["tgt"])
         accu = compute_accu(pred, egs["tgt"])

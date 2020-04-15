@@ -7,8 +7,8 @@ import pprint
 import pathlib
 import argparse
 
-import numpy as np 
-import torch as th 
+import numpy as np
+import torch as th
 
 from libs.utils import StrToBoolAction
 from libs.trainer import LmTrainer
@@ -48,6 +48,7 @@ def run(args):
         token2idx = [line.decode("utf-8").split()[0] for line in f]
 
     eos = token2idx.index("<eos>")
+    sos = token2idx.index("<sos>")
     conf["nnet_conf"]["vocab_size"] = len(token2idx)
 
     for key in conf.keys():
@@ -64,13 +65,15 @@ def run(args):
                                 fmt=data_conf["fmt"],
                                 train=True,
                                 batch_size=args.batch_size,
-                                chunk_size=args.chunk_size,
+                                num_workers=args.num_workers,
+                                sos=sos,
                                 eos=eos)
     dev_loader = support_loader(**data_conf["valid"],
                                 train=False,
                                 fmt=data_conf["fmt"],
                                 batch_size=args.batch_size,
-                                chunk_size=args.chunk_size,
+                                num_workers=args.num_workers,
+                                sos=sos,
                                 eos=eos)
 
     asr_cls = support_nnet(conf["nnet_type"])
@@ -126,10 +129,6 @@ if __name__ == "__main__":
                         type=int,
                         default=32,
                         help="Number of utterances in each batch")
-    parser.add_argument("--chunk-size",
-                        type=int,
-                        default=32,
-                        help="Bptt size used during training")
     parser.add_argument("--eval-interval",
                         type=int,
                         default=-1,
@@ -145,7 +144,7 @@ if __name__ == "__main__":
                         help="Interval to report the progress of the training")
     parser.add_argument("--num-workers",
                         type=int,
-                        default=4,
+                        default=0,
                         help="Number of workers used in script data loader")
     parser.add_argument("--tensorboard",
                         action=StrToBoolAction,

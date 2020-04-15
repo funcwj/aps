@@ -61,7 +61,7 @@ class TorchLM(nn.Module):
         self.dist.bias.data.zero_()
         self.dist.weight.data.uniform_(-initrange, initrange)
 
-    def forward(self, x, h=None, detach_h=True):
+    def forward(self, x, h=None):
         """
         args:
             x: N x T
@@ -69,8 +69,6 @@ class TorchLM(nn.Module):
         return:
             y: N x T x V
         """
-        if h is not None and detach_h:
-            h = repackage_hidden(h)
         # N x T => N x T x V
         x = self.vocab_embed(x)
         x = self.vocab_drop(x)
