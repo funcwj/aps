@@ -4,10 +4,12 @@
 
 set -eu
 
+gpu=0
+seed=777
 epoches=100
 tensorboard=false
 batch_size=128
-chunk_size=20
+chunk_size=40
 eval_interval=-1
 save_interval=-1
 prog_interval=100
@@ -33,6 +35,8 @@ $cmd --gpu 1 $data.train_lm.$exp_id.log \
   $python asr/train_lm.py \
     --conf $conf \
     --dict $dict \
+    --seed $seed \
+    --device-ids $gpu \
     --tensorboard $tensorboard \
     --checkpoint exp/$data/rnnlm/$exp_id \
     --batch-size $batch_size \

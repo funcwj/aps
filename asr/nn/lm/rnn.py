@@ -30,12 +30,14 @@ class TorchLM(nn.Module):
                  rnn="lstm",
                  rnn_layers=3,
                  rnn_hidden=512,
-                 rnn_dropout=0.2):
+                 rnn_dropout=0.2,
+                 tie_weights=False):
         super(TorchLM, self).__init__()
         RNN = rnn.upper()
         supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
         if RNN not in supported_rnn:
             raise RuntimeError(f"Unknown RNN type: {RNN}")
+        self.vocab_drop = nn.Dropout(rnn_dropout)
         if embed_size != vocab_size:
             self.vocab_embed = nn.Embedding(vocab_size, embed_size)
         else:
@@ -50,6 +52,15 @@ class TorchLM(nn.Module):
         # output distribution
         self.dist = nn.Linear(rnn_hidden, vocab_size)
 
+        # tie_weights
+        if tie_weights and embed_size == rnn_hidden:
+            self.dist.weight = self.vocab_embed.weight
+
+    def init_weights(self, initrange=0.1):
+        self.vocab_embed.weight.data.uniform_(-initrange, initrange)
+        self.dist.bias.data.zero_()
+        self.dist.weight.data.uniform_(-initrange, initrange)
+
     def forward(self, x, h=None, detach_h=True):
         """
         args:
@@ -62,6 +73,9 @@ class TorchLM(nn.Module):
             h = repackage_hidden(h)
         # N x T => N x T x V
         x = self.vocab_embed(x)
+        x = self.vocab_drop(x)
+
+        # N x T x H
         y, h = self.pred(x, h)
         # N x T x V
         y = self.dist(y)

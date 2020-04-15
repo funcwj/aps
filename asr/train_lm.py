@@ -2,9 +2,13 @@
 # wujian@2019
 
 import yaml
+import random
 import pprint
 import pathlib
 import argparse
+
+import numpy as np 
+import torch as th 
 
 from libs.utils import StrToBoolAction
 from libs.trainer import LmTrainer
@@ -15,6 +19,11 @@ constrained_conf_keys = ["nnet_type", "nnet_conf", "data_conf", "trainer_conf"]
 
 
 def run(args):
+    # set random seed
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    th.random.manual_seed(args.seed)
+
     dev_conf = args.device_ids
     device_ids = tuple(map(int, dev_conf.split(","))) if dev_conf else None
 
@@ -40,7 +49,6 @@ def run(args):
 
     eos = token2idx.index("<eos>")
     conf["nnet_conf"]["vocab_size"] = len(token2idx)
-    conf["nnet_type"] = "rnnlm"
 
     for key in conf.keys():
         if key not in constrained_conf_keys:
@@ -88,7 +96,7 @@ def run(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Command to start model training, configured by yaml files",
+        description="Command to start LM training, configured by yaml files",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--conf",
                         type=str,
@@ -143,5 +151,9 @@ if __name__ == "__main__":
                         action=StrToBoolAction,
                         default="false",
                         help="Flags to use the tensorboad")
+    parser.add_argument("--seed",
+                        type=int,
+                        default=777,
+                        help="Random seed used for random package")
     args = parser.parse_args()
     run(args)

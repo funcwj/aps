@@ -102,6 +102,7 @@ class MvdrBeamformer(nn.Module):
         if self.mask_norm:
             max_abs = th.norm(mask, float("inf"), dim=1, keepdim=True)
             mask = mask / (max_abs + EPSILON)
+        mask = th.transpose(mask, 1, 2)
         return mask
 
     def forward(self, mask_s, x, mask_n=None, xlen=None):
@@ -113,11 +114,9 @@ class MvdrBeamformer(nn.Module):
         return:
             y: enhanced complex spectrogram N x T x F
         """
-        # N x T x F
+        # N x F x T
         mask_s = self._process_mask(mask_s, xlen=xlen)
         mask_n = self._process_mask(mask_n, xlen=xlen)
-        # N x T x F => N x F x T
-        mask_s = th.transpose(mask_s, 1, 2)
         # N x F x C x C
         Rs = estimate_covar(mask_s, x)
         Rn = estimate_covar(1 - mask_s if mask_n is None else mask_n, x)

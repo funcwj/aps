@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from torch_complex.tensor import ComplexTensor
-from .beamformer import init_melfilter
+from .google import init_melfilter
 
 
 class ComplexConvXd(nn.Module):

@@ -2,11 +2,12 @@
 nnet_type: "torch_lm"
 
 nnet_conf:
-  embed_size: 256
+  embed_size: 650
   rnn: "lstm"
   rnn_layers: 3
-  rnn_hidden: 512
-  rnn_dropout: 0.1
+  rnn_hidden: 650
+  rnn_dropout: 0.5
+  tie_weights: true
 
 trainer_conf:
   optimizer: "adam"
@@ -23,7 +24,7 @@ trainer_conf:
   stop_criterion: "accu"
 
 data_conf:
-  fmt: "token"
+  fmt: "tok"
   train:
     token: "data/aishell_v2/train/token"
   valid:
