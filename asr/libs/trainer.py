@@ -649,13 +649,11 @@ class TransducerTrainer(Trainer):
             tgt_pad: N x To
             tgt_len: N
         """
-        # tgt_pad: N x To (replace ignore_id with eos)
-        # tgts: N x To+1 (add eos)
-        tgt_pad, _ = process_tgts(egs["tgt_pad"],
-                                  egs["tgt_len"],
-                                  eos=self.nnet.eos)
-        pack = (egs["src_pad"], egs["src_len"], tgt_pad, egs["tgt_len"])
+        # tgt_pad: N x To (replace ignore_id with blank)
+        ignore_mask = egs["tgt_pad"] == IGNORE_ID
+        tgt_pad = egs["tgt_pad"].masked_fill(ignore_mask, self.blank)
         # N x Ti x To+1 x V
+        pack = (egs["src_pad"], egs["src_len"], tgt_pad, egs["tgt_len"])
         outs, enc_len = datp(self.nnet, pack, device_ids=self.device_ids)
         # add log_softmax if use https://github.com/1ytic/warp-rnnt
         outs = F.log_softmax(outs, -1)

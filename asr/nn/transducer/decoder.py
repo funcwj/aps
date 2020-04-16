@@ -56,7 +56,7 @@ class TorchRNNDecoder(nn.Module):
         self.vocab_size = vocab_size
         self.output = nn.Linear(jot_dim, vocab_size, bias=False)
 
-    def forward(self, enc_out, tgt_pad, sos=-1):
+    def forward(self, enc_out, tgt_pad, blank=0):
         """
         args:
             enc_out: N x Ti x D
@@ -64,10 +64,8 @@ class TorchRNNDecoder(nn.Module):
         return:
             output: N x Ti x To+1 x V
         """
-        if sos < 0:
-            raise ValueError(f"Invalid sos value: {sos}")
         # N x To+1
-        tgt_pad = F.pad(tgt_pad, (1, 0), value=sos)
+        tgt_pad = F.pad(tgt_pad, (1, 0), value=blank)
         # N x To+1 x E
         tgt_pad = self.vocab_embed(tgt_pad)
         # N x To+1 x D
@@ -84,8 +82,7 @@ class TorchRNNDecoder(nn.Module):
     def beam_search(self,
                     enc_out,
                     beam=16,
-                    sos=-1,
-                    eos=-1,
+                    blank=0,
                     nbest=8,
                     max_len=-1,
                     vectorized=True,
@@ -125,7 +122,7 @@ class TorchTransformerDecoder(nn.Module):
         self.vocab_size = vocab_size
         self.output = nn.Linear(jot_dim, vocab_size, bias=False)
 
-    def forward(self, enc_out, tgt_pad, tgt_len, sos=-1):
+    def forward(self, enc_out, tgt_pad, tgt_len, blank=0):
         """
         args:
             enc_out: Ti x N x D
@@ -134,13 +131,11 @@ class TorchTransformerDecoder(nn.Module):
         return:
             output: N x Ti x To+1 x V
         """
-        if sos < 0:
-            raise ValueError(f"Invalid sos value: {sos}")
         # N x Ti
         pad_mask = None if tgt_len is None else (padding_mask(tgt_len +
                                                               1) == 1)
         # N x To+1
-        tgt_pad = F.pad(tgt_pad, (1, 0), value=sos)
+        tgt_pad = F.pad(tgt_pad, (1, 0), value=blank)
         # genrarte target masks (-inf/0)
         tgt_mask = prep_sub_mask(tgt_pad.shape[-1], device=tgt_pad.device)
         # To+1 x N x E
@@ -157,3 +152,13 @@ class TorchTransformerDecoder(nn.Module):
         output = self.output(add_out)
         # N x Ti x To+1 x J
         return output.transpose(0, 2).contiguous()
+
+    def beam_search(self,
+                    enc_out,
+                    beam=16,
+                    blank=0,
+                    nbest=8,
+                    max_len=-1,
+                    vectorized=True,
+                    normalized=True):
+        pass

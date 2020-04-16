@@ -13,7 +13,7 @@ import torch as th
 import numpy as np
 
 from libs.utils import StrToBoolAction
-from libs.distributed_trainer import S2STrainer
+from libs.distributed_trainer import CtcXentHybridTrainer, TransducerTrainer
 
 from loader import support_loader
 from feats import support_transform
@@ -26,23 +26,27 @@ constrained_conf_keys = [
 ]
 
 
-def train_worker(rank, nnet, conf, args):
+def train_worker(rank, nnet, is_transducer, conf, args):
     """
     Initalize training workers
     """
     # construct trainer
     # torch.distributed.launch will provide
     # environment variables, and requires that you use init_method="env://".
-    trainer = S2STrainer(rank,
-                         nnet,
-                         cuda_devices=args.num_process,
-                         checkpoint=args.checkpoint,
-                         resume=args.resume,
-                         init=args.init,
-                         save_interval=args.save_interval,
-                         prog_interval=args.prog_interval,
-                         tensorboard=args.tensorboard,
-                         **conf["trainer_conf"])
+    if is_transducer:
+        TrainerC = TransducerTrainer
+    else:
+        TrainerC = CtcXentHybridTrainer
+    trainer = TrainerC(rank,
+                       nnet,
+                       cuda_devices=args.num_process,
+                       checkpoint=args.checkpoint,
+                       resume=args.resume,
+                       init=args.init,
+                       save_interval=args.save_interval,
+                       prog_interval=args.prog_interval,
+                       tensorboard=args.tensorboard,
+                       **conf["trainer_conf"])
 
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
@@ -83,27 +87,32 @@ def load_conf(yaml_conf, dict_path):
             unit, idx = line.split()
             vocab[unit] = int(idx)
 
-    nnet_conf["sos"] = vocab["<sos>"]
-    nnet_conf["eos"] = vocab["<eos>"]
     nnet_conf["vocab_size"] = len(vocab)
 
-    if "nnet_type" not in conf:
-        conf["nnet_type"] = "las"
     for key in conf.keys():
         if key not in constrained_conf_keys:
             raise ValueError(f"Invalid configuration item: {key}")
     print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
-    # for CTC
+
     trainer_conf = conf["trainer_conf"]
-    nnet_conf["ctc"] = "ctc_regularization" in trainer_conf and trainer_conf[
+    use_ctc = "ctc_regularization" in trainer_conf and trainer_conf[
         "ctc_regularization"] > 0
-    # for CTC
-    if conf["nnet_conf"]["ctc"]:
-        if ctc_blank_sym not in vocab:
+    is_transducer = conf["nnet_type"][-10:] == "transducer"
+    if not is_transducer:
+        nnet_conf["sos"] = vocab["<sos>"]
+        nnet_conf["eos"] = vocab["<eos>"]
+    # for CTC/RNNT
+    if use_ctc or is_transducer:
+        if blank_sym not in vocab:
             raise RuntimeError(
-                f"Missing {ctc_blank_sym} in dictionary for CTC training")
-        trainer_conf["ctc_blank"] = vocab[ctc_blank_sym]
-    return conf
+                f"Missing {blank_sym} in dictionary for CTC/RNNT training")
+        if is_transducer:
+            trainer_conf["transducer_blank"] = vocab[blank_sym]
+            nnet_conf["blank"] = vocab[blank_sym]
+        else:
+            trainer_conf["ctc_blank"] = vocab[blank_sym]
+            nnet_conf["ctc"] = use_ctc
+    return conf, is_transducer
 
 
 def run(args):
@@ -127,7 +136,7 @@ def run(args):
     if last_checkpoint.exists():
         args.resume = last_checkpoint.as_posix()
 
-    conf = load_conf(args.conf, args.dict)
+    conf, is_transducer = load_conf(args.conf, args.dict)
     asr_cls = support_nnet(conf["nnet_type"])
     asr_transform = None
     enh_transform = None
@@ -149,7 +158,7 @@ def run(args):
     else:
         nnet = asr_cls(**conf["nnet_conf"])
 
-    train_worker(args.local_rank, nnet, conf, args)
+    train_worker(args.local_rank, is_transducer, nnet, conf, args)
 
 
 if __name__ == "__main__":

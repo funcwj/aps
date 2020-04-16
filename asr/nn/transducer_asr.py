@@ -18,16 +18,15 @@ class TorchTransducerASR(nn.Module):
     def __init__(self,
                  input_size=80,
                  vocab_size=40,
-                 sos=-1,
-                 eos=-1,
+                 blank=-1,
                  asr_transform=None,
                  encoder_type="transformer",
                  encoder_proj=None,
                  encoder_kwargs=None,
                  decoder_kwargs=None):
         super(TorchTransducerASR, self).__init__()
-        if eos < 0 or sos < 0:
-            raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
+        if blank < 0:
+            raise RuntimeError(f"Unsupported blank value: {blank}")
         if encoder_type == "transformer":
             self.encoder = TorchTransformerEncoder(input_size,
                                                    **encoder_kwargs)
@@ -39,8 +38,7 @@ class TorchTransducerASR(nn.Module):
                                             encoder_proj, **encoder_kwargs)
         decoder_kwargs["enc_dim"] = encoder_proj
         self.decoder = TorchRNNDecoder(vocab_size, **decoder_kwargs)
-        self.sos = sos
-        self.eos = eos
+        self.blank = blank
         self.asr_transform = asr_transform
         self.encoder_type = encoder_type
 
@@ -63,7 +61,7 @@ class TorchTransducerASR(nn.Module):
             # Ti x N x D => N x Ti x D
             enc_out = enc_out.transpose(0, 1)
         # N x Ti x To+1 x V
-        dec_out = self.decoder(enc_out, y_pad, sos=self.sos)
+        dec_out = self.decoder(enc_out, y_pad, blank=self.blank)
         return dec_out, enc_len
 
 
@@ -74,16 +72,15 @@ class TransformerTransducerASR(nn.Module):
     def __init__(self,
                  input_size=80,
                  vocab_size=40,
-                 sos=-1,
-                 eos=-1,
+                 blank=-1,
                  asr_transform=None,
                  encoder_type="transformer",
                  encoder_proj=None,
                  encoder_kwargs=None,
                  decoder_kwargs=None):
         super(TransformerTransducerASR, self).__init__()
-        if eos < 0 or sos < 0:
-            raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
+        if blank < 0:
+            raise RuntimeError(f"Unsupported blank value: {blank}")
         if encoder_type == "transformer":
             self.encoder = TorchTransformerEncoder(input_size,
                                                    **encoder_kwargs)
@@ -95,8 +92,7 @@ class TransformerTransducerASR(nn.Module):
                                             encoder_proj, **encoder_kwargs)
         decoder_kwargs["enc_dim"] = encoder_proj
         self.decoder = TorchTransformerDecoder(vocab_size, **decoder_kwargs)
-        self.sos = sos
-        self.eos = eos
+        self.blank = blank
         self.asr_transform = asr_transform
         self.encoder_type = encoder_type
 
@@ -119,5 +115,5 @@ class TransformerTransducerASR(nn.Module):
             # N x Ti x D => Ti x N x D
             enc_out = enc_out.transpose(0, 1)
         # N x Ti x To+1 x V
-        dec_out = self.decoder(enc_out, y_pad, y_len, sos=self.sos)
+        dec_out = self.decoder(enc_out, y_pad, y_len, blank=self.blank)
         return dec_out, enc_len

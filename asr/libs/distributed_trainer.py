@@ -421,7 +421,7 @@ class Trainer(object):
         self.reporter.log(f"Training for {e:d}/{num_epoches:d} epoches done!")
 
 
-class S2STrainer(Trainer):
+class CtcXentHybridTrainer(Trainer):
     """
     E2E ASR Trainer (CE)
     """
@@ -432,7 +432,7 @@ class S2STrainer(Trainer):
                  ctc_regularization=0,
                  ctc_blank=0,
                  **kwargs):
-        super(S2STrainer, self).__init__(rank, nnet, **kwargs)
+        super(CtcXentHybridTrainer, self).__init__(rank, nnet, **kwargs)
         if ctc_regularization:
             self.reporter.log(
                 f"Using CTC regularization (factor = {ctc_regularization:.2f}, "
@@ -481,4 +481,49 @@ class S2STrainer(Trainer):
         # add to reporter
         self.reporter.add("loss", loss.item())
         self.reporter.add("accu", accu)
+        return loss
+
+
+# from https://github.com/HawkAaron/warp-transducer
+# from warprnnt_pytorch import rnnt_loss
+# https://github.com/1ytic/warp-rnnt
+from warp_rnnt import rnnt_loss
+
+
+class TransducerTrainer(Trainer):
+    """
+    ASR Trainer (Transducer)
+    """
+    def __init__(self, rank, nnet, transducer_blank=0, **kwargs):
+        super(TransducerTrainer, self).__init__(rank, nnet, **kwargs)
+        self.blank = transducer_blank
+        self.reporter.log(
+            f"Got Transducer trainer, blank = {transducer_blank}")
+
+    def compute_loss(self, egs, **kwargs):
+        """
+        Compute training loss, egs contains:
+            src_pad: N x Ti x F
+            src_len: N
+            tgt_pad: N x To
+            tgt_len: N
+        """
+        # tgt_pad: N x To (replace ignore_id with blank)
+        ignore_mask = egs["tgt_pad"] == IGNORE_ID
+        tgt_pad = egs["tgt_pad"].masked_fill(ignore_mask, self.blank)
+        # N x Ti x To+1 x V
+        outs, enc_len = self.nnet(egs["src_pad"], egs["src_len"], tgt_pad,
+                                  egs["tgt_len"])
+        # add log_softmax if use https://github.com/1ytic/warp-rnnt
+        outs = F.log_softmax(outs, -1)
+        # compute loss
+        loss = rnnt_loss(outs,
+                         tgt_pad.to(th.int32),
+                         enc_len.to(th.int32),
+                         egs["tgt_len"].to(th.int32),
+                         blank=self.blank,
+                         reduction="mean",
+                         gather=True)
+        # add to reporter
+        self.reporter.add("loss", loss.item())
         return loss

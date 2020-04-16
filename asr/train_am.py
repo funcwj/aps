@@ -42,8 +42,6 @@ def load_conf(yaml_conf, dict_path):
             unit, idx = line.split()
             vocab[unit] = int(idx)
 
-    nnet_conf["sos"] = vocab["<sos>"]
-    nnet_conf["eos"] = vocab["<eos>"]
     nnet_conf["vocab_size"] = len(vocab)
 
     for key in conf.keys():
@@ -54,6 +52,9 @@ def load_conf(yaml_conf, dict_path):
     use_ctc = "ctc_regularization" in trainer_conf and trainer_conf[
         "ctc_regularization"] > 0
     is_transducer = conf["nnet_type"][-10:] == "transducer"
+    if not is_transducer:
+        nnet_conf["sos"] = vocab["<sos>"]
+        nnet_conf["eos"] = vocab["<eos>"]
     # for CTC/RNNT
     if use_ctc or is_transducer:
         if blank_sym not in vocab:
@@ -61,6 +62,7 @@ def load_conf(yaml_conf, dict_path):
                 f"Missing {blank_sym} in dictionary for CTC/RNNT training")
         if is_transducer:
             trainer_conf["transducer_blank"] = vocab[blank_sym]
+            nnet_conf["blank"] = vocab[blank_sym]
         else:
             trainer_conf["ctc_blank"] = vocab[blank_sym]
             nnet_conf["ctc"] = use_ctc
