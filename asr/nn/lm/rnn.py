@@ -20,7 +20,7 @@ def repackage_hidden(h):
         raise TypeError(f"Unsupport type: {type(h)}")
 
 
-class TorchLM(nn.Module):
+class TorchRNNLM(nn.Module):
     """
     A simple Torch RNN LM
     """
@@ -32,7 +32,7 @@ class TorchLM(nn.Module):
                  rnn_hidden=512,
                  rnn_dropout=0.2,
                  tie_weights=False):
-        super(TorchLM, self).__init__()
+        super(TorchRNNLM, self).__init__()
         RNN = rnn.upper()
         supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
         if RNN not in supported_rnn:
@@ -52,6 +52,8 @@ class TorchLM(nn.Module):
         # output distribution
         self.dist = nn.Linear(rnn_hidden, vocab_size)
 
+        self.init_weights()
+
         # tie_weights
         if tie_weights and embed_size == rnn_hidden:
             self.dist.weight = self.vocab_embed.weight
@@ -61,11 +63,12 @@ class TorchLM(nn.Module):
         self.dist.bias.data.zero_()
         self.dist.weight.data.uniform_(-initrange, initrange)
 
-    def forward(self, x, h=None):
+    def forward(self, x, h=None, xlen=None):
         """
         args:
             x: N x T
             h: hidden state from previous time step
+            xlen: N or None
         return:
             y: N x T x V
         """

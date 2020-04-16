@@ -4,9 +4,6 @@
 """
 Dataloader for raw waveforms in enhancement/separation tasks
 """
-
-# wujian@2018
-
 import random
 import torch as th
 import numpy as np

@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn.utils import clip_grad_norm_
-from torch.nn.parallel import data_parallel
+from torch.nn.parallel import data_parallel as datp
 from torch.utils.tensorboard import SummaryWriter
 
 import torch_complex.functional as cF
@@ -34,7 +34,10 @@ def ce_loss(outs, tgts):
     outs = outs.view(-1, V)
     # N(To+1)
     tgts = tgts.view(-1)
-    ce_loss = F.cross_entropy(outs, tgts, ignore_index=-1, reduction="mean")
+    ce_loss = F.cross_entropy(outs,
+                              tgts,
+                              ignore_index=IGNORE_ID,
+                              reduction="mean")
     return ce_loss
 
 
@@ -357,7 +360,7 @@ class Trainer(object):
 
             self.optimizer.zero_grad()
 
-            loss, accu = self.compute_loss(egs, idx=idx, ssr=self.ssr)
+            loss = self.compute_loss(egs, idx=idx, ssr=self.ssr)
             loss.backward()
 
             # clip gradient after backward
@@ -373,9 +376,6 @@ class Trainer(object):
                     add_gaussian_noise(self.nnet, std=self.gaussian_noise_std)
 
                 self.reporter.add("norm", norm)
-                self.reporter.add("loss", loss)
-                if accu is not None:
-                    self.reporter.add("accu", accu)
                 self.reporter.add("rate", self.optimizer.param_groups[0]["lr"])
             else:
                 self.reporter.log(f"Invalid gradient {norm:.3f} or " +
@@ -389,10 +389,7 @@ class Trainer(object):
             for idx, egs in enumerate(data_loader):
                 egs = load_obj(egs, self.default_device)
                 # ssr = 0, use ground truth
-                loss, accu = self.compute_loss(egs, idx=idx, ssr=0)
-                self.reporter.add("loss", loss.item())
-                if accu is not None:
-                    self.reporter.add("accu", accu)
+                _ = self.compute_loss(egs, idx=idx, ssr=0)
 
     def _prep_train(self, dev_loader):
         """
@@ -494,7 +491,7 @@ class Trainer(object):
                 egs = load_obj(egs, self.default_device)
                 self.optimizer.zero_grad()
 
-                loss, accu = self.compute_loss(egs, idx=idx, ssr=self.ssr)
+                loss = self.compute_loss(egs, idx=idx, ssr=self.ssr)
                 loss.backward()
 
                 if self.clip_gradient:
@@ -509,9 +506,6 @@ class Trainer(object):
                                            std=self.gaussian_noise_std)
 
                     self.reporter.add("norm", norm)
-                    self.reporter.add("loss", loss)
-                    if accu is not None:
-                        self.reporter.add("accu", accu)
                     self.reporter.add("rate",
                                       self.optimizer.param_groups[0]["lr"])
                 else:
@@ -602,8 +596,9 @@ class CtcXentHybridTrainer(Trainer):
         # outs: N x (To+1) x V
         # alis: N x (To+1) x Ti
         pack = (egs["src_pad"], egs["src_len"], tgt_pad, ssr)
-        outs, _, ctc_branch, enc_len = data_parallel(
-            self.nnet, pack, device_ids=self.device_ids)
+        outs, _, ctc_branch, enc_len = datp(self.nnet,
+                                            pack,
+                                            device_ids=self.device_ids)
         # compute loss
         if self.lsm_factor > 0:
             loss = ls_loss(outs, tgts, lsm_factor=self.lsm_factor)
@@ -624,7 +619,10 @@ class CtcXentHybridTrainer(Trainer):
             loss = self.ctc_factor * ctc_loss + (1 - self.ctc_factor) * loss
         # compute accu
         accu = compute_accu(outs, tgts)
-        return loss, accu
+        # add to reporter
+        self.reporter.add("loss", loss.item())
+        self.reporter.add("accu", accu)
+        return loss
 
 
 # from https://github.com/HawkAaron/warp-transducer
@@ -658,9 +656,7 @@ class TransducerTrainer(Trainer):
                                   eos=self.nnet.eos)
         pack = (egs["src_pad"], egs["src_len"], tgt_pad, egs["tgt_len"])
         # N x Ti x To+1 x V
-        outs, enc_len = data_parallel(self.nnet,
-                                      pack,
-                                      device_ids=self.device_ids)
+        outs, enc_len = datp(self.nnet, pack, device_ids=self.device_ids)
         # add log_softmax if use https://github.com/1ytic/warp-rnnt
         outs = F.log_softmax(outs, -1)
         # compute loss
@@ -671,7 +667,9 @@ class TransducerTrainer(Trainer):
                          blank=self.blank,
                          reduction="mean",
                          gather=True)
-        return loss, None
+        # add to reporter
+        self.reporter.add("loss", loss.item())
+        return loss
 
 
 class LmTrainer(Trainer):
@@ -688,14 +686,15 @@ class LmTrainer(Trainer):
             tgt: N x T+1
             len: N
         """
+        pack = (egs["src"], None, egs["len"])
         # pred: N x T+1 x V
-        pred, self.hidden = data_parallel(self.nnet,
-                                          egs["src"],
-                                          device_ids=self.device_ids)
+        pred, self.hidden = datp(self.nnet, pack, device_ids=self.device_ids)
         loss = ce_loss(pred, egs["tgt"])
         accu = compute_accu(pred, egs["tgt"])
-
-        return loss, accu
+        # add to reporter
+        self.reporter.add("loss", loss.item())
+        self.reporter.add("accu", accu)
+        return loss
 
 
 class MlTrainer(Trainer):
@@ -789,4 +788,7 @@ class MlTrainer(Trainer):
         # N x F x T
         log_pdf = th.log((th.exp(ps) + th.exp(pn)) * 0.5)
         # to maxinmum log_pdf
-        return -th.mean(log_pdf), None
+        loss = -th.mean(log_pdf)
+        # add to reporter
+        self.reporter.add("loss", loss.item())
+        return loss

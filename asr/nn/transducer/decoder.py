@@ -18,7 +18,6 @@ from ..transformer.embedding import IOEmbedding
 from ..transformer.decoder import prep_sub_mask
 from ..las.attention import padding_mask
 from ..las.decoder import OneHotEmbedding
-from ..lm.rnn import TorchLM
 
 IGNORE_ID = -1
 
@@ -81,6 +80,17 @@ class TorchRNNDecoder(nn.Module):
         add_out = th.tanh(enc_out.unsqueeze(-2) + dec_out.unsqueeze(-1))
         # N x Ti x To+1 x V
         return self.output(add_out)
+
+    def beam_search(self,
+                    enc_out,
+                    beam=16,
+                    sos=-1,
+                    eos=-1,
+                    nbest=8,
+                    max_len=-1,
+                    vectorized=True,
+                    normalized=True):
+        pass
 
 
 class TorchTransformerDecoder(nn.Module):

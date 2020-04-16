@@ -16,7 +16,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from .utils import load_obj
 from .trainer import ProgressReporter, StopCriterion, IGNORE_ID
 from .trainer import get_device_ids, add_gaussian_noise
-from .trainer import ce_loss, ls_loss, compute_accu
+from .trainer import ce_loss, ls_loss, compute_accu, process_tgts
 from .scheduler import support_ss_scheduler
 from .noamopt import NoamOpt
 
@@ -219,7 +219,7 @@ class Trainer(object):
 
             self.optimizer.zero_grad()
 
-            loss, accu = self.compute_loss(egs, idx=idx, ssr=self.ssr)
+            loss = self.compute_loss(egs, idx=idx, ssr=self.ssr)
             loss.backward()
 
             # clip gradient after backward
@@ -235,9 +235,6 @@ class Trainer(object):
                     add_gaussian_noise(self.nnet, std=self.gaussian_noise_std)
 
                 self.reporter.add("norm", norm)
-                self.reporter.add("loss", loss)
-                if accu is not None:
-                    self.reporter.add("accu", accu)
                 self.reporter.add("rate", self.optimizer.param_groups[0]["lr"])
             else:
                 self.reporter.log(f"Invalid gradient {norm:.3f} or " +
@@ -251,10 +248,7 @@ class Trainer(object):
             for idx, egs in enumerate(data_loader):
                 egs = load_obj(egs, self.default_device)
                 # ssr = 0, use ground truth
-                loss, accu = self.compute_loss(egs, idx=idx, ssr=0)
-                self.reporter.add("loss", loss.item())
-                if accu is not None:
-                    self.reporter.add("accu", accu)
+                _ = self.compute_loss(egs, idx=idx, ssr=0)
 
     def _prep_train(self, valid_loader):
         """
@@ -356,7 +350,7 @@ class Trainer(object):
                 egs = load_obj(egs, self.default_device)
                 self.optimizer.zero_grad()
 
-                loss, accu = self.compute_loss(egs, idx=idx, ssr=self.ssr)
+                loss = self.compute_loss(egs, idx=idx, ssr=self.ssr)
                 loss.backward()
 
                 if self.clip_gradient:
@@ -371,10 +365,8 @@ class Trainer(object):
                                            std=self.gaussian_noise_std)
 
                     self.reporter.add("norm", norm)
-                    self.reporter.add("loss", loss)
-                    if accu is not None:
-                        self.reporter.add("accu", accu)
-                    self.reporter.add("rate", self.optimizer.param_groups[0]["lr"])
+                    self.reporter.add("rate",
+                                      self.optimizer.param_groups[0]["lr"])
                 else:
                     self.reporter.log(f"Invalid gradient {norm} or " +
                                       f"loss {loss}, skip...")
@@ -448,7 +440,6 @@ class S2STrainer(Trainer):
         self.ctc_blank = ctc_blank
         self.ctc_factor = ctc_regularization
         self.lsm_factor = lsm_factor
-        self.eos = nnet.eos
 
     def compute_loss(self, egs, idx=0, ssr=0):
         """
@@ -458,17 +449,15 @@ class S2STrainer(Trainer):
             tgt_pad: N x To
             tgt_len: N
         """
-        # N x To, -1 => EOS
-        ignored_mask = egs["tgt_pad"] == IGNORE_ID
-        tgt_pad = egs["tgt_pad"].masked_fill(ignored_mask, self.eos)
+        # tgt_pad: N x To (replace ignore_id with eos)
+        # tgts: N x To+1 (add eos)
+        tgt_pad, tgts = process_tgts(egs["tgt_pad"],
+                                     egs["tgt_len"],
+                                     eos=self.nnet.eos)
         # outs: N x (To+1) x V
         # alis: N x (To+1) x Ti
         outs, _, ctc_branch, enc_len = self.nnet(egs["src_pad"],
                                                  egs["src_len"], tgt_pad, ssr)
-        # N x (To+1), pad -1
-        tgts = F.pad(egs["tgt_pad"], (0, 1), value=IGNORE_ID)
-        # add eos
-        tgts = tgts.scatter(1, egs["tgt_len"][:, None], self.eos)
         # compute loss
         if self.lsm_factor > 0:
             loss = ls_loss(outs, tgts, lsm_factor=self.lsm_factor)
@@ -489,4 +478,7 @@ class S2STrainer(Trainer):
             loss = self.ctc_factor * ctc_loss + (1 - self.ctc_factor) * loss
         # compute accu
         accu = compute_accu(outs, tgts)
-        return loss, accu
+        # add to reporter
+        self.reporter.add("loss", loss.item())
+        self.reporter.add("accu", accu)
+        return loss

@@ -26,6 +26,7 @@ class PositionalEncoding(nn.Module):
         # Tmax x 1 x D
         self.register_buffer("pos_enc", pos_enc[:, None])
         self.dropout = nn.Dropout(p=dropout)
+        self.scale = embed_dim**0.5
 
     def forward(self, x, t=0):
         """
@@ -38,7 +39,9 @@ class PositionalEncoding(nn.Module):
         # T x N x D
         x = x.transpose(0, 1)
         # Tmax x 1 x D
-        x = x + self.pos_enc[t:t + T, :]
+        x = x * self.scale + self.pos_enc[t:t + T, :]
+        # before commit 85cd010423ae975ecb04df0fb27430c3df0c301e
+        # x = x + self.pos_enc[t:t + T, :]
         x = self.dropout(x)
         return x
 

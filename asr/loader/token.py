@@ -12,7 +12,7 @@ from torch.nn.utils.rnn import pad_sequence
 from kaldi_python_io import Reader as BaseReader
 
 
-def token_loader(token_scp="",
+def token_loader(token="",
                  train=True,
                  sos=-1,
                  eos=-1,
@@ -20,7 +20,7 @@ def token_loader(token_scp="",
                  batch_size=64,
                  num_workers=0,
                  drop_last=False):
-    dataset = Dataset(token_scp, min_token_num=min_token_num)
+    dataset = Dataset(token, min_token_num=min_token_num)
     return DataLoader(dataset,
                       sos=sos,
                       eos=eos,
@@ -75,8 +75,9 @@ class Dataset(dat.Dataset):
             num_tokens=-1)
         self.token_set = []
         for key, tok in token_reader:
-            if len(tok) < min_token_num:
-                warnings.warn(f"Pass short utterances: {key}")
+            if len(tok) <= min_token_num:
+                # warnings.warn(f"Pass short utterances: {key}")
+                pass
             else:
                 self.token_set.append(tok)
 
@@ -131,7 +132,7 @@ class DataLoader(object):
 
 
 def run():
-    loader = token_loader(token_scp="token", sos=1, eos=0, train=False, batch_size=32)
+    loader = token_loader(token="token", sos=1, eos=0, train=False, batch_size=32)
     for egs in loader:
         print(egs["len"])
         print(egs["tgt"])

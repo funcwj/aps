@@ -4,10 +4,12 @@ from .transformer_asr import TransformerASR
 from .enh_transformer_asr import BeamTransformerASR, MvdrTransformerASR
 from .unsupervised_enh import UnsupervisedEnh
 from .transducer_asr import TransformerTransducerASR, TorchTransducerASR
-from .lm.rnn import TorchLM
+from .lm.rnn import TorchRNNLM
+from .lm.transformer import TorchTransformerLM
 
 nnet_templ = {
-    "torch_lm": TorchLM,
+    "rnn_lm": TorchRNNLM,
+    "transformer_lm": TorchTransformerLM,
     "las": LasASR,
     "mvdr_las": MvdrLasASR,
     "beam_las": BeamLasASR,
