@@ -57,12 +57,59 @@ class TorchTransducerASR(nn.Module):
             x_pad, x_len = self.asr_transform(x_pad, x_len)
         # Ti x N x D or N x Ti x D
         enc_out, enc_len = self.encoder(x_pad, x_len)
+        # Ti x N x D => N x Ti x D
         if self.encoder_type == "transformer":
-            # Ti x N x D => N x Ti x D
             enc_out = enc_out.transpose(0, 1)
         # N x Ti x To+1 x V
         dec_out = self.decoder(enc_out, y_pad, blank=self.blank)
         return dec_out, enc_len
+
+    def _dec_prep(self, x):
+        """
+        Parepare data for decoding
+        """
+        # raw wave
+        if self.asr_transform:
+            if x.dim() != 1:
+                raise RuntimeError("Now only support for one utterance")
+            x, _ = self.asr_transform(x[None, ...], None)
+        else:
+            # T x F or Beam x T x F
+            if x.dim() not in [2, 3]:
+                raise RuntimeError(f"Expect 2/3D tensor, but got {x.dim()}")
+            x = x[None, ...]
+        # Ti x N x D
+        enc_out, _ = self.encoder(x, None)
+        # Ti x N x D => N x Ti x D
+        if self.encoder_type == "transformer":
+            enc_out = enc_out.transpose(0, 1)
+        return enc_out
+
+    def greedy_search(self, x, blank=0):
+        """
+        Beam search for TorchTransducerASR
+        """
+        with th.no_grad():
+            enc_out = self._dec_prep(x)
+            return self.decoder.greedy_search(enc_out, blank=self.blank)
+
+    def beam_search(self,
+                    x,
+                    beam=16,
+                    nbest=8,
+                    normalized=True,
+                    max_len=-1,
+                    vectorized=True):
+        """
+        Beam search for TorchTransducerASR
+        """
+        with th.no_grad():
+            enc_out = self._dec_prep(x)
+            return self.decoder.beam_search(enc_out,
+                                            beam=beam,
+                                            blank=self.blank,
+                                            nbest=nbest,
+                                            normalized=normalized)
 
 
 class TransformerTransducerASR(nn.Module):
@@ -111,9 +158,55 @@ class TransformerTransducerASR(nn.Module):
             x_pad, x_len = self.asr_transform(x_pad, x_len)
         # Ti x N x D or N x Ti x D
         enc_out, enc_len = self.encoder(x_pad, x_len)
+        # N x Ti x D => Ti x N x D
         if self.encoder_type != "transformer":
-            # N x Ti x D => Ti x N x D
             enc_out = enc_out.transpose(0, 1)
         # N x Ti x To+1 x V
         dec_out = self.decoder(enc_out, y_pad, y_len, blank=self.blank)
         return dec_out, enc_len
+
+    def _dec_prep(self, x):
+        """
+        Prepare data for decoding
+        """
+        # raw wave
+        if self.asr_transform:
+            if x.dim() != 1:
+                raise RuntimeError("Now only support for one utterance")
+            x, _ = self.asr_transform(x[None, ...], None)
+        else:
+            if x.dim() not in [2, 3]:
+                raise RuntimeError(f"Expect 2/3D tensor, but got {x.dim()}")
+            x = x[None, ...]
+        # Ti x N x D
+        enc_out, _ = self.encoder(x, None)
+        # N x Ti x D => Ti x N x D
+        if self.encoder_type != "transformer":
+            enc_out = enc_out.transpose(0, 1)
+        return enc_out
+
+    def greedy_search(self, x, blank=0):
+        """
+        Greedy search for TransformerTransducerASR
+        """
+        with th.no_grad():
+            enc_out = self._dec_prep(x)
+            return self.decoder.greedy_search(enc_out, blank=self.blank)
+
+    def beam_search(self,
+                    x,
+                    beam=16,
+                    nbest=8,
+                    normalized=True,
+                    max_len=-1,
+                    vectorized=True):
+        """
+        Beam search for TransformerTransducerASR
+        """
+        with th.no_grad():
+            enc_out = self._dec_prep(x)
+            return self.decoder.beam_search(enc_out,
+                                            beam=beam,
+                                            blank=self.blank,
+                                            nbest=nbest,
+                                            normalized=normalized)

@@ -19,7 +19,7 @@ from loader import support_loader
 from feats import support_transform
 from nn import support_nnet
 
-ctc_blank_sym = "<blank>"
+blank_sym = "<blank>"
 constrained_conf_keys = [
     "nnet_type", "nnet_conf", "data_conf", "trainer_conf", "asr_transform",
     "enh_transform"

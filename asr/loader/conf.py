@@ -94,7 +94,7 @@ def add_room_response(spk, rir, early_energy=True, sr=16000):
     """
     S = spk.shape[-1]
     # revb = [ss.fftconvolve(spk, r)[:S] for r in rir]
-    revb = ss.fftconvolve(spk[None, ...], rir)[..., :S]
+    revb = ss.oaconvolve(spk[None, ...], rir)[..., :S]
     revb = np.asarray(revb)
 
     if early_energy:
@@ -103,7 +103,7 @@ def add_room_response(spk, rir, early_energy=True, sr=16000):
         rir_beg_idx = max(0, int(rir_peak - 0.001 * sr))
         rir_end_idx = min(rir_ch0.size, int(rir_peak + 0.05 * sr))
         early_rir = rir_ch0[rir_beg_idx:rir_end_idx]
-        early_rev = ss.fftconvolve(spk, early_rir)[:S]
+        early_rev = ss.oaconvolve(spk, early_rir)[:S]
         return revb, np.mean(early_rev**2)
     else:
         return revb, np.mean(revb[0]**2)

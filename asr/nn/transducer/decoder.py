@@ -2,6 +2,8 @@
 
 # wujian@2020
 
+from queue import PriorityQueue
+
 import torch as th
 import torch.nn as nn
 
@@ -20,6 +22,23 @@ from ..las.attention import padding_mask
 from ..las.decoder import OneHotEmbedding
 
 IGNORE_ID = -1
+
+
+class Node(object):
+    """
+    Node for usage in beam search
+    """
+    def __init__(self, score, stats):
+        self.score = score
+        self.stats = stats
+
+    def __cmp__(self, other):
+        if self.score < other.score:
+            return -1
+        elif self.score > other.score:
+            return 1
+        else:
+            return 0
 
 
 class TorchRNNDecoder(nn.Module):
@@ -64,30 +83,129 @@ class TorchRNNDecoder(nn.Module):
         return:
             output: N x Ti x To+1 x V
         """
-        # N x To+1
-        tgt_pad = F.pad(tgt_pad, (1, 0), value=blank)
         # N x To+1 x E
-        tgt_pad = self.vocab_embed(tgt_pad)
+        tgt_pad = self.vocab_embed(F.pad(tgt_pad, (1, 0), value=blank))
         # N x To+1 x D
         dec_out, _ = self.decoder(tgt_pad)
-        # N x Ti x J
-        enc_out = self.enc_proj(enc_out)
-        # N x To+1 x J
-        dec_out = self.dec_proj(dec_out)
-        # N x Ti x To+1 x J
-        add_out = th.tanh(enc_out.unsqueeze(-2) + dec_out.unsqueeze(-1))
         # N x Ti x To+1 x V
+        return self._pred_joint(enc_out, dec_out)
+
+    def _pred_joint(self, enc_out, dec_out):
+        """
+        Joint network prediction
+        args:
+            enc_out: N x Ti x D or N x D
+            dec_out: N x To+1 x D or N x D
+        return:
+            output: N x Ti x To+1 x V or N x 1 x V
+        """
+        # N x Ti x J or N x J
+        enc_out = self.enc_proj(enc_out)
+        # N x To+1 x J or N x J
+        dec_out = self.dec_proj(dec_out)
+        # N x Ti x To+1 x J or N x 1 x J
+        add_out = th.tanh(enc_out.unsqueeze(-2) + dec_out.unsqueeze(1))
+        # N x Ti x To+1 x V or N x 1 x V
         return self.output(add_out)
 
-    def beam_search(self,
-                    enc_out,
-                    beam=16,
-                    blank=0,
-                    nbest=8,
-                    max_len=-1,
-                    vectorized=True,
-                    normalized=True):
-        pass
+    def _step_decoder(self, pred_prev, hidden=None):
+        """
+        Make one step for decoder
+        """
+        pred_prev_emb = self.vocab_embed(pred_prev)  # 1 x 1 x E
+        return self.decoder(pred_prev_emb, hidden)
+
+    def greedy_search(self, enc_out, blank=0):
+        """
+        Greedy search algorithm for RNN-T
+        args:
+            enc_out: N x Ti x D
+        """
+        _, T, _ = enc_out.shape
+        score = 0
+        trans = []
+        for t in range(T):
+            if t == 0:
+                blk = th.tensor([[blank]],
+                                dtype=th.int64,
+                                device=enc_out.device)
+                dec_out, hidden = self._step_decoder(blk)
+            # 1 x V
+            prob = F.log_softmax(self._pred_joint(enc_out[:, t], dec_out)[0])
+            best_prob, best_pred = th.max(prob, dim=-1)
+            score += best_prob.item()
+            # not blank
+            if best_pred.item() != blank:
+                dec_out, hidden = self._step_decoder(best_pred[None, ...],
+                                                     hidden=hidden)
+                trans += [best_pred.item()]
+        return {"score": score, "trans": [blank] + trans + [blank]}
+
+    def beam_search(self, enc_out, beam=16, blank=0, nbest=8, normalized=True):
+        """
+        Beam search algorithm for RNN-T
+        args:
+            enc_out: N(=1) x Ti x D
+        """
+        nbest = min(beam, nbest)
+        if beam > self.vocab_size:
+            raise RuntimeError(f"Beam size({beam}) > vocabulary size")
+
+        beam_queue = PriorityQueue()
+        beam_queue.put(0.0, {"trans": [blank], "hidden": None})
+
+        _, T, _ = enc_out.shape
+        dev = enc_out.device
+        for t in range(T):
+            queue_t = beam_queue
+            beam_queue = PriorityQueue()
+            # < beam size
+            while beam_queue.qsize() <= beam:
+                # pop one
+                cur_node = queue_t.get()
+                trans = cur_node.stats["trans"]
+
+                # make a step
+                cur_inp = th.tensor([[trans[-1]]], dtype=th.int64, device=dev)
+                dec_out, hidden = self._step_decoder(
+                    cur_inp, hidden=cur_node.stats["hidden"])
+
+                # predition: 1 x V
+                prob = F.log_softmax(
+                    self._pred_joint(enc_out[:, t], dec_out)[0])
+
+                # extention
+                for i in range(self.vocab_size):
+                    score = cur_node.score + prob[i].item()
+                    if i == blank:
+                        beam_queue.put(score, {
+                            "trans": trans,
+                            "hidden": cur_node.stats["hidden"]
+                        })
+                    else:
+                        queue_t.put(score, {
+                            "trans": trans + [i],
+                            "hidden": hidden
+                        })
+        # get nbest
+        beam_hypos = []
+        while beam_queue.qsize():
+            node = beam_queue.get()
+            beam_hypos.append({
+                "score": node.score,
+                "trans": node.stats["trans"] + [blank]
+            })
+        # return best
+        if normalized:
+            nbest_hypos = sorted(beam_hypos,
+                                 key=lambda n: n["score"] /
+                                 (len(n["trans"]) - 1),
+                                 reverse=True)[:nbest]
+        else:
+            nbest_hypos = sorted(beam_hypos,
+                                 key=lambda n: n["score"],
+                                 reverse=True)
+        return nbest_hypos
 
 
 class TorchTransformerDecoder(nn.Module):
@@ -144,21 +262,132 @@ class TorchTransformerDecoder(nn.Module):
         dec_out = self.decoder(tgt_pad,
                                mask=tgt_mask,
                                src_key_padding_mask=pad_mask)
+        return self._pred_joint(enc_out, dec_out)
+
+    def _pred_joint(self, enc_out, dec_out):
+        """
+        Joint network prediction
+        args:
+            enc_out: Ti x N x D or 1 x D
+            dec_out: To+1 x N x D or 1 x D
+        return:
+            output: N x Ti x To+1 x V or N x 1 x V
+        """
         enc_out = self.enc_proj(enc_out)
         dec_out = self.dec_proj(dec_out)
-        # To+1 x Ti x N x J
+        # To+1 x Ti x N x J or 1 x 1 x J
         add_out = th.tanh(enc_out[None, ...] + dec_out[:, None])
-        # To+1 x Ti x N x J
+        # To+1 x Ti x N x J or 1 x 1 x V
         output = self.output(add_out)
-        # N x Ti x To+1 x J
-        return output.transpose(0, 2).contiguous()
+        # N x Ti x To+1 x V or 1 x 1 x V
+        if output.dim() == 4:
+            output = output.transpose(0, 2).contiguous()
+        return output
 
-    def beam_search(self,
-                    enc_out,
-                    beam=16,
-                    blank=0,
-                    nbest=8,
-                    max_len=-1,
-                    vectorized=True,
-                    normalized=True):
-        pass
+    def _step_decoder(self, pred_prev, history=None):
+        """
+        Make one step for decoder
+        args:
+            pred_prev: 1 x 1
+            history: None or T x 1 x E
+        return:
+            dec_out: 1 x 1 x D
+        """
+        # 1 x 1 x E
+        pred_prev_emb = self.tgt_embed(pred_prev, t=u)
+        if history is None:
+            history = pred_prev_emb
+        else:
+            history = th.cat([pred_prev_emb, history], dim=0)
+        tgt_mask = prep_sub_mask(history.shape[0], device=pred_prev.device)
+        return self.decoder(history, mask=tgt_mask), history
+
+    def greedy_search(self, enc_out, blank=0):
+        """
+        Greedy search algorithm for RNN-T
+        args:
+            enc_out: Ti x N(=1) x D
+        """
+        score = 0
+        trans = []
+        T, _, _ = enc_out.shape
+        for t in range(T):
+            if t == 0:
+                blk = th.tensor([[blank]],
+                                dtype=th.int64,
+                                device=enc_out.device)
+                dec_out, history = self._step_decoder(blk)
+            # 1 x V
+            prob = F.log_softmax(self._pred_joint(enc_out[t], dec_out)[0])
+            best_prob, best_pred = th.max(prob, dim=-1)
+            score += best_prob.item()
+            # not blank
+            if best_pred.item() != blank:
+                dec_out, history = self._step_decoder(best_pred[None, ...],
+                                                      history=history)
+                trans += [best_pred.item()]
+        return {"score": score, "trans": [blank] + trans + [blank]}
+
+    def beam_search(self, enc_out, beam=16, blank=0, nbest=8, normalized=True):
+        """
+        Beam search algorithm for RNN-T
+        args:
+            enc_out: Ti x N(=1) x D
+        """
+        nbest = min(beam, nbest)
+        if beam > self.vocab_size:
+            raise RuntimeError(f"Beam size({beam}) > vocabulary size")
+
+        beam_queue = PriorityQueue()
+        beam_queue.put(0.0, {"trans": [blank], "history": None})
+
+        T, _, _ = enc_out.shape
+        dev = enc_out.device
+        for t in range(T):
+            queue_t = beam_queue
+            beam_queue = PriorityQueue()
+            # < beam size
+            while beam_queue.qsize() <= beam:
+                # pop one
+                cur_node = queue_t.get()
+                trans = cur_node.stats["trans"]
+                cur_inp = th.tensor([[trans[-1]]], dtype=th.int64, device=dev)
+                # make a step
+                dec_out, history = self._step_decoder(
+                    cur_inp, history=cur_node.stats["history"])
+
+                # predition: 1 x V
+                prob = F.log_softmax(self._pred_joint(enc_out[t], dec_out)[0])
+
+                # extention
+                for i in range(self.vocab_size):
+                    score = cur_node.score + prob[i].item()
+                    if i == blank:
+                        beam_queue.put(score, {
+                            "trans": trans,
+                            "history": cur_node.stats["history"]
+                        })
+                    else:
+                        queue_t.put(score, {
+                            "trans": trans + [i],
+                            "history": history
+                        })
+        # get nbest
+        beam_hypos = []
+        while beam_queue.qsize():
+            node = beam_queue.get()
+            beam_hypos.append({
+                "score": node.score,
+                "trans": node.stats["trans"] + [blank]
+            })
+        # return best
+        if normalized:
+            nbest_hypos = sorted(beam_hypos,
+                                 key=lambda n: n["score"] /
+                                 (len(n["trans"]) - 1),
+                                 reverse=True)[:nbest]
+        else:
+            nbest_hypos = sorted(beam_hypos,
+                                 key=lambda n: n["score"],
+                                 reverse=True)
+        return nbest_hypos

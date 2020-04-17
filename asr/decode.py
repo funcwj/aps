@@ -182,7 +182,7 @@ if __name__ == "__main__":
                         help="If not empty, dump n-best hypothesis")
     parser.add_argument("--vectorized",
                         action=StrToBoolAction,
-                        default="false",
+                        default="true",
                         help="If ture, using vectorized algothrim")
     parser.add_argument("--normalized",
                         action=StrToBoolAction,
