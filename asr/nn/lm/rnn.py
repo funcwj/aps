@@ -72,6 +72,8 @@ class TorchRNNLM(nn.Module):
         return:
             y: N x T x V
         """
+        if h is not None:
+            h = repackage_hidden(h)
         # N x T => N x T x V
         x = self.vocab_embed(x)
         x = self.vocab_drop(x)

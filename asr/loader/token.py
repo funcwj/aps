@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 # wujian@2019
-
+"""
+for RNNLM (utterance corpus)
+"""
 import random
 import warnings
 import torch as th
@@ -68,18 +70,21 @@ class Dataset(dat.Dataset):
     """
     Dataset for token corpus
     """
-    def __init__(self, token_scp, min_token_num=2):
+    def __init__(self, token_scp, min_token_num=2, eos=None):
         token_reader = BaseReader(
             token_scp,
             value_processor=lambda l: [int(n) for n in l],
             num_tokens=-1)
         self.token_set = []
-        for key, tok in token_reader:
+        for _, tok in token_reader:
             if len(tok) <= min_token_num:
                 # warnings.warn(f"Pass short utterances: {key}")
                 pass
             else:
-                self.token_set.append(tok)
+                if eos is None:
+                    self.token_set.append(tok)
+                else:
+                    self.token_set.append(tok + [eos])
 
     def __getitem__(self, index):
         return self.token_set[index]

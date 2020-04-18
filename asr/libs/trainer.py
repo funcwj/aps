@@ -354,13 +354,14 @@ class Trainer(object):
     def train(self, data_loader):
         self.nnet.train()
         self.reporter.train()
-        for idx, egs in enumerate(data_loader):
+        # for idx, egs in enumerate(data_loader):
+        for egs in data_loader:
             # load to gpu
             egs = load_obj(egs, self.default_device)
 
             self.optimizer.zero_grad()
 
-            loss = self.compute_loss(egs, idx=idx, ssr=self.ssr)
+            loss = self.compute_loss(egs, ssr=self.ssr)
             loss.backward()
 
             # clip gradient after backward
@@ -386,10 +387,11 @@ class Trainer(object):
         self.reporter.eval()
 
         with th.no_grad():
-            for idx, egs in enumerate(data_loader):
+            # for idx, egs in enumerate(data_loader):
+            for egs in data_loader:
                 egs = load_obj(egs, self.default_device)
                 # ssr = 0, use ground truth
-                _ = self.compute_loss(egs, idx=idx, ssr=0)
+                _ = self.compute_loss(egs, ssr=0)
 
     def _prep_train(self, dev_loader):
         """
@@ -485,13 +487,14 @@ class Trainer(object):
         self.reporter.train()
         while True:
             # trained on several batches
-            for idx, egs in enumerate(trn_loader):
+            # for idx, egs in enumerate(trn_loader):
+            for egs in trn_loader:
                 trained_batches = (trained_batches + 1) % eval_interval
                 # update per-batch
                 egs = load_obj(egs, self.default_device)
                 self.optimizer.zero_grad()
 
-                loss = self.compute_loss(egs, idx=idx, ssr=self.ssr)
+                loss = self.compute_loss(egs, ssr=self.ssr)
                 loss.backward()
 
                 if self.clip_gradient:
@@ -674,8 +677,11 @@ class LmTrainer(Trainer):
     """
     LM Trainer (CE)
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, repackage_hidden=False, **kwargs):
         super(LmTrainer, self).__init__(*args, **kwargs)
+        self.hidden = None
+        self.repackage_hidden = repackage_hidden
+        self.reporter.log("Repackage hidden state for each batch")
 
     def compute_loss(self, egs, **kwargs):
         """
@@ -684,9 +690,15 @@ class LmTrainer(Trainer):
             tgt: N x T+1
             len: N
         """
-        pack = (egs["src"], None, egs["len"])
         # pred: N x T+1 x V
-        pred, self.hidden = datp(self.nnet, pack, device_ids=self.device_ids)
+        if self.repackage_hidden:
+            pack = (egs["src"], self.hidden)
+            pred, self.hidden = datp(self.nnet,
+                                     pack,
+                                     device_ids=self.device_ids)
+        else:
+            pack = (egs["src"], None, egs["len"])
+            pred, _ = datp(self.nnet, pack, device_ids=self.device_ids)
         loss = ce_loss(pred, egs["tgt"])
         accu = compute_accu(pred, egs["tgt"])
         # add to reporter

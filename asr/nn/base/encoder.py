@@ -443,6 +443,7 @@ class TdnnRnnEncoder(nn.Module):
                  rnn_bidir=True,
                  rnn_dropout=0.2,
                  rnn_proj=None,
+                 rnn_layernorm=False,
                  rnn_hidden=512):
         super(TdnnRnnEncoder, self).__init__()
 
@@ -466,6 +467,7 @@ class TdnnRnnEncoder(nn.Module):
         self.rnns = CustomEncoder(tdnn_dim,
                                   output_size,
                                   rnn=rnn,
+                                  layernorm=rnn_layernorm,
                                   rnn_layers=rnn_layers,
                                   rnn_bidir=rnn_bidir,
                                   rnn_dropout=rnn_dropout,

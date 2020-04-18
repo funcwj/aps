@@ -4,21 +4,18 @@ nnet_type: "common_transducer"
 
 nnet_conf:
   input_size: 80
-  encoder_type: "fsmn"
+  encoder_type: "tdnn"
   encoder_proj: 512
   encoder_kwargs:
     tdnn_dim: 512
     tdnn_layers: 3
     tdnn_stride: "2,2,2"
     tdnn_dilats: "1,1,2"
-    fsmn_layers: 6
-    fsmn_residual: True
-    fsmn_lctx: 10
-    fsmn_rctx: 10
-    fsmn_proj: 512
-    fsmn_norm: "LN"
-    fsmn_dilats: "1,1,1,1,1,1"
-    fsmn_dropout: 0.2
+    rnn_layers: 3
+    rnn_dropout: 0.2
+    rnn_hidden: 512
+    rnn_proj: 512
+    rnn_layernorm: True
   decoder_kwargs:
     embed_size: 512
     jot_dim: 512
@@ -49,8 +46,8 @@ trainer_conf:
     patience: 1
     factor: 0.5
   no_impr: 6
-  no_impr_thres: 0.2
-  clip_gradient: 10
+  no_impr_thres: 0.3
+  clip_gradient: 50
   stop_criterion: "loss"
 
 data_conf:

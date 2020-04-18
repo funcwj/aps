@@ -136,7 +136,7 @@ class TimeInvariantEnh(nn.Module):
         return f
 
 
-from ..las.encoder import TorchEncoder
+from ..base.encoder import TorchEncoder
 
 
 class TimeInvariantAttEnh(nn.Module):
