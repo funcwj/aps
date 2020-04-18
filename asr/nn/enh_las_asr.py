@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence
 
 from .las_asr import LasASR
-from .las.encoder import TorchEncoder
+from .base.encoder import TorchEncoder
 from .enh.mvdr import MvdrBeamformer
 from .enh.google import CLPFsBeamformer  # same as TimeInvariantEnh
 from .enh.conv import TimeInvariantEnh, TimeVariantEnh, TimeInvariantAttEnh
@@ -120,7 +120,7 @@ class MvdrLasASR(EnhLasASR):
             # beamforming
             enh_transform=None,
             mask_net_kwargs=None,
-            mask_net_noise=True,
+            mask_net_noise=False,
             mvdr_kwargs=None,
             **kwargs):
         super(MvdrLasASR, self).__init__(**kwargs)

@@ -13,8 +13,8 @@ except:
     raise ImportError("import Transformer module failed")
 
 from .embedding import IOEmbedding
-from ..las.attention import padding_mask
-from ..las.decoder import NEG_INF
+from ..base.attention import padding_mask
+from ..base.decoder import NEG_INF
 
 IGNORE_ID = -1
 
@@ -165,8 +165,8 @@ class TorchTransformerDecoder(nn.Module):
                 # beam
                 if t:
                     point = back_point[-1]
-                    cur_emb = self.tgt_embed(hist_token[-1][point][..., None],
-                                             t=t)
+                    history = hist_token[-1][point]
+                    cur_emb = self.tgt_embed(history[..., None], t=t)
                     pre_emb = th.cat([pre_emb, cur_emb], dim=0)
                 else:
                     point = th.arange(0, beam, dtype=th.int64, device=dev)

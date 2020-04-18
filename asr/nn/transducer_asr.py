@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 from .transformer.encoder import TorchTransformerEncoder
 from .transducer.decoder import TorchTransformerDecoder, TorchRNNDecoder
-from .las.encoder import encoder_instance
+from .base.encoder import encoder_instance
 
 
 class TorchTransducerASR(nn.Module):
@@ -85,7 +85,7 @@ class TorchTransducerASR(nn.Module):
             enc_out = enc_out.transpose(0, 1)
         return enc_out
 
-    def greedy_search(self, x, blank=0):
+    def greedy_search(self, x):
         """
         Beam search for TorchTransducerASR
         """
@@ -185,7 +185,7 @@ class TransformerTransducerASR(nn.Module):
             enc_out = enc_out.transpose(0, 1)
         return enc_out
 
-    def greedy_search(self, x, blank=0):
+    def greedy_search(self, x):
         """
         Greedy search for TransformerTransducerASR
         """

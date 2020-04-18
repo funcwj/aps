@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 from .transformer.decoder import TorchTransformerDecoder
 from .transformer.encoder import TorchTransformerEncoder
-from .las.encoder import encoder_instance
+from .base.encoder import encoder_instance
 
 
 class TransformerASR(nn.Module):

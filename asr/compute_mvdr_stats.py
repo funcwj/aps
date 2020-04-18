@@ -32,6 +32,8 @@ class Computer(Evaluator):
         wav = th.from_numpy(wav).to(self.device)[None, ...]
         if stats == "mask":
             out, _, _ = self.nnet.speech_mask(wav, None)
+            if self.nnet.mask_net_noise:
+                out, _ = th.chunk(out, 2, dim=-1)
         else:
             out, _ = self.nnet.mvdr_beam(wav, None)
             out = out.abs()

@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch_complex.functional as cF
 
-from ..las.attention import padding_mask
+from ..base.attention import padding_mask
 
 EPSILON = th.finfo(th.float32).eps
 

@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .transformer_asr import TransformerASR
-from .las.encoder import TorchEncoder
+from .base.encoder import TorchEncoder
 from .enh.conv import TimeInvariantEnh, TimeVariantEnh, TimeInvariantAttEnh
 from .enh.mvdr import MvdrBeamformer
 from .enh.google import CLPFsBeamformer  # same as TimeInvariantEnh
@@ -139,7 +139,7 @@ class MvdrTransformerASR(EnhTransformerASR):
             # beamforming
             enh_transform=None,
             mask_net_kwargs=None,
-            mask_net_noise=True,
+            mask_net_noise=False,
             mvdr_kwargs=None,
             **kwargs):
         super(MvdrTransformerASR, self).__init__(**kwargs)

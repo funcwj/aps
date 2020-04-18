@@ -9,7 +9,7 @@ except:
     raise ImportError("import Transformer module failed")
 
 from ..transformer.embedding import IOEmbedding
-from ..las.attention import padding_mask
+from ..base.attention import padding_mask
 
 
 class TorchTransformerLM(nn.Module):

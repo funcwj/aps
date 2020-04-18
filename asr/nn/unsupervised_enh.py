@@ -6,7 +6,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .las.encoder import TorchEncoder
+from .base.encoder import TorchEncoder
 
 
 class UnsupervisedEnh(TorchEncoder):

@@ -11,7 +11,7 @@ except:
     raise ImportError("import Transformer module failed")
 
 from .embedding import IOEmbedding
-from ..las.attention import padding_mask
+from ..base.attention import padding_mask
 
 
 class TorchTransformerEncoder(nn.Module):

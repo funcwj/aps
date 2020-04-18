@@ -2,8 +2,6 @@
 
 # wujian@2020
 
-from queue import PriorityQueue
-
 import torch as th
 import torch.nn as nn
 
@@ -16,10 +14,12 @@ try:
 except:
     raise ImportError("import Transformer module failed")
 
+from queue import PriorityQueue
+
 from ..transformer.embedding import IOEmbedding
 from ..transformer.decoder import prep_sub_mask
-from ..las.attention import padding_mask
-from ..las.decoder import OneHotEmbedding
+from ..base.attention import padding_mask
+from ..base.decoder import OneHotEmbedding
 
 IGNORE_ID = -1
 
@@ -32,13 +32,8 @@ class Node(object):
         self.score = score
         self.stats = stats
 
-    def __cmp__(self, other):
-        if self.score < other.score:
-            return -1
-        elif self.score > other.score:
-            return 1
-        else:
-            return 0
+    def __lt__(self, other):
+        return self.score <= other.score
 
 
 class TorchRNNDecoder(nn.Module):
@@ -121,17 +116,15 @@ class TorchRNNDecoder(nn.Module):
         args:
             enc_out: N x Ti x D
         """
-        _, T, _ = enc_out.shape
+        blk = th.tensor([[blank]], dtype=th.int64, device=enc_out.device)
+        dec_out, hidden = self._step_decoder(blk)
         score = 0
         trans = []
+        _, T, _ = enc_out.shape
         for t in range(T):
-            if t == 0:
-                blk = th.tensor([[blank]],
-                                dtype=th.int64,
-                                device=enc_out.device)
-                dec_out, hidden = self._step_decoder(blk)
             # 1 x V
-            prob = F.log_softmax(self._pred_joint(enc_out[:, t], dec_out)[0])
+            prob = F.log_softmax(self._pred_joint(enc_out[:, t], dec_out)[0],
+                                 dim=-1)
             best_prob, best_pred = th.max(prob, dim=-1)
             score += best_prob.item()
             # not blank
@@ -139,7 +132,7 @@ class TorchRNNDecoder(nn.Module):
                 dec_out, hidden = self._step_decoder(best_pred[None, ...],
                                                      hidden=hidden)
                 trans += [best_pred.item()]
-        return {"score": score, "trans": [blank] + trans + [blank]}
+        return [{"score": score, "trans": [blank] + trans + [blank]}]
 
     def beam_search(self, enc_out, beam=16, blank=0, nbest=8, normalized=True):
         """
@@ -152,17 +145,17 @@ class TorchRNNDecoder(nn.Module):
             raise RuntimeError(f"Beam size({beam}) > vocabulary size")
 
         beam_queue = PriorityQueue()
-        beam_queue.put(0.0, {"trans": [blank], "hidden": None})
+        init_node = Node(0.0, {"trans": [blank], "history": None})
+        beam_queue.put_nowait(init_node)
 
         _, T, _ = enc_out.shape
         dev = enc_out.device
         for t in range(T):
             queue_t = beam_queue
             beam_queue = PriorityQueue()
-            # < beam size
-            while beam_queue.qsize() <= beam:
-                # pop one
-                cur_node = queue_t.get()
+            for _ in range(beam):
+                # pop one (queue_t is updated)
+                cur_node = queue_t.get_nowait()
                 trans = cur_node.stats["trans"]
 
                 # make a step
@@ -171,26 +164,28 @@ class TorchRNNDecoder(nn.Module):
                     cur_inp, hidden=cur_node.stats["hidden"])
 
                 # predition: 1 x V
-                prob = F.log_softmax(
-                    self._pred_joint(enc_out[:, t], dec_out)[0])
-
+                prob = F.log_softmax(self._pred_joint(enc_out[:, t],
+                                                      dec_out)[0],
+                                     dim=-1).squeeze()
                 # extention
                 for i in range(self.vocab_size):
                     score = cur_node.score + prob[i].item()
                     if i == blank:
-                        beam_queue.put(score, {
+                        node = Node(score, {
                             "trans": trans,
                             "hidden": cur_node.stats["hidden"]
                         })
+                        beam_queue.put_nowait(node)
                     else:
-                        queue_t.put(score, {
+                        node = Node(score, {
                             "trans": trans + [i],
                             "hidden": hidden
                         })
+                        queue_t.put_nowait(node)
         # get nbest
         beam_hypos = []
-        while beam_queue.qsize():
-            node = beam_queue.get()
+        for _ in range(beam):
+            node = beam_queue.get_nowait()
             beam_hypos.append({
                 "score": node.score,
                 "trans": node.stats["trans"] + [blank]
@@ -291,16 +286,18 @@ class TorchTransformerDecoder(nn.Module):
             pred_prev: 1 x 1
             history: None or T x 1 x E
         return:
-            dec_out: 1 x 1 x D
+            dec_out: 1 x D
         """
+        t = 0 if history is None else history.shape[0]
         # 1 x 1 x E
-        pred_prev_emb = self.tgt_embed(pred_prev, t=u)
+        pred_prev_emb = self.tgt_embed(pred_prev, t=t)
         if history is None:
             history = pred_prev_emb
         else:
             history = th.cat([pred_prev_emb, history], dim=0)
-        tgt_mask = prep_sub_mask(history.shape[0], device=pred_prev.device)
-        return self.decoder(history, mask=tgt_mask), history
+        tgt_mask = prep_sub_mask(t + 1, device=pred_prev.device)
+        dec_out = self.decoder(history, mask=tgt_mask)
+        return dec_out[-1], history
 
     def greedy_search(self, enc_out, blank=0):
         """
@@ -308,17 +305,15 @@ class TorchTransformerDecoder(nn.Module):
         args:
             enc_out: Ti x N(=1) x D
         """
+        blk = th.tensor([[blank]], dtype=th.int64, device=enc_out.device)
+        dec_out, history = self._step_decoder(blk)
         score = 0
         trans = []
         T, _, _ = enc_out.shape
         for t in range(T):
-            if t == 0:
-                blk = th.tensor([[blank]],
-                                dtype=th.int64,
-                                device=enc_out.device)
-                dec_out, history = self._step_decoder(blk)
             # 1 x V
-            prob = F.log_softmax(self._pred_joint(enc_out[t], dec_out)[0])
+            prob = F.log_softmax(self._pred_joint(enc_out[t], dec_out)[0],
+                                 dim=-1)
             best_prob, best_pred = th.max(prob, dim=-1)
             score += best_prob.item()
             # not blank
@@ -326,7 +321,7 @@ class TorchTransformerDecoder(nn.Module):
                 dec_out, history = self._step_decoder(best_pred[None, ...],
                                                       history=history)
                 trans += [best_pred.item()]
-        return {"score": score, "trans": [blank] + trans + [blank]}
+        return [{"score": score, "trans": [blank] + trans + [blank]}]
 
     def beam_search(self, enc_out, beam=16, blank=0, nbest=8, normalized=True):
         """
@@ -339,43 +334,46 @@ class TorchTransformerDecoder(nn.Module):
             raise RuntimeError(f"Beam size({beam}) > vocabulary size")
 
         beam_queue = PriorityQueue()
-        beam_queue.put(0.0, {"trans": [blank], "history": None})
+        init_node = Node(0.0, {"trans": [blank], "history": None})
+        beam_queue.put_nowait(init_node)
 
         T, _, _ = enc_out.shape
         dev = enc_out.device
         for t in range(T):
             queue_t = beam_queue
             beam_queue = PriorityQueue()
-            # < beam size
-            while beam_queue.qsize() <= beam:
+            for _ in range(beam):
                 # pop one
-                cur_node = queue_t.get()
+                cur_node = queue_t.get_nowait()
                 trans = cur_node.stats["trans"]
                 cur_inp = th.tensor([[trans[-1]]], dtype=th.int64, device=dev)
                 # make a step
                 dec_out, history = self._step_decoder(
                     cur_inp, history=cur_node.stats["history"])
 
-                # predition: 1 x V
-                prob = F.log_softmax(self._pred_joint(enc_out[t], dec_out)[0])
+                # predition: V
+                prob = F.log_softmax(self._pred_joint(enc_out[t], dec_out)[0],
+                                     dim=-1).squeeze()
 
                 # extention
                 for i in range(self.vocab_size):
                     score = cur_node.score + prob[i].item()
                     if i == blank:
-                        beam_queue.put(score, {
+                        node = Node(score, {
                             "trans": trans,
                             "history": cur_node.stats["history"]
                         })
+                        beam_queue.put_nowait(node)
                     else:
-                        queue_t.put(score, {
+                        node = Node(score, {
                             "trans": trans + [i],
                             "history": history
                         })
+                        queue_t.put_nowait(node)
         # get nbest
         beam_hypos = []
-        while beam_queue.qsize():
-            node = beam_queue.get()
+        for _ in range(beam):
+            node = beam_queue.get_nowait()
             beam_hypos.append({
                 "score": node.score,
                 "trans": node.stats["trans"] + [blank]

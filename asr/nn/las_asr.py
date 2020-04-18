@@ -11,9 +11,9 @@ import torch.nn.functional as F
 
 from torch.nn.utils.rnn import pack_padded_sequence
 
-from .las.decoder import TorchDecoder
-from .las.encoder import encoder_instance
-from .las.attention import att_instance
+from .base.decoder import TorchDecoder
+from .base.encoder import encoder_instance
+from .base.attention import att_instance
 
 
 class LasASR(nn.Module):
