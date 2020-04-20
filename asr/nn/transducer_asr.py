@@ -30,13 +30,14 @@ class TorchTransducerASR(nn.Module):
         if encoder_type == "transformer":
             self.encoder = TorchTransformerEncoder(input_size,
                                                    **encoder_kwargs)
+            decoder_kwargs["enc_dim"] = encoder_kwargs["att_dim"]
         else:
             if encoder_proj is None:
                 raise ValueError("For non-transformer encoder, "
                                  "encoder_proj can not be None")
             self.encoder = encoder_instance(encoder_type, input_size,
                                             encoder_proj, **encoder_kwargs)
-        decoder_kwargs["enc_dim"] = encoder_proj
+            decoder_kwargs["enc_dim"] = encoder_proj
         self.decoder = TorchRNNDecoder(vocab_size, **decoder_kwargs)
         self.blank = blank
         self.asr_transform = asr_transform
@@ -105,11 +106,11 @@ class TorchTransducerASR(nn.Module):
         """
         with th.no_grad():
             enc_out = self._dec_prep(x)
-            return self.decoder.beam_search(enc_out,
-                                            beam=beam,
-                                            blank=self.blank,
-                                            nbest=nbest,
-                                            normalized=normalized)
+            return self.decoder.beam_search_best_first(enc_out,
+                                                       beam=beam,
+                                                       blank=self.blank,
+                                                       nbest=nbest,
+                                                       normalized=normalized)
 
 
 class TransformerTransducerASR(nn.Module):
@@ -205,8 +206,8 @@ class TransformerTransducerASR(nn.Module):
         """
         with th.no_grad():
             enc_out = self._dec_prep(x)
-            return self.decoder.beam_search(enc_out,
-                                            beam=beam,
-                                            blank=self.blank,
-                                            nbest=nbest,
-                                            normalized=normalized)
+            return self.decoder.beam_search_best_first(enc_out,
+                                                       beam=beam,
+                                                       blank=self.blank,
+                                                       nbest=nbest,
+                                                       normalized=normalized)

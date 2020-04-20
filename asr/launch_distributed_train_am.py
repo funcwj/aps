@@ -158,7 +158,7 @@ def run(args):
     else:
         nnet = asr_cls(**conf["nnet_conf"])
 
-    train_worker(args.local_rank, is_transducer, nnet, conf, args)
+    train_worker(args.local_rank, nnet, is_transducer, conf, args)
 
 
 if __name__ == "__main__":

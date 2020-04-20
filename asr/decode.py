@@ -119,7 +119,7 @@ def run(args):
                 top1.write(f"{key}\t{trans}\n")
         if topn:
             topn.write("".join(nbest))
-        if not (N + 1) % 50:
+        if not (N + 1) % 10:
             top1.flush()
             if topn:
                 topn.flush()

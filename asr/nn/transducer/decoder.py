@@ -26,14 +26,41 @@ IGNORE_ID = -1
 
 class Node(object):
     """
-    Node for usage in beam search
+    Node for usage in best-first beam search
     """
     def __init__(self, score, stats):
         self.score = score
         self.stats = stats
 
     def __lt__(self, other):
-        return self.score <= other.score
+        return self.score >= other.score
+
+
+def _prep_nbest(container, nbest, normalized=True, blank=0):
+    """
+    Return nbest hypos from queue or list
+    """
+    # get nbest
+    if isinstance(container, PriorityQueue):
+        beam_hypos = []
+        while not container.empty():
+            node = container.get_nowait()
+            beam_hypos.append({
+                "score": node.score,
+                "trans": node.stats["trans"] + [blank]
+            })
+    else:
+        beam_hypos = container
+    # return best
+    if normalized:
+        nbest_hypos = sorted(beam_hypos,
+                             key=lambda n: n["score"] / (len(n["trans"]) - 1),
+                             reverse=True)
+    else:
+        nbest_hypos = sorted(beam_hypos,
+                             key=lambda n: n["score"],
+                             reverse=True)
+    return nbest_hypos[:nbest]
 
 
 class TorchRNNDecoder(nn.Module):
@@ -129,14 +156,18 @@ class TorchRNNDecoder(nn.Module):
             score += best_prob.item()
             # not blank
             if best_pred.item() != blank:
-                dec_out, hidden = self._step_decoder(best_pred[None, ...],
-                                                     hidden=hidden)
+                dec_out, hidden = self._step_decoder(best_pred, hidden=hidden)
                 trans += [best_pred.item()]
         return [{"score": score, "trans": [blank] + trans + [blank]}]
 
-    def beam_search(self, enc_out, beam=16, blank=0, nbest=8, normalized=True):
+    def beam_search_best_first(self,
+                               enc_out,
+                               beam=16,
+                               blank=0,
+                               nbest=8,
+                               normalized=True):
         """
-        Beam search algorithm for RNN-T
+        Beam search (best first) algorithm for RNN-T
         args:
             enc_out: N(=1) x Ti x D
         """
@@ -145,7 +176,7 @@ class TorchRNNDecoder(nn.Module):
             raise RuntimeError(f"Beam size({beam}) > vocabulary size")
 
         beam_queue = PriorityQueue()
-        init_node = Node(0.0, {"trans": [blank], "history": None})
+        init_node = Node(0.0, {"trans": [blank], "hidden": None})
         beam_queue.put_nowait(init_node)
 
         _, T, _ = enc_out.shape
@@ -162,45 +193,49 @@ class TorchRNNDecoder(nn.Module):
                 cur_inp = th.tensor([[trans[-1]]], dtype=th.int64, device=dev)
                 dec_out, hidden = self._step_decoder(
                     cur_inp, hidden=cur_node.stats["hidden"])
-
-                # predition: 1 x V
+                # predition: V
                 prob = F.log_softmax(self._pred_joint(enc_out[:, t],
                                                       dec_out)[0],
                                      dim=-1).squeeze()
-                # extention
-                for i in range(self.vocab_size):
-                    score = cur_node.score + prob[i].item()
-                    if i == blank:
-                        node = Node(score, {
-                            "trans": trans,
-                            "hidden": cur_node.stats["hidden"]
-                        })
-                        beam_queue.put_nowait(node)
-                    else:
-                        node = Node(score, {
-                            "trans": trans + [i],
-                            "hidden": hidden
-                        })
-                        queue_t.put_nowait(node)
-        # get nbest
-        beam_hypos = []
-        for _ in range(beam):
-            node = beam_queue.get_nowait()
-            beam_hypos.append({
-                "score": node.score,
-                "trans": node.stats["trans"] + [blank]
-            })
-        # return best
-        if normalized:
-            nbest_hypos = sorted(beam_hypos,
-                                 key=lambda n: n["score"] /
-                                 (len(n["trans"]) - 1),
-                                 reverse=True)[:nbest]
-        else:
-            nbest_hypos = sorted(beam_hypos,
-                                 key=lambda n: n["score"],
-                                 reverse=True)
-        return nbest_hypos
+
+                # add terminal node (end with blank)
+                score = cur_node.score + prob[blank].item()
+                blank_node = Node(score, {
+                    "trans": trans,
+                    "hidden": cur_node.stats["hidden"]
+                })
+                beam_queue.put_nowait(blank_node)
+
+                # extend other nodes
+                topk_score, topk_index = th.topk(prob, beam + 1)
+                topk = topk_index.tolist()
+                for i in range(beam + 1 if blank in topk else beam):
+                    if topk[i] == blank:
+                        continue
+                    score = cur_node.score + topk_score[i].item()
+                    node = Node(score, {
+                        "trans": trans + [topk[i]],
+                        "hidden": hidden
+                    })
+                    queue_t.put_nowait(node)
+
+        return _prep_nbest(beam_queue,
+                           nbest,
+                           normalized=normalized,
+                           blank=blank)
+
+    def beam_search_breadth_first(self,
+                                  enc_out,
+                                  beam=16,
+                                  blank=0,
+                                  nbest=8,
+                                  normalized=True):
+        """
+        Beam search (breadth first) algorithm for RNN-T
+        args:
+            enc_out: Ti x N(=1) x D
+        """
+        return None
 
 
 class TorchTransformerDecoder(nn.Module):
@@ -276,7 +311,9 @@ class TorchTransformerDecoder(nn.Module):
         output = self.output(add_out)
         # N x Ti x To+1 x V or 1 x 1 x V
         if output.dim() == 4:
-            output = output.transpose(0, 2).contiguous()
+            output = output.transpose(0, 2)
+        if not output.is_contiguous():
+            output = output.contiguous()
         return output
 
     def _step_decoder(self, pred_prev, history=None):
@@ -291,10 +328,8 @@ class TorchTransformerDecoder(nn.Module):
         t = 0 if history is None else history.shape[0]
         # 1 x 1 x E
         pred_prev_emb = self.tgt_embed(pred_prev, t=t)
-        if history is None:
-            history = pred_prev_emb
-        else:
-            history = th.cat([pred_prev_emb, history], dim=0)
+        history = pred_prev_emb if history is None else th.cat(
+            [history, pred_prev_emb], dim=0)
         tgt_mask = prep_sub_mask(t + 1, device=pred_prev.device)
         dec_out = self.decoder(history, mask=tgt_mask)
         return dec_out[-1], history
@@ -323,9 +358,14 @@ class TorchTransformerDecoder(nn.Module):
                 trans += [best_pred.item()]
         return [{"score": score, "trans": [blank] + trans + [blank]}]
 
-    def beam_search(self, enc_out, beam=16, blank=0, nbest=8, normalized=True):
+    def beam_search_best_first(self,
+                               enc_out,
+                               beam=16,
+                               blank=0,
+                               nbest=8,
+                               normalized=True):
         """
-        Beam search algorithm for RNN-T
+        Beam search (best first) algorithm for RNN-T
         args:
             enc_out: Ti x N(=1) x D
         """
@@ -346,46 +386,51 @@ class TorchTransformerDecoder(nn.Module):
                 # pop one
                 cur_node = queue_t.get_nowait()
                 trans = cur_node.stats["trans"]
-                cur_inp = th.tensor([[trans[-1]]], dtype=th.int64, device=dev)
+
                 # make a step
+                cur_inp = th.tensor([[trans[-1]]], dtype=th.int64, device=dev)
                 dec_out, history = self._step_decoder(
                     cur_inp, history=cur_node.stats["history"])
-
                 # predition: V
                 prob = F.log_softmax(self._pred_joint(enc_out[t], dec_out)[0],
                                      dim=-1).squeeze()
+                # add terminal node (end with blank)
+                score = cur_node.score + prob[blank].item()
+                blank_node = Node(score, {
+                    "trans": trans,
+                    "history": cur_node.stats["history"]
+                })
+                beam_queue.put_nowait(blank_node)
 
-                # extention
-                for i in range(self.vocab_size):
-                    score = cur_node.score + prob[i].item()
-                    if i == blank:
-                        node = Node(score, {
-                            "trans": trans,
-                            "history": cur_node.stats["history"]
-                        })
-                        beam_queue.put_nowait(node)
-                    else:
-                        node = Node(score, {
-                            "trans": trans + [i],
-                            "history": history
-                        })
-                        queue_t.put_nowait(node)
-        # get nbest
-        beam_hypos = []
-        for _ in range(beam):
-            node = beam_queue.get_nowait()
-            beam_hypos.append({
-                "score": node.score,
-                "trans": node.stats["trans"] + [blank]
-            })
-        # return best
-        if normalized:
-            nbest_hypos = sorted(beam_hypos,
-                                 key=lambda n: n["score"] /
-                                 (len(n["trans"]) - 1),
-                                 reverse=True)[:nbest]
-        else:
-            nbest_hypos = sorted(beam_hypos,
-                                 key=lambda n: n["score"],
-                                 reverse=True)
-        return nbest_hypos
+                # extend other nodes
+                topk_score, topk_index = th.topk(prob, beam + 1)
+                topk = topk_index.tolist()
+                for i in range(beam + 1 if blank in topk else beam):
+                    if topk[i] == blank:
+                        continue
+                    score = cur_node.score + topk_score[i].item()
+                    node = Node(score, {
+                        "trans": trans + [topk[i]],
+                        "history": history
+                    })
+                    queue_t.put_nowait(node)
+
+        return _prep_nbest(beam_queue,
+                           nbest,
+                           normalized=normalized,
+                           blank=blank)
+
+    def beam_search_breadth_first(self,
+                                  enc_out,
+                                  beam=16,
+                                  blank=0,
+                                  nbest=8,
+                                  normalized=True):
+        """
+        Beam search (breadth first) algorithm for RNN-T
+        Reference: 
+            Monotonic Recurrent Neural Network Transducer and Decoding Strategies
+        args:
+            enc_out: Ti x N(=1) x D
+        """
+        return None

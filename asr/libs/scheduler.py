@@ -1,9 +1,14 @@
 """
-Schedule sampling
+Schedule sampling & Learning rate
 """
+
+from torch.optim import lr_scheduler
 
 
 def support_ss_scheduler(scheduler, **kwargs):
+    """
+    Return supported ss scheduler
+    """
     scheduler_templ = {
         "const": ConstScheduler,
         "linear": LinearScheduler,
@@ -14,7 +19,7 @@ def support_ss_scheduler(scheduler, **kwargs):
     return scheduler_templ[scheduler](**kwargs)
 
 
-class Scheduler(object):
+class SsScheduler(object):
     """
     Basic class for schedule sampling
     """
@@ -25,7 +30,7 @@ class Scheduler(object):
         raise NotImplementedError
 
 
-class ConstScheduler(Scheduler):
+class ConstScheduler(SsScheduler):
     """
     Use const schedule sampling rate
     """
@@ -36,7 +41,7 @@ class ConstScheduler(Scheduler):
         return self.ssr
 
 
-class TriggerScheduler(Scheduler):
+class TriggerScheduler(SsScheduler):
     """
     Use schedule sampling rate when metrics triggered
     """
@@ -48,7 +53,7 @@ class TriggerScheduler(Scheduler):
         return 0 if accu < self.trigger else self.ssr
 
 
-class LinearScheduler(Scheduler):
+class LinearScheduler(SsScheduler):
     """
     Use linear schedule sampling rate
     """

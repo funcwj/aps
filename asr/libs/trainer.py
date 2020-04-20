@@ -220,6 +220,7 @@ class Trainer(object):
                  optimizer="adam",
                  device_ids=0,
                  optimizer_kwargs=None,
+                 lr_scheduler="reduce",
                  lr_scheduler_kwargs=None,
                  ss_scheduler="const",
                  ss_scheduler_kwargs=None,
@@ -620,6 +621,7 @@ class CtcXentHybridTrainer(Trainer):
                                   reduction="mean",
                                   zero_infinity=True)
             loss = self.ctc_factor * ctc_loss + (1 - self.ctc_factor) * loss
+            self.reporter.add("fctc", ctc_loss.item())
         # compute accu
         accu = compute_accu(outs, tgts)
         # add to reporter
