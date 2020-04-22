@@ -11,7 +11,7 @@ import numpy as np
 import torch as th
 
 from asr.utils import StrToBoolAction
-from asr.trainer.trainer import LmTrainer
+from asr.trainer.datp import LmTrainer
 from asr.loader import support_loader
 from asr.nn import support_nnet
 

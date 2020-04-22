@@ -62,7 +62,13 @@ def run(args):
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
-    lm = Evaluator(args.lm, device_id=args.device_id)
+    if args.lm:
+        lm = Computer(args.lm, device_id=args.device_id)
+        logger.info(f"Load lm from {args.lm}: epoch {lm.epoch}, " +
+                    f"weight = {args.lm_weight}")
+        lm = lm.nnet
+    else:
+        lm = None
 
     stdout_top1, top1 = io_wrapper(args.best, "w")
     topn = None
@@ -74,7 +80,7 @@ def run(args):
     for key, src in src_reader:
         logger.info(f"Decoding utterance {key}...")
         nbest_hypos = decoder.run(src,
-                                  lm=lm.nnet,
+                                  lm=lm,
                                   beam=args.beam_size,
                                   nbest=args.nbest,
                                   max_len=args.max_len,

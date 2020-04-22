@@ -4,11 +4,11 @@
 
 set -eu
 
+gpu=0
+seed=777
 epoches=100
 tensorboard=false
-batch_size=64
-num_workers=4
-num_process=2
+batch_size=128
 eval_interval=-1
 save_interval=-1
 prog_interval=100
@@ -22,27 +22,23 @@ echo "$0 $@"
 data=$1
 exp_id=$2
 dict=data/$data/dict
-conf=conf/$data/$exp_id.yaml
+conf=conf/$data/rnnlm/$exp_id.yaml
 
 [ ! -f $dict ] && echo "$0: missing dictionary $dict" && exit 1
 [ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
 
-export OMP_NUM_THREADS=24
-
-python -m torch.distributed.launch \
-  --nproc_per_node=$num_process \
-  asr/launch_distributed_train_am.py \
+python src/train_lm.py \
   --conf $conf \
   --dict $dict \
+  --seed $seed \
+  --device-ids $gpu \
   --tensorboard $tensorboard \
-  --save-interval $save_interval \
-  --prog-interval $prog_interval \
-  --num-workers $num_workers \
-  --num-process $num_process \
-  --checkpoint exp/$data/$exp_id \
+  --checkpoint exp/$data/rnnlm/$exp_id \
   --batch-size $batch_size \
   --epoches $epoches \
   --eval-interval $eval_interval \
-  > $data.train_am.$exp_id.log 2>&1
+  --prog-interval $prog_interval \
+  --save-interval $save_interval \
+  > $data.train_lm.$exp_id.log 2>&1
 
-mv $data.train_am.$exp_id.log exp/$data/$exp_id
+mv $data.train_lm.$exp_id.log exp/$data/rnnlm/$exp_id

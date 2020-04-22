@@ -81,6 +81,8 @@ class LasASR(nn.Module):
 
     def beam_search(self,
                     x,
+                    lm=None,
+                    lm_weight=0,
                     beam=16,
                     nbest=8,
                     max_len=-1,
@@ -88,7 +90,7 @@ class LasASR(nn.Module):
                     normalized=True):
         """
         args
-            x: S or Ti x F
+            x: audio samples or acoustic features, S or Ti x F
         """
         with th.no_grad():
             if self.asr_transform:
@@ -109,6 +111,8 @@ class LasASR(nn.Module):
                 return self.decoder.beam_search_vectorized(
                     enc_out,
                     beam=beam,
+                    lm=lm,
+                    lm_weight=lm_weight,
                     nbest=nbest,
                     max_len=max_len,
                     sos=self.sos,
@@ -132,7 +136,7 @@ class LasASR(nn.Module):
                           normalized=True):
         """
         args
-            x: S or Ti x F
+            x: audio samples or acoustic features, N x S or N x Ti x F
         """
         with th.no_grad():
             if self.asr_transform:

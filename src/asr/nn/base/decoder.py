@@ -281,6 +281,8 @@ class TorchDecoder(nn.Module):
 
     def beam_search_vectorized(self,
                                enc_out,
+                               lm=None,
+                               lm_weight=0,
                                beam=8,
                                nbest=1,
                                max_len=-1,
@@ -340,6 +342,7 @@ class TorchDecoder(nn.Module):
         accu_score = th.zeros(beam, device=dev)
         hist_token = []
         back_point = []
+        lm_state = None
 
         hypos = []
         # step by step
@@ -373,6 +376,12 @@ class TorchDecoder(nn.Module):
                 proj=proj[point])
             # compute prob: beam x V, nagetive
             prob = F.log_softmax(pred, dim=-1)
+
+            if lm:
+                lm_prob, lm_state = lm(out[point][..., None], lm_state)
+                # beam x V
+                prob += F.log_softmax(lm_prob[:, 0], dim=-1) * lm_weight
+
             # local pruning: beam x beam
             topk_score, topk_token = th.topk(prob, beam, dim=-1)
             if t == 0:

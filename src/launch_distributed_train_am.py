@@ -13,7 +13,7 @@ import torch as th
 import numpy as np
 
 from asr.utils import StrToBoolAction
-from asr.trainer.distributed_trainer import CtcXentHybridTrainer, TransducerTrainer
+from asr.trainer.distributed import CtcXentHybridTrainer, TransducerTrainer
 
 from asr.loader import support_loader
 from asr.feats import support_transform

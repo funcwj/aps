@@ -13,7 +13,7 @@ class Computer(object):
     """
     A simple wrapper for model evaluation
     """
-    def __init__(self, nnet, cpt_dir, device_id=-1):
+    def __init__(self, cpt_dir, device_id=-1):
         # load nnet
         self.epoch, self.nnet, self.conf = self._load(cpt_dir)
         # offload to device

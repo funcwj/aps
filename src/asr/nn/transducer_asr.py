@@ -96,6 +96,8 @@ class TorchTransducerASR(nn.Module):
 
     def beam_search(self,
                     x,
+                    lm=None,
+                    lm_weight=0,
                     beam=16,
                     nbest=8,
                     normalized=True,
@@ -106,11 +108,13 @@ class TorchTransducerASR(nn.Module):
         """
         with th.no_grad():
             enc_out = self._dec_prep(x)
-            return self.decoder.beam_search_best_first(enc_out,
-                                                       beam=beam,
-                                                       blank=self.blank,
-                                                       nbest=nbest,
-                                                       normalized=normalized)
+            return self.decoder.beam_search(enc_out,
+                                            beam=beam,
+                                            blank=self.blank,
+                                            nbest=nbest,
+                                            lm=lm,
+                                            lm_weight=lm_weight,
+                                            normalized=normalized)
 
 
 class TransformerTransducerASR(nn.Module):
@@ -196,6 +200,8 @@ class TransformerTransducerASR(nn.Module):
 
     def beam_search(self,
                     x,
+                    lm=None,
+                    lm_weight=0,
                     beam=16,
                     nbest=8,
                     normalized=True,
@@ -206,8 +212,10 @@ class TransformerTransducerASR(nn.Module):
         """
         with th.no_grad():
             enc_out = self._dec_prep(x)
-            return self.decoder.beam_search_best_first(enc_out,
-                                                       beam=beam,
-                                                       blank=self.blank,
-                                                       nbest=nbest,
-                                                       normalized=normalized)
+            return self.decoder.beam_search(enc_out,
+                                            beam=beam,
+                                            blank=self.blank,
+                                            nbest=nbest,
+                                            lm=lm,
+                                            lm_weight=lm_weight,
+                                            normalized=normalized)

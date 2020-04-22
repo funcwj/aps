@@ -9,6 +9,7 @@ except:
     raise ImportError("import Transformer module failed")
 
 from ..transformer.embedding import IOEmbedding
+from ..transformer.decoder import prep_sub_mask
 from ..base.attention import padding_mask
 
 
@@ -39,23 +40,31 @@ class TorchTransformerLM(nn.Module):
         # output distribution
         self.dist = nn.Linear(att_dim, vocab_size)
 
-    def forward(self, x, h=None, xlen=None):
+    def forward(self, token, h=None, token_len=None):
         """
         args:
-            x: N x T
-            h: hidden state (None here)
-            xlen: N or None
+            token: input token sequence, N x T
+            h: previous sequence embeddings, T x N x E
+            token_len: length of x, N or None
         return:
-            y: N x T x V
+            output: N x T x V
+            h: current sequence embeddings, T x N x E
         """
         # N x T => T x N x V
-        x = self.tgt_embed(x)
+        t = 0 if h is None else h.shape[0]
+        x = self.tgt_embed(token, t=t)
+        # h == None: training or eval in time = 0
+        h = x if h is None else th.cat([h, x], dim=0)
         # src_pad_mask: N x T
-        src_pad_mask = None if xlen is None else (padding_mask(xlen) == 1)
+        src_pad_mask = None if token_len is None else (
+            padding_mask(token_len) == 1)
+        tgt_mask = prep_sub_mask(t + 1, device=x.device)
         # Ti x N x D
-        enc_out = self.encoder(x, mask=None, src_key_padding_mask=src_pad_mask)
+        enc_out = self.encoder(h,
+                               mask=tgt_mask,
+                               src_key_padding_mask=src_pad_mask)
         # N x Ti x D
         enc_out = enc_out.transpose(0, 1)
         # N x Ti x V
-        y = self.dist(enc_out)
-        return y, h
+        output = self.dist(enc_out)
+        return output, h

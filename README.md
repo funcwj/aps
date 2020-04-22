@@ -4,6 +4,8 @@ My repository for E2E acoustic model training.
 
 ## Support
 
-1. LAS/Transformer/Transducer based AM
-2. Neural beamforming (FB/MVDR) multi-channel front-end
-3. Unsupervised multi-channel speech enhancement
+1. Single channel AM (Transducer & Encoder-Decoder structure with RNN, Transformer, TDNN, FSMN, ...)
+2. Multi-channel AM (Mainly based on popular neural beamforming methods)
+3. RNN & Transformer LM
+4. Distributed training (now using Pytorch's DistributedDataParallel)
+5. Online feature extraction

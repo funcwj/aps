@@ -63,23 +63,24 @@ class TorchRNNLM(nn.Module):
         self.dist.bias.data.zero_()
         self.dist.weight.data.uniform_(-initrange, initrange)
 
-    def forward(self, x, h=None, xlen=None):
+    def forward(self, token, h=None, token_len=None):
         """
         args:
-            x: N x T
+            token: input token sequence, N x T
             h: hidden state from previous time step
-            xlen: N or None
+            token_len: length of x, N or None
         return:
-            y: N x T x V
+            output: N x T x V
+            h: hidden state from current time step
         """
         if h is not None:
             h = repackage_hidden(h)
         # N x T => N x T x V
-        x = self.vocab_embed(x)
+        x = self.vocab_embed(token)
         x = self.vocab_drop(x)
 
         # N x T x H
         y, h = self.pred(x, h)
         # N x T x V
-        y = self.dist(y)
-        return y, h
+        output = self.dist(y)
+        return output, h

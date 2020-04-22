@@ -13,13 +13,14 @@ from torch.nn.utils import clip_grad_norm_
 from torch.nn.parallel import DistributedDataParallel
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from .trainer import ProgressReporter, StopCriterion, IGNORE_ID
-from .trainer import get_device_ids, add_gaussian_noise
-from .trainer import ce_loss, ls_loss, compute_accu, process_tgts
+from .datp import ProgressReporter, StopCriterion, IGNORE_ID
+from .datp import get_device_ids, add_gaussian_noise
+from .datp import ce_loss, ls_loss, compute_accu, process_tgts
 from .scheduler import support_ss_scheduler
 from .noamopt import NoamOpt
 
 from ..utils import load_obj
+
 
 class Trainer(object):
     """

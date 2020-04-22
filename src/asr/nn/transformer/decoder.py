@@ -158,7 +158,7 @@ class TorchTransformerDecoder(nn.Module):
             hist_token = []
             back_point = []
             pre_emb = None
-            lm_hidden = None
+            lm_state = None
 
             hypos = []
             # step by step
@@ -188,8 +188,8 @@ class TorchTransformerDecoder(nn.Module):
                 prob = F.log_softmax(dec_out, dim=-1)
 
                 # add LM score
-                if lm is not None:
-                    lm_prob, lm_hidden = lm(history, lm_hidden)
+                if lm:
+                    lm_prob, lm_state = lm(history, lm_state)
                     # beam x V
                     prob += F.log_softmax(lm_prob[:, 0], dim=-1) * lm_weight
 

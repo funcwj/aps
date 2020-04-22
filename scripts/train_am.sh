@@ -4,7 +4,8 @@
 
 set -eu
 
-node=""
+gpu=0
+seed=777
 epoches=100
 tensorboard=false
 batch_size=64
@@ -27,23 +28,19 @@ conf=conf/$data/$exp_id.yaml
 [ ! -f $dict ] && echo "$0: missing dictionary $dict" && exit 1
 [ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
 
-cmd="/home/work_nfs/common/tools/pyqueue_asr.pl"
-opts="--gpu 1"
-python=$(which python)
-
-[ ! -z $node ] && opts="$opts -l hostname=$node"
-
-$cmd $opts $data.train_am.$exp_id.log \
-  $python asr/train_am.py \
-    --conf $conf \
-    --dict $dict \
-    --tensorboard $tensorboard \
-    --save-interval $save_interval \
-    --prog-interval $prog_interval \
-    --num-workers $num_workers \
-    --checkpoint exp/$data/$exp_id \
-    --batch-size $batch_size \
-    --epoches $epoches \
-    --eval-interval $eval_interval
+src/train_am.py \
+  --conf $conf \
+  --dict $dict \
+  --seed $seed \
+  --tensorboard $tensorboard \
+  --save-interval $save_interval \
+  --prog-interval $prog_interval \
+  --num-workers $num_workers \
+  --checkpoint exp/$data/$exp_id \
+  --batch-size $batch_size \
+  --epoches $epoches \
+  --device-ids $gpu \
+  --eval-interval $eval_interval \
+  > $data.train_am.$exp_id.log 2>&1
 
 mv $data.train_am.$exp_id.log exp/$data/$exp_id
