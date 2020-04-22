@@ -145,7 +145,7 @@ class UnfactedFsBeamformer(_FsBeamformer):
         args:
             x: multi-channel audio utterances, N x C x S
         return:
-            y: N x P x T, enhanced features
+            y: enhanced features, N x P x T
         """
         if x.dim() not in [2, 3]:
             raise RuntimeError(f"Expect 2/3D tensor, got {x.dim()} instead")
@@ -205,7 +205,7 @@ class FactedFsBeamformer(_FsBeamformer):
         args:
             x: multi-channel audio utterances, N x C x S
         return:
-            y: N x P x F x T, enhanced features
+            y: enhanced features, N x P x F x T
         """
         if x.dim() not in [2, 3]:
             raise RuntimeError(f"Expect 2/3D tensor, got {x.dim()} instead")
@@ -297,9 +297,9 @@ class CLPFsBeamformer(nn.Module):
     def forward(self, x, eps=1e-5):
         """
         args:
-            x: N x C x F x T, complex tensor
+            x: complex tensor, N x C x F x T
         return:
-            y: N x P x G x T, enhanced features
+            y: enhanced features, N x P x G x T
         """
         if not isinstance(x, ComplexTensor):
             raise RuntimeError(

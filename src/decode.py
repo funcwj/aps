@@ -10,11 +10,9 @@ import argparse
 
 import torch as th
 
-from libs.evaluator import Evaluator
+from nn.eval import Evaluator
 from libs.utils import get_logger, io_wrapper, StrToBoolAction
 from loader.wave import WaveReader
-from nn import support_nnet
-from feats import support_transform
 from kaldi_python_io import ScriptReader
 
 logger = get_logger(__name__)
@@ -38,35 +36,11 @@ class FasterDecoder(Evaluator):
     Decoder wrapper
     """
     def __init__(self, cpt_dir, device_id=-1):
-        nnet = self._load(cpt_dir)
-        super(FasterDecoder, self).__init__(nnet, cpt_dir, device_id=device_id)
-
-    def compute(self, src, **kwargs):
+        super(FasterDecoder, self).__init__(cpt_dir, device_id=device_id)
+        
+    def run(self, src, **kwargs):
         src = th.from_numpy(src).to(self.device)
         return self.nnet.beam_search(src, **kwargs)
-
-    def _load(self, cpt_dir):
-        with open(pathlib.Path(cpt_dir) / "train.yaml", "r") as f:
-            conf = yaml.full_load(f)
-            asr_cls = support_nnet(conf["nnet_type"])
-        asr_transform = None
-        enh_transform = None
-        self.accept_raw = False
-        if "asr_transform" in conf:
-            asr_transform = support_transform("asr")(**conf["asr_transform"])
-            self.accept_raw = True
-        if "enh_transform" in conf:
-            enh_transform = support_transform("enh")(**conf["enh_transform"])
-            self.accept_raw = True
-        if enh_transform:
-            nnet = asr_cls(enh_transform=enh_transform,
-                           asr_transform=asr_transform,
-                           **conf["nnet_conf"])
-        elif asr_transform:
-            nnet = asr_cls(asr_transform=asr_transform, **conf["nnet_conf"])
-        else:
-            nnet = asr_cls(**conf["nnet_conf"])
-        return nnet
 
 
 def run(args):
@@ -87,6 +61,8 @@ def run(args):
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
+    lm = Evaluator(args.lm, device_id=args.device_id)
+
     stdout_top1, top1 = io_wrapper(args.best, "w")
     topn = None
     if args.dump_nbest:
@@ -97,9 +73,11 @@ def run(args):
     for key, src in src_reader:
         logger.info(f"Decoding utterance {key}...")
         nbest_hypos = decoder.compute(src,
+                                      lm=lm.nnet,
                                       beam=args.beam_size,
                                       nbest=args.nbest,
                                       max_len=args.max_len,
+                                      lm_weight=args.lm_weight,
                                       normalized=args.normalized,
                                       vectorized=args.vectorized)
         nbest = [f"{key}\n"]
@@ -154,6 +132,15 @@ if __name__ == "__main__":
                         type=int,
                         default=8,
                         help="Beam size used during decoding")
+    parser.add_argument("--lm",
+                        type=str,
+                        default="",
+                        help="Checkpoint of the nerual network LM "
+                        "used in shallow fusion")
+    parser.add_argument("--lm-weight",
+                        type=float,
+                        default=0.1,
+                        help="LM score weight used in shallow fusion")
     parser.add_argument("--dict",
                         type=str,
                         default="",

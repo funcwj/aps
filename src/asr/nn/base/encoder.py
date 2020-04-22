@@ -442,7 +442,7 @@ class TdnnRnnEncoder(nn.Module):
                  rnn_layers=3,
                  rnn_bidir=True,
                  rnn_dropout=0.2,
-                 rnn_proj=None,
+                 rnn_project=None,
                  rnn_layernorm=False,
                  rnn_hidden=512):
         super(TdnnRnnEncoder, self).__init__()
@@ -471,7 +471,7 @@ class TdnnRnnEncoder(nn.Module):
                                   rnn_layers=rnn_layers,
                                   rnn_bidir=rnn_bidir,
                                   rnn_dropout=rnn_dropout,
-                                  rnn_proj=rnn_proj,
+                                  rnn_proj=rnn_project,
                                   rnn_hidden=rnn_hidden)
 
     def forward(self, x_pad, x_len):
@@ -503,9 +503,9 @@ class TdnnFsmnEncoder(nn.Module):
                  fsmn_residual=True,
                  fsmn_lctx=10,
                  fsmn_rctx=10,
-                 fsmn_proj=512,
                  fsmn_norm="LN",
                  fsmn_dilats="1,1,1,1",
+                 fsmn_project=512,
                  fsmn_dropout=0):
         super(TdnnFsmnEncoder, self).__init__()
         stride_conf = [int(t) for t in tdnn_stride.split(",")]
@@ -527,7 +527,7 @@ class TdnnFsmnEncoder(nn.Module):
         self.tdnn = nn.Sequential(*tdnns)
         self.fsmn = FsmnEncoder(tdnn_dim,
                                 output_size,
-                                fsmn_proj,
+                                fsmn_project,
                                 lctx=fsmn_lctx,
                                 rctx=fsmn_rctx,
                                 norm=fsmn_norm,

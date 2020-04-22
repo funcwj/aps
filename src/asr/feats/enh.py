@@ -146,10 +146,10 @@ class FeatureTransform(nn.Module):
     def forward(self, x_pad, x_len, norm_obs=False):
         """
         args:
-            x_pad: raw waveform: N x C x S or N x S
+            x_pad: raw waveform, N x C x S or N x S
             x_len: N or None
         return:
-            feats: spatial+spectral features: N x T x ...
+            feats: spatial+spectral features, N x T x ...
             f_len: N or None
         """
         # N x C x F x T

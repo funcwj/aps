@@ -31,9 +31,7 @@ class Computer(Evaluator):
     def compute(self, wav, stats="mask"):
         wav = th.from_numpy(wav).to(self.device)[None, ...]
         if stats == "mask":
-            out, _, _ = self.nnet.speech_mask(wav, None)
-            if self.nnet.mask_net_noise:
-                out, _ = th.chunk(out, 2, dim=-1)
+            out, _, _, _ = self.nnet.pred_mask(wav, None)
         else:
             out, _ = self.nnet.mvdr_beam(wav, None)
             out = out.abs()

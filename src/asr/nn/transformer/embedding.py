@@ -58,7 +58,7 @@ class LinearEmbedding(nn.Module):
     def forward(self, x):
         """
         args:
-            x: N x T x F (from asr transform)
+            x: features from asr transform, N x T x F
         """
         x = self.norm(self.proj(x))
         x = F.relu(x)
@@ -85,7 +85,7 @@ class Conv1dEmbedding(nn.Module):
     def forward(self, x):
         """
         args:
-            x: N x B x T x F or N x T x F (from front-end or asr transform)
+            x: features from front-end or asr transform, N x B x T x F or N x T x F
         """
         if x.dim() not in [3, 4]:
             raise RuntimeError(

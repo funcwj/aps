@@ -3,8 +3,8 @@ __pycache__/
 .py[cod]
 
 asset/
-asr/test
-asr/debug*
+src/test
+src/debug*
 egs/
 
 .DS_Store

@@ -81,6 +81,8 @@ class TransformerASR(nn.Module):
     def beam_search(self,
                     x,
                     beam=16,
+                    lm=None,
+                    lm_weight=0,
                     nbest=8,
                     max_len=-1,
                     vectorized=True,
@@ -97,13 +99,16 @@ class TransformerASR(nn.Module):
             else:
                 # T x F or Beam x T x F
                 if x.dim() not in [2, 3]:
-                    raise RuntimeError(f"Expect 2/3D tensor, but got {x.dim()}")
+                    raise RuntimeError(
+                        f"Expect 2/3D tensor, but got {x.dim()}")
                 x = x[None, ...]
             # Ti x N x D
             enc_out, _ = self.encoder(x, None)
             # beam search
             return self.decoder.beam_search(enc_out,
                                             beam=beam,
+                                            lm=lm,
+                                            lm_weight=lm_weight,
                                             sos=self.sos,
                                             eos=self.eos,
                                             nbest=nbest,

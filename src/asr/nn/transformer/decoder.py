@@ -103,6 +103,8 @@ class TorchTransformerDecoder(nn.Module):
 
     def beam_search(self,
                     enc_out,
+                    lm=None,
+                    lm_weight=0,
                     beam=16,
                     sos=-1,
                     eos=-1,
@@ -156,6 +158,7 @@ class TorchTransformerDecoder(nn.Module):
             hist_token = []
             back_point = []
             pre_emb = None
+            lm_hidden = None
 
             hypos = []
             # step by step
@@ -165,20 +168,31 @@ class TorchTransformerDecoder(nn.Module):
                 # beam
                 if t:
                     point = back_point[-1]
-                    history = hist_token[-1][point]
-                    cur_emb = self.tgt_embed(history[..., None], t=t)
+                    # history: beam x 1
+                    history = hist_token[-1][point][..., None]
+                    cur_emb = self.tgt_embed(history, t=t)
                     pre_emb = th.cat([pre_emb, cur_emb], dim=0)
                 else:
                     point = th.arange(0, beam, dtype=th.int64, device=dev)
-                    out = th.tensor([sos] * beam, dtype=th.int64, device=dev)
+                    # history: beam x 1
+                    history = th.tensor([[sos]] * beam,
+                                        dtype=th.int64,
+                                        device=dev)
                     # 1 x beam x E
-                    pre_emb = self.tgt_embed(out[..., None])
+                    pre_emb = self.tgt_embed(history)
                 # Tcur - 1 x beam x D
                 dec_out = self.decoder(pre_emb, enc_out, tgt_mask=tgt_mask)[-1]
                 # beam x V
                 dec_out = self.output(dec_out)
                 # compute prob: beam x V, nagetive
                 prob = F.log_softmax(dec_out, dim=-1)
+
+                # add LM score
+                if lm is not None:
+                    lm_prob, lm_hidden = lm(history, lm_hidden)
+                    # beam x V
+                    prob += F.log_softmax(lm_prob[:, 0], dim=-1) * lm_weight
+
                 # local pruning: beam x beam
                 topk_score, topk_token = th.topk(prob, beam, dim=-1)
 

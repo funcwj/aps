@@ -135,7 +135,8 @@ class TorchRNNDecoder(nn.Module):
         Make one step for decoder
         """
         pred_prev_emb = self.vocab_embed(pred_prev)  # 1 x 1 x E
-        return self.decoder(pred_prev_emb, hidden)
+        dec_out, hidden = self.decoder(pred_prev_emb, hidden)
+        return dec_out[:, -1], hidden
 
     def greedy_search(self, enc_out, blank=0):
         """
@@ -156,7 +157,8 @@ class TorchRNNDecoder(nn.Module):
             score += best_prob.item()
             # not blank
             if best_pred.item() != blank:
-                dec_out, hidden = self._step_decoder(best_pred, hidden=hidden)
+                dec_out, hidden = self._step_decoder(best_pred[None, ...],
+                                                     hidden=hidden)
                 trans += [best_pred.item()]
         return [{"score": score, "trans": [blank] + trans + [blank]}]
 
