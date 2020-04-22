@@ -1,32 +1,28 @@
 #!/usr/bin/env python
 
-import yaml
 import pathlib
 import argparse
 
 import torch as th
 import numpy as np
 
-from libs.evaluator import Evaluator
-from libs.utils import get_logger
-from loader.wave import WaveReader
+from asr.utils import get_logger
+from asr.eval import Computer
+from asr.loader.wave import WaveReader
 
 from kaldi_python_io import ScriptReader
 from kaldi_python_io import Reader as BaseReader
 
-from nn import support_nnet
-from feats import support_transform
-
 logger = get_logger(__name__)
 
 
-class Computer(Evaluator):
+class MaskComputer(Computer):
     """
     Mask computation wrapper
     """
     def __init__(self, cpt_dir, device_id=-1):
-        nnet = self._load(cpt_dir)
-        super(Computer, self).__init__(nnet, cpt_dir, device_id=device_id)
+        super(MaskComputer, self).__init__(cpt_dir, device_id=device_id)
+        logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
 
     def compute(self, wav, stats="mask"):
         wav = th.from_numpy(wav).to(self.device)[None, ...]
@@ -37,36 +33,13 @@ class Computer(Evaluator):
             out = out.abs()
         return out.detach().cpu().squeeze().numpy()
 
-    def _load(self, cpt_dir):
-        with open(pathlib.Path(cpt_dir) / "train.yaml", "r") as f:
-            conf = yaml.full_load(f)
-            asr_cls = support_nnet(conf["nnet_type"])
-        asr_transform = None
-        enh_transform = None
-        self.accept_raw = False
-        if "asr_transform" in conf:
-            asr_transform = support_transform("asr")(**conf["asr_transform"])
-            self.accept_raw = True
-        if "enh_transform" in conf:
-            enh_transform = support_transform("enh")(**conf["enh_transform"])
-            self.accept_raw = True
-        if enh_transform:
-            nnet = asr_cls(enh_transform=enh_transform,
-                           asr_transform=asr_transform,
-                           **conf["nnet_conf"])
-        elif asr_transform:
-            nnet = asr_cls(asr_transform=asr_transform, **conf["nnet_conf"])
-        else:
-            nnet = asr_cls(**conf["nnet_conf"])
-        return nnet
-
 
 def run(args):
-    computer = Computer(args.checkpoint, device_id=args.device_id)
+    computer = MaskComputer(args.checkpoint, device_id=args.device_id)
     wav_reader = WaveReader(args.wav_scp, sr=16000)
+
     dump_dir = pathlib.Path(args.dump_dir)
     dump_dir.mkdir(parents=True, exist_ok=True)
-
     for key, wav in wav_reader:
         logger.info(f"Processing utterance {key}...")
         mask = computer.compute(wav, stats=args.stats)

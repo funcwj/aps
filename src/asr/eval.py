@@ -5,11 +5,11 @@ import pathlib
 
 import torch as th
 
-from ..nn import support_nnet
-from ..feats import support_transform
+from .nn import support_nnet
+from .feats import support_transform
 
 
-class Evaluator(object):
+class Computer(object):
     """
     A simple wrapper for model evaluation
     """
@@ -53,5 +53,5 @@ class Evaluator(object):
         nnet.load_state_dict(cpt["model_state_dict"])
         return cpt["epoch"], nnet, conf
 
-    def run(self, egs):
+    def run(self, *args, **kwargs):
         raise NotImplementedError

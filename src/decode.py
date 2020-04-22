@@ -3,16 +3,16 @@
 # wujian@2019
 
 import sys
-import yaml
 import codecs
-import pathlib
 import argparse
 
 import torch as th
 
-from nn.eval import Evaluator
-from libs.utils import get_logger, io_wrapper, StrToBoolAction
-from loader.wave import WaveReader
+from asr.eval import Computer
+from asr.utils import get_logger, io_wrapper
+from asr.utils import StrToBoolAction
+from asr.loader.wave import WaveReader
+
 from kaldi_python_io import ScriptReader
 
 logger = get_logger(__name__)
@@ -31,13 +31,14 @@ score-n hyp-n
 """
 
 
-class FasterDecoder(Evaluator):
+class FasterDecoder(Computer):
     """
     Decoder wrapper
     """
     def __init__(self, cpt_dir, device_id=-1):
         super(FasterDecoder, self).__init__(cpt_dir, device_id=device_id)
-        
+        logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
+
     def run(self, src, **kwargs):
         src = th.from_numpy(src).to(self.device)
         return self.nnet.beam_search(src, **kwargs)
@@ -72,14 +73,14 @@ def run(args):
     N = 0
     for key, src in src_reader:
         logger.info(f"Decoding utterance {key}...")
-        nbest_hypos = decoder.compute(src,
-                                      lm=lm.nnet,
-                                      beam=args.beam_size,
-                                      nbest=args.nbest,
-                                      max_len=args.max_len,
-                                      lm_weight=args.lm_weight,
-                                      normalized=args.normalized,
-                                      vectorized=args.vectorized)
+        nbest_hypos = decoder.run(src,
+                                  lm=lm.nnet,
+                                  beam=args.beam_size,
+                                  nbest=args.nbest,
+                                  max_len=args.max_len,
+                                  lm_weight=args.lm_weight,
+                                  normalized=args.normalized,
+                                  vectorized=args.vectorized)
         nbest = [f"{key}\n"]
         for idx, hyp in enumerate(nbest_hypos):
             score = hyp["score"]

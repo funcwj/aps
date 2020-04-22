@@ -17,9 +17,11 @@ from torch.utils.tensorboard import SummaryWriter
 
 import torch_complex.functional as cF
 
-from .utils import get_logger, load_obj, get_device_ids, SimpleTimer
 from .scheduler import support_ss_scheduler
 from .noamopt import NoamOpt
+
+from ..utils import get_logger, load_obj, get_device_ids
+from ..utils import SimpleTimer
 
 IGNORE_ID = -1  # in data loader
 EPSILON = np.finfo(np.float32).eps

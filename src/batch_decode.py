@@ -1,64 +1,37 @@
 #!/usr/bin/env python
 
-import sys
-import yaml
 import codecs
 import random
-import pathlib
 import argparse
 
 import torch as th
 
 from torch.nn.utils.rnn import pad_sequence
 
-from libs.evaluator import Evaluator
-from libs.utils import get_logger, io_wrapper, StrToBoolAction
-from loader.wave import WaveReader
-from nn import support_nnet
-from feats import support_transform
+from asr.utils import get_logger, io_wrapper
+from asr.utils import StrToBoolAction
+from asr.eval import Computer
+from asr.loader.wave import WaveReader
+
 from kaldi_python_io import ScriptReader
 
 logger = get_logger(__name__)
 
 
-class BatchDecoder(Evaluator):
+class BatchDecoder(Computer):
     """
     Decoder wrapper
     """
     def __init__(self, cpt_dir, device_id=-1):
-        nnet = self._load(cpt_dir)
-        super(BatchDecoder, self).__init__(nnet, cpt_dir, device_id=device_id)
+        super(BatchDecoder, self).__init__(cpt_dir, device_id=device_id)
+        logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
 
-    def compute(self, src, xlen, **kwargs):
+    def run(self, src, xlen, **kwargs):
         src = pad_sequence([th.from_numpy(s) for s in src],
                            batch_first=True,
                            padding_value=0)
-        src = src.to(self.device)
         xlen = th.tensor(xlen, dtype=th.int64, device=self.device)
-        return self.nnet.beam_search_batch(src, xlen, **kwargs)
-
-    def _load(self, cpt_dir):
-        with open(pathlib.Path(cpt_dir) / "train.yaml", "r") as f:
-            conf = yaml.full_load(f)
-            asr_cls = support_nnet(conf["nnet_type"])
-        asr_transform = None
-        enh_transform = None
-        self.accept_raw = False
-        if "asr_transform" in conf:
-            asr_transform = support_transform("asr")(**conf["asr_transform"])
-            self.accept_raw = True
-        if "enh_transform" in conf:
-            enh_transform = support_transform("enh")(**conf["enh_transform"])
-            self.accept_raw = True
-        if enh_transform:
-            nnet = asr_cls(enh_transform=enh_transform,
-                           asr_transform=asr_transform,
-                           **conf["nnet_conf"])
-        elif asr_transform:
-            nnet = asr_cls(asr_transform=asr_transform, **conf["nnet_conf"])
-        else:
-            nnet = asr_cls(**conf["nnet_conf"])
-        return nnet
+        return self.nnet.beam_search_batch(src.to(self.device), xlen, **kwargs)
 
 
 def run(args):
@@ -103,12 +76,12 @@ def run(args):
         xlen = [b["len"] for b in batch]
         mats = [src_reader[key] for key in keys]
         # decode
-        batch_nbest = decoder.compute(mats,
-                                      xlen,
-                                      beam=args.beam_size,
-                                      nbest=args.nbest,
-                                      max_len=args.max_len,
-                                      normalized=args.normalized)
+        batch_nbest = decoder.run(mats,
+                                  xlen,
+                                  beam=args.beam_size,
+                                  nbest=args.nbest,
+                                  max_len=args.max_len,
+                                  normalized=args.normalized)
         for key, nbest in zip(keys, batch_nbest):
             logger.info(f"Decoding utterance {key}...")
             nbest_hypos = [f"{key}\n"]

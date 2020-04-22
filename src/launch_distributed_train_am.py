@@ -12,12 +12,12 @@ import argparse
 import torch as th
 import numpy as np
 
-from libs.utils import StrToBoolAction
-from libs.distributed_trainer import CtcXentHybridTrainer, TransducerTrainer
+from asr.utils import StrToBoolAction
+from asr.trainer.distributed_trainer import CtcXentHybridTrainer, TransducerTrainer
 
-from loader import support_loader
-from feats import support_transform
-from nn import support_nnet
+from asr.loader import support_loader
+from asr.feats import support_transform
+from asr.nn import support_nnet
 
 blank_sym = "<blank>"
 constrained_conf_keys = [

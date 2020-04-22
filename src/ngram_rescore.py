@@ -2,13 +2,13 @@
 
 # wujian@2019
 
-import sys
 import kenlm
 import codecs
 import argparse
 
-from nn.lm.utils import NbestReader
-from libs.utils import get_logger, io_wrapper, StrToBoolAction
+from asr.nn.lm.utils import NbestReader
+from asr.utils import get_logger, io_wrapper
+from asr.utils import StrToBoolAction
 
 logger = get_logger(__name__)
 

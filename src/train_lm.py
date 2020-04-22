@@ -10,10 +10,10 @@ import argparse
 import numpy as np
 import torch as th
 
-from libs.utils import StrToBoolAction
-from libs.trainer import LmTrainer
-from loader import support_loader
-from nn import support_nnet
+from asr.utils import StrToBoolAction
+from asr.trainer.trainer import LmTrainer
+from asr.loader import support_loader
+from asr.nn import support_nnet
 
 constrained_conf_keys = ["nnet_type", "nnet_conf", "data_conf", "trainer_conf"]
 
