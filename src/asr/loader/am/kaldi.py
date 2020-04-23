@@ -18,33 +18,33 @@ from kaldi_python_io import ScriptReader
 from .utils import process_token, BatchSampler
 
 
-def kaldi_loader(train=True,
-                 distributed=False,
-                 feats_scp="",
-                 token="",
-                 utt2dur="",
-                 max_token_num=400,
-                 max_dur=3000,
-                 min_dur=40,
-                 adapt_dur=800,
-                 adapt_token_num=150,
-                 batch_size=32,
-                 num_workers=0,
-                 min_batch_size=4):
+def DataLoader(train=True,
+               distributed=False,
+               feats_scp="",
+               token="",
+               utt2dur="",
+               max_token_num=400,
+               max_dur=3000,
+               min_dur=40,
+               adapt_dur=800,
+               adapt_token_num=150,
+               batch_size=32,
+               num_workers=0,
+               min_batch_size=4):
     dataset = Dataset(feats_scp,
                       token,
                       utt2dur,
                       max_token_num=max_token_num,
                       max_frame_num=max_dur,
                       min_frame_num=min_dur)
-    return DataLoader(dataset,
-                      shuffle=train,
-                      distributed=distributed,
-                      num_workers=num_workers,
-                      adapt_frame_num=adapt_dur,
-                      adapt_token_num=adapt_token_num,
-                      batch_size=batch_size,
-                      min_batch_size=min_batch_size)
+    return KaldiDataLoader(dataset,
+                           shuffle=train,
+                           distributed=distributed,
+                           num_workers=num_workers,
+                           adapt_frame_num=adapt_dur,
+                           adapt_token_num=adapt_token_num,
+                           batch_size=batch_size,
+                           min_batch_size=min_batch_size)
 
 
 class Dataset(dat.Dataset):
@@ -96,7 +96,7 @@ def egs_collate(egs):
     }
 
 
-class DataLoader(object):
+class KaldiDataLoader(object):
     """
     Acoustic dataloader for seq2seq model training
     """

@@ -1,19 +1,16 @@
 # wujian@2019
 
-from .conf import conf_loader
-from .wave import wave_loader
-from .enhan import enhan_loader
-from .kaldi import kaldi_loader
-from .token import token_loader
-from .corpus import corpus_loader
+from . import am
+from . import lm
+from . import enh
 
 loader_templ = {
-    "kaldi": kaldi_loader,
-    "conf": conf_loader,
-    "wav": wave_loader,
-    "enh": enhan_loader,
-    "tok": token_loader,
-    "cop": corpus_loader
+    "kaldi": am.kaldi.DataLoader,
+    "conf": am.conf.DataLoader,
+    "wav": am.wav.DataLoader,
+    "enh": enh.wav.DataLoader,
+    "bptt": lm.bptt.DataLoader,
+    "cop": lm.utt.DataLoader
 }
 
 

@@ -20,21 +20,21 @@ MAX_INT16 = np.iinfo(np.int16).max
 EPSILON = np.finfo(np.float32).eps
 
 
-def wave_loader(train=True,
-                distributed=False,
-                wav_scp="",
-                sr=16000,
-                channel=-1,
-                token="",
-                utt2dur="",
-                max_token_num=400,
-                max_dur=30,
-                min_dur=0.4,
-                adapt_dur=8,
-                adapt_token_num=150,
-                batch_size=32,
-                num_workers=0,
-                min_batch_size=4):
+def DataLoader(train=True,
+               distributed=False,
+               wav_scp="",
+               sr=16000,
+               channel=-1,
+               token="",
+               utt2dur="",
+               max_token_num=400,
+               max_dur=30,
+               min_dur=0.4,
+               adapt_dur=8,
+               adapt_token_num=150,
+               batch_size=32,
+               num_workers=0,
+               min_batch_size=4):
     dataset = Dataset(wav_scp,
                       token,
                       utt2dur,
@@ -43,14 +43,14 @@ def wave_loader(train=True,
                       max_token_num=max_token_num,
                       max_wav_dur=max_dur,
                       min_wav_dur=min_dur)
-    return DataLoader(dataset,
-                      shuffle=train,
-                      distributed=distributed,
-                      num_workers=num_workers,
-                      adapt_wav_dur=adapt_dur,
-                      adapt_token_num=adapt_token_num,
-                      batch_size=batch_size,
-                      min_batch_size=min_batch_size)
+    return WaveDataLoader(dataset,
+                          shuffle=train,
+                          distributed=distributed,
+                          num_workers=num_workers,
+                          adapt_wav_dur=adapt_dur,
+                          adapt_token_num=adapt_token_num,
+                          batch_size=batch_size,
+                          min_batch_size=min_batch_size)
 
 
 def read_wav(fname,
@@ -223,7 +223,7 @@ def egs_collate(egs):
     }
 
 
-class DataLoader(object):
+class WaveDataLoader(object):
     """
     Acoustic dataloader for seq2seq model training
     """

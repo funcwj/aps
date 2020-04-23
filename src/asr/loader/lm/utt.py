@@ -14,22 +14,22 @@ from torch.nn.utils.rnn import pad_sequence
 from kaldi_python_io import Reader as BaseReader
 
 
-def token_loader(token="",
-                 train=True,
-                 sos=-1,
-                 eos=-1,
-                 min_token_num=2,
-                 batch_size=64,
-                 num_workers=0,
-                 drop_last=False):
+def DataLoader(token="",
+               train=True,
+               sos=-1,
+               eos=-1,
+               min_token_num=2,
+               batch_size=64,
+               num_workers=0,
+               drop_last=False):
     dataset = Dataset(token, min_token_num=min_token_num)
-    return DataLoader(dataset,
-                      sos=sos,
-                      eos=eos,
-                      shuffle=train,
-                      drop_last=drop_last,
-                      batch_size=batch_size,
-                      num_workers=num_workers)
+    return UttDataLoader(dataset,
+                         sos=sos,
+                         eos=eos,
+                         shuffle=train,
+                         drop_last=drop_last,
+                         batch_size=batch_size,
+                         num_workers=num_workers)
 
 
 class BatchSampler(dat.Sampler):
@@ -93,7 +93,7 @@ class Dataset(dat.Dataset):
         return len(self.token_set)
 
 
-class DataLoader(object):
+class UttDataLoader(object):
     """
     DataLoader for LM training
     """
@@ -137,7 +137,11 @@ class DataLoader(object):
 
 
 def run():
-    loader = token_loader(token="token", sos=1, eos=0, train=False, batch_size=32)
+    loader = token_loader(token="token",
+                          sos=1,
+                          eos=0,
+                          train=False,
+                          batch_size=32)
     for egs in loader:
         print(egs["len"])
         print(egs["tgt"])

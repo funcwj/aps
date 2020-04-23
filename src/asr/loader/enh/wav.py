@@ -12,20 +12,20 @@ import torch.utils.data as dat
 from torch.utils.data.dataloader import default_collate
 from kaldi_python_io import Reader as BaseReader
 
-from .wave import WaveReader
+from ..am.wav import WaveReader
 
 type_seq = (list, tuple)
 
 
-def enhan_loader(train=True,
-                 sr=16000,
-                 mix_scp="",
-                 doa_scp="",
-                 ref_scp="",
-                 emb_scp="",
-                 chunk_size=64000,
-                 batch_size=16,
-                 num_workers=4):
+def DataLoader(train=True,
+               sr=16000,
+               mix_scp="",
+               doa_scp="",
+               ref_scp="",
+               emb_scp="",
+               chunk_size=64000,
+               batch_size=16,
+               num_workers=4):
     """
     Return a online-chunk dataloader for enhancement/separation tasks
     args
@@ -53,11 +53,11 @@ def enhan_loader(train=True,
                             emb_scp=emb_scp,
                             doa_scp=doa_scp,
                             ref_scp=ref_scp)
-    return DataLoader(dataset,
-                      train=train,
-                      chunk_size=chunk_size,
-                      batch_size=batch_size,
-                      num_workers=num_workers)
+    return WaveChunkDataLoader(dataset,
+                               train=train,
+                               chunk_size=chunk_size,
+                               batch_size=batch_size,
+                               num_workers=num_workers)
 
 
 class NumpyReader(BaseReader):
@@ -222,7 +222,7 @@ class ChunkSplitter(object):
         return chunks
 
 
-class DataLoader(object):
+class WaveChunkDataLoader(object):
     """
     Online dataloader for chunk-level PIT
     """

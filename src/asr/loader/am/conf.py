@@ -13,7 +13,7 @@ import scipy.signal as ss
 import torch as th
 import torch.utils.data as dat
 
-from .wave import read_wav, DataLoader, EPSILON
+from .wav import read_wav, WaveDataLoader, EPSILON
 from .utils import BatchSampler
 
 from kaldi_python_io import Reader as BaseReader
@@ -56,31 +56,31 @@ Configuration egs: (Generate by setk/scripts/sptk/create_data_conf.py)
 """
 
 
-def conf_loader(simu_conf="",
-                train=True,
-                channel=-1,
-                sr=16000,
-                max_token_num=400,
-                max_dur=30,
-                min_dur=0.4,
-                adapt_dur=8,
-                adapt_token_num=150,
-                batch_size=32,
-                num_workers=4,
-                min_batch_size=4):
+def DataLoader(simu_conf="",
+               train=True,
+               channel=-1,
+               sr=16000,
+               max_token_num=400,
+               max_dur=30,
+               min_dur=0.4,
+               adapt_dur=8,
+               adapt_token_num=150,
+               batch_size=32,
+               num_workers=4,
+               min_batch_size=4):
     dataset = SimulationDataset(simu_conf,
                                 channel=channel,
                                 sr=sr,
                                 max_token_num=max_token_num,
                                 max_wav_dur=max_dur,
                                 min_wav_dur=min_dur)
-    return DataLoader(dataset,
-                      shuffle=train,
-                      num_workers=num_workers,
-                      adapt_wav_dur=adapt_dur,
-                      adapt_token_num=adapt_token_num,
-                      batch_size=batch_size,
-                      min_batch_size=min_batch_size)
+    return WaveDataLoader(dataset,
+                          shuffle=train,
+                          num_workers=num_workers,
+                          adapt_wav_dur=adapt_dur,
+                          adapt_token_num=adapt_token_num,
+                          batch_size=batch_size,
+                          min_batch_size=min_batch_size)
 
 
 def add_room_response(spk, rir, early_energy=True, sr=16000):
@@ -107,6 +107,7 @@ def add_room_response(spk, rir, early_energy=True, sr=16000):
         return revb, np.mean(early_rev**2)
     else:
         return revb, np.mean(revb[0]**2)
+
 
 def snr_coeff(sig_pow, ref_pow, snr):
     """
@@ -176,10 +177,12 @@ class SimulationDataset(dat.Dataset):
         cur_conf = self.epoch_conf[self.epoch]
         with open(cur_conf, "r") as f:
             self.cur_simu_conf = json.load(f)
-            self.token_reader = process_conf(self.cur_simu_conf, **self.proc_kwargs)
+            self.token_reader = process_conf(self.cur_simu_conf,
+                                             **self.proc_kwargs)
             self.epoch = (self.epoch + 1) % len(self.epoch_conf)
-        print("Got dataset from configuration: " + 
-                f"{cur_conf}, {len(self.token_reader)} utterances", flush=True)
+        print("Got dataset from configuration: " +
+              f"{cur_conf}, {len(self.token_reader)} utterances",
+              flush=True)
 
     def __len__(self):
         # make sure that each conf has same utterances

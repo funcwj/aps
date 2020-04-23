@@ -15,22 +15,22 @@ from .token import Dataset
 from kaldi_python_io import Reader as BaseReader
 
 
-def corpus_loader(token,
-                  train=True,
-                  sos=-1,
-                  eos=-1,
-                  batch_size=64,
-                  chunk_size=20,
-                  num_workers=0,
-                  min_token_num=5):
+def DataLoader(token,
+               train=True,
+               sos=-1,
+               eos=-1,
+               batch_size=64,
+               chunk_size=20,
+               num_workers=0,
+               min_token_num=5):
     dataset = Dataset(token, eos=eos, min_token_num=min_token_num)
-    return DataLoader(dataset,
-                      shuffle=train,
-                      batch_size=batch_size,
-                      chunk_size=chunk_size)
+    return BpttDataLoader(dataset,
+                          shuffle=train,
+                          batch_size=batch_size,
+                          chunk_size=chunk_size)
 
 
-class DataLoader(object):
+class BpttDataLoader(object):
     """
     LM loader for bptt training
     """

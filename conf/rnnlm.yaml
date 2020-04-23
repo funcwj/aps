@@ -24,7 +24,7 @@ trainer_conf:
   stop_criterion: "accu"
 
 data_conf:
-  fmt: "tok"
+  fmt: "utt"
   train:
     token: "data/aishell_v2/train/token"
   valid:
