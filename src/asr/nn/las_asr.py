@@ -2,14 +2,10 @@
 
 # wujian@2019
 
-import random
-
 import torch as th
 import torch.nn as nn
 
 import torch.nn.functional as F
-
-from torch.nn.utils.rnn import pack_padded_sequence
 
 from .base.decoder import TorchDecoder
 from .base.encoder import encoder_instance

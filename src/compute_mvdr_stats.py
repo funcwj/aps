@@ -8,7 +8,7 @@ import numpy as np
 
 from asr.utils import get_logger
 from asr.eval import Computer
-from asr.loader.wave import WaveReader
+from asr.loader.am.wav import WaveReader
 
 from kaldi_python_io import ScriptReader
 from kaldi_python_io import Reader as BaseReader

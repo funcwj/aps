@@ -7,8 +7,6 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
-from torch.nn.utils.rnn import pack_padded_sequence
-
 from .las_asr import LasASR
 from .base.encoder import TorchEncoder
 from .enh.mvdr import MvdrBeamformer

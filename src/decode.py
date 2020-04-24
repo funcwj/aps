@@ -11,7 +11,7 @@ import torch as th
 from asr.eval import Computer
 from asr.utils import get_logger, io_wrapper
 from asr.utils import StrToBoolAction
-from asr.loader.wave import WaveReader
+from asr.loader.am.wav import WaveReader
 
 from kaldi_python_io import ScriptReader
 

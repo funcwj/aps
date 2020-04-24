@@ -39,7 +39,7 @@ if [ $stage -eq 1 ]; then
   if [ $batch_size -eq 1 ]; then
     src/decode.py \
       $tst_dir/wav.scp \
-      $dec_dir/beam${beam_size}_decode.token \
+      $dec_dir/beam${beam_size}.decode \
       --beam-size $beam_size \
       --checkpoint $exp_dir \
       --device-id $gpu \
@@ -49,7 +49,7 @@ if [ $stage -eq 1 ]; then
       --lm-weight $lm_weight \
       --space "$space" \
       --nbest $nbest \
-      --dump-nbest $dec_dir/beam${beam_size}_${nbest}best.token \
+      --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
       --max-len $max_len \
       --normalized $normalized \
       --vectorized true \
@@ -57,7 +57,7 @@ if [ $stage -eq 1 ]; then
   else
     src/batch_decode.py \
       $tst_dir/wav.scp \
-      $dec_dir/beam${beam_size}_decode.token \
+      $dec_dir/beam${beam_size}.decode \
       --beam-size $beam_size \
       --batch-size $batch_size \
       --checkpoint $exp_dir \
@@ -66,7 +66,7 @@ if [ $stage -eq 1 ]; then
       --dict "$dict" \
       --space "$space" \
       --nbest $nbest \
-      --dump-nbest $dec_dir/beam${beam_size}_${nbest}best.token \
+      --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
       --max-len $max_len \
       --normalized $normalized \
       > $mdl_id.decode.$exp_id.log 2>&1

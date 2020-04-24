@@ -1,16 +1,14 @@
-# wujian@2019
-
-from . import am
-from . import lm
-from . import enh
+from .am import kaldi, conf, wav
+from .lm import bptt, utt
+from .enh import chunk
 
 loader_templ = {
-    "kaldi": am.kaldi.DataLoader,
-    "conf": am.conf.DataLoader,
-    "wav": am.wav.DataLoader,
-    "enh": enh.wav.DataLoader,
-    "bptt": lm.bptt.DataLoader,
-    "cop": lm.utt.DataLoader
+    "kaldi": kaldi.DataLoader,
+    "conf": conf.DataLoader,
+    "wav": wav.DataLoader,
+    "enh": chunk.DataLoader,
+    "bptt": bptt.DataLoader,
+    "utt": utt.DataLoader
 }
 
 
