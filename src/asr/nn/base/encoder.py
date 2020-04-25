@@ -104,7 +104,7 @@ class CustomRnnLayer(nn.Module):
     def __init__(self,
                  input_size,
                  hidden_size=512,
-                 proj_size=None,
+                 project_size=None,
                  rnn="lstm",
                  layernorm=False,
                  dropout=0.0,
@@ -125,8 +125,9 @@ class CustomRnnLayer(nn.Module):
         self.dpt = nn.Dropout(dropout) if dropout != 0 else None
         if not add_forward_backward and bidirectional:
             hidden_size *= 2
-        self.lnm = nn.LayerNorm(hidden_size) if layernorm else None
-        self.lin = nn.Linear(hidden_size, proj_size) if proj_size else None
+        self.ln = nn.LayerNorm(hidden_size) if layernorm else None
+        self.proj = nn.Linear(hidden_size,
+                              project_size) if project_size else None
 
     def flat(self):
         self.rnn.flatten_parameters()
@@ -161,11 +162,11 @@ class CustomRnnLayer(nn.Module):
         if self.dpt:
             y = self.dpt(y)
         # add ln
-        if self.lnm:
-            y = self.lnm(y)
+        if self.ln:
+            y = self.ln(y)
         # proj
-        if self.lin:
-            y = self.lin(y)
+        if self.proj:
+            y = self.proj(y)
         return y
 
 
@@ -181,7 +182,7 @@ class CustomEncoder(nn.Module):
                  rnn_bidir=True,
                  rnn_dropout=0.0,
                  rnn_hidden=512,
-                 rnn_proj=None,
+                 rnn_project=None,
                  layernorm=False,
                  use_pyramid=False,
                  add_forward_backward=False):
@@ -194,8 +195,8 @@ class CustomEncoder(nn.Module):
             if layer_idx == 0:
                 in_size = input_size
             else:
-                if rnn_proj:
-                    return rnn_proj
+                if rnn_project:
+                    return rnn_project
                 else:
                     in_size = rnn_hidden
                     if rnn_bidir and not add_forward_backward:
@@ -207,15 +208,15 @@ class CustomEncoder(nn.Module):
         rnn_list = []
         for i in range(rnn_layers):
             rnn_list.append(
-                CustomRnnLayer(
-                    derive_in_size(i),
-                    hidden_size=rnn_hidden,
-                    rnn=rnn,
-                    proj_size=rnn_proj if i != rnn_layers - 1 else output_size,
-                    layernorm=layernorm,
-                    dropout=rnn_dropout,
-                    bidirectional=rnn_bidir,
-                    add_forward_backward=add_forward_backward))
+                CustomRnnLayer(derive_in_size(i),
+                               hidden_size=rnn_hidden,
+                               rnn=rnn,
+                               project_size=rnn_project
+                               if i != rnn_layers - 1 else output_size,
+                               layernorm=layernorm,
+                               dropout=rnn_dropout,
+                               bidirectional=rnn_bidir,
+                               add_forward_backward=add_forward_backward))
         self.rnns = nn.ModuleList(rnn_list)
         self.use_pyramid = use_pyramid
 
@@ -259,7 +260,7 @@ class TdnnLayer(nn.Module):
                  output_size,
                  kernel_size=3,
                  steps=2,
-                 dilat=1,
+                 dilation=1,
                  norm="BN",
                  dropout=0):
         super(TdnnLayer, self).__init__()
@@ -269,8 +270,8 @@ class TdnnLayer(nn.Module):
                                 output_size,
                                 kernel_size,
                                 stride=steps,
-                                dilation=dilat,
-                                padding=(dilat * (kernel_size - 1)) // 2)
+                                dilation=dilation,
+                                padding=(dilation * (kernel_size - 1)) // 2)
         if norm == "BN":
             self.norm = nn.BatchNorm1d(output_size)
         else:
@@ -314,23 +315,23 @@ class FsmnLayer(nn.Module):
     def __init__(self,
                  input_size,
                  output_size,
-                 proj_size,
+                 project_size,
                  lctx=3,
                  rctx=3,
                  norm="BN",
-                 dilat=0,
+                 dilation=0,
                  dropout=0):
         super(FsmnLayer, self).__init__()
-        self.inp_proj = nn.Linear(input_size, proj_size, bias=False)
+        self.inp_proj = nn.Linear(input_size, project_size, bias=False)
         self.ctx_size = lctx + rctx + 1
-        self.ctx_conv = nn.Conv1d(proj_size,
-                                  proj_size,
+        self.ctx_conv = nn.Conv1d(project_size,
+                                  project_size,
                                   kernel_size=self.ctx_size,
-                                  dilation=dilat,
-                                  groups=proj_size,
+                                  dilation=dilation,
+                                  groups=project_size,
                                   padding=(self.ctx_size - 1) // 2,
                                   bias=False)
-        self.out_proj = nn.Linear(proj_size, output_size)
+        self.out_proj = nn.Linear(project_size, output_size)
         if norm == "BN":
             self.norm = nn.BatchNorm1d(output_size)
         elif norm == "LN":
@@ -374,6 +375,22 @@ class FsmnLayer(nn.Module):
         return o, p
 
 
+def parse_str_int(str_or_int, num_layers):
+    """
+    Parse string or int, egs:
+        1,1,2 => [1, 1, 2]
+        2     => [2, 2, 2]
+    """
+    if isinstance(str_or_int, str):
+        values = [int(t) for t in str_or_int.split(",")]
+        if len(values) != num_layers:
+            raise ValueError(f"Number of the layers: {num_layers} " +
+                             f"do not match {str_or_int}")
+    else:
+        values = [str_or_int] * num_layers
+    return values
+
+
 class FsmnEncoder(nn.Module):
     """
     Stack of FsmnLayers, with optional residual connection
@@ -381,28 +398,24 @@ class FsmnEncoder(nn.Module):
     def __init__(self,
                  input_size,
                  output_size,
-                 proj_size,
+                 project_size,
                  num_layers=4,
                  residual=True,
                  lctx=3,
                  rctx=3,
                  norm="BN",
-                 dilats="1,1,1,1",
+                 dilation=1,
                  dropout=0):
         super(FsmnEncoder, self).__init__()
-        dilats = [int(t) for t in dilats.split(",")]
-        if len(dilats) != num_layers:
-            raise RuntimeError(
-                "Number of layers do not match dilation configurations" +
-                f"{num_layers} vs {dilats}")
+        dilations = parse_str_int(dilation, num_layers)
         self.layers = nn.ModuleList([
             FsmnLayer(input_size,
                       output_size,
-                      proj_size,
+                      project_size,
                       lctx=lctx,
                       rctx=rctx,
                       norm="" if i == num_layers - 1 else norm,
-                      dilat=dilats[i],
+                      dilation=dilations[i],
                       dropout=dropout) for i in range(num_layers)
         ])
         self.res = residual
@@ -436,7 +449,7 @@ class TdnnRnnEncoder(nn.Module):
                  tdnn_norm="BN",
                  tdnn_layers=2,
                  tdnn_stride="2,2",
-                 tdnn_dilats="1,1",
+                 tdnn_dilation="1,1",
                  tdnn_dropout=0,
                  rnn="lstm",
                  rnn_layers=3,
@@ -446,12 +459,8 @@ class TdnnRnnEncoder(nn.Module):
                  rnn_layernorm=False,
                  rnn_hidden=512):
         super(TdnnRnnEncoder, self).__init__()
-
-        stride_conf = [int(t) for t in tdnn_stride.split(",")]
-        dilats_conf = [int(t) for t in tdnn_dilats.split(",")]
-        if len(stride_conf) != len(dilats_conf) or len(
-                stride_conf) != tdnn_layers:
-            raise RuntimeError("Errors in tdnn_stride/tdnn_dilats existed")
+        stride_conf = parse_str_int(tdnn_stride, tdnn_layers)
+        dilation_conf = parse_str_int(tdnn_dilation, tdnn_layers)
         tdnns = []
         self.tdnn_layers = tdnn_layers
         for i in range(tdnn_layers):
@@ -461,7 +470,7 @@ class TdnnRnnEncoder(nn.Module):
                           kernel_size=3,
                           norm=tdnn_norm,
                           steps=stride_conf[i],
-                          dilat=dilats_conf[i],
+                          dilation=dilation_conf[i],
                           dropout=tdnn_dropout))
         self.tdnn = nn.Sequential(*tdnns)
         self.rnns = CustomEncoder(tdnn_dim,
@@ -471,7 +480,7 @@ class TdnnRnnEncoder(nn.Module):
                                   rnn_layers=rnn_layers,
                                   rnn_bidir=rnn_bidir,
                                   rnn_dropout=rnn_dropout,
-                                  rnn_proj=rnn_project,
+                                  rnn_project=rnn_project,
                                   rnn_hidden=rnn_hidden)
 
     def forward(self, x_pad, x_len):
@@ -497,22 +506,19 @@ class TdnnFsmnEncoder(nn.Module):
                  tdnn_norm="BN",
                  tdnn_layers=2,
                  tdnn_stride="2,2",
-                 tdnn_dilats="1,1",
+                 tdnn_dilation="1,1",
                  tdnn_dropout=0.2,
                  fsmn_layers=4,
-                 fsmn_residual=True,
                  fsmn_lctx=10,
                  fsmn_rctx=10,
                  fsmn_norm="LN",
-                 fsmn_dilats="1,1,1,1",
+                 fsmn_residual=True,
+                 fsmn_dilation=1,
                  fsmn_project=512,
-                 fsmn_dropout=0):
+                 fsmn_dropout=0.2):
         super(TdnnFsmnEncoder, self).__init__()
-        stride_conf = [int(t) for t in tdnn_stride.split(",")]
-        dilats_conf = [int(t) for t in tdnn_dilats.split(",")]
-        if len(stride_conf) != len(dilats_conf) or len(
-                stride_conf) != tdnn_layers:
-            raise RuntimeError("Errors in tdnn_stride/tdnn_dilats existed")
+        stride_conf = parse_str_int(tdnn_stride, tdnn_layers)
+        dilation_conf = parse_str_int(tdnn_dilation, tdnn_layers)
         tdnns = []
         self.tdnn_layers = tdnn_layers
         for i in range(tdnn_layers):
@@ -522,7 +528,7 @@ class TdnnFsmnEncoder(nn.Module):
                           kernel_size=3,
                           norm=tdnn_norm,
                           steps=stride_conf[i],
-                          dilat=dilats_conf[i],
+                          dilation=dilation_conf[i],
                           dropout=tdnn_dropout))
         self.tdnn = nn.Sequential(*tdnns)
         self.fsmn = FsmnEncoder(tdnn_dim,
@@ -531,7 +537,7 @@ class TdnnFsmnEncoder(nn.Module):
                                 lctx=fsmn_lctx,
                                 rctx=fsmn_rctx,
                                 norm=fsmn_norm,
-                                dilats=fsmn_dilats,
+                                dilation=fsmn_dilation,
                                 residual=fsmn_residual,
                                 num_layers=fsmn_layers,
                                 dropout=fsmn_dropout)

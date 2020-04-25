@@ -178,13 +178,13 @@ class TorchRNNDecoder(nn.Module):
             raise RuntimeError(f"Beam size({beam}) > vocabulary size")
 
         dev = enc_out.device
+        blk = th.tensor([[blank]], dtype=th.int64, device=dev)
         beam_queue = PriorityQueue()
-        init_node = Node(
-            0.0, {
-                "trans": th.tensor([[blank]], dtype=th.int64, device=dev),
-                "hidden": None,
-                "lm_state": None
-            })
+        init_node = Node(0.0, {
+            "trans": [blk],
+            "hidden": None,
+            "lm_state": None
+        })
         beam_queue.put_nowait(init_node)
 
         _, T, _ = enc_out.shape
@@ -200,10 +200,10 @@ class TorchRNNDecoder(nn.Module):
                 # cur_inp = th.tensor([[trans[-1]]], dtype=th.int64, device=dev)
                 dec_out, hidden = self._step_decoder(
                     trans[-1], hidden=cur_node.stats["hidden"])
-                # predition: V
+                # predition: 1 x V
                 prob = F.log_softmax(self._pred_joint(enc_out[:, t],
                                                       dec_out)[0],
-                                     dim=-1)
+                                     dim=-1).squeeze()
 
                 # add terminal node (end with blank)
                 score = cur_node.score + prob[blank].item()
@@ -221,11 +221,11 @@ class TorchRNNDecoder(nn.Module):
                                            cur_node.stats["lm_state"])
                     if blank != 0:
                         raise RuntimeError("Hard code for blank = 0 here")
-                    prob[..., 1:] += F.log_softmax(lm_prob[:, 0],
-                                                   dim=-1) * lm_weight
+                    prob[1:] += F.log_softmax(lm_prob[:, -1].squeeze(),
+                                              dim=-1) * lm_weight
 
                 # extend other nodes
-                topk_score, topk_index = th.topk(prob.squeeze(), beam + 1)
+                topk_score, topk_index = th.topk(prob, beam + 1)
                 topk = topk_index.tolist()
                 for i in range(beam + 1 if blank in topk else beam):
                     if topk[i] == blank:
@@ -233,7 +233,7 @@ class TorchRNNDecoder(nn.Module):
                     score = cur_node.score + topk_score[i].item()
                     node = Node(
                         score, {
-                            "trans": trans + [topk_index[i][..., None]],
+                            "trans": trans + [topk_index[None, i][..., None]],
                             "hidden": hidden,
                             "lm_state": lm_state
                         })
@@ -396,13 +396,13 @@ class TorchTransformerDecoder(nn.Module):
             raise RuntimeError(f"Beam size({beam}) > vocabulary size")
 
         dev = enc_out.device
+        blk = th.tensor([[blank]], dtype=th.int64, device=dev)
         beam_queue = PriorityQueue()
-        init_node = Node(
-            0.0, {
-                "trans": th.tensor([[blank]], dtype=th.int64, device=dev),
-                "history": None,
-                "lm_state": None
-            })
+        init_node = Node(0.0, {
+            "trans": [blk],
+            "history": None,
+            "lm_state": None
+        })
         beam_queue.put_nowait(init_node)
 
         T, _, _ = enc_out.shape
@@ -419,9 +419,9 @@ class TorchTransformerDecoder(nn.Module):
                 # cur_inp = th.tensor([[trans[-1]]], dtype=th.int64, device=dev)
                 dec_out, history = self._step_decoder(
                     trans[-1], history=cur_node.stats["history"])
-                # predition: 1 x V
+                # predition: V
                 prob = F.log_softmax(self._pred_joint(enc_out[t], dec_out)[0],
-                                     dim=-1)
+                                     dim=-1).squeeze()
 
                 # add terminal node (end with blank)
                 score = cur_node.score + prob[blank].item()
@@ -439,11 +439,11 @@ class TorchTransformerDecoder(nn.Module):
                                            cur_node.stats["lm_state"])
                     if blank != 0:
                         raise RuntimeError("Hard code for blank = 0 here")
-                    prob[..., 1:] += F.log_softmax(lm_prob[:, 0],
-                                                   dim=-1) * lm_weight
+                    prob[1:] += F.log_softmax(lm_prob[:, -1].squeeze(),
+                                              dim=-1) * lm_weight
 
                 # extend other nodes
-                topk_score, topk_index = th.topk(prob.squeeze(), beam + 1)
+                topk_score, topk_index = th.topk(prob, beam + 1)
                 topk = topk_index.tolist()
                 for i in range(beam + 1 if blank in topk else beam):
                     if topk[i] == blank:
@@ -452,7 +452,7 @@ class TorchTransformerDecoder(nn.Module):
                     node = Node(
                         score, {
                             "lm_state": lm_state,
-                            "trans": trans + [topk_index[i][..., None]],
+                            "trans": trans + [topk_index[None, i][..., None]],
                             "history": history
                         })
                     queue_t.put_nowait(node)

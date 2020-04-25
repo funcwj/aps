@@ -8,4 +8,4 @@ My repository for E2E acoustic model training.
 2. Multi-channel AM (Mainly based on popular neural beamforming methods)
 3. RNN & Transformer LM
 4. Distributed training (now using Pytorch's DistributedDataParallel)
-5. Online feature extraction
+5. Kaldi & Pytorch's feature extraction

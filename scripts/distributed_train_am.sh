@@ -4,6 +4,7 @@
 
 set -eu
 
+seed=777
 epoches=100
 tensorboard=false
 batch_size=64
@@ -15,7 +16,7 @@ prog_interval=100
 
 echo "$0 $@"
 
-. ./local/parse_options.sh || exit 1
+. ./utils/parse_options.sh || exit 1
 
 [ $# -ne 2 ] && echo "Script format error: $0 <data-set> <exp-id>" && exit 1
 
@@ -34,6 +35,7 @@ python -m torch.distributed.launch \
   src/launch_distributed_train_am.py \
   --conf $conf \
   --dict $dict \
+  --seed $seed \
   --tensorboard $tensorboard \
   --save-interval $save_interval \
   --prog-interval $prog_interval \
