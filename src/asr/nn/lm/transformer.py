@@ -39,6 +39,7 @@ class TorchTransformerLM(nn.Module):
         self.encoder = TransformerEncoder(encoder_layer, num_layers)
         # output distribution
         self.dist = nn.Linear(att_dim, vocab_size)
+        self.vocab_size = vocab_size
 
     def forward(self, token, h=None, token_len=None):
         """

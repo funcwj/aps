@@ -51,6 +51,7 @@ class TorchRNNLM(nn.Module):
                                        bidirectional=False)
         # output distribution
         self.dist = nn.Linear(rnn_hidden, vocab_size)
+        self.vocab_size = vocab_size
 
         self.init_weights()
 

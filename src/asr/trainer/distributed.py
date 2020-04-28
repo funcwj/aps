@@ -17,7 +17,7 @@ from .datp import ProgressReporter, StopCriterion, IGNORE_ID
 from .datp import get_device_ids, add_gaussian_noise
 from .datp import ce_loss, ls_loss, compute_accu, process_tgts
 from .scheduler import support_ss_scheduler
-from .noamopt import NoamOpt
+from .scheduler import NoamOpt
 
 from ..utils import load_obj
 

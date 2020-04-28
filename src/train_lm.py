@@ -2,6 +2,7 @@
 # wujian@2019
 
 import yaml
+import codecs
 import random
 import pprint
 import pathlib
@@ -44,12 +45,17 @@ def run(args):
         conf = yaml.full_load(f)
 
     # add dictionary info
-    with open(args.dict, "rb") as f:
-        token2idx = [line.decode("utf-8").split()[0] for line in f]
+    with codecs.open(args.dict, encoding="utf-8") as f:
+        vocab = {}
+        for line in f:
+            unit, idx = line.split()
+            vocab[unit] = int(idx)
 
-    eos = token2idx.index("<eos>")
-    sos = token2idx.index("<sos>")
-    conf["nnet_conf"]["vocab_size"] = len(token2idx)
+    if "<sos>" not in vocab or "<eos>" not in vocab:
+        raise ValueError(f"Missing <sos>/<eos> in {args.dict}")
+    eos = vocab["<eos>"]
+    sos = vocab["<sos>"]
+    conf["nnet_conf"]["vocab_size"] = len(vocab)
 
     for key in conf.keys():
         if key not in constrained_conf_keys:

@@ -168,18 +168,18 @@ class TorchTransformerDecoder(nn.Module):
                 # beam
                 if t:
                     point = back_point[-1]
-                    # history: beam x 1
-                    history = hist_token[-1][point][..., None]
-                    cur_emb = self.tgt_embed(history, t=t)
+                    # pre_out: beam x 1
+                    pre_out = hist_token[-1][point][..., None]
+                    cur_emb = self.tgt_embed(pre_out, t=t)
                     pre_emb = th.cat([pre_emb, cur_emb], dim=0)
                 else:
                     point = th.arange(0, beam, dtype=th.int64, device=dev)
-                    # history: beam x 1
-                    history = th.tensor([[sos]] * beam,
+                    # pre_out: beam x 1
+                    pre_out = th.tensor([[sos]] * beam,
                                         dtype=th.int64,
                                         device=dev)
                     # 1 x beam x E
-                    pre_emb = self.tgt_embed(history)
+                    pre_emb = self.tgt_embed(pre_out)
                 # Tcur - 1 x beam x D
                 dec_out = self.decoder(pre_emb, enc_out, tgt_mask=tgt_mask)[-1]
                 # beam x V
@@ -189,9 +189,9 @@ class TorchTransformerDecoder(nn.Module):
 
                 # add LM score
                 if lm:
-                    lm_prob, lm_state = lm(history, lm_state)
+                    lm_prob, lm_state = lm(pre_out, lm_state)
                     # beam x V
-                    prob += F.log_softmax(lm_prob[:, 0], dim=-1) * lm_weight
+                    prob += F.log_softmax(lm_prob[:, -1], dim=-1) * lm_weight
 
                 # local pruning: beam x beam
                 topk_score, topk_token = th.topk(prob, beam, dim=-1)

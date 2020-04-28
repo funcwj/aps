@@ -176,6 +176,9 @@ class TorchRNNDecoder(nn.Module):
         nbest = min(beam, nbest)
         if beam > self.vocab_size:
             raise RuntimeError(f"Beam size({beam}) > vocabulary size")
+        if lm.vocab_size < self.vocab_size:
+            raise RuntimeError("lm.vocab_size < am.vocab_size, "
+                               "seems different dictionary is used")
 
         dev = enc_out.device
         blk = th.tensor([[blank]], dtype=th.int64, device=dev)
@@ -215,14 +218,16 @@ class TorchRNNDecoder(nn.Module):
                     })
                 beam_queue.put_nowait(blank_node)
 
+                lm_state = None
                 if lm and t:
                     # 1 x 1 x V (without blank)
                     lm_prob, lm_state = lm(trans[-1],
                                            cur_node.stats["lm_state"])
                     if blank != 0:
                         raise RuntimeError("Hard code for blank = 0 here")
-                    prob[1:] += F.log_softmax(lm_prob[:, -1].squeeze(),
-                                              dim=-1) * lm_weight
+                    prob[1:] += F.log_softmax(
+                        lm_prob[:, -1, 1:self.vocab_size].squeeze(),
+                        dim=-1) * lm_weight
 
                 # extend other nodes
                 topk_score, topk_index = th.topk(prob, beam + 1)
@@ -336,23 +341,23 @@ class TorchTransformerDecoder(nn.Module):
             output = output.contiguous()
         return output
 
-    def _step_decoder(self, pred_prev, history=None):
+    def _step_decoder(self, pred_prev, prev_embed=None):
         """
         Make one step for decoder
         args:
             pred_prev: 1 x 1
-            history: None or T x 1 x E
+            prev_embed: None or T x 1 x E
         return:
             dec_out: 1 x D
         """
-        t = 0 if history is None else history.shape[0]
+        t = 0 if prev_embed is None else prev_embed.shape[0]
         # 1 x 1 x E
         pred_prev_emb = self.tgt_embed(pred_prev, t=t)
-        history = pred_prev_emb if history is None else th.cat(
-            [history, pred_prev_emb], dim=0)
+        prev_embed = pred_prev_emb if prev_embed is None else th.cat(
+            [prev_embed, pred_prev_emb], dim=0)
         tgt_mask = prep_sub_mask(t + 1, device=pred_prev.device)
-        dec_out = self.decoder(history, mask=tgt_mask)
-        return dec_out[-1], history
+        dec_out = self.decoder(prev_embed, mask=tgt_mask)
+        return dec_out[-1], prev_embed
 
     def greedy_search(self, enc_out, blank=0):
         """
@@ -361,7 +366,7 @@ class TorchTransformerDecoder(nn.Module):
             enc_out: Ti x N(=1) x D
         """
         blk = th.tensor([[blank]], dtype=th.int64, device=enc_out.device)
-        dec_out, history = self._step_decoder(blk)
+        dec_out, prev_embed = self._step_decoder(blk)
         score = 0
         trans = []
         T, _, _ = enc_out.shape
@@ -373,8 +378,8 @@ class TorchTransformerDecoder(nn.Module):
             score += best_prob.item()
             # not blank
             if best_pred.item() != blank:
-                dec_out, history = self._step_decoder(best_pred[None, ...],
-                                                      history=history)
+                dec_out, prev_embed = self._step_decoder(best_pred[None, ...],
+                                                         prev_embed=prev_embed)
                 trans += [best_pred.item()]
         return [{"score": score, "trans": [blank] + trans + [blank]}]
 
@@ -394,19 +399,22 @@ class TorchTransformerDecoder(nn.Module):
         nbest = min(beam, nbest)
         if beam > self.vocab_size:
             raise RuntimeError(f"Beam size({beam}) > vocabulary size")
+        if lm:
+            if lm.vocab_size < self.vocab_size:
+                raise RuntimeError("lm.vocab_size < am.vocab_size, "
+                                   "seems different dictionary is used")
 
         dev = enc_out.device
         blk = th.tensor([[blank]], dtype=th.int64, device=dev)
         beam_queue = PriorityQueue()
         init_node = Node(0.0, {
             "trans": [blk],
-            "history": None,
+            "prev_embed": None,
             "lm_state": None
         })
         beam_queue.put_nowait(init_node)
 
         T, _, _ = enc_out.shape
-        lm_state = None
         for t in range(T):
             queue_t = beam_queue
             beam_queue = PriorityQueue()
@@ -417,8 +425,8 @@ class TorchTransformerDecoder(nn.Module):
 
                 # make a step
                 # cur_inp = th.tensor([[trans[-1]]], dtype=th.int64, device=dev)
-                dec_out, history = self._step_decoder(
-                    trans[-1], history=cur_node.stats["history"])
+                dec_out, prev_embed = self._step_decoder(
+                    trans[-1], prev_embed=cur_node.stats["prev_embed"])
                 # predition: V
                 prob = F.log_softmax(self._pred_joint(enc_out[t], dec_out)[0],
                                      dim=-1).squeeze()
@@ -429,18 +437,20 @@ class TorchTransformerDecoder(nn.Module):
                     score, {
                         "trans": trans,
                         "lm_state": cur_node.stats["lm_state"],
-                        "history": cur_node.stats["history"]
+                        "prev_embed": cur_node.stats["prev_embed"]
                     })
                 beam_queue.put_nowait(blank_node)
 
+                lm_state = None
                 if lm and t:
                     # 1 x 1 x V (without blank)
                     lm_prob, lm_state = lm(trans[-1],
                                            cur_node.stats["lm_state"])
                     if blank != 0:
                         raise RuntimeError("Hard code for blank = 0 here")
-                    prob[1:] += F.log_softmax(lm_prob[:, -1].squeeze(),
-                                              dim=-1) * lm_weight
+                    prob[1:] += F.log_softmax(
+                        lm_prob[:, -1, 1:self.vocab_size].squeeze(),
+                        dim=-1) * lm_weight
 
                 # extend other nodes
                 topk_score, topk_index = th.topk(prob, beam + 1)
@@ -451,9 +461,9 @@ class TorchTransformerDecoder(nn.Module):
                     score = cur_node.score + topk_score[i].item()
                     node = Node(
                         score, {
-                            "lm_state": lm_state,
                             "trans": trans + [topk_index[None, i][..., None]],
-                            "history": history
+                            "lm_state": lm_state,
+                            "prev_embed": prev_embed
                         })
                     queue_t.put_nowait(node)
 

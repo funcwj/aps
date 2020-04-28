@@ -18,7 +18,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch_complex.functional as cF
 
 from .scheduler import support_ss_scheduler
-from .noamopt import NoamOpt
+from .scheduler import NoamOpt
 
 from ..utils import get_logger, load_obj, get_device_ids
 from ..utils import SimpleTimer
@@ -708,6 +708,7 @@ class LmTrainer(Trainer):
         # add to reporter
         self.reporter.add("loss", loss.item())
         self.reporter.add("accu", accu)
+        self.reporter.add("vppl", th.exp(loss.item()))
         return loss
 
 

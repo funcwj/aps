@@ -42,6 +42,8 @@ def load_conf(yaml_conf, dict_path):
             unit, idx = line.split()
             vocab[unit] = int(idx)
 
+    if "<sos>" not in vocab or "<eos>" not in vocab:
+        raise ValueError(f"Missing <sos>/<eos> in {args.dict}")
     nnet_conf["vocab_size"] = len(vocab)
 
     for key in conf.keys():
