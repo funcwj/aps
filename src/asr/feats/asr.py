@@ -28,12 +28,16 @@ class SpectrogramTransform(STFT):
                  frame_len,
                  frame_hop,
                  window="hamm",
-                 round_pow_of_two=True):
+                 round_pow_of_two=True,
+                 normalized=False,
+                 onesided=True):
         super(SpectrogramTransform,
               self).__init__(frame_len,
                              frame_hop,
                              window=window,
-                             round_pow_of_two=round_pow_of_two)
+                             round_pow_of_two=round_pow_of_two,
+                             normalized=normalized,
+                             onesided=onesided)
 
     def dim(self):
         return self.num_bins
@@ -370,6 +374,7 @@ class FeatureTransform(nn.Module):
                  frame_hop=160,
                  window="hamm",
                  round_pow_of_two=True,
+                 stft_normalized=False,
                  sr=16000,
                  num_mels=80,
                  num_ceps=13,
@@ -400,14 +405,16 @@ class FeatureTransform(nn.Module):
                     SpectrogramTransform(frame_len,
                                          frame_hop,
                                          window=window,
-                                         round_pow_of_two=round_pow_of_two))
+                                         round_pow_of_two=round_pow_of_two,
+                                         normalized=stft_normalized))
                 feats_dim = transform[-1].dim()
             elif tok == "fbank":
                 fbank = [
                     SpectrogramTransform(frame_len,
                                          frame_hop,
                                          window=window,
-                                         round_pow_of_two=round_pow_of_two),
+                                         round_pow_of_two=round_pow_of_two,
+                                         normalized=stft_normalized),
                     MelTransform(frame_len,
                                  round_pow_of_two=round_pow_of_two,
                                  sr=sr,

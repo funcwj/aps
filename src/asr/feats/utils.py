@@ -295,8 +295,8 @@ class STFTBase(nn.Module):
         self.frame_hop = frame_hop
         self.num_bins = self.K.shape[0] // 4 + 1
         self.expr = (
-            f"window={window}, stride={self.frame_hop}" +
-            f"onesided={self.onesided}, normalized={self.normalized}, " +
+            f"window={window}, stride={frame_hop}, onesided={onesided}, " +
+            f"normalized={normalized}, " +
             f"kernel_size={self.num_bins}x{self.K.shape[2]}")
 
     def num_frames(self, num_samples):

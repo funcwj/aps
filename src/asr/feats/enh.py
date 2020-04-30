@@ -82,6 +82,7 @@ class FeatureTransform(nn.Module):
                  frame_hop=256,
                  window="sqrthann",
                  round_pow_of_two=True,
+                 stft_normalized=False,
                  sr=16000,
                  gcmvn="",
                  norm_mean=True,
@@ -99,7 +100,8 @@ class FeatureTransform(nn.Module):
         self.STFT = STFT(frame_len,
                          frame_hop,
                          window=window,
-                         round_pow_of_two=round_pow_of_two)
+                         round_pow_of_two=round_pow_of_two,
+                         normalized=stft_normalized)
         trans_tokens = feats.split("-") if feats else []
         transform = []
         feats_dim = 0
