@@ -13,11 +13,11 @@ def tf_mask(batch,
             device="cpu"):
     """
     Return batch of TF-masks
-    args:
-        batch: N
+    Args:
+        batch: batch size, N
         shape: (T x F)
-    return:
-        masks: N x T x F
+    Return:
+        masks (Tensor): 0,1 masks, N x T x F
     """
     T, F = shape
     max_frame = min(max_frame, T // 2)
@@ -42,10 +42,10 @@ def tf_mask(batch,
 def random_mask(shape, max_steps=30, num_masks=2, order="freq", device="cpu"):
     """
     Generate random 0/1 masks
-    args:
+    Args:
         shape: (T, F)
-    return:
-        masks: T x F
+    Return:
+        masks (Tensor): 0,1 masks, T x F
     """
     if order not in ["time", "freq"]:
         raise RuntimeError(f"Unknown order: {order}")

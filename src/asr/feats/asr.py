@@ -3,6 +3,12 @@
 # wujian@2019
 """
 Feature transform for ASR
+Notations:
+    N: batch size
+    C: number of channels
+    T: number of frames
+    F: number of FFT bins
+    S: number of samples in utts
 """
 import math
 
@@ -37,10 +43,10 @@ class SpectrogramTransform(STFT):
 
     def forward(self, x):
         """
-        args:
-            x: input signal, N x C x S or N x S
-        return:
-            m: magnitude, N x C x T x F or N x T x F
+        Args:
+            x (Tensor): input signal, N x (C) x S
+        Return:
+            m (Tensor): magnitude, N x (C) x T x F
         """
         m, _ = super().forward(x)
         m = th.transpose(m, -1, -2)
@@ -60,10 +66,10 @@ class AbsTransform(nn.Module):
 
     def forward(self, x):
         """
-        args:
-            x: enhanced complex spectrogram N x T x F
-        return:
-            y: enhanced N x T x F
+        Args:
+            x (Tensor or ComplexTensor): N x T x F
+        Return:
+            y (Tensor): N x T x F
         """
         if not isinstance(x, th.Tensor):
             x = x + self.eps
@@ -104,10 +110,10 @@ class MelTransform(nn.Module):
 
     def forward(self, x):
         """
-        args:
-            x: spectrogram, N x C x T x F or N x T x F
-        return:
-            f: mel-spectrogram, N x C x T x B
+        Args:
+            x (Tensor): spectrogram, N x (C) x T x F
+        Return:
+            f (Tensor): mel-fbank feature, N x (C) x T x B
         """
         if x.dim() not in [3, 4]:
             raise RuntimeError("MelTransform expect 3/4D tensor, " +
@@ -133,10 +139,10 @@ class LogTransform(nn.Module):
 
     def forward(self, x):
         """
-        args:
-            x: features in linear domain, N x C x T x F or N x T x F
-        return:
-            y: features in log domain, N x C x T x F or N x T x F
+        Args:
+            x (Tensor): linear, N x (C) x T x F
+        Return:
+            y (Tensor): log features, N x (C) x T x F
         """
         x = th.clamp(x, min=self.eps)
         return th.log(x)
@@ -166,10 +172,10 @@ class DiscreteCosineTransform(nn.Module):
 
     def forward(self, x):
         """
-        args:
-            x: log mel-spectrogram, N x C x T x B
-        return:
-            f: mfcc, N x C x T x P
+        Args:
+            x (Tensor): log mel-fbank, N x (C) x T x B
+        Return:
+            f (Tensor): mfcc, N x (C) x T x P
         """
         f = F.linear(x, self.dct, bias=None)
         f = f * self.cepstral_lifter
@@ -201,10 +207,10 @@ class CmvnTransform(nn.Module):
 
     def forward(self, x):
         """
-        args:
-            x: feature without normalized, N x C x T x F or N x T x F
-        return:
-            y: normalized feature, N x C x T x F or N x T x F
+        Args:
+            x (Tensor): feature before normalization, N x (C) x T x F
+        Return:
+            y (Tensor): normalized feature, N x (C) x T x F
         """
         if not self.norm_mean and not self.norm_var:
             return x
@@ -243,10 +249,10 @@ class SpecAugTransform(nn.Module):
 
     def forward(self, x):
         """
-        args:
-            x: original features, N x C x T x F or N x T x F
-        return:
-            y: augmented features
+        Args:
+            x (Tensor): original features, N x (C) x T x F
+        Return:
+            y (Tensor): augmented features
         """
         if self.training and th.rand(1).item() < self.p:
             if x.dim() == 4:
@@ -286,9 +292,9 @@ class SpliceTransform(nn.Module):
     def forward(self, x):
         """
         args:
-            x: original feature, N x ... x Ti x F
+            x (Tensor): original feature, N x ... x Ti x F
         return:
-            y: spliced feature, N x ... x To x FD
+            y (Tensor): spliced feature, N x ... x To x FD
         """
         T = x.shape[-2]
         T = T - T % self.rate
@@ -334,9 +340,9 @@ class DeltaTransform(nn.Module):
     def forward(self, x):
         """
         args:
-            x: original feature, N x C x T x F or N x T x F
+            x (Tensor): original feature, N x (C) x T x F
         return:
-            y: delta feature, N x C x T x FD or N x T x FD
+            y (Tensor): delta feature, N x (C) x T x FD
         """
         delta = [x]
         for _ in range(self.order):
@@ -482,12 +488,12 @@ class FeatureTransform(nn.Module):
 
     def forward(self, x_pad, x_len):
         """
-        args:
-            x_pad: raw waveform: N x C x S or N x S
-            x_len: N
-        return:
-            feats_pad: acoustic features: N x C x T x ...
-            feats_len: number of frames
+        Args:
+            x_pad (Tensor): raw waveform: N x C x S or N x S
+            x_len (Tensor or None): N or None
+        Return:
+            feats_pad (Tensor): acoustic features: N x C x T x ...
+            feats_len (Tensor or None): number of frames
         """
         feats_pad = self.transform(x_pad)
         if x_len is None:

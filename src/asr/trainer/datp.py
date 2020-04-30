@@ -58,7 +58,7 @@ def ls_loss(outs, tgts, lsm_factor=0.1):
     # M
     tgts = th.masked_select(tgts, mask)
     # M x V
-    dist = outs.new_full(outs.size(), lsm_factor / (V - 1))
+    dist = outs.new_full(outs.size(), lsm_factor / V)
     dist = dist.scatter_(1, tgts.unsqueeze(-1), 1 - lsm_factor)
     # KL distance
     loss = F.kl_div(F.log_softmax(outs, -1), dist, reduction="batchmean")
@@ -708,7 +708,7 @@ class LmTrainer(Trainer):
         # add to reporter
         self.reporter.add("loss", loss.item())
         self.reporter.add("accu", accu)
-        self.reporter.add("vppl", th.exp(loss.item()))
+        self.reporter.add("xppl", th.exp(loss.item()))
         return loss
 
 

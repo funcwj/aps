@@ -27,9 +27,11 @@ class TorchTransformerLM(nn.Module):
                  att_dropout=0.1,
                  num_layers=6):
         super(TorchTransformerLM, self).__init__()
+        if embed_size != att_dim:
+            raise ValueError("Need embed_size == att_dim")
         self.tgt_embed = IOEmbedding("sparse",
                                      vocab_size,
-                                     embed_dim=embed_size,
+                                     embed_dim=att_dim,
                                      dropout=pos_dropout)
         encoder_layer = TransformerEncoderLayer(
             att_dim,

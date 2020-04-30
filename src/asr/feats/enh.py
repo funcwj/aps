@@ -41,10 +41,10 @@ class IpdTransform(nn.Module):
     def forward(self, p):
         """
         Accept multi-channel phase and output inter-channel phase difference
-        args
-            p: phase matrix, N x C x F x T
-        return
-            ipd: N x MF x T
+        Args
+            p (Tensor): phase matrix, N x C x F x T
+        Return
+            ipd (Tensor): IPD features,  N x MF x T
         """
         if p.dim() not in [3, 4]:
             raise RuntimeError(
@@ -145,12 +145,12 @@ class FeatureTransform(nn.Module):
 
     def forward(self, x_pad, x_len, norm_obs=False):
         """
-        args:
-            x_pad: raw waveform, N x C x S or N x S
-            x_len: N or None
-        return:
-            feats: spatial+spectral features, N x T x ...
-            f_len: N or None
+        Args:
+            x_pad (Tensor): raw waveform, N x C x S or N x S
+            x_len (Tensor or None): number samples in x_pad, N or None
+        Return:
+            feats (Tensor): spatial+spectral features, N x T x ...
+            f_len (Tensor or None): number frames in each batch, N or None
         """
         # N x C x F x T
         mag, pha = self.STFT(x_pad)

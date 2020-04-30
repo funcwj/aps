@@ -137,11 +137,11 @@ class UttDataLoader(object):
 
 
 def run():
-    loader = token_loader(token="token",
-                          sos=1,
-                          eos=0,
-                          train=False,
-                          batch_size=32)
+    loader = DataLoader(token="token",
+                        sos=1,
+                        eos=0,
+                        train=False,
+                        batch_size=32)
     for egs in loader:
         print(egs["len"])
         print(egs["tgt"])
