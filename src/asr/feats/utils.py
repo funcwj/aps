@@ -293,6 +293,7 @@ class STFTBase(nn.Module):
         self.w = nn.Parameter(w, requires_grad=False)
         self.frame_len = frame_len
         self.frame_hop = frame_hop
+        self.onesided = onesided
         self.num_bins = self.K.shape[0] // 4 + 1
         self.expr = (
             f"window={window}, stride={frame_hop}, onesided={onesided}, " +
