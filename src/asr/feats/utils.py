@@ -68,6 +68,7 @@ def init_kernel(frame_len,
 
 def init_melfilter(frame_len,
                    round_pow_of_two=True,
+                   num_bins=None,
                    sr=16000,
                    num_mels=80,
                    fmin=0.0,
@@ -76,7 +77,11 @@ def init_melfilter(frame_len,
     Return mel-filters
     """
     # FFT points
-    N = 2**math.ceil(math.log2(frame_len)) if round_pow_of_two else frame_len
+    if num_bins is None:
+        N = 2**math.ceil(
+            math.log2(frame_len)) if round_pow_of_two else frame_len
+    else:
+        N = (num_bins - 1) * 2
     # fmin & fmax
     fmax = sr // 2 if fmax is None else min(fmax, sr // 2)
     # mel-matrix

@@ -10,11 +10,11 @@ nnet_conf:
     tdnn_dim: 512
     tdnn_layers: 3
     tdnn_stride: "2,2,2"
-    tdnn_dilats: "1,1,2"
+    tdnn_dilation: "1,1,2"
     rnn_layers: 3
-    rnn_dropout: 0.2
     rnn_hidden: 512
-    rnn_proj: 512
+    rnn_dropout: 0.2
+    rnn_project: 512
     rnn_layernorm: True
   decoder_kwargs:
     embed_size: 512

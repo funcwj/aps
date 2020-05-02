@@ -1,14 +1,14 @@
 # End2End ASR
 
-My own repository for E2E acoustic model training and evaluation.
+My own repository for single/multi-channel E2E acoustic model training and evaluation.
 
 ## Support
 
 1. Single channel AM (Transducer & Encoder-Decoder structure with RNN, Transformer, TDNN, FSMN, ...)
-2. Multi-channel AM (Mainly based on popular neural beamforming methods)
+2. Multi-channel AM (Mainly based on the neural beamforming methods)
 3. RNN & Transformer LM
 4. Distributed training (now using Pytorch's DistributedDataParallel)
-5. Kaldi & Pytorch's feature extraction
+5. Kaldi features & Module-based feature extraction
 
 ## Quick Start
 
@@ -16,7 +16,7 @@ Following steps to train and evaluate the AM (using aishell_v2 as example)
 
 ### Data Preparation
 
-We need to prepare data dependencies for training and cross-validation, e.g., to use raw waveform dataloader, `wav.scp`, `token` and `utt2dur` are needed. You can finish the job with the help of the [Kaldi](https://github.com/kaldi-asr/kaldi/egs) following the Kaldi's data preparation recipe.
+We need to prepare data dependencies for training and cross-validation, e.g., to use raw waveform dataloader, `wav.scp`, `token` and `utt2dur` are needed. You can finish the job with the help of the [Kaldi](https://github.com/kaldi-asr/kaldi/egs) following the data preparation recipes.
 
 1. Create directory `data/<dataset>/{train,valid}` and prepare `wav.scp`, `text` and `utt2dur` files.
 
@@ -235,9 +235,12 @@ Now we have data directory `data/<dataset>` and training configurations `conf/<d
 
     ```bash
     # GPU
-    ./decode.sh --max-len 30 --nbest 8 --beam-size 24 --gpu 0 --dict data/<dataset>/dict <dataset> 1a <tst-wav-scp> exp/<dataset>/1a/tst
+    ./decode.sh --max-len 30 --nbest 8 --beam-size 24 --gpu 0 --dict data/<dataset>/dict \
+        <dataset> 1a <tst-wav-scp> exp/<dataset>/1a/tst
     # CPU: parallel mode
-    ./parallel_decode.sh --nj 40 --cmd "utils/run.pl" --max-len 30 --nbest 8 --beam-size 24 --gpu 0 --dict data/<dataset>/dict <dataset> 1a <tst-wav-scp> exp/<dataset>/1a/tst
+    ./decode_parallel.sh --nj 40 --cmd "utils/run.pl" --max-len 30 --nbest 8 \
+        --beam-size 24 --gpu 0 --dict data/<dataset>/dict <dataset> 1a \
+        <tst-wav-scp> exp/<dataset>/1a/tst
     ```
     This will dump decoding transcripts and n-best hypothesis in `exp/<dataset>/1a/tst`
 

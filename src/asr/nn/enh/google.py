@@ -10,98 +10,10 @@ import librosa.filters as filters
 
 import torch.nn.functional as F
 
+from ...feats.utils import init_melfilter
+from ...feats.enh import FixedBeamformer
+
 from torch_complex.tensor import ComplexTensor
-
-
-def init_melfilter(num_bins, sr=16000, num_mels=80, fmin=0.0, fmax=None):
-    """
-    Return mel-filters
-    """
-    # fmin & fmax
-    fmax = sr // 2 if fmax is None else min(fmax, sr // 2)
-    # mel-matrix
-    mel = filters.mel(sr, (num_bins - 1) * 2,
-                      n_mels=num_mels,
-                      fmax=fmax,
-                      fmin=fmin,
-                      htk=True)
-    # num_mels x (N // 2 + 1)
-    return th.tensor(mel, dtype=th.float32)
-
-
-class FixedBeamformer(nn.Module):
-    """
-    Fixed beamformer as a layer
-    """
-    def __init__(self,
-                 num_beams,
-                 num_channels,
-                 num_bins,
-                 weight=None,
-                 requires_grad=False):
-        super(FixedBeamformer, self).__init__()
-        if weight:
-            # (2, num_directions, num_channels, num_bins)
-            w = th.load(weight)
-            if w.shape[1] != num_beams:
-                raise RuntimeError(f"Number of beam got from {w.shape[1]} " +
-                                   f"don't match parameter {num_beams}")
-            self.init_weight = weight
-        else:
-            self.init_weight = None
-            w = th.zeros(2, num_beams, num_channels, num_bins)
-            nn.init.kaiming_uniform_(w, a=math.sqrt(5))
-        # (num_directions, num_channels, num_bins, 1)
-        self.real = nn.Parameter(w[0].unsqueeze(-1),
-                                 requires_grad=requires_grad)
-        self.imag = nn.Parameter(w[1].unsqueeze(-1),
-                                 requires_grad=requires_grad)
-        self.requires_grad = requires_grad
-
-    def extra_repr(self):
-        B, M, F, _ = self.real.shape
-        return (f"num_beams={B}, num_channels={M}, " +
-                f"num_bins={F}, init_weight={self.init_weight}, " +
-                f"requires_grad={self.requires_grad}")
-
-    def forward(self, x, beam=None, squeeze=False, trans=False, cplx=True):
-        """
-        args
-            x: N x C x F x T, complex tensor
-            beam: N
-        return
-            br, bi: N x B x F x T or N x F x T
-        """
-        r, i = x.real, x.imag
-        if r.dim() != i.dim() and r.dim() != 4:
-            raise RuntimeError(
-                f"FixBeamformer accept 4D tensor, got {r.dim()}")
-        if self.real.shape[1] != r.shape[1]:
-            raise RuntimeError(f"Number of channels mismatch: "
-                               f"{r.shape[1]} vs {self.real.shape[1]}")
-        if beam is None:
-            # output all the beam
-            br = th.sum(r.unsqueeze(1) * self.real, 2) + th.sum(
-                i.unsqueeze(1) * self.imag, 2)
-            bi = th.sum(i.unsqueeze(1) * self.real, 2) - th.sum(
-                r.unsqueeze(1) * self.imag, 2)
-        else:
-            # output selected beam
-            br = th.sum(r * self.real[beam], 1) + th.sum(
-                i * self.imag[beam], 1)
-            bi = th.sum(i * self.real[beam], 1) - th.sum(
-                r * self.imag[beam], 1)
-        if squeeze:
-            br = br.squeeze()
-            bi = bi.squeeze()
-        if trans:
-            br = br.transpose(-1, -2)
-            bi = bi.transpose(-1, -2)
-        if cplx:
-            return ComplexTensor(br, bi)
-        else:
-            return br, bi
-
 
 class _FsBeamformer(nn.Module):
     """
@@ -288,7 +200,7 @@ class CLPFsBeamformer(nn.Module):
         else:
             self.proj = nn.Linear(num_bins, spectra_filters, bias=False)
             if spectra_init == "mel":
-                mel_filter = init_melfilter(num_bins)
+                mel_filter = init_melfilter(None, num_bins=num_bins)
                 self.proj.weight.data = mel_filter
         self.norm = nn.BatchNorm2d(spatial_filters) if batchnorm else None
         self.spectra_complex = spectra_complex

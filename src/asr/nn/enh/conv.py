@@ -8,7 +8,8 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from torch_complex.tensor import ComplexTensor
-from .google import init_melfilter
+
+from ...feats.utils import init_melfilter
 
 
 class ComplexConvXd(nn.Module):
@@ -92,7 +93,7 @@ class TimeInvariantEnh(nn.Module):
             self.conv.imag.data = w[1]
         self.proj = nn.Linear(num_bins, spectra_filters, bias=False)
         if spectra_init == "mel":
-            mel_filter = init_melfilter(num_bins)
+            mel_filter = init_melfilter(None, num_bins=num_bins)
             self.proj.weight.data = mel_filter
         self.norm = nn.BatchNorm2d(spatial_filters) if batchnorm else None
         self.B = spatial_filters

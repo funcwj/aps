@@ -17,12 +17,12 @@ nnet_conf:
     tdnn_dim: 512
     tdnn_layers: 3
     tdnn_stride: "2,2,2"
-    tdnn_dilats: "1,1,2"
+    tdnn_dilation: "1,1,2"
     fsmn_layers: 4
     fsmn_lctx: 10
     fsmn_rctx: 10
-    fsmn_proj: 256
     fsmn_norm: "LN"
+    fsmn_project: 256
   decoder_dim: 512
   decoder_kwargs:
     dec_rnn: "lstm"

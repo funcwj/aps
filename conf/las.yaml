@@ -10,7 +10,7 @@ nnet_conf:
     tdnn_dim: 512
     tdnn_layers: 3
     tdnn_stride: "2,2,2"
-    tdnn_dilats: "1,1,2"
+    tdnn_dilation: "1,1,2"
     rnn: "lstm"
     rnn_layers: 3
     rnn_bidir: True
