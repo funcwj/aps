@@ -182,12 +182,12 @@ class LmXentTask(Task):
         self.hidden = None
         self.repackage_hidden = repackage_hidden
 
-    def compute_loss(self, egs, **kwargs):
+    def forward(self, egs, **kwargs):
         """
         Compute CE loss, egs contains
-            src: N x T+1
-            tgt: N x T+1
-            len: N
+            src (Tensor): N x T+1
+            tgt (Tensor): N x T+1
+            len (Tensor): N
         """
         # pred: N x T+1 x V
         if self.repackage_hidden:

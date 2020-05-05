@@ -11,7 +11,7 @@ import torch.nn as nn
 
 from torch_complex.tensor import ComplexTensor
 
-from .utils import STFT, EPSILON
+from .utils import STFT, iSTFT, EPSILON
 from .asr import LogTransform, CmvnTransform, SpecAugTransform
 
 MATH_PI = math.pi
@@ -313,11 +313,12 @@ class FeatureTransform(nn.Module):
                  sin_ipd=False,
                  eps=EPSILON):
         super(FeatureTransform, self).__init__()
-        self.STFT = STFT(frame_len,
-                         frame_hop,
-                         window=window,
-                         round_pow_of_two=round_pow_of_two,
-                         normalized=stft_normalized)
+        self.stft_kwargs = {
+            "window": window,
+            "normalized": stft_normalized,
+            "round_pow_of_two": round_pow_of_two
+        }
+        self.STFT = STFT(frame_len, frame_hop, **self.stft_kwargs)
         trans_tokens = feats.split("-") if feats else []
         transform = []
         feats_dim = 0
@@ -360,6 +361,22 @@ class FeatureTransform(nn.Module):
         else:
             self.aug_transform = None
         self.feats_dim = feats_dim
+        self.frame_len = frame_len
+        self.frame_hop = frame_hop
+
+    def task_ctx(self, name="forward_stft"):
+        """
+        Return ctx(STFT/iSTFT) for task defined in src/aps/task
+        """
+        ctx = nn.ModuleDict({
+            "forward_stft":
+            STFT(self.frame_len, self.frame_hop, **self.stft_kwargs),
+            "inverse_stft":
+            iSTFT(self.frame_len, self.frame_hop, **self.stft_kwargs)
+        })
+        if name not in ctx:
+            raise ValueError(f"Unknown task context: {name}")
+        return ctx[name]
 
     def forward(self, x_pad, x_len, norm_obs=False):
         """

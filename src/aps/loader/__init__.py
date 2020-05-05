@@ -1,6 +1,6 @@
 from .am import kaldi, conf, wav
 from .lm import bptt, utt
-from .enh import chunk
+from .ss import chunk
 
 loader_cls = {
     "kaldi": kaldi.DataLoader,

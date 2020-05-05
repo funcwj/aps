@@ -1,11 +1,13 @@
 from .asr import *
-from .enh import *
+from .ss import *
 
 task_cls = {
     "lm": LmXentTask,
     "ctc_xent": CtcXentHybridTask,
     "transducer": TransducerTask,
-    "unsuper_enh": UnsuperEnhTask
+    "unsuper_enh": UnsuperEnhTask,
+    "sisnr": SisnrTask,
+    "sa": SaTask
 }
 
 

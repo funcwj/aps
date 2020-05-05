@@ -103,7 +103,8 @@ def load_gcmvn_stats(cmvn_mat):
     """
     Compute mean/std from Kaldi's cmvn.mat
     """
-    cmvn = th.tensor(read_kaldi_mat(cmvn_mat), dtype=th.float32)
+    cmvn = read_kaldi_mat(cmvn_mat)
+    cmvn = th.tensor(cmvn, dtype=th.float32)
     N = cmvn[0, -1]
     mean = cmvn[0, :-1] / N
     var = cmvn[1, :-1] / N - mean**2
@@ -242,7 +243,7 @@ def forward_stft(wav,
                     normalized=normalized,
                     inverse=False)
     return _forward_stft(wav,
-                         K,
+                         K.to(wav.device),
                          output=output,
                          frame_hop=frame_hop,
                          onesided=onesided)
@@ -259,6 +260,10 @@ def inverse_stft(transform,
     """
     iSTFT function implementation, equals to iSTFT layer
     """
+    if isinstance(transform, th.Tensor):
+        device = transform.device
+    else:
+        device = transform[0].device
     w = init_window(window, frame_len)
     K = init_kernel(frame_len,
                     frame_hop,
@@ -267,8 +272,8 @@ def inverse_stft(transform,
                     normalized=normalized,
                     inverse=True)
     return _inverse_stft(transform,
-                         K,
-                         w,
+                         K.to(device),
+                         w.to(device),
                          input=input,
                          frame_hop=frame_hop,
                          onesided=onesided)
@@ -325,9 +330,9 @@ class STFT(STFTBase):
     def forward(self, wav, output="polar"):
         """
         Accept (single or multiple channel) raw waveform and output magnitude and phase
-        args
+        Args
             wav (Tensor) input signal, N x (C) x S
-        return
+        Return
             transform (Tensor or [Tensor, Tensor]), N x (C) x F x T
         """
         return _forward_stft(wav,
@@ -347,9 +352,9 @@ class iSTFT(STFTBase):
     def forward(self, transform, input="polar"):
         """
         Accept phase & magnitude and output raw waveform
-        args
+        Args
             transform (Tensor or [Tensor, Tensor]), STFT output
-        return
+        Return
             s (Tensor), N x S
         """
         return _inverse_stft(transform,

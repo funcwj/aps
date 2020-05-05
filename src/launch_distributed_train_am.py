@@ -18,7 +18,7 @@ from aps.trainer.ddp import Trainer
 from aps.loader import support_loader
 from aps.feats import support_transform
 from aps.task import support_task
-from aps.nn import support_nnet
+from aps.asr import support_nnet
 
 blank_sym = "<blank>"
 constrained_conf_keys = [

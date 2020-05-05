@@ -14,7 +14,7 @@ import torch as th
 from aps.utils import StrToBoolAction
 from aps.trainer.ddp import Trainer
 from aps.loader import support_loader
-from aps.nn import support_nnet
+from aps.asr import support_nnet
 from aps.task import support_task
 
 constrained_conf_keys = [
