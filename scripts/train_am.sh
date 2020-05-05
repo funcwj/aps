@@ -39,7 +39,7 @@ src/train_am.py \
   --checkpoint exp/$data/$exp_id \
   --batch-size $batch_size \
   --epoches $epoches \
-  --device-ids $gpu \
+  --device-id $gpu \
   --eval-interval $eval_interval \
   > $data.train_am.$exp_id.log 2>&1
 

@@ -12,12 +12,12 @@ import argparse
 import torch as th
 import numpy as np
 
-from asr.utils import StrToBoolAction
-from asr.trainer.datp import MlTrainer
+from aps.utils import StrToBoolAction
+from aps.trainer.datp import MlTrainer
 
-from asr.loader import support_loader
-from asr.feats import support_transform
-from asr.nn import support_nnet
+from aps.loader import support_loader
+from aps.feats import support_transform
+from aps.nn import support_nnet
 
 constrained_conf_keys = [
     "nnet_type", "nnet_conf", "data_conf", "trainer_conf", "enh_transform"

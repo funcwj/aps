@@ -9,7 +9,7 @@ import editdistance as ed
 from collections import defaultdict
 from itertools import permutations
 
-from asr.utils import StrToBoolAction
+from aps.utils import StrToBoolAction
 from kaldi_python_io import Reader as BaseReader
 
 

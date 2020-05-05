@@ -12,41 +12,41 @@ import argparse
 import torch as th
 import numpy as np
 
-from asr.utils import StrToBoolAction
-from asr.trainer.distributed import CtcXentHybridTrainer, TransducerTrainer
+from aps.utils import StrToBoolAction
+from aps.trainer.ddp import Trainer
 
-from asr.loader import support_loader
-from asr.feats import support_transform
-from asr.nn import support_nnet
+from aps.loader import support_loader
+from aps.feats import support_transform
+from aps.task import support_task
+from aps.nn import support_nnet
 
 blank_sym = "<blank>"
 constrained_conf_keys = [
-    "nnet_type", "nnet_conf", "data_conf", "trainer_conf", "asr_transform",
-    "enh_transform"
+    "nnet", "nnet_conf", "task", "task_conf", "data_conf", "trainer_conf",
+    "asr_transform", "enh_transform"
 ]
 
 
-def train_worker(rank, nnet, is_transducer, conf, args):
+def train_worker(rank, nnet, conf, args):
     """
     Initalize training workers
     """
     # construct trainer
     # torch.distributed.launch will provide
     # environment variables, and requires that you use init_method="env://".
-    if is_transducer:
-        TrainerC = TransducerTrainer
-    else:
-        TrainerC = CtcXentHybridTrainer
-    trainer = TrainerC(rank,
-                       nnet,
-                       cuda_devices=args.num_process,
-                       checkpoint=args.checkpoint,
-                       resume=args.resume,
-                       init=args.init,
-                       save_interval=args.save_interval,
-                       prog_interval=args.prog_interval,
-                       tensorboard=args.tensorboard,
-                       **conf["trainer_conf"])
+
+    task = support_task(conf["task"], nnet, **conf["task_conf"])
+
+    trainer = Trainer(task,
+                      rank=rank,
+                      device_ids=(i for i in range(args.num_process)),
+                      checkpoint=args.checkpoint,
+                      resume=args.resume,
+                      init=args.init,
+                      save_interval=args.save_interval,
+                      prog_interval=args.prog_interval,
+                      tensorboard=args.tensorboard,
+                      **conf["trainer_conf"])
 
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
@@ -97,7 +97,7 @@ def load_conf(yaml_conf, dict_path):
     trainer_conf = conf["trainer_conf"]
     use_ctc = "ctc_regularization" in trainer_conf and trainer_conf[
         "ctc_regularization"] > 0
-    is_transducer = conf["nnet_type"][-10:] == "transducer"
+    is_transducer = conf["task"] == "transducer"
     if not is_transducer:
         nnet_conf["sos"] = vocab["<sos>"]
         nnet_conf["eos"] = vocab["<eos>"]
@@ -106,13 +106,12 @@ def load_conf(yaml_conf, dict_path):
         if blank_sym not in vocab:
             raise RuntimeError(
                 f"Missing {blank_sym} in dictionary for CTC/RNNT training")
+        conf["task_conf"]["blank"] = vocab[blank_sym]
         if is_transducer:
-            trainer_conf["transducer_blank"] = vocab[blank_sym]
             nnet_conf["blank"] = vocab[blank_sym]
         else:
-            trainer_conf["ctc_blank"] = vocab[blank_sym]
             nnet_conf["ctc"] = use_ctc
-    return conf, is_transducer
+    return conf
 
 
 def run(args):
@@ -136,7 +135,7 @@ def run(args):
     if last_checkpoint.exists():
         args.resume = last_checkpoint.as_posix()
 
-    conf, is_transducer = load_conf(args.conf, args.dict)
+    conf = load_conf(args.conf, args.dict)
     asr_cls = support_nnet(conf["nnet_type"])
     asr_transform = None
     enh_transform = None
@@ -158,7 +157,7 @@ def run(args):
     else:
         nnet = asr_cls(**conf["nnet_conf"])
 
-    train_worker(args.local_rank, nnet, is_transducer, conf, args)
+    train_worker(args.local_rank, nnet, conf, args)
 
 
 if __name__ == "__main__":
@@ -175,7 +174,7 @@ if __name__ == "__main__":
                         "by torch.distributed.launch")
     parser.add_argument("--num-process",
                         type=int,
-                        default=1,
+                        default=2,
                         help="Number of process for distributed training")
     parser.add_argument("--conf",
                         type=str,

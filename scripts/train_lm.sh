@@ -31,7 +31,7 @@ python src/train_lm.py \
   --conf $conf \
   --dict $dict \
   --seed $seed \
-  --device-ids $gpu \
+  --device-id $gpu \
   --tensorboard $tensorboard \
   --checkpoint exp/$data/rnnlm/$exp_id \
   --batch-size $batch_size \

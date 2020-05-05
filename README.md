@@ -1,6 +1,6 @@
-# End2End ASR
+# APS: ASR + Separation
 
-My own repository for single/multi-channel E2E acoustic model training and evaluation.
+My repository for single/multi-channel speech enhancement & separation & recognition model training and evaluation.
 
 ## Support
 

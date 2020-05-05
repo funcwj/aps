@@ -12,17 +12,18 @@ import argparse
 import torch as th
 import numpy as np
 
-from asr.utils import StrToBoolAction
-from asr.trainer.datp import CtcXentHybridTrainer, TransducerTrainer
+from aps.utils import StrToBoolAction
+from aps.trainer.ddp import Trainer
 
-from asr.loader import support_loader
-from asr.feats import support_transform
-from asr.nn import support_nnet
+from aps.loader import support_loader
+from aps.feats import support_transform
+from aps.task import support_task
+from aps.nn import support_nnet
 
 blank_sym = "<blank>"
 constrained_conf_keys = [
-    "nnet_type", "nnet_conf", "data_conf", "trainer_conf", "asr_transform",
-    "enh_transform"
+    "nnet", "nnet_conf", "task", "task_conf", "data_conf", "trainer_conf",
+    "asr_transform", "enh_transform"
 ]
 
 
@@ -33,6 +34,9 @@ def load_conf(yaml_conf, dict_path):
     # load configurations
     with open(yaml_conf, "r") as f:
         conf = yaml.full_load(f)
+    # create task_conf if None
+    if "task_conf" not in conf:
+        conf["task_conf"] = {}
 
     nnet_conf = conf["nnet_conf"]
     # add dictionary info
@@ -53,7 +57,7 @@ def load_conf(yaml_conf, dict_path):
     trainer_conf = conf["trainer_conf"]
     use_ctc = "ctc_regularization" in trainer_conf and trainer_conf[
         "ctc_regularization"] > 0
-    is_transducer = conf["nnet_type"][-10:] == "transducer"
+    is_transducer = conf["task"] == "transducer"
     if not is_transducer:
         nnet_conf["sos"] = vocab["<sos>"]
         nnet_conf["eos"] = vocab["<eos>"]
@@ -62,13 +66,12 @@ def load_conf(yaml_conf, dict_path):
         if blank_sym not in vocab:
             raise RuntimeError(
                 f"Missing {blank_sym} in dictionary for CTC/RNNT training")
+        conf["task_conf"]["blank"] = vocab[blank_sym]
         if is_transducer:
-            trainer_conf["transducer_blank"] = vocab[blank_sym]
             nnet_conf["blank"] = vocab[blank_sym]
         else:
-            trainer_conf["ctc_blank"] = vocab[blank_sym]
             nnet_conf["ctc"] = use_ctc
-    return conf, is_transducer
+    return conf
 
 
 def run(args):
@@ -76,10 +79,6 @@ def run(args):
     random.seed(args.seed)
     np.random.seed(args.seed)
     th.random.manual_seed(args.seed)
-
-    # get device
-    dev_conf = args.device_ids
-    device_ids = tuple(map(int, dev_conf.split(","))) if dev_conf else None
 
     # new logger instance
     print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
@@ -93,7 +92,7 @@ def run(args):
     if last_checkpoint.exists():
         resume = last_checkpoint.as_posix()
 
-    conf, is_transducer = load_conf(args.conf, args.dict)
+    conf = load_conf(args.conf, args.dict)
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
                                 train=True,
@@ -108,7 +107,7 @@ def run(args):
                                 num_workers=args.num_workers,
                                 **data_conf["loader"])
 
-    asr_cls = support_nnet(conf["nnet_type"])
+    asr_cls = support_nnet(conf["nnet"])
     asr_transform = None
     enh_transform = None
     if "asr_transform" in conf:
@@ -129,19 +128,17 @@ def run(args):
     else:
         nnet = asr_cls(**conf["nnet_conf"])
 
-    if is_transducer:
-        TrainerC = TransducerTrainer
-    else:
-        TrainerC = CtcXentHybridTrainer
-    trainer = TrainerC(nnet,
-                       device_ids=device_ids,
-                       checkpoint=args.checkpoint,
-                       resume=resume,
-                       init=args.init,
-                       save_interval=args.save_interval,
-                       prog_interval=args.prog_interval,
-                       tensorboard=args.tensorboard,
-                       **conf["trainer_conf"])
+    task = support_task(conf["task"], nnet, **conf["task_conf"])
+
+    trainer = Trainer(task,
+                      device_ids=args.device_id,
+                      checkpoint=args.checkpoint,
+                      resume=resume,
+                      init=args.init,
+                      save_interval=args.save_interval,
+                      prog_interval=args.prog_interval,
+                      tensorboard=args.tensorboard,
+                      **conf["trainer_conf"])
 
     if args.eval_interval > 0:
         trainer.run_batch_per_epoch(trn_loader,
@@ -165,10 +162,10 @@ if __name__ == "__main__":
                         type=str,
                         required=True,
                         help="Dictionary file")
-    parser.add_argument("--device-ids",
-                        type=str,
-                        default="",
-                        help="Training on which GPUs (one or more)")
+    parser.add_argument("--device-id",
+                        type=int,
+                        default=0,
+                        help="Training on which GPU device")
     parser.add_argument("--epoches",
                         type=int,
                         default=50,

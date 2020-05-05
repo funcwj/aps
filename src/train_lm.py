@@ -11,12 +11,15 @@ import argparse
 import numpy as np
 import torch as th
 
-from asr.utils import StrToBoolAction
-from asr.trainer.datp import LmTrainer
-from asr.loader import support_loader
-from asr.nn import support_nnet
+from aps.utils import StrToBoolAction
+from aps.trainer.ddp import Trainer
+from aps.loader import support_loader
+from aps.nn import support_nnet
+from aps.task import support_task
 
-constrained_conf_keys = ["nnet_type", "nnet_conf", "data_conf", "trainer_conf"]
+constrained_conf_keys = [
+    "nnet", "nnet_conf", "task", "task_conf", "data_conf", "trainer_conf"
+]
 
 
 def run(args):
@@ -82,17 +85,17 @@ def run(args):
                                 sos=sos,
                                 eos=eos)
 
-    asr_cls = support_nnet(conf["nnet_type"])
-    nnet = asr_cls(**conf["nnet_conf"])
+    nnet = support_nnet(conf["nnet"])(**conf["nnet_conf"])
+    task = support_task(conf["task"], nnet, **conf["task_conf"])
 
-    trainer = LmTrainer(nnet,
-                        device_ids=device_ids,
-                        checkpoint=args.checkpoint,
-                        resume=resume,
-                        save_interval=args.save_interval,
-                        prog_interval=args.prog_interval,
-                        tensorboard=args.tensorboard,
-                        **conf["trainer_conf"])
+    trainer = Trainer(task,
+                      device_ids=args.device_id,
+                      checkpoint=args.checkpoint,
+                      resume=resume,
+                      save_interval=args.save_interval,
+                      prog_interval=args.prog_interval,
+                      tensorboard=args.tensorboard,
+                      **conf["trainer_conf"])
 
     if args.eval_interval > 0:
         trainer.run_batch_per_epoch(trn_loader,
@@ -115,10 +118,10 @@ if __name__ == "__main__":
                         type=str,
                         required=True,
                         help="Dictionary file")
-    parser.add_argument("--device-ids",
-                        type=str,
-                        default="",
-                        help="Training on which GPUs (one or more)")
+    parser.add_argument("--device-id",
+                        type=int,
+                        default=0,
+                        help="Training on which GPU device")
     parser.add_argument("--epoches",
                         type=int,
                         default=50,

@@ -1,35 +1,158 @@
 # wujian@2019
 
-import os
 import math
-import pathlib
 
 import torch as th
 import torch.distributed as dist
 import torch.multiprocessing as mp
-import torch.nn.functional as F
+
+from os import environ
+from pathlib import Path
 
 from torch.nn.utils import clip_grad_norm_
 from torch.nn.parallel import DistributedDataParallel
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from .datp import ProgressReporter, StopCriterion, IGNORE_ID
-from .datp import get_device_ids, add_gaussian_noise
-from .datp import ce_loss, ls_loss, compute_accu, process_tgts
 from .scheduler import support_ss_scheduler
 from .scheduler import NoamOpt
 
-from ..utils import load_obj
+from ..utils import load_obj, get_device_ids, get_logger
+from ..task import Task
 
+def add_gaussian_noise(nnet, std=0.075):
+    """
+    Add gaussian noise to updated weights
+    """
+    for p in nnet.parameters():
+        if p.requires_grad:
+            p.data += th.randn(p.data.shape, device=nnet.device) * std
+
+
+class ProgressReporter(object):
+    """
+    A simple progress reporter
+    """
+    def __init__(self, checkpoint, period=100, tensorboard=True, rank=None):
+        self.period = period
+        if rank is None:
+            logger_loc = (checkpoint / "trainer.log").as_posix()
+            self.header = "Trainer"
+        else:
+            logger_loc = (checkpoint / f"trainer.rank{rank}.log").as_posix()
+            self.header = f"Rank {rank}"
+
+        self.logger = get_logger(logger_loc, file=True)
+        if tensorboard:
+            self.board_writer = SummaryWriter(checkpoint)
+        else:
+            self.board_writer = None
+        self.reset()
+
+    def log(self, sstr):
+        self.logger.info(f"{self.header}: {sstr}")
+
+    def eval(self):
+        self.log(">> Set eval mode ...")
+        self.mode = "valid"
+        self.reset()
+
+    def train(self):
+        self.log(">> Set train mode ...")
+        self.mode = "train"
+        self.reset()
+
+    def reset(self):
+        self.stats = defaultdict(list)
+        self.timer = SimpleTimer()
+
+    def update(self, dict_obj):
+        if dict_obj is None:
+            return
+        for key in dict_obj:
+            self.add(key, dict_obj[key])
+
+    def add(self, key, value):
+        self.stats[key].append(value)
+        N = len(self.stats[key])
+        if not N % self.period:
+            if key == "rate":
+                cur = self.stats[key][-1]
+                self.log(f"Processed {N:.2e} batches ({key} = {cur:.3e}) ...")
+            else:
+                avg = sum(self.stats[key][-self.period:]) / self.period
+                self.log(f"Processed {N:.2e} batches ({key} = {avg:+.2f}) ...")
+
+    def report(self, epoch, lr):
+        N = len(self.stats["loss"])
+        if self.mode == "valid":
+            sstr = ",".join(
+                map(lambda f: "{:.2f}".format(f), self.stats["loss"]))
+            self.log(f"Loss on {N:d} batches: {sstr}")
+
+        if N == 0:
+            raise RuntimeError("No statistics to report")
+        loss = sum(self.stats["loss"]) / N
+        accu = sum(
+            self.stats["accu"]) * 100 / N if "accu" in self.stats else None
+        if self.board_writer:
+            self.board_writer.add_scalar(f"loss/{self.mode}", loss, epoch)
+            if accu is not None:
+                self.board_writer.add_scalar(f"accu/{self.mode}", accu, epoch)
+        cost = self.timer.elapsed()
+        if accu is not None:
+            hstr = f"Loss/Accu(time/N, lr={lr:.3e}) - Epoch {epoch:2d}: "
+            cstr = f"{self.mode} = {loss:.4f}/{accu:.2f}({cost:.2f}m/{N:d})"
+        else:
+            hstr = f"Loss(time/N, lr={lr:.3e}) - Epoch {epoch:2d}: "
+            cstr = f"{self.mode} = {loss:.4f}({cost:.2f}m/{N:d})"
+        return loss, accu, hstr + cstr
+
+
+class StopCriterion(object):
+    """
+    Early stop of the training
+    """
+    def __init__(self,
+                 no_impr,
+                 mode="min",
+                 init_criterion=math.inf,
+                 no_impr_thres=2e-3):
+        self.max_no_impr = no_impr
+        self.no_impr = 0
+        self.no_impr_thres = no_impr_thres
+        self.mode = mode
+        self.best_criterion = init_criterion
+
+    def reset(self, update_value):
+        self.best_criterion = update_value
+
+    def stop(self):
+        return self.no_impr == self.max_no_impr
+
+    def step(self, update_value):
+        is_better = True
+        # loss
+        if self.mode == "min":
+            is_better = self.best_criterion > update_value + self.no_impr_thres
+        # accu
+        if self.mode == "max":
+            is_better = self.best_criterion < update_value - self.no_impr_thres
+        if is_better:
+            self.best_criterion = update_value
+            self.no_impr = 0
+            return True
+        else:
+            self.no_impr += 1
+            return False
 
 class Trainer(object):
     """
-    A PyTorch base trainer
+    A PyTorch distributed trainer
     """
     def __init__(self,
-                 rank,
-                 nnet,
-                 cuda_devices=1,
+                 task,
+                 rank=None,
+                 device_ids=0,
                  dist_url="env://",
                  checkpoint="cpt",
                  optimizer="adam",
@@ -47,22 +170,32 @@ class Trainer(object):
                  stop_criterion="loss",
                  no_impr=6,
                  no_impr_thres=1e-3):
-        if rank >= cuda_devices:
-            raise ValueError("rank value exceeds number of GPUs: " +
-                             f"{rank} vs {cuda_devices}")
-        if dist_url == "env://":
-            if int(os.environ.get("RANK")) != rank:
-                raise RuntimeError(
-                    f"rank value {rank} mismatch with env[RANK]")
-            if int(os.environ.get("WORLD_SIZE")) != cuda_devices:
-                raise RuntimeError(
-                    f"world size {cuda_devices} mismatch with env[WORLD_SIZE]")
+        if not isinstance(task, Task):
+            raise TypeError(
+                f"Trainer accepts Task object, but got {type(task)}")
+        self.device_ids = get_device_ids(device_ids)
+        self.cuda_devices = len(device_ids)
+
+        if rank is None:
+            # single GPU
+            self.default_device = th.device(f"cuda:{device_ids[0]:d}")
+        else:
+            # in distributed mode
+            if rank >= self.cuda_devices:
+                raise ValueError("rank value exceeds number of GPUs: " +
+                                 f"{rank} vs {self.cuda_devices}")
+            if dist_url == "env://":
+                if int(environ.get("RANK")) != rank:
+                    raise RuntimeError(
+                        f"rank value {rank} mismatch with env[RANK]")
+                if int(environ.get("WORLD_SIZE")) != self.cuda_devices:
+                    raise RuntimeError(
+                        f"world size {self.cuda_devices} mismatch with env[WORLD_SIZE]"
+                    )
+            self.default_device = th.device(f"cuda:{device_ids[rank]:d}")
 
         self.rank = rank
-        self.cuda_devices = cuda_devices
-        self.default_device = th.device(f"cuda:{rank:d}")
-
-        self.checkpoint = pathlib.Path(checkpoint)
+        self.checkpoint = Path(checkpoint)
         self.checkpoint.mkdir(parents=True, exist_ok=True)
         self.reporter = ProgressReporter(self.checkpoint,
                                          rank=rank,
@@ -82,16 +215,16 @@ class Trainer(object):
                                             mode=mode,
                                             no_impr_thres=no_impr_thres)
 
-        self.reporter.log(f"Model summary:\n{nnet}")
+        self.reporter.log(f"Model summary:\n{task.nnet}")
         if resume or init:
             cpt_path = resume if resume else init
-            if not pathlib.Path(cpt_path).exists():
+            if not Path(cpt_path).exists():
                 raise FileNotFoundError(
                     f"Could not find checkpoint: {cpt_path}")
             cpt = th.load(cpt_path, map_location="cpu")
             self.cur_epoch = cpt["epoch"]
-            nnet.load_state_dict(cpt["model_state_dict"])
-            self.nnet = self.setup_distributed(nnet, dist_url)
+            task.nnet.load_state_dict(cpt["model_state_dict"])
+            self.task = self.setup_distributed(task, dist_url)
             if resume:
                 self.reporter.log(f"Resume from checkpoint {cpt_path}: " +
                                   f"epoch {self.cur_epoch}")
@@ -103,7 +236,7 @@ class Trainer(object):
                 self.optimizer = self.create_optimizer(optimizer,
                                                        optimizer_kwargs)
         else:
-            self.nnet = self.setup_distributed(nnet, dist_url)
+            self.task = self.setup_distributed(task, dist_url)
             self.optimizer = self.create_optimizer(optimizer, optimizer_kwargs)
 
         if ss_scheduler_kwargs:
@@ -122,12 +255,17 @@ class Trainer(object):
                                                   threshold=no_impr_thres,
                                                   **lr_scheduler_kwargs)
         self.num_params = sum(
-            [param.nelement() for param in nnet.parameters()]) / 10.0**6
+            [param.nelement() for param in task.nnet.parameters()]) / 10.0**6
 
         # logging
-        self.reporter.log(
-            f"running process {rank} on GPU-{rank}/{self.cuda_devices}, " +
-            f"#param: {self.num_params:.2f}M")
+        if rank is None:
+            self.reporter.log(f"Loading model to GPU:{self.device_ids[0]}, " +
+                              f"#param: {self.num_params:.2f}M")
+        else:
+            self.reporter.log(
+                f"Running process {rank} on GPU-{rank}/{self.cuda_devices}, " +
+                f"#param: {self.num_params:.2f}M")
+
         self.reporter.log(f"Schedule sampling strategy: {ss_scheduler}")
         self.reporter.log(f"Stop criterion: {self.stop_on}")
         if clip_gradient:
@@ -164,13 +302,13 @@ class Trainer(object):
         """
         Save checkpoint (epoch, model, optimizer)
         """
-        if self.rank == 0:
+        if self.rank in [1, None]:
             cpt = {
                 "epoch":
                 epoch,
                 "model_state_dict":
-                self.nnet.module.state_dict()
-                if self.distributed else self.nnet.state_dict(),
+                self.task.module.nnet.state_dict()
+                if self.distributed else self.task.nnet.state_dict(),
                 "optim_state_dict":
                 self.optimizer.state_dict()
             }
@@ -197,35 +335,34 @@ class Trainer(object):
         }
         if optimizer not in supported_optimizer:
             raise ValueError(f"Unknown optimizer: {optimizer}")
-        opt = supported_optimizer[optimizer](self.nnet.parameters(), **kwargs)
+        opt = supported_optimizer[optimizer](self.task.nnet.parameters(),
+                                             **kwargs)
         self.reporter.log(f"Create optimizer {optimizer}: {kwargs}")
         if state is not None:
             opt.load_state_dict(state)
             self.reporter.log("Load optimizer state dict from checkpoint")
         return opt
 
-    def compute_loss(self, egs, **kwargs):
-        """
-        Compute training loss, return loss and other numbers
-        """
-        raise NotImplementedError
-
     def train(self, data_loader):
-        self.nnet.train()
+        self.task.train()
         self.reporter.train()
-
-        for idx, egs in enumerate(data_loader):
+        # for idx, egs in enumerate(data_loader):
+        for egs in data_loader:
             # load to gpu
             egs = load_obj(egs, self.default_device)
 
             self.optimizer.zero_grad()
 
-            loss = self.compute_loss(egs, idx=idx, ssr=self.ssr)
+            loss, stats = self.task(egs, ssr=self.ssr)
             loss.backward()
+
+            # add to reporter
+            self.reporter.add("loss", loss.item())
+            self.reporter.update(stats)
 
             # clip gradient after backward
             if self.clip_gradient:
-                norm = clip_grad_norm_(self.nnet.parameters(),
+                norm = clip_grad_norm_(self.task.nnet.parameters(),
                                        self.clip_gradient)
 
             loss = loss.item()
@@ -233,7 +370,8 @@ class Trainer(object):
                 self.optimizer.step()
 
                 if self.gaussian_noise_std:
-                    add_gaussian_noise(self.nnet, std=self.gaussian_noise_std)
+                    add_gaussian_noise(self.task.nnet,
+                                       std=self.gaussian_noise_std)
 
                 self.reporter.add("norm", norm)
                 self.reporter.add("rate", self.optimizer.param_groups[0]["lr"])
@@ -242,16 +380,19 @@ class Trainer(object):
                                   f"loss {loss:.3f}, skip...")
 
     def eval(self, data_loader):
-        self.nnet.eval()
+        self.task.eval()
         self.reporter.eval()
 
         with th.no_grad():
-            for idx, egs in enumerate(data_loader):
+            # for idx, egs in enumerate(data_loader):
+            for egs in data_loader:
                 egs = load_obj(egs, self.default_device)
                 # ssr = 0, use ground truth
-                _ = self.compute_loss(egs, idx=idx, ssr=0)
+                loss, stats = self.task(egs, ssr=0)
+                self.reporter.add("loss", loss.item())
+                self.reporter.update(stats)
 
-    def _prep_train(self, valid_loader):
+    def _prep_train(self, dev_loader):
         """
         Prepare for training
         """
@@ -260,7 +401,7 @@ class Trainer(object):
         # make dilated conv faster
         th.backends.cudnn.benchmark = True
         # eval
-        self.eval(valid_loader)
+        self.eval(dev_loader)
         e = self.cur_epoch
         best_loss, best_accu, _ = self.reporter.report(e, 0)
         if self.ss_scheduler:
@@ -277,24 +418,24 @@ class Trainer(object):
         self.reporter.log(sstr)
         return e
 
-    def run(self, train_loader, valid_loader, num_epoches=50):
+    def run(self, trn_loader, dev_loader, num_epoches=50):
         """
         Run on whole training set and evaluate
         """
         self.reporter.log(
-            f"Rank {self.rank}: Number of batches (train/valid) = " +
-            f"{len(train_loader)}/{len(valid_loader)}")
-        e = self._prep_train(valid_loader)
+            f"Number of batches (train/valid) = {len(trn_loader)}/{len(dev_loader)}"
+        )
+        e = self._prep_train(dev_loader)
         while e < num_epoches:
             e += 1
             cur_lr = self.optimizer.param_groups[0]["lr"]
             # >> train
-            self.train(train_loader)
+            self.train(trn_loader)
             _, _, sstr = self.reporter.report(e, cur_lr)
             self.reporter.log(sstr)
             # << train
             # >> eval
-            self.eval(valid_loader)
+            self.eval(dev_loader)
             cv_loss, cv_accu, sstr = self.reporter.report(e, cur_lr)
             # schedule sampling for eval
             if self.ss_scheduler:
@@ -322,55 +463,60 @@ class Trainer(object):
             # early stop
             if self.stop_criterion.stop():
                 self.reporter.log("Stop training cause no impr for " +
-                                  f"{self.no_impr:d} epochs")
+                                  f"{self.no_impr} epochs")
                 break
         self.reporter.log(f"Training for {e:d}/{num_epoches:d} epoches done!")
 
     def run_batch_per_epoch(self,
-                            train_loader,
-                            valid_loader,
+                            trn_loader,
+                            dev_loader,
                             num_epoches=100,
                             eval_interval=4000):
         """
         Run on several batches and evaluate
         """
         self.reporter.log(
-            f"Rank {self.rank}: Number of batches (train/valid) = " +
-            f"{len(train_loader)}/{len(valid_loader)}")
-        e = self._prep_train(valid_loader)
+            f"Number of batches (train/valid) = {len(trn_loader)}/{len(dev_loader)}"
+        )
+        e = self._prep_train(dev_loader)
         stop = False
         trained_batches = 0
         # set train mode
-        self.nnet.train()
+        self.task.train()
         self.reporter.train()
         while True:
             # trained on several batches
-            for idx, egs in enumerate(train_loader):
+            # for idx, egs in enumerate(trn_loader):
+            for egs in trn_loader:
                 trained_batches = (trained_batches + 1) % eval_interval
                 # update per-batch
                 egs = load_obj(egs, self.default_device)
                 self.optimizer.zero_grad()
 
-                loss = self.compute_loss(egs, idx=idx, ssr=self.ssr)
+                loss, stats = self.task(egs, ssr=self.ssr)
                 loss.backward()
 
+                # add to reporter
+                self.reporter.add("loss", loss.item())
+                self.reporter.update(stats)
+
                 if self.clip_gradient:
-                    norm = clip_grad_norm_(self.nnet.parameters(),
+                    norm = clip_grad_norm_(self.task.nnet.parameters(),
                                            self.clip_gradient)
                 loss = loss.item()
                 if math.isfinite(norm) and math.isfinite(loss):
                     self.optimizer.step()
 
                     if self.gaussian_noise_std:
-                        add_gaussian_noise(self.nnet,
+                        add_gaussian_noise(self.task.nnet,
                                            std=self.gaussian_noise_std)
 
                     self.reporter.add("norm", norm)
                     self.reporter.add("rate",
                                       self.optimizer.param_groups[0]["lr"])
                 else:
-                    self.reporter.log(f"Invalid gradient {norm} or " +
-                                      f"loss {loss}, skip...")
+                    self.reporter.log(f"Invalid gradient {norm:.3f} or " +
+                                      f"loss {loss:.3f}, skip...")
 
                 # if trained on batches done, start evaluation
                 if trained_batches == 0:
@@ -398,8 +544,7 @@ class Trainer(object):
                     # schedule here
                     if self.lr_scheduler:
                         self.lr_scheduler.step(update_value)
-                    if self.ss_scheduler:
-                        self.ssr = self.ss_scheduler.step(e, cv_accu)
+                    self.ssr = self.ss_scheduler.step(e, cv_accu)
                     # save last checkpoint
                     self.save_checkpoint(e, best=False)
                     # reset reporter
@@ -407,7 +552,7 @@ class Trainer(object):
                     # early stop or not
                     if self.stop_criterion.stop():
                         self.reporter.log("Stop training cause no impr for " +
-                                          f"{self.no_impr:d} epochs")
+                                          f"{self.no_impr} epochs")
                         stop = True
                         break
                     if e == num_epoches:
@@ -415,116 +560,8 @@ class Trainer(object):
                         break
                     # enable train mode
                     self.reporter.log("Set train mode...")
-                    self.nnet.train()
+                    self.task.train()
             self.reporter.log("Finished one epoch on training set")
             if stop:
                 break
         self.reporter.log(f"Training for {e:d}/{num_epoches:d} epoches done!")
-
-
-class CtcXentHybridTrainer(Trainer):
-    """
-    E2E ASR Trainer (CE)
-    """
-    def __init__(self,
-                 rank,
-                 nnet,
-                 lsm_factor=0,
-                 ctc_regularization=0,
-                 ctc_blank=0,
-                 **kwargs):
-        super(CtcXentHybridTrainer, self).__init__(rank, nnet, **kwargs)
-        if ctc_regularization:
-            self.reporter.log(
-                f"Using CTC regularization (factor = {ctc_regularization:.2f}, "
-                + f"blank = {ctc_blank})")
-        self.ctc_blank = ctc_blank
-        self.ctc_factor = ctc_regularization
-        self.lsm_factor = lsm_factor
-
-    def compute_loss(self, egs, idx=0, ssr=0):
-        """
-        Compute training loss, egs contains
-            src_pad: N x Ti x F
-            src_len: N
-            tgt_pad: N x To
-            tgt_len: N
-        """
-        # tgt_pad: N x To (replace ignore_id with eos)
-        # tgts: N x To+1 (add eos)
-        tgt_pad, tgts = process_tgts(egs["tgt_pad"],
-                                     egs["tgt_len"],
-                                     eos=self.nnet.eos)
-        # outs: N x (To+1) x V
-        # alis: N x (To+1) x Ti
-        outs, _, ctc_branch, enc_len = self.nnet(egs["src_pad"],
-                                                 egs["src_len"], tgt_pad, ssr)
-        # compute loss
-        if self.lsm_factor > 0:
-            loss = ls_loss(outs, tgts, lsm_factor=self.lsm_factor)
-        else:
-            loss = ce_loss(outs, tgts)
-
-        if self.ctc_factor > 0:
-            # add log-softmax, N x T x V => T x N x V
-            log_prob = F.log_softmax(ctc_branch, dim=-1).transpose(0, 1)
-            # CTC loss
-            ctc_loss = F.ctc_loss(log_prob,
-                                  tgt_pad,
-                                  enc_len,
-                                  egs["tgt_len"],
-                                  blank=self.ctc_blank,
-                                  reduction="mean",
-                                  zero_infinity=True)
-            loss = self.ctc_factor * ctc_loss + (1 - self.ctc_factor) * loss
-        # compute accu
-        accu = compute_accu(outs, tgts)
-        # add to reporter
-        self.reporter.add("loss", loss.item())
-        self.reporter.add("accu", accu)
-        return loss
-
-
-# from https://github.com/HawkAaron/warp-transducer
-# from warprnnt_pytorch import rnnt_loss
-# https://github.com/1ytic/warp-rnnt
-from warp_rnnt import rnnt_loss
-
-
-class TransducerTrainer(Trainer):
-    """
-    ASR Trainer (Transducer)
-    """
-    def __init__(self, rank, nnet, transducer_blank=0, **kwargs):
-        super(TransducerTrainer, self).__init__(rank, nnet, **kwargs)
-        self.blank = transducer_blank
-        self.reporter.log(
-            f"Got Transducer trainer, blank = {transducer_blank}")
-
-    def compute_loss(self, egs, **kwargs):
-        """
-        Compute training loss, egs contains:
-            src_pad: N x Ti x F
-            src_len: N
-            tgt_pad: N x To
-            tgt_len: N
-        """
-        # tgt_pad: N x To (replace ignore_id with blank)
-        ignore_mask = egs["tgt_pad"] == IGNORE_ID
-        tgt_pad = egs["tgt_pad"].masked_fill(ignore_mask, self.blank)
-        # N x Ti x To+1 x V
-        outs, enc_len = self.nnet(egs["src_pad"], egs["src_len"], tgt_pad,
-                                  egs["tgt_len"])
-        # add log_softmax if use https://github.com/1ytic/warp-rnnt
-        outs = F.log_softmax(outs, -1)
-        # compute loss
-        loss = rnnt_loss(outs,
-                         tgt_pad.to(th.int32),
-                         enc_len.to(th.int32),
-                         egs["tgt_len"].to(th.int32),
-                         blank=self.blank,
-                         reduction="mean",
-                         gather=True)
-        # add to reporter
-        self.reporter.add("loss", loss.item())
-        return loss

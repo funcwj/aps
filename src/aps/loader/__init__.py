@@ -2,7 +2,7 @@ from .am import kaldi, conf, wav
 from .lm import bptt, utt
 from .enh import chunk
 
-loader_templ = {
+loader_cls = {
     "kaldi": kaldi.DataLoader,
     "conf": conf.DataLoader,
     "wav": wav.DataLoader,
@@ -13,6 +13,6 @@ loader_templ = {
 
 
 def support_loader(fmt="wav", **kwargs):
-    if fmt not in loader_templ:
+    if fmt not in loader_cls:
         raise RuntimeError(f"Unsupported data-loader type: {fmt}")
-    return loader_templ[fmt](**kwargs)
+    return loader_cls[fmt](**kwargs)
