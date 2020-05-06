@@ -102,7 +102,7 @@ class UnsuperEnhTask(Task):
         """
         _, _, C, _ = obs.shape
         # N x F x C x C
-        Bk = estimate_covar(mask, obs, eps=eps)
+        Bk = estimate_covar(mask, obs, eps=self.eps)
         # add to diag
         I = th.eye(C, device=Bk.device, dtype=Bk.dtype)
         Bk = Bk + I * self.eps
@@ -198,7 +198,7 @@ class SaTask(Task):
                  permute=True,
                  num_spks=2):
         # STFT context
-        sa_ctx = nnet.enh_transform.task_ctx("forward_stft")
+        sa_ctx = nnet.enh_transform.ctx("forward_stft")
         super(SaTask, self).__init__(nnet, ctx=sa_ctx)
         self.phase_sensitive = phase_sensitive
         self.truncated = truncated

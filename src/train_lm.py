@@ -28,9 +28,6 @@ def run(args):
     np.random.seed(args.seed)
     th.random.manual_seed(args.seed)
 
-    dev_conf = args.device_ids
-    device_ids = tuple(map(int, dev_conf.split(","))) if dev_conf else None
-
     # new logger instance
     print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
           flush=True)
@@ -46,6 +43,10 @@ def run(args):
     # load configurations
     with open(args.conf, "r") as f:
         conf = yaml.full_load(f)
+        
+    # create task_conf if None
+    if "task_conf" not in conf:
+        conf["task_conf"] = {}
 
     # add dictionary info
     with codecs.open(args.dict, encoding="utf-8") as f:

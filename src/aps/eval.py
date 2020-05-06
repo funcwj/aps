@@ -31,7 +31,7 @@ class Computer(object):
         cpt = th.load(cpt_dir / "best.pt.tar", map_location="cpu")
         with open(cpt_dir / "train.yaml", "r") as f:
             conf = yaml.full_load(f)
-            asr_cls = support_nnet(conf["nnet_type"])
+            asr_cls = support_nnet(conf["nnet"])
         asr_transform = None
         enh_transform = None
         self.accept_raw = False

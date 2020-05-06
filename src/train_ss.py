@@ -13,14 +13,16 @@ import torch as th
 import numpy as np
 
 from aps.utils import StrToBoolAction
-from aps.trainer.datp import MlTrainer
+from aps.trainer.ddp import Trainer
 
 from aps.loader import support_loader
 from aps.feats import support_transform
-from aps.nn import support_nnet
+from aps.task import support_task
+from aps.ss import support_nnet
 
 constrained_conf_keys = [
-    "nnet_type", "nnet_conf", "data_conf", "trainer_conf", "enh_transform"
+    "nnet", "nnet_conf", "task", "task_conf", "data_conf", "trainer_conf",
+    "enh_transform"
 ]
 
 
@@ -32,13 +34,14 @@ def load_conf(yaml_conf):
     with open(yaml_conf, "r") as f:
         conf = yaml.full_load(f)
 
-    if conf["nnet_type"] != "unsupervised_enh":
-        raise ValueError("This command is for unsupervised " +
-                         "optimization for enhancement task")
+    # create task_conf if None
+    if "task_conf" not in conf:
+        conf["task_conf"] = {}
 
     for key in constrained_conf_keys:
         if key not in conf.keys():
             raise ValueError(f"Missing configuration item: {key}")
+
     print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
     return conf
 
@@ -48,10 +51,6 @@ def run(args):
     random.seed(args.seed)
     np.random.seed(args.seed)
     th.random.manual_seed(args.seed)
-
-    # get device
-    dev_conf = args.device_ids
-    device_ids = tuple(map(int, dev_conf.split(","))) if dev_conf else None
 
     # new logger instance
     print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
@@ -80,7 +79,7 @@ def run(args):
                                 num_workers=args.num_workers,
                                 **data_conf["loader"])
 
-    asr_cls = support_nnet(conf["nnet_type"])
+    asr_cls = support_nnet(conf["nnet"])
     enh_transform = support_transform("enh")(**conf["enh_transform"])
 
     # dump configurations
@@ -88,16 +87,17 @@ def run(args):
         yaml.dump(conf, f)
 
     nnet = asr_cls(enh_transform=enh_transform, **conf["nnet_conf"])
+    task = support_task(conf["task"], nnet, **conf["task_conf"])
 
-    trainer = MlTrainer(nnet,
-                        device_ids=device_ids,
-                        checkpoint=args.checkpoint,
-                        resume=resume,
-                        init=args.init,
-                        save_interval=args.save_interval,
-                        prog_interval=args.prog_interval,
-                        tensorboard=args.tensorboard,
-                        **conf["trainer_conf"])
+    trainer = Trainer(task,
+                      device_ids=args.device_id,
+                      checkpoint=args.checkpoint,
+                      resume=resume,
+                      init=args.init,
+                      save_interval=args.save_interval,
+                      prog_interval=args.prog_interval,
+                      tensorboard=args.tensorboard,
+                      **conf["trainer_conf"])
 
     if args.eval_interval > 0:
         trainer.run_batch_per_epoch(trn_loader,
@@ -110,17 +110,16 @@ def run(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description=
-        "Command for multi-channel unsupervised speech enhancement model training",
+        description="Command for speech separation/enhancement model training",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--conf",
                         type=str,
                         required=True,
                         help="Yaml configuration file for training")
-    parser.add_argument("--device-ids",
-                        type=str,
-                        default="",
-                        help="Training on which GPUs (one or more)")
+    parser.add_argument("--device-id",
+                        type=int,
+                        default=0,
+                        help="Training on which GPU device")
     parser.add_argument("--epoches",
                         type=int,
                         default=50,

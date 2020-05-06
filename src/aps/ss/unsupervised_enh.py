@@ -6,7 +6,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .base.encoder import TorchEncoder
+from ..asr.base.encoder import TorchEncoder
 
 
 class UnsupervisedEnh(TorchEncoder):
@@ -35,11 +35,11 @@ class UnsupervisedEnh(TorchEncoder):
 
     def forward(self, s):
         """
-        args
+        Args
             s: N x C x S
-        return
-            cspec: N x C x F x T
-            masks: N x T x F
+        Return
+            cspec (ComplexTensor): N x C x F x T
+            masks (Tensor): N x T x F
         """
         if s.dim() not in [2, 3]:
             raise RuntimeError(f"Expect 1/2D tensor, got {s.dim()} instead")

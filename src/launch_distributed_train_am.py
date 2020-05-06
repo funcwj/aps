@@ -136,7 +136,7 @@ def run(args):
         args.resume = last_checkpoint.as_posix()
 
     conf = load_conf(args.conf, args.dict)
-    asr_cls = support_nnet(conf["nnet_type"])
+    asr_cls = support_nnet(conf["nnet"])
     asr_transform = None
     enh_transform = None
     if "asr_transform" in conf:

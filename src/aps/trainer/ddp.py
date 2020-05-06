@@ -19,6 +19,7 @@ from .scheduler import NoamOpt
 from ..utils import load_obj, get_device_ids, get_logger
 from ..task import Task
 
+
 def add_gaussian_noise(nnet, std=0.075):
     """
     Add gaussian noise to updated weights
@@ -144,6 +145,7 @@ class StopCriterion(object):
         else:
             self.no_impr += 1
             return False
+
 
 class Trainer(object):
     """
@@ -475,9 +477,8 @@ class Trainer(object):
         """
         Run on several batches and evaluate
         """
-        self.reporter.log(
-            f"Number of batches (train/valid) = {len(trn_loader)}/{len(dev_loader)}"
-        )
+        self.reporter.log("Number of batches (train/valid) = " +
+                          f"{len(trn_loader)}/{len(dev_loader)}")
         e = self._prep_train(dev_loader)
         stop = False
         trained_batches = 0

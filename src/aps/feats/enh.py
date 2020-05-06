@@ -364,7 +364,7 @@ class FeatureTransform(nn.Module):
         self.frame_len = frame_len
         self.frame_hop = frame_hop
 
-    def task_ctx(self, name="forward_stft"):
+    def ctx(self, name="forward_stft"):
         """
         Return ctx(STFT/iSTFT) for task defined in src/aps/task
         """
