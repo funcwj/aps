@@ -1,11 +1,12 @@
 from .unsupervised_enh import UnsupervisedEnh
 from .enh import DCUNet
-from .bss import ConvTasNet
+from .bss import ConvTasNet, DPRNN
 
 nnet_cls = {
     "unsupervised_enh": UnsupervisedEnh,
     "conv_tasnet": ConvTasNet,
-    "dcunet": DCUNet
+    "dcunet": DCUNet,
+    "dprnn": DPRNN
 }
 
 

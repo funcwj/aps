@@ -86,7 +86,7 @@ class DpB(nn.Module):
         return inter_out.permute(0, -1, 1, 2)
 
 
-class DpRNN(nn.Module):
+class DPRNN(nn.Module):
     """
     DP (dual-path) RNN
     """
@@ -98,7 +98,7 @@ class DpRNN(nn.Module):
                  dprnn_layers=6,
                  dprnn_bi_inter=True,
                  dprnn_hidden=128):
-        super(DpRNN, self).__init__()
+        super(DPRNN, self).__init__()
         # conv1d encoder
         self.encoder = nn.Conv1d(1,
                                  conv_filters,
@@ -134,7 +134,6 @@ class DpRNN(nn.Module):
             s = s[None, ...]
         # N x 1 x S => N x F x T
         w = tf.relu(self.encoder(s[:, None, :]))
-        print(w.shape)
         N, F, T = w.shape
         # N x F x T x 1 => N x FK x L
         rnn_inp = tf.unfold(w[..., None], (self.chunk_len, 1),

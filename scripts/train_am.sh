@@ -43,4 +43,4 @@ src/train_am.py \
   --eval-interval $eval_interval \
   > $data.train_am.$exp_id.log 2>&1
 
-mv $data.train_am.$exp_id.log exp/$data/$exp_id
+cp $data.train_am.$exp_id.log exp/$data/$exp_id
