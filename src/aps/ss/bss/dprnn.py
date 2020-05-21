@@ -152,11 +152,11 @@ class DPRNN(nn.Module):
                         stride=self.chunk_hop)
         # N x 2 x F x T
         masks = masks.view(N, self.num_spks, F, -1)
-        return [self.decoder(masks[:, s] * w) for s in range(self.num_spks)]
+        return [self.decoder(masks[:, s] * w)[: 0] for s in range(self.num_spks)]
 
 
 def run():
-    dprnn = DpRNN(num_spks=2, chunk_len=100)
+    dprnn = DPRNN(num_spks=2, chunk_len=100)
     print(dprnn)
     x = th.rand(2, 320000)
     m = dprnn(x)

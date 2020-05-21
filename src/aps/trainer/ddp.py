@@ -8,15 +8,18 @@ import torch.multiprocessing as mp
 
 from os import environ
 from pathlib import Path
+from collections import defaultdict
 
 from torch.nn.utils import clip_grad_norm_
 from torch.nn.parallel import DistributedDataParallel
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.tensorboard import SummaryWriter
 
 from .scheduler import support_ss_scheduler
 from .scheduler import NoamOpt
 
 from ..utils import load_obj, get_device_ids, get_logger
+from ..utils import SimpleTimer
 from ..task import Task
 
 
@@ -175,8 +178,9 @@ class Trainer(object):
         if not isinstance(task, Task):
             raise TypeError(
                 f"Trainer accepts Task object, but got {type(task)}")
-        self.device_ids = get_device_ids(device_ids)
+        device_ids = get_device_ids(device_ids)
         self.cuda_devices = len(device_ids)
+        self.device_ids = device_ids
 
         if rank is None:
             # single GPU
@@ -261,7 +265,7 @@ class Trainer(object):
 
         # logging
         if rank is None:
-            self.reporter.log(f"Loading model to GPU:{self.device_ids[0]}, " +
+            self.reporter.log(f"Loading model to GPU:{device_ids[0]}, " +
                               f"#param: {self.num_params:.2f}M")
         else:
             self.reporter.log(
@@ -363,6 +367,7 @@ class Trainer(object):
             self.reporter.update(stats)
 
             # clip gradient after backward
+            norm = -1
             if self.clip_gradient:
                 norm = clip_grad_norm_(self.task.nnet.parameters(),
                                        self.clip_gradient)

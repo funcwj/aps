@@ -247,6 +247,12 @@ class ConvTasNet(nn.Module):
         return nn.Sequential(*repeats)
 
     def forward(self, x):
+        """
+        Args:
+            s (Tensor): N x S
+        Return:
+            [Tensor, ...]: N x S
+        """
         if x.dim() >= 3:
             raise RuntimeError(
                 "{} accept 1/2D tensor as input, but got {:d}".format(

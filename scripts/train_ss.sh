@@ -26,9 +26,8 @@ conf=conf/$data/$exp_id.yaml
 
 [ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
 
-src/train_am.py \
+src/train_ss.py \
   --conf $conf \
-  --dict $dict \
   --seed $seed \
   --tensorboard $tensorboard \
   --save-interval $save_interval \

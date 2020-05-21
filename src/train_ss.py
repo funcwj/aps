@@ -38,9 +38,9 @@ def load_conf(yaml_conf):
     if "task_conf" not in conf:
         conf["task_conf"] = {}
 
-    for key in constrained_conf_keys:
-        if key not in conf.keys():
-            raise ValueError(f"Missing configuration item: {key}")
+    for key in conf.keys():
+        if key not in constrained_conf_keys:
+            raise ValueError(f"Invalid configuration item: {key}")
 
     print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
     return conf
@@ -80,13 +80,16 @@ def run(args):
                                 **data_conf["loader"])
 
     asr_cls = support_nnet(conf["nnet"])
-    enh_transform = support_transform("enh")(**conf["enh_transform"])
+    if "enh_transform" in conf:
+        enh_transform = support_transform("enh")(**conf["enh_transform"])
+        nnet = asr_cls(enh_transform=enh_transform, **conf["nnet_conf"])
+    else:
+        nnet = asr_cls(**conf["nnet_conf"])
 
     # dump configurations
     with open(checkpoint / "train.yaml", "w") as f:
         yaml.dump(conf, f)
 
-    nnet = asr_cls(enh_transform=enh_transform, **conf["nnet_conf"])
     task = support_task(conf["task"], nnet, **conf["task_conf"])
 
     trainer = Trainer(task,
