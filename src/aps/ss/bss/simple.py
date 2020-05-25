@@ -49,20 +49,23 @@ class Simple(TorchEncoder):
         Return:
             [Tensor, ...]: N x S
         """
-        if s.dim() not in [2, 3]:
+        if s.dim() not in [1, 2]:
             raise RuntimeError(f"Expect 1/2D tensor, got {s.dim()} instead")
-        if s.dim() == 2:
+        if s.dim() == 1:
             s = s[None, ...]
         # feats: N x T x F
+        # stft: N x F x T
         feats, stft, _ = self.enh_transform(s, None)
         rnn_out, _ = self.rnns(feats)
         # N x T x 2F
         masks = self.oact(self.proj(rnn_out))
-        # [N x T x F, ...]
-        masks = th.chunk(masks, self.num_spks, -1)
+        # N x 2F x T
+        masks = masks.transpose(1, 2)
+        # [N x F x T, ...]
+        masks = th.chunk(masks, self.num_spks, 1)
         if self.inverse_stft:
             # complex tensor
-            spk_stft = [m * stft for m in masks]
+            spk_stft = [stft * m for m in masks]
             return [
                 self.inverse_stft((s.real, s.imag), input="complex")
                 for s in spk_stft

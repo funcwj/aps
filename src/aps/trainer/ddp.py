@@ -506,6 +506,7 @@ class Trainer(object):
                 self.reporter.add("loss", loss.item())
                 self.reporter.update(stats)
 
+                norm = -1
                 if self.clip_gradient:
                     norm = clip_grad_norm_(self.task.nnet.parameters(),
                                            self.clip_gradient)

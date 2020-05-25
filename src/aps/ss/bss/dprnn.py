@@ -77,7 +77,6 @@ class DpB(nn.Module):
                 f"Expect 3/4D tensor, got {chunk.dim()} instead")
         if chunk.dim() == 3:
             chunk = chunk[None, ...]
-        print(chunk.shape)
         # N x L x K x F
         intra_out = self._intra(chunk)
         # N x K x L x F
@@ -152,7 +151,7 @@ class DPRNN(nn.Module):
                         stride=self.chunk_hop)
         # N x 2 x F x T
         masks = masks.view(N, self.num_spks, F, -1)
-        return [self.decoder(masks[:, s] * w)[: 0] for s in range(self.num_spks)]
+        return [self.decoder(masks[:, s] * w)[:, 0] for s in range(self.num_spks)]
 
 
 def run():

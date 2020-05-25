@@ -389,10 +389,13 @@ class FeatureTransform(nn.Module):
         """
         # N x C x F x T
         mag, pha = self.STFT(x_pad)
+        multi_channel = mag.dim() == 4
+        mag_ref = mag[:, 0] if multi_channel else mag
+
         # spectra transform
         if self.spe_transform:
             # N x T x F
-            feats = mag[:, 0].transpose(-1, -2)
+            feats = mag_ref.transpose(-1, -2)
             # spectra features of CH0, N x T x F
             feats = self.spe_transform(feats)
             if self.aug_transform:
@@ -404,7 +407,7 @@ class FeatureTransform(nn.Module):
             if self.aug_transform:
                 mag = self.aug_transform(mag)
         # complex spectrogram of CH 0~(C-1), N x C x F x T
-        if norm_obs:
+        if norm_obs and multi_channel:
             mag_norm = th.norm(mag, p=2, dim=1, keepdim=True)
             mag = mag / th.clamp(mag_norm, min=EPSILON)
         real = mag * th.cos(pha)

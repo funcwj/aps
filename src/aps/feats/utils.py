@@ -218,7 +218,7 @@ def _inverse_stft(transform,
     I = th.eye(window.shape[0], device=win.device)[:, None]
     # 1 x 1 x T
     norm = tf.conv_transpose1d(win**2, I, stride=frame_hop, padding=0)
-    s = th.where(norm == 0, s, s / norm)
+    s = s / (norm + EPSILON)
     # N x S
     s = s.squeeze(1)
     return s
