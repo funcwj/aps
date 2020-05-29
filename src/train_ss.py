@@ -79,12 +79,12 @@ def run(args):
                                 num_workers=args.num_workers,
                                 **data_conf["loader"])
 
-    asr_cls = support_nnet(conf["nnet"])
+    ss_cls = support_nnet(conf["nnet"])
     if "enh_transform" in conf:
         enh_transform = support_transform("enh")(**conf["enh_transform"])
-        nnet = asr_cls(enh_transform=enh_transform, **conf["nnet_conf"])
+        nnet = ss_cls(enh_transform=enh_transform, **conf["nnet_conf"])
     else:
-        nnet = asr_cls(**conf["nnet_conf"])
+        nnet = ss_cls(**conf["nnet_conf"])
 
     # dump configurations
     with open(checkpoint / "train.yaml", "w") as f:

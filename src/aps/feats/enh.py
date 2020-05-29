@@ -289,8 +289,8 @@ class FixedBeamformer(nn.Module):
 
 class FeatureTransform(nn.Module):
     """
-    Feature transform for ASR tasks
-    Spectrogram - LogTransform - CmvnTransform + IpdTransform
+    Feature transform for Enhancement/Separation tasks
+    Spectrogram - LogTransform - CmvnTransform + IpdTransform + DfTransform
     """
     def __init__(self,
                  feats="spectrogram-log-cmvn-ipd",
@@ -385,6 +385,7 @@ class FeatureTransform(nn.Module):
             x_len (Tensor or None): number samples in x_pad, N or None
         Return:
             feats (Tensor): spatial+spectral features, N x T x ...
+            cplx (ComplexTensor): STFT of reference channels, N x (C) x F x T
             f_len (Tensor or None): number frames in each batch, N or None
         """
         # N x C x F x T

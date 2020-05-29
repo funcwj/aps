@@ -94,8 +94,7 @@ class Conv1D(nn.Conv1d):
         x: N x L or N x C x L
         """
         if x.dim() not in [2, 3]:
-            raise RuntimeError("{} accept 2/3D tensor as input".format(
-                self.__name__))
+            raise RuntimeError("Conv1D expects 2/3D tensor as input")
         x = super().forward(x if x.dim() == 3 else th.unsqueeze(x, 1))
         if squeeze:
             x = th.squeeze(x)
@@ -114,8 +113,7 @@ class ConvTrans1D(nn.ConvTranspose1d):
         x: N x L or N x C x L
         """
         if x.dim() not in [2, 3]:
-            raise RuntimeError("{} accept 2/3D tensor as input".format(
-                self.__name__))
+            raise RuntimeError("ConvTrans1D expects 2/3D tensor as input")
         x = super().forward(x if x.dim() == 3 else th.unsqueeze(x, 1))
         if squeeze:
             x = th.squeeze(x)
@@ -246,22 +244,33 @@ class ConvTasNet(nn.Module):
         ]
         return nn.Sequential(*repeats)
 
-    def forward(self, x):
+    def infer(self, mix):
         """
         Args:
-            s (Tensor): N x S
+            mix (Tensor): S
+        Return:
+            sep ([Tensor, ...]): S
+        """
+        if mix.dim() != 1:
+            raise RuntimeError("ConvTasNet expects 1D tensor (inference), " +
+                               f"got {mix.dim()} instead")
+        # when inference, only one utt
+        mix = mix[None, ...]
+        sep = self.forward(mix)
+        return sep
+
+    def forward(self, mix):
+        """
+        Args:
+            mix (Tensor): N x S
         Return:
             [Tensor, ...]: N x S
         """
-        if x.dim() >= 3:
+        if mix.dim() != 2:
             raise RuntimeError(
-                "{} accept 1/2D tensor as input, but got {:d}".format(
-                    self.__name__, x.dim()))
-        # when inference, only one utt
-        if x.dim() == 1:
-            x = th.unsqueeze(x, 0)
+                f"ConvTasNet expects 2D tensor as input, but got {mix.dim()}")
         # n x 1 x S => n x N x T
-        w = F.relu(self.encoder(x))
+        w = F.relu(self.encoder(mix))
         # n x B x T
         y = self.proj(self.ln(w))
         # n x B x T

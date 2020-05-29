@@ -31,23 +31,38 @@ class UnsupervisedEnh(TorchEncoder):
                                               rnn_bidir=rnn_bidir)
         self.enh_transform = enh_transform
         if enh_transform is None:
-            raise ValueError("UnsupervisedEnh: enh_transform can not be None")
-
-    def forward(self, s):
+            raise ValueError("enh_transform can not be None")
+        
+    def infer(self, noisy):
         """
         Args
-            s: N x C x S
+            noisy: C x S
+        Return
+            masks (Tensor): T x F
+        """
+        if noisy.dim() != 2:
+            raise RuntimeError(
+                "UnsupervisedEnh expects 2D tensor (training), " +
+                f"got {noisy.dim()} instead")
+        noisy = noisy[None, ...]
+        masks, _ = self.forward(noisy)
+        return masks[0]
+
+    def forward(self, noisy):
+        """
+        Args
+            noisy: N x C x S
         Return
             cspec (ComplexTensor): N x C x F x T
             masks (Tensor): N x T x F
         """
-        if s.dim() not in [2, 3]:
-            raise RuntimeError(f"Expect 1/2D tensor, got {s.dim()} instead")
-        if s.dim() == 2:
-            s = s[None, ...]
+        if noisy.dim() != 3:
+            raise RuntimeError(
+                "UnsupervisedEnh expects 3D tensor (training), " +
+                f"got {noisy.dim()} instead")
         # feats: N x T x F
         # cspec: N x C x F x T
-        feats, cspec, _ = self.enh_transform(s, None, norm_obs=True)
+        feats, cspec, _ = self.enh_transform(noisy, None, norm_obs=True)
         feats, _ = self.rnns(feats)
         # N x T x F
         masks = th.sigmoid(self.proj(feats))

@@ -1,5 +1,5 @@
-from .las_asr import LasASR
-from .enh_las_asr import MvdrLasASR, BeamLasASR
+from .att_asr import AttASR
+from .enh_att_asr import MvdrAttASR, BeamAttASR
 from .transformer_asr import TransformerASR
 from .enh_transformer_asr import BeamTransformerASR, MvdrTransformerASR
 from .transducer_asr import TransformerTransducerASR, TorchTransducerASR
@@ -9,9 +9,9 @@ from .lm.transformer import TorchTransformerLM
 nnet_cls = {
     "rnn_lm": TorchRNNLM,
     "transformer_lm": TorchTransformerLM,
-    "las": LasASR,
-    "mvdr_las": MvdrLasASR,
-    "beam_las": BeamLasASR,
+    "las": AttASR,
+    "mvdr_att": MvdrAttASR,
+    "beam_att": BeamAttASR,
     "transformer": TransformerASR,
     "beam_transformer": BeamTransformerASR,
     "mvdr_transformer": MvdrTransformerASR,

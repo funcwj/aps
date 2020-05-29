@@ -7,16 +7,16 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
-from .las_asr import LasASR
+from .att_asr import AttASR
 from .base.encoder import TorchEncoder
 from .enh.mvdr import MvdrBeamformer
 from .enh.google import CLPFsBeamformer  # same as TimeInvariantEnh
 from .enh.conv import TimeInvariantEnh, TimeVariantEnh, TimeInvariantAttEnh
 
 
-class EnhLasASR(nn.Module):
+class EnhAttASR(nn.Module):
     """
-    LasASR with enhancement front-end
+    AttASR with enhancement front-end
     """
     def __init__(
             self,
@@ -38,11 +38,11 @@ class EnhLasASR(nn.Module):
             # decoder
             decoder_dim=512,
             decoder_kwargs=None):
-        super(EnhLasASR, self).__init__()
+        super(EnhAttASR, self).__init__()
         # Back-end feature transform
         self.asr_transform = asr_transform
         # LAS-based ASR
-        self.las_asr = LasASR(input_size=asr_input_size,
+        self.las_asr = AttASR(input_size=asr_input_size,
                               vocab_size=vocab_size,
                               eos=eos,
                               sos=sos,
@@ -107,9 +107,9 @@ class EnhLasASR(nn.Module):
                                             normalized=normalized)
 
 
-class MvdrLasASR(EnhLasASR):
+class MvdrAttASR(EnhAttASR):
     """
-    Mvdr beamformer + LAS-based ASR model
+    Mvdr beamformer + Att-based ASR model
     """
     def __init__(
             self,
@@ -121,7 +121,7 @@ class MvdrLasASR(EnhLasASR):
             mask_net_noise=False,
             mvdr_kwargs=None,
             **kwargs):
-        super(MvdrLasASR, self).__init__(**kwargs)
+        super(MvdrAttASR, self).__init__(**kwargs)
         if enh_transform is None:
             raise RuntimeError("Enhancement feature transform can not be None")
         # Front-end feature extraction
@@ -175,12 +175,12 @@ class MvdrLasASR(EnhLasASR):
         return mask_s, mask_n, x_len, x_cplx
 
 
-class BeamLasASR(EnhLasASR):
+class BeamAttASR(EnhAttASR):
     """
-    Beamformer-based front-end + LAS ASR
+    Beamformer-based front-end + AttASR
     """
     def __init__(self, mode="tv", enh_transform=None, enh_conf=None, **kwargs):
-        super(BeamLasASR, self).__init__(**kwargs)
+        super(BeamAttASR, self).__init__(**kwargs)
         conv_enh = {
             "ti": TimeInvariantEnh,
             "tv": TimeVariantEnh,

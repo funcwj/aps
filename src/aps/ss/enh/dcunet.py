@@ -227,14 +227,30 @@ class DCUNet(nn.Module):
             s = self.inverse_stft((sr * m, si * m), input="complex")
         return s
 
+    def infer(self, mix):
+        """
+        Args:
+            mix (Tensor): S
+        Return:
+            Tensor: S
+        """
+        if mix.dim() != 1:
+            raise RuntimeError("DCUNet expects 1D tensor (inference), " +
+                               f"got {mix.dim()} instead")
+        mix = mix[None, :]
+        sep = self.forward(mix)
+        return sep[0]
+
     def forward(self, s):
         """
-        s: N x S
+        Args:
+            s (Tensor): N x S
+        Return:
+            Tensor: N x S
         """
-        if s.dim() not in [1, 2]:
-            raise RuntimeError(f"Expect 1/2D tensor, got {s.dim()} instead")
-        if s.dim() == 1:
-            s = s[None, :]
+        if s.dim() != 2:
+            raise RuntimeError("DCUNet expects 2D tensor (training), " +
+                               f"got {s.dim()} instead")
         # N x F x T
         sr, si = self.forward_stft(s, output="complex")
         if self.cplx:

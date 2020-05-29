@@ -1,6 +1,6 @@
 # APS: ASR + Separation
 
-My repository for single/multi-channel speech enhancement & separation & recognition model training and evaluation.
+My repository for single/multi-channel speech enhancement & separation & recognition task.
 
 ## Support
 

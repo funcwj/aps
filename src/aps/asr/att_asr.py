@@ -12,9 +12,9 @@ from .base.encoder import encoder_instance
 from .base.attention import att_instance
 
 
-class LasASR(nn.Module):
+class AttASR(nn.Module):
     """
-    LAS-based ASR model
+    Attention-based ASR model
     """
     def __init__(
             self,
@@ -34,7 +34,7 @@ class LasASR(nn.Module):
             # decoder
             decoder_dim=512,
             decoder_kwargs=None):
-        super(LasASR, self).__init__()
+        super(AttASR, self).__init__()
         self.encoder = encoder_instance(encoder_type, input_size, encoder_proj,
                                         **encoder_kwargs)
         decoder_kwargs["attention"] = att_instance(att_type, encoder_proj,

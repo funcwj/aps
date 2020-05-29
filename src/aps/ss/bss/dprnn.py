@@ -120,19 +120,32 @@ class DPRNN(nn.Module):
         self.num_spks = num_spks
         self.chunk_hop, self.chunk_len = chunk_len // 2, chunk_len
 
-    def forward(self, s):
+    def infer(self, mix):
         """
         Args:
-            s (Tensor): N x S
+            mix (Tensor): S
+        Return:
+            [Tensor, ...]: S
+        """
+        if mix.dim() != 1:
+            raise RuntimeError(
+                f"DPRNN expects 1D tensor (inference), but got {mix.dim()}")
+        mix = mix[None, ...]
+        sep = self.forward(mix)
+        return [s[0] for s in sep]
+
+    def forward(self, mix):
+        """
+        Args:
+            mix (Tensor): N x S
         Return:
             [Tensor, ...]: N x S
         """
-        if s.dim() not in [1, 2]:
-            raise RuntimeError(f"Expect 1/2D tensor, but got {s.dim()}")
-        if s.dim() == 1:
-            s = s[None, ...]
+        if mix.dim() != 2:
+            raise RuntimeError(
+                f"DPRNN expects 2D tensor (training), but got {mix.dim()}")
         # N x 1 x S => N x F x T
-        w = tf.relu(self.encoder(s[:, None, :]))
+        w = tf.relu(self.encoder(mix[:, None, :]))
         N, F, T = w.shape
         # N x F x T x 1 => N x FK x L
         rnn_inp = tf.unfold(w[..., None], (self.chunk_len, 1),
@@ -151,7 +164,9 @@ class DPRNN(nn.Module):
                         stride=self.chunk_hop)
         # N x 2 x F x T
         masks = masks.view(N, self.num_spks, F, -1)
-        return [self.decoder(masks[:, s] * w)[:, 0] for s in range(self.num_spks)]
+        return [
+            self.decoder(masks[:, s] * w)[:, 0] for s in range(self.num_spks)
+        ]
 
 
 def run():
