@@ -234,12 +234,13 @@ class DCUNet(nn.Module):
         Return:
             Tensor: S
         """
-        if mix.dim() != 1:
-            raise RuntimeError("DCUNet expects 1D tensor (inference), " +
-                               f"got {mix.dim()} instead")
-        mix = mix[None, :]
-        sep = self.forward(mix)
-        return sep[0]
+        with th.no_grad():
+            if mix.dim() != 1:
+                raise RuntimeError("DCUNet expects 1D tensor (inference), " +
+                                f"got {mix.dim()} instead")
+            mix = mix[None, :]
+            sep = self.forward(mix)
+            return sep[0]
 
     def forward(self, s):
         """

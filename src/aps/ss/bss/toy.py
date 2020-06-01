@@ -45,28 +45,29 @@ class FreqDomainToyRNN(TorchEncoder):
         Return:
             sep [Tensor, ...]: S
         """
-        if mix.dim() not in [1, 2]:
-            raise RuntimeError("ToyRNN expects 1/2D tensor (inference), " +
-                               f"got {mix.dim()} instead")
-        mix = mix[None, ...]
-        # feats: N x T x F
-        feats, stft, _ = self.enh_transform(mix, None)
-        # use ch0 as reference if multi-channel
-        if stft.dim() == 4:
-            stft = stft[:, 0]
-        rnn_out, _ = self.rnns(feats)
-        # N x T x 2F
-        masks = self.oact(self.proj(rnn_out))
-        # N x 2F x T
-        masks = masks.transpose(1, 2)
-        # [N x F x T, ...]
-        masks = th.chunk(masks, self.num_spks, 1)
-        # complex tensor
-        spk_stft = [stft * m for m in masks]
-        return [
-            self.inverse_stft((s.real, s.imag)[0], input="complex")
-            for s in spk_stft
-        ]
+        with th.no_grad():
+            if mix.dim() not in [1, 2]:
+                raise RuntimeError("ToyRNN expects 1/2D tensor (inference), " +
+                                   f"got {mix.dim()} instead")
+            mix = mix[None, ...]
+            # feats: N x T x F
+            feats, stft, _ = self.enh_transform(mix, None)
+            # use ch0 as reference if multi-channel
+            if stft.dim() == 4:
+                stft = stft[:, 0]
+            rnn_out, _ = self.rnns(feats)
+            # N x T x 2F
+            masks = self.oact(self.proj(rnn_out))
+            # N x 2F x T
+            masks = masks.transpose(1, 2)
+            # [N x F x T, ...]
+            masks = th.chunk(masks, self.num_spks, 1)
+            # complex tensor
+            spk_stft = [stft * m for m in masks]
+            return [
+                self.inverse_stft((s.real, s.imag)[0], input="complex")
+                for s in spk_stft
+            ]
 
     def forward(self, mix):
         """
@@ -126,13 +127,14 @@ class TimeDomainToyRNN(TorchEncoder):
         Return:
             sep [Tensor, ...]: S
         """
-        if mix.dim() != 2:
-            raise RuntimeError("ToyRNN expects 1/2D tensor (inference), " +
-                               f"got {mix.dim()} instead")
-        # N x (C) x S
-        mix = mix[None, ...]
-        sep = self.forward(mix)
-        return [s[0] for s in sep]
+        with th.no_grad():
+            if mix.dim() != 2:
+                raise RuntimeError("ToyRNN expects 1/2D tensor (inference), " +
+                                   f"got {mix.dim()} instead")
+            # N x (C) x S
+            mix = mix[None, ...]
+            sep = self.forward(mix)
+            return [s[0] for s in sep]
 
     def forward(self, mix):
         """

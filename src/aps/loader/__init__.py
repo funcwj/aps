@@ -2,6 +2,8 @@ from .am import kaldi, conf, wav
 from .lm import bptt, utt
 from .ss import chunk
 
+from .am import WaveReader, write_wav
+
 loader_cls = {
     "kaldi": kaldi.DataLoader,
     "conf": conf.DataLoader,

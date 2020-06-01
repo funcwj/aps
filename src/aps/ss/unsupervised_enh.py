@@ -40,13 +40,14 @@ class UnsupervisedEnh(TorchEncoder):
         Return
             masks (Tensor): T x F
         """
-        if noisy.dim() != 2:
-            raise RuntimeError(
-                "UnsupervisedEnh expects 2D tensor (training), " +
-                f"got {noisy.dim()} instead")
-        noisy = noisy[None, ...]
-        masks, _ = self.forward(noisy)
-        return masks[0]
+        with th.no_grad():
+            if noisy.dim() != 2:
+                raise RuntimeError(
+                    "UnsupervisedEnh expects 2D tensor (training), " +
+                    f"got {noisy.dim()} instead")
+            noisy = noisy[None, ...]
+            masks, _ = self.forward(noisy)
+            return masks[0]
 
     def forward(self, noisy):
         """

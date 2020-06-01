@@ -11,7 +11,7 @@ import torch as th
 from aps.eval import Computer
 from aps.utils import get_logger, io_wrapper
 from aps.utils import StrToBoolAction
-from aps.loader.am.wav import WaveReader
+from aps.loader.am import WaveReader
 
 from kaldi_python_io import ScriptReader
 

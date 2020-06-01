@@ -127,12 +127,13 @@ class DPRNN(nn.Module):
         Return:
             [Tensor, ...]: S
         """
-        if mix.dim() != 1:
-            raise RuntimeError(
-                f"DPRNN expects 1D tensor (inference), but got {mix.dim()}")
-        mix = mix[None, ...]
-        sep = self.forward(mix)
-        return [s[0] for s in sep]
+        with th.no_grad():
+            if mix.dim() != 1:
+                raise RuntimeError(
+                    f"DPRNN expects 1D tensor (inference), but got {mix.dim()}")
+            mix = mix[None, ...]
+            sep = self.forward(mix)
+            return [s[0] for s in sep]
 
     def forward(self, mix):
         """

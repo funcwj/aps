@@ -251,13 +251,14 @@ class ConvTasNet(nn.Module):
         Return:
             sep ([Tensor, ...]): S
         """
-        if mix.dim() != 1:
-            raise RuntimeError("ConvTasNet expects 1D tensor (inference), " +
-                               f"got {mix.dim()} instead")
-        # when inference, only one utt
-        mix = mix[None, ...]
-        sep = self.forward(mix)
-        return sep
+        with th.no_grad():
+            if mix.dim() != 1:
+                raise RuntimeError("ConvTasNet expects 1D tensor (inference), " +
+                                f"got {mix.dim()} instead")
+            # when inference, only one utt
+            mix = mix[None, ...]
+            sep = self.forward(mix)
+            return sep
 
     def forward(self, mix):
         """

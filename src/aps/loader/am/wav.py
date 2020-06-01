@@ -4,12 +4,13 @@
 """
 Dataloader for raw waveforms in asr tasks
 """
+import io
+import os
+
 import numpy as np
 import torch as th
 import soundfile as sf
 import torch.utils.data as dat
-
-from io import BytesIO
 
 from torch.nn.utils.rnn import pad_sequence
 from kaldi_python_io import Reader as BaseReader
@@ -88,6 +89,22 @@ def read_wav(fname,
     return samps
 
 
+def write_wav(fname, samps, sr=16000, normalize=True):
+    """
+    Write wav files, support single/multi-channel
+    """
+    samps = samps.astype("float32" if normalize else "int16")
+    # for multi-channel, accept ndarray [num_samples, num_channels]
+    if samps.ndim != 1 and samps.shape[0] < samps.shape[1]:
+        samps = np.transpose(samps)
+        samps = np.squeeze(samps)
+    # make dirs
+    fdir = os.path.dirname(fname)
+    if fdir and not os.path.exists(fdir):
+        os.makedirs(fdir)
+    sf.write(fname, samps, sr)
+
+
 class WaveReader(BaseReader):
     """
         Sequential/Random Reader for single/multiple channel wave
@@ -123,7 +140,7 @@ class WaveReader(BaseReader):
         else:
             if fname[-1] == "|":
                 shell, _ = run_command(fname[:-1], wait=True)
-                fname = BytesIO(shell)
+                fname = io.BytesIO(shell)
             sr, samps = read_wav(fname, norm=self.norm, return_sr=True)
         # if given sample rate, check it
         if sr != self.sr:
