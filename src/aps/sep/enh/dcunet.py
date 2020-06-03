@@ -204,6 +204,8 @@ class DCUNet(nn.Module):
     """
     def __init__(self, cplx=True, num_layers=16, enh_transform=None):
         super(DCUNet, self).__init__()
+        if enh_transform is None:
+            raise RuntimeError("Missing configuration for enh_transform")
         self.cplx = cplx
         self.forward_stft = enh_transform.ctx(name="forward_stft")
         self.inverse_stft = enh_transform.ctx(name="inverse_stft")
@@ -237,7 +239,7 @@ class DCUNet(nn.Module):
         with th.no_grad():
             if mix.dim() != 1:
                 raise RuntimeError("DCUNet expects 1D tensor (inference), " +
-                                f"got {mix.dim()} instead")
+                                   f"got {mix.dim()} instead")
             mix = mix[None, :]
             sep = self.forward(mix)
             return sep[0]

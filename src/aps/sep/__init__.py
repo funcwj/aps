@@ -1,6 +1,7 @@
 from .unsupervised_enh import UnsupervisedEnh
 from .enh import DCUNet
-from .bss import ConvTasNet, DPRNN, TimeDomainToyRNN, FreqDomainToyRNN
+from .bss import ConvTasNet, DPRNN
+from .toy import TimeDomainToyRNN, FreqDomainToyRNN
 
 nnet_cls = {
     "unsupervised_enh": UnsupervisedEnh,

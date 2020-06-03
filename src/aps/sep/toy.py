@@ -6,7 +6,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...asr.base.encoder import TorchEncoder
+from ..asr.base.encoder import TorchEncoder
 
 
 class FreqDomainToyRNN(TorchEncoder):
@@ -64,10 +64,14 @@ class FreqDomainToyRNN(TorchEncoder):
             masks = th.chunk(masks, self.num_spks, 1)
             # complex tensor
             spk_stft = [stft * m for m in masks]
-            return [
+            spk = [
                 self.inverse_stft((s.real, s.imag)[0], input="complex")
                 for s in spk_stft
             ]
+            if self.num_spks == 1:
+                return spk[0]
+            else:
+                return [s[0] for s in spk]
 
     def forward(self, mix):
         """
@@ -82,10 +86,12 @@ class FreqDomainToyRNN(TorchEncoder):
         # feats: N x T x F
         feats, _, _ = self.enh_transform(mix, None)
         rnn_out, _ = self.rnns(feats)
-        # N x T x 2F
+        # N x T x *F
         masks = self.oact(self.proj(rnn_out))
-        # N x 2F x T
+        # N x *F x T
         masks = masks.transpose(1, 2)
+        if self.num_spks == 1:
+            return masks
         # [N x F x T, ...]
         masks = th.chunk(masks, self.num_spks, 1)
         return masks
@@ -134,7 +140,10 @@ class TimeDomainToyRNN(TorchEncoder):
             # N x (C) x S
             mix = mix[None, ...]
             sep = self.forward(mix)
-            return [s[0] for s in sep]
+            if isinstance(sep, th.Tensor):
+                return sep[0]
+            else:
+                return [s[0] for s in sep]
 
     def forward(self, mix):
         """
@@ -161,7 +170,11 @@ class TimeDomainToyRNN(TorchEncoder):
         masks = th.chunk(masks, self.num_spks, 1)
         # complex tensor
         spk_stft = [stft * m for m in masks]
-        return [
+        spk = [
             self.inverse_stft((s.real, s.imag), input="complex")
             for s in spk_stft
         ]
+        if self.num_spks == 1:
+            return spk[0]
+        else:
+            return spk

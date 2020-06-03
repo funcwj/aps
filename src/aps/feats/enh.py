@@ -293,7 +293,7 @@ class FeatureTransform(nn.Module):
     Spectrogram - LogTransform - CmvnTransform + IpdTransform + DfTransform
     """
     def __init__(self,
-                 feats="spectrogram-log-cmvn-ipd",
+                 feats="spectrogram-log-cmvn",
                  frame_len=512,
                  frame_hop=256,
                  window="sqrthann",
@@ -308,7 +308,7 @@ class FeatureTransform(nn.Module):
                  aug_max_frame=40,
                  num_aug_bands=2,
                  num_aug_frame=2,
-                 ipd_index="1,0",
+                 ipd_index="",
                  cos_ipd=True,
                  sin_ipd=False,
                  eps=EPSILON):
@@ -318,7 +318,9 @@ class FeatureTransform(nn.Module):
             "normalized": stft_normalized,
             "round_pow_of_two": round_pow_of_two
         }
-        self.STFT = STFT(frame_len, frame_hop, **self.stft_kwargs)
+        self.forward_stft = self.ctx(name="forward_stft")
+        self.inverse_stft = self.ctx(name="inverse_stft")
+
         trans_tokens = feats.split("-") if feats else []
         transform = []
         feats_dim = 0
@@ -348,9 +350,9 @@ class FeatureTransform(nn.Module):
             else:
                 raise RuntimeError(f"Unknown token {tok} in {feats}")
         if len(transform):
-            self.spe_transform = nn.Sequential(*transform)
+            self.mag_transform = nn.Sequential(*transform)
         else:
-            self.spe_transform = None
+            self.mag_transform = None
         self.ipd_transform = feats_ipd
         if aug_prob > 0:
             self.aug_transform = SpecAugTransform(p=aug_prob,
@@ -384,21 +386,21 @@ class FeatureTransform(nn.Module):
             x_pad (Tensor): raw waveform, N x C x S or N x S
             x_len (Tensor or None): number samples in x_pad, N or None
         Return:
-            feats (Tensor): spatial+spectral features, N x T x ...
+            feats (Tensor): spatial + spectral features, N x T x ...
             cplx (ComplexTensor): STFT of reference channels, N x (C) x F x T
             f_len (Tensor or None): number frames in each batch, N or None
         """
         # N x C x F x T
-        mag, pha = self.STFT(x_pad)
+        mag, pha = self.forward_stft(x_pad)
         multi_channel = mag.dim() == 4
         mag_ref = mag[:, 0] if multi_channel else mag
 
-        # spectra transform
-        if self.spe_transform:
+        # spectral (magnitude) transform
+        if self.mag_transform:
             # N x T x F
             feats = mag_ref.transpose(-1, -2)
             # spectra features of CH0, N x T x F
-            feats = self.spe_transform(feats)
+            feats = self.mag_transform(feats)
             if self.aug_transform:
                 # spectra augmentation if needed
                 feats = self.aug_transform(feats)

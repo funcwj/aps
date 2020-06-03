@@ -8,7 +8,7 @@ task_cls = {
     "transducer": TransducerTask,
     "unsuper_enh": UnsuperEnhTask,
     "sisnr": SisnrTask,
-    "sa": SaTask
+    "spectra_appro": SaTask
 }
 
 
