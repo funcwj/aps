@@ -313,6 +313,8 @@ class FeatureTransform(nn.Module):
                  sin_ipd=False,
                  eps=EPSILON):
         super(FeatureTransform, self).__init__()
+        self.frame_len = frame_len
+        self.frame_hop = frame_hop
         self.stft_kwargs = {
             "window": window,
             "normalized": stft_normalized,
@@ -329,7 +331,7 @@ class FeatureTransform(nn.Module):
             if i == 0:
                 if tok != "spectrogram" and tok != "ipd":
                     raise RuntimeError("Now only support spectrogram features")
-                feats_dim = self.STFT.num_bins
+                feats_dim = self.forward_stft.num_bins
             elif tok == "log":
                 transform.append(LogTransform(eps=EPSILON))
             elif tok == "cmvn":
@@ -363,8 +365,6 @@ class FeatureTransform(nn.Module):
         else:
             self.aug_transform = None
         self.feats_dim = feats_dim
-        self.frame_len = frame_len
-        self.frame_hop = frame_hop
 
     def ctx(self, name="forward_stft"):
         """
@@ -427,5 +427,6 @@ class FeatureTransform(nn.Module):
                 feats = th.cat([feats, ipd], -1)
             else:
                 feats = ipd
-        f_len = self.STFT.num_frames(x_len) if x_len is not None else None
+        f_len = self.forward_stft.num_frames(
+            x_len) if x_len is not None else None
         return feats, cplx, f_len

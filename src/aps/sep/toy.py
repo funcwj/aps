@@ -36,7 +36,6 @@ class FreqDomainToyRNN(TorchEncoder):
             raise ValueError("enh_transform can not be None")
         self.enh_transform = enh_transform
         self.num_spks = num_spks
-        self.inverse_stft = enh_transform.ctx(name="inverse_stft")
 
     def infer(self, mix):
         """
@@ -65,7 +64,8 @@ class FreqDomainToyRNN(TorchEncoder):
             # complex tensor
             spk_stft = [stft * m for m in masks]
             spk = [
-                self.inverse_stft((s.real, s.imag)[0], input="complex")
+                self.enh_transform.inverse_stft((s.real, s.imag)[0],
+                                                input="complex")
                 for s in spk_stft
             ]
             if self.num_spks == 1:
@@ -124,7 +124,6 @@ class TimeDomainToyRNN(TorchEncoder):
             raise ValueError("enh_transform can not be None")
         self.enh_transform = enh_transform
         self.num_spks = num_spks
-        self.inverse_stft = enh_transform.ctx(name="inverse_stft")
 
     def infer(self, mix):
         """
@@ -171,7 +170,7 @@ class TimeDomainToyRNN(TorchEncoder):
         # complex tensor
         spk_stft = [stft * m for m in masks]
         spk = [
-            self.inverse_stft((s.real, s.imag), input="complex")
+            self.enh_transform.inverse_stft((s.real, s.imag), input="complex")
             for s in spk_stft
         ]
         if self.num_spks == 1:

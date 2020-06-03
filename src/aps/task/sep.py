@@ -231,7 +231,7 @@ class SaTask(Task):
         for s, t in enumerate(permute):
             # N x F x T
             loss_mat = self.objf(out[s] * mix_mag, ref[t], reduction="none")
-            loss_utt = th.sum(loss_mat, (1, 2))  # x N
+            loss_utt = th.sum(loss_mat.mean(-1), -1)  # x N, per-frame
             permu_loss.append(loss_utt)
         return sum(permu_loss)
 
@@ -256,7 +256,8 @@ class SaTask(Task):
             # F x T
             ref = self._ref_mag(mix_mag, mix_pha, egs["ref"])
             loss = self.objf(mask * mix_mag, ref, reduction="sum")
-            loss = loss / N
+            # per-frame loss
+            loss = loss / (N * ref.shape[-1])
         else:
             num_spks = len(mask)
             if num_spks != self.num_spks:
