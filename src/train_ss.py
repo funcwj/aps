@@ -18,7 +18,7 @@ from aps.trainer.ddp import Trainer
 from aps.loader import support_loader
 from aps.feats import support_transform
 from aps.task import support_task
-from aps.ss import support_nnet
+from aps.sep import support_nnet
 
 constrained_conf_keys = [
     "nnet", "nnet_conf", "task", "task_conf", "data_conf", "trainer_conf",

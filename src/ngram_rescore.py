@@ -6,7 +6,7 @@ import kenlm
 import codecs
 import argparse
 
-from aps.nn.lm.utils import NbestReader
+from aps.asr.lm.utils import NbestReader
 from aps.utils import get_logger, io_wrapper
 from aps.utils import StrToBoolAction
 

@@ -1,6 +1,6 @@
-# APF: ASR + Separation
+# APS: ASR + Speech Front-End
 
-My PyTorch repository for single/multi-channel speech enhancement & separation & recognition task.
+My repository for single/multi-channel speech enhancement & separation & E2E recognition task.
 
 ## Support
 

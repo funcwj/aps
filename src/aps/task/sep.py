@@ -215,7 +215,7 @@ class SaTask(Task):
         if self.truncated is None:
             return ref_mag
         # truncated
-        ref_mag = th.clamp_min(ref_mag, self.truncated * mix_mag)
+        ref_mag = th.min(ref_mag, self.truncated * mix_mag)
         if not self.phase_sensitive:
             return ref_mag
         # use phase-sensitive
