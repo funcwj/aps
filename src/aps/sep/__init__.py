@@ -1,5 +1,5 @@
 from .unsupervised_enh import UnsupervisedEnh
-from .enh import DCUNet
+from .enh import DCUNet, CRNet
 from .bss import ConvTasNet, DPRNN
 from .toy import TimeDomainToyRNN, FreqDomainToyRNN
 
@@ -7,6 +7,7 @@ nnet_cls = {
     "unsupervised_enh": UnsupervisedEnh,
     "conv_tasnet": ConvTasNet,
     "dcunet": DCUNet,
+    "crn": CRNet,
     "dprnn": DPRNN,
     "time_toy": TimeDomainToyRNN,
     "freq_toy": FreqDomainToyRNN

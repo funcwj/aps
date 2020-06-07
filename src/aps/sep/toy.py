@@ -64,7 +64,7 @@ class FreqDomainToyRNN(TorchEncoder):
             # complex tensor
             spk_stft = [stft * m for m in masks]
             spk = [
-                self.enh_transform.inverse_stft((s.real, s.imag)[0],
+                self.enh_transform.inverse_stft((s.real, s.imag),
                                                 input="complex")
                 for s in spk_stft
             ]
@@ -133,7 +133,7 @@ class TimeDomainToyRNN(TorchEncoder):
             sep [Tensor, ...]: S
         """
         with th.no_grad():
-            if mix.dim() != 2:
+            if mix.dim() not in [1, 2]:
                 raise RuntimeError("ToyRNN expects 1/2D tensor (inference), " +
                                    f"got {mix.dim()} instead")
             # N x (C) x S

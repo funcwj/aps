@@ -47,12 +47,14 @@ class Computer(object):
         if "enh_transform" in conf:
             enh_transform = support_transform("enh")(**conf["enh_transform"])
             self.accept_raw = True
-        if enh_transform:
+        if enh_transform and asr_transform:
             nnet = net_cls(enh_transform=enh_transform,
                            asr_transform=asr_transform,
                            **conf["nnet_conf"])
         elif asr_transform:
             nnet = net_cls(asr_transform=asr_transform, **conf["nnet_conf"])
+        elif enh_transform:
+            nnet = net_cls(enh_transform=enh_transform, **conf["nnet_conf"])
         else:
             nnet = net_cls(**conf["nnet_conf"])
 

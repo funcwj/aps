@@ -41,10 +41,15 @@ class Separator(Computer):
             # now only for enhancement task
             for t in range(0, N, chunk_hop):
                 pad = N - t - chunk_len
-                if pad <= 0:
+                if pad >= 0:
                     c = src[..., t:t + chunk_len]
                 else:
-                    c = th.nn.functional.pad(src[..., t:], (0, pad, 0, 0))
+                    # S or P x S
+                    if src.dim() == 1:
+                        zero = th.zeros(-pad, device=self.device)
+                    else:
+                        zero = th.zeros(src.shape[0], -pad, device=self.device)
+                    c = th.cat([src[..., t:], zero], 0)
                 s = self.nnet.infer(c)
                 if pad > 0:
                     chunks.append(s[..., :-pad])
@@ -54,9 +59,9 @@ class Separator(Computer):
             for i, c in enumerate(chunks):
                 beg = i * chunk_hop
                 if i == len(chunks) - 1:
-                    sep[beg:] = c
+                    sep[..., beg:] = c[..., :N - beg]
                 else:
-                    sep[beg:beg + chunk_hop] = c
+                    sep[..., beg:beg + chunk_len] = c
             return sep
 
 
@@ -68,7 +73,9 @@ def run(args):
     for key, mix in mix_reader:
         logger.info(f"Processing utterance {key}...")
         norm = np.max(np.abs(mix))
-        sep = separator.run(mix)
+        sep = separator.run(mix,
+                            chunk_hop=args.chunk_hop,
+                            chunk_len=args.chunk_len)
         if isinstance(sep, th.Tensor):
             sep = sep.cpu().numpy()
             sep = sep * norm / np.max(np.abs(sep))
@@ -83,7 +90,7 @@ def run(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Command to do speech separation",
+        description="Command to do blind speech separation (enhancement)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("wav_scp",
                         type=str,
