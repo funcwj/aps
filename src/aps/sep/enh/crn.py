@@ -62,6 +62,8 @@ class CRNet(nn.Module):
         if not enh_transform:
             raise RuntimeError(
                 "Need feature extractor: enh_transform can not be None")
+        if enh_transform.feats_dim != num_bins:
+            raise RuntimeError(f"Feature dimention != num_bins (num_bins)")
         num_encoders = 5
         K = [16, 32, 64, 128, 256]
         P = [0, (0, 1), 0, 0, 0]
@@ -95,11 +97,11 @@ class CRNet(nn.Module):
                                    f"got {mix.dim()} instead")
             mix = mix[None, :]
             # N x T x F
-            feats, mix_stft, _ = self.enh_transform(mix, None)
+            _, mix_stft, _ = self.enh_transform(mix, None)
             # pha: N x T x F
             pha = mix_stft.angle()
             # mag: N x T x F
-            mag = self.forward(feats[:, None])
+            mag = self.forward(mix)
             # enh: N x S
             enh = self.enh_transform.inverse_stft((mag, pha), input="polar")
             return enh[0]
@@ -121,6 +123,7 @@ class CRNet(nn.Module):
             # N x C x T x F
             inp = encoder(inp)
             encoder_out.append(inp)
+        encoder_out = encoder_out[::-1]
         # >>> rnn
         N, C, T, F = inp.shape
         # N x T x C x F
@@ -135,7 +138,8 @@ class CRNet(nn.Module):
         # <<< rnn
         for i, decoder in enumerate(self.decoders):
             # N x 2C x T x F
-            inp = th.cat([out, encoder_out[-i - 1]], 1)
+            inp = th.cat([out, encoder_out[i]], 1)
             out = decoder(inp)
-        # N x T x F
-        return out[:, 0]
+        # N x T x F => N x F x T
+        out = th.transpose(out[:, 0], 1, 2)
+        return out

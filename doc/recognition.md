@@ -72,7 +72,7 @@ We need to prepare data dependencies for training and cross-validation, e.g., to
     ...
     ```
 
-### Model Configuration
+### Training Configuration
 
 Create .yaml configurations in `conf/<dataset>`, e.g., `conf/aishell_v2/1a.yaml` and configure the following keywords:
 

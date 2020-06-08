@@ -196,13 +196,15 @@ class SaTask(Task):
                  truncated=None,
                  objf="L2",
                  permute=True,
-                 num_spks=2):
+                 num_spks=2,
+                 masking=True):
         # STFT context
         sa_ctx = nnet.enh_transform.ctx("forward_stft")
         super(SaTask, self).__init__(nnet, ctx=sa_ctx)
         self.phase_sensitive = phase_sensitive
         self.truncated = truncated
         self.permute = permute
+        self.masking = masking
         self.num_spks = num_spks
         # L2 or L1 loss
         self.objf = tf.mse_loss if objf == "L2" else tf.l1_loss
@@ -230,7 +232,9 @@ class SaTask(Task):
         # for one permutation
         for s, t in enumerate(permute):
             # N x F x T
-            loss_mat = self.objf(out[s] * mix_mag, ref[t], reduction="none")
+            loss_mat = self.objf(out[s] * mix_mag if self.masking else out[s],
+                                 ref[t],
+                                 reduction="none")
             loss_utt = th.sum(loss_mat.mean(-1), -1)  # x N, per-frame
             permu_loss.append(loss_utt)
         return sum(permu_loss)
@@ -255,7 +259,9 @@ class SaTask(Task):
         if isinstance(mask, th.Tensor):
             # F x T
             ref = self._ref_mag(mix_mag, mix_pha, egs["ref"])
-            loss = self.objf(mask * mix_mag, ref, reduction="sum")
+            loss = self.objf(mask * mix_mag if self.masking else mask,
+                             ref,
+                             reduction="sum")
             # per-frame loss
             loss = loss / (N * ref.shape[-1])
         else:
@@ -276,7 +282,9 @@ class SaTask(Task):
                 loss = th.mean(min_val) / num_spks
             else:
                 loss = [
-                    self.objf(m * mix, r, reduction="sum")
+                    self.objf(m * mix if self.masking else m,
+                              r,
+                              reduction="sum")
                     for m, mix, r in zip(mask, mix_mag, ref)
                 ]
                 loss = sum(loss) / (self.num_spks * N)

@@ -168,6 +168,11 @@ class Conv1DBlock(nn.Module):
 
 
 class ConvTasNet(nn.Module):
+    """
+    Y. Luo, N. Mesgarani. Conv-tasnet: Surpassing Ideal Time–frequency Magnitude 
+    Masking for Speech Separation[J]. IEEE/ACM transactions on audio, speech, 
+    and language processing, 2019, 27(8):1256–1266.
+    """
     def __init__(self,
                  L=20,
                  N=256,
@@ -193,8 +198,6 @@ class ConvTasNet(nn.Module):
         self.non_linear = supported_nonlinear[non_linear]
         # n x S => n x N x T, S = 4s*8000 = 32000
         self.encoder = Conv1D(1, N, L, stride=L // 2, padding=0)
-        # keep T not change
-        # T = int((xlen - L) / (L // 2)) + 1
         # before repeat blocks, always cLN
         self.ln = ChannelWiseLayerNorm(N)
         # n x N x T => n x B x T
@@ -208,11 +211,6 @@ class ConvTasNet(nn.Module):
                                            kernel_size=P,
                                            norm=norm,
                                            causal=causal)
-        # output 1x1 conv
-        # n x B x T => n x N x T
-        # NOTE: using ModuleList not python list
-        # self.conv1x1_2 = th.nn.ModuleList(
-        #     [Conv1D(B, N, 1) for _ in range(num_spks)])
         # n x B x T => n x 2N x T
         self.mask = Conv1D(B, num_spks * N, 1)
         # using ConvTrans1D: n x N x T => n x 1 x To
@@ -253,8 +251,9 @@ class ConvTasNet(nn.Module):
         """
         with th.no_grad():
             if mix.dim() != 1:
-                raise RuntimeError("ConvTasNet expects 1D tensor (inference), " +
-                                f"got {mix.dim()} instead")
+                raise RuntimeError(
+                    "ConvTasNet expects 1D tensor (inference), " +
+                    f"got {mix.dim()} instead")
             # when inference, only one utt
             mix = mix[None, ...]
             sep = self.forward(mix)
