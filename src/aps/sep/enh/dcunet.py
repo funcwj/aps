@@ -80,22 +80,30 @@ class EncoderBlock(nn.Module):
                  out_channels,
                  kernel_size,
                  stride=1,
-                 padding=0,
+                 causal=False,
                  cplx=True):
         super(EncoderBlock, self).__init__()
         conv_impl = ComplexConv2d if cplx else nn.Conv2d
+        # NOTE: time stride should be 1
+        var_kt = kernel_size[1] - 1
+        time_axis_pad = var_kt if causal else var_kt // 2
+        freq_axis_pad = (kernel_size[0] - 1) // 2
         self.conv = conv_impl(in_channels,
                               out_channels,
                               kernel_size,
                               stride=stride,
-                              padding=padding)
+                              padding=(freq_axis_pad, time_axis_pad))
         if cplx:
             self.bn = ComplexBatchNorm2d(out_channels)
         else:
             self.bn = nn.BatchNorm2d(out_channels)
+        self.causal = causal
+        self.time_axis_pad = time_axis_pad
 
     def forward(self, x):
         x = self.conv(x)
+        if self.causal:
+            x = x[..., :-self.time_axis_pad]
         x = self.bn(x)
         x = F.leaky_relu(x)
         return x
@@ -110,18 +118,20 @@ class DecoderBlock(nn.Module):
                  out_channels,
                  kernel_size,
                  stride=1,
-                 padding=0,
-                 output_padding=0,
+                 causal=False,
                  cplx=True,
                  last_layer=False):
         super(DecoderBlock, self).__init__()
         conv_impl = ComplexConvTranspose2d if cplx else nn.ConvTranspose2d
+        var_kt = kernel_size[1] - 1
+        time_axis_pad = var_kt if causal else var_kt // 2
+        freq_axis_pad = (kernel_size[0] - 1) // 2
         self.trans_conv = conv_impl(in_channels,
                                     out_channels,
                                     kernel_size,
                                     stride=stride,
-                                    padding=padding,
-                                    output_padding=output_padding)
+                                    padding=(freq_axis_pad,
+                                             var_kt - time_axis_pad))
         if last_layer:
             self.bn = None
         else:
@@ -129,9 +139,13 @@ class DecoderBlock(nn.Module):
                 self.bn = ComplexBatchNorm2d(out_channels)
             else:
                 self.bn = nn.BatchNorm2d(out_channels)
+        self.causal = causal
+        self.time_axis_pad = time_axis_pad
 
     def forward(self, x):
         x = self.trans_conv(x)
+        if self.causal:
+            x = x[..., :-self.time_axis_pad]
         if self.bn:
             x = self.bn(x)
             x = F.leaky_relu(x)
@@ -145,7 +159,7 @@ class Encoder(nn.Module):
         S: strides
         C: output channels
     """
-    def __init__(self, cplx, K, S, C, P):
+    def __init__(self, cplx, K, S, C, causal=False):
         super(Encoder, self).__init__()
         layers = [
             EncoderBlock(C[i],
@@ -153,7 +167,7 @@ class Encoder(nn.Module):
                          k,
                          stride=S[i],
                          cplx=cplx,
-                         padding=P[i]) for i, k in enumerate(K)
+                         causal=causal) for i, k in enumerate(K)
         ]
         self.layers = nn.ModuleList(layers)
         self.num_layers = len(layers)
@@ -162,6 +176,7 @@ class Encoder(nn.Module):
         enc_h = []
         for index, layer in enumerate(self.layers):
             x = layer(x)
+            # print(f"encoder-{index}: {x.shape}")
             if index + 1 != self.num_layers:
                 enc_h.append(x)
         return enc_h, x
@@ -174,7 +189,7 @@ class Decoder(nn.Module):
         S: strides
         C: output channels
     """
-    def __init__(self, cplx, K, S, C, P, O):
+    def __init__(self, cplx, K, S, C, causal=False):
         super(Decoder, self).__init__()
 
         layers = [
@@ -182,19 +197,20 @@ class Decoder(nn.Module):
                          C[i + 1],
                          k,
                          stride=S[i],
+                         causal=causal,
                          cplx=cplx,
-                         padding=P[i],
-                         output_padding=O[i],
                          last_layer=(i == len(K) - 1)) for i, k in enumerate(K)
         ]
         self.layers = nn.ModuleList(layers)
 
     def forward(self, x, enc_h):
+        # N = len(self.layers)
         for index, layer in enumerate(self.layers):
             if index == 0:
                 x = layer(x)
             else:
                 x = layer(x + enc_h[index - 1])
+            # print(f"encoder-{N - 1 - index}: {x.shape}")
         return x
 
 
@@ -202,17 +218,24 @@ class DCUNet(nn.Module):
     """
     Real or Complex UNet for Speech Enhancement
     """
-    def __init__(self, cplx=True, num_layers=16, enh_transform=None):
+    def __init__(self,
+                 cplx=True,
+                 num_layers=16,
+                 causal_conv=False,
+                 enh_transform=None):
         super(DCUNet, self).__init__()
         if enh_transform is None:
             raise RuntimeError("Missing configuration for enh_transform")
         self.cplx = cplx
         self.forward_stft = enh_transform.ctx(name="forward_stft")
         self.inverse_stft = enh_transform.ctx(name="inverse_stft")
-        K, S, C, P, O = make_unet(num_layers, cplx=cplx)
-        self.encoder = Encoder(cplx, K, S, C, P)
-        self.decoder = Decoder(cplx, K[::-1], S[::-1], C[::-1], P[::-1],
-                               O[::-1])
+        K, S, C = make_unet(num_layers, cplx=cplx)
+        self.encoder = Encoder(cplx, K, S, C, causal=causal_conv)
+        self.decoder = Decoder(cplx,
+                               K[::-1],
+                               S[::-1],
+                               C[::-1],
+                               causal=causal_conv)
 
     def sep(self, m, sr, si):
         # N x 2F x T
@@ -280,23 +303,20 @@ def make_unet(N, cplx=True):
     """
     if N == 10:
         K = [(7, 5)] * 2 + [(5, 3)] * 3
-        S = [(2, 2)] * 4 + [(2, 1)]
+        S = [(2, 1)] * 5
         C = [1, 32, 64, 64, 64, 64] if cplx else [1, 45, 90, 90, 90, 90]
-        P = [(3, 2)] * 2 + [(2, 1)] * 3
-        O = [0, (0, 1), (0, 1), 0, 0]
+        # P = [(3, 2)] * 2 + [(2, 1)] * 3
     elif N == 16:
         K = [(7, 5)] * 3 + [(5, 3)] * 5
-        S = [(2, 2), (2, 1)] * 4
+        S = [(2, 1)] * 8
         C = [1, 32, 32] + [64] * 6 if cplx else [1, 45, 45] + [90] * 6
-        P = [(3, 2)] * 3 + [(2, 1)] * 5
-        O = [0, 0, (0, 1), 0, (0, 1), 0, 0, 0]
+        # P = [(3, 2)] * 3 + [(2, 1)] * 5
     elif N == 20:
         K = [(7, 1), (1, 7)] + [(7, 5)] * 2 + [(5, 3)] * 6
-        S = [(1, 1)] * 2 + [(2, 2), (2, 1)] * 4
-        C = [1, 32, 32] + [64] * 8 + [90] if cplx else [1, 45, 45
-                                                        ] + [90] * 8 + [180]
-        P = [(3, 0), (0, 3), (3, 2), (3, 2)] + [(2, 1)] * 6
-        O = [0, 0, 0, 0, (0, 1), 0, (0, 1), 0, 0, 0]
+        S = [(1, 1)] * 2 + [(2, 1)] * 8
+        C = [1, 32, 32] + [64] * 7 + [90] if cplx else [1, 45, 45
+                                                        ] + [90] * 7 + [180]
+        # P = [(3, 0), (0, 3), (3, 2), (3, 2)] + [(2, 1)] * 6
     else:
         raise RuntimeError(f"Unsupported N = {N}")
-    return K, S, C, P, O
+    return K, S, C
