@@ -1,6 +1,6 @@
-# default conf
+# common encoder-decoder structure with enhancement front-end
 
-nnet_type: "beam_las"
+nnet: "beam_att"
 
 nnet_conf:
   asr_input_size: 640
@@ -35,6 +35,12 @@ nnet_conf:
   att_kwargs:
     att_dim: 512
 
+task: "ctc_xent"
+
+task_conf:
+  lsm_factor: 0.1
+  ctc_regularization: 0.2
+
 enh_transform:
   feats: ""
   aug_prob: 0.5
@@ -63,10 +69,8 @@ trainer_conf:
     update_interval: 3
   no_impr: 4
   no_impr_thres: 0.2
-  lsm_factor: 0.1
   clip_gradient: 5
   stop_criterion: "accu"
-  ctc_regularization: 0.2
 
 data_conf:
   fmt: "wav"  # or "kaldi"

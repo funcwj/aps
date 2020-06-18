@@ -9,7 +9,7 @@ from .lm.transformer import TorchTransformerLM
 nnet_cls = {
     "rnn_lm": TorchRNNLM,
     "transformer_lm": TorchTransformerLM,
-    "las": AttASR,
+    "att": AttASR,
     "mvdr_att": MvdrAttASR,
     "beam_att": BeamAttASR,
     "transformer": TransformerASR,

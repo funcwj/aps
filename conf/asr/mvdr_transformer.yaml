@@ -1,22 +1,6 @@
-nnet_type: mvdr_transformer
+# transformer-based encoder-decoder structure with joint-mvdr front-end
 
-data_conf:
-  fmt: wav
-  loader:
-    adapt_dur: 10
-    adapt_token_num: 150
-    channel: -1
-    max_dur: 30
-    max_token_num: 400
-    min_dur: 0.4
-  train:
-    token: data/far_simu_iso_asv2/train/token
-    utt2dur: data/far_simu_iso_asv2/train/utt2dur
-    wav_scp: data/far_simu_iso_asv2/train/wav.scp
-  valid:
-    token: data/far_simu_iso_asv2/dev/token
-    utt2dur: data/far_simu_iso_asv2/dev/utt2dur
-    wav_scp: data/far_simu_iso_asv2/dev/wav.scp
+nnet_type: mvdr_transformer
 
 enh_transform:
   feats: "spectrogram-log-cmvn-ipd"
@@ -68,14 +52,18 @@ nnet_conf:
     num_layers: 6
     feedforward_dim: 512
 
+task: "ctc_xent"
+
+task_conf:
+  lsm_factor: 0.1
+  ctc_regularization: 0.2
+
 trainer_conf:
   clip_gradient: 5
-  ctc_regularization: 0.2
   lr_scheduler_kwargs:
     factor: 0.5
     min_lr: 1.0e-08
     patience: 1
-  lsm_factor: 0.1
   no_impr: 6
   no_impr_thres: 0.2
   optimizer: adam
@@ -83,3 +71,21 @@ trainer_conf:
     lr: 0.0001
     weight_decay: 1.0e-05
   stop_criterion: accu
+
+data_conf:
+  fmt: wav
+  loader:
+    adapt_dur: 10
+    adapt_token_num: 150
+    channel: -1
+    max_dur: 30
+    max_token_num: 400
+    min_dur: 0.4
+  train:
+    token: data/far_simu_iso_asv2/train/token
+    utt2dur: data/far_simu_iso_asv2/train/utt2dur
+    wav_scp: data/far_simu_iso_asv2/train/wav.scp
+  valid:
+    token: data/far_simu_iso_asv2/dev/token
+    utt2dur: data/far_simu_iso_asv2/dev/utt2dur
+    wav_scp: data/far_simu_iso_asv2/dev/wav.scp

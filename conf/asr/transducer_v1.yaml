@@ -1,28 +1,28 @@
 # default conf
 
-nnet_type: "common_transducer"
+nnet: "transformer_transducer"
 
 nnet_conf:
   input_size: 80
-  encoder_type: "tdnn"
-  encoder_proj: 512
+  encoder_type: "transformer"
   encoder_kwargs:
-    tdnn_dim: 512
-    tdnn_layers: 3
-    tdnn_stride: "2,2,2"
-    tdnn_dilation: "1,1,2"
-    rnn_layers: 3
-    rnn_hidden: 512
-    rnn_dropout: 0.2
-    rnn_project: 512
-    rnn_layernorm: True
+    input_embed: "conv2d"
+    att_dim: 256
+    nhead: 4
+    feedforward_dim: 512
+    pos_dropout: 0.1
+    att_dropout: 0.2
+    num_layers: 6
+  decoder_type: "transformer"
   decoder_kwargs:
-    embed_size: 512
-    jot_dim: 512
-    dec_rnn: "lstm"
-    dec_layers: 3
-    dec_hidden: 512
-    dec_dropout: 0.2
+    att_dim: 256
+    nhead: 4
+    feedforward_dim: 512
+    pos_dropout: 0.1
+    att_dropout: 0.2
+    num_layers: 6
+
+task: "transducer"
 
 asr_transform:
   feats: "fbank-log-cmvn-aug"
@@ -39,15 +39,15 @@ asr_transform:
 trainer_conf:
   optimizer: "adam"
   optimizer_kwargs:
-    lr: 1.0e-3
+    lr: 1.0e-4
     weight_decay: 1.0e-5
   lr_scheduler_kwargs:
     min_lr: 1.0e-8
     patience: 1
     factor: 0.5
   no_impr: 6
-  no_impr_thres: 0.3
-  clip_gradient: 50
+  no_impr_thres: 0.002
+  clip_gradient: 10
   stop_criterion: "loss"
 
 data_conf:

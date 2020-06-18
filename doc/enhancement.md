@@ -20,15 +20,25 @@ Create .yaml configuration file under `conf/enh_egs`, e.g., `conf/enh_egs/1a.yam
 
 1. `nnet`
 
-    Now the supported SE models are defined in [src/aps/sep/enh](src/aps/sep/enh):
-    * CRN (`crn`)
-    * DCUNet (`dcunet`)
-    * FreqDomainToyRNN (`freq_toy`) & TimeDomainToyRNN (`time_toy`)
-
-2. `nnet_conf`
-
-    Parameters configuration for SE models defined in [src/aps/sep/enh](src/aps/sep/enh), e.g., `time_toy`:
+    Now the supported SE models are defined in [src/aps/sep/\_\_init\_\_.py](src/aps/sep/__init__.py):
+    ```python
+    nnet_cls = {
+        # for BSS
+        "conv_tasnet": ConvTasNet,
+        "dprnn": DPRNN,
+        # for speech enhancement
+        "dcunet": DCUNet,
+        "crn": CRNet,
+        # toy structure for both separation & enhancement
+        "time_toy": TimeDomainToyRNN,
+        "freq_toy": FreqDomainToyRNN,
+        # unsupervised training toy
+        "unsupervised_enh": UnsupervisedEnh
+    }
+    ```
+    Parameters for SE model is configured in `nnet_conf`, e.g., `time_toy`:
     ```yaml
+    nnet: "time_toy"
     # network parameter (see src/aps/sep/enh/*.py or src/aps/sep/*.py)
     nnet_conf:
       num_spks: 1
@@ -42,10 +52,24 @@ Create .yaml configuration file under `conf/enh_egs`, e.g., `conf/enh_egs/1a.yam
       output_nonlinear: "relu"
     ```
 
-3. `task` and `task_conf`
+2. `task` and `task_conf`
 
-    The `Task` classes for speech enhancement/separation are defined in [src/aps/task/sep.py](src/aps/task/sep.py). We adopt `sisnr` task here
-    to match the `time_toy` model:
+    The supported `Task` for speech enhancement/separation are listed in [src/aps/task/\_\_init\_\_.py](src/aps/task/__init__.py):
+    ```python
+    task_cls = {
+        # for LM/AM training ...
+        "lm": LmXentTask,
+        "ctc_xent": CtcXentHybridTask,
+        "transducer": TransducerTask,
+        # for unsupervised enhancement task...
+        "unsuper_enh": UnsuperEnhTask,
+        # Time domain Si-SNR loss
+        "sisnr": SisnrTask,
+        # Frequency domain L1/L2 loss
+        "spectra_appro": SaTask
+    }
+    ```
+    We adopt `sisnr` task here to match the `time_toy` model:
     ```yaml
     # task name (using si-snr as objective function)
     task: sisnr
@@ -72,7 +96,7 @@ Create .yaml configuration file under `conf/enh_egs`, e.g., `conf/enh_egs/1a.yam
       ...
     ```
 
-4. `enh_transform`
+3. `enh_transform`
 
     Parameters of the feature extraction for speech enhancement/separation tasks, defined in [src/aps/feats/enh.py](src/aps/feats/enh.py), e.g., to extract log spectrogram features for `time_toy` model
     ```yaml
@@ -85,7 +109,7 @@ Create .yaml configuration file under `conf/enh_egs`, e.g., `conf/enh_egs/1a.yam
       round_pow_of_two: true
     ```
 
-5. `data_conf`
+4. `data_conf`
 
     Training and cross-validation data configuration, e.g., for dataset in `data/enh_egs`:
     ```yaml
@@ -103,7 +127,7 @@ Create .yaml configuration file under `conf/enh_egs`, e.g., `conf/enh_egs/1a.yam
         ref_scp: "data/enh_egs/dev/clean.scp"
     ```
 
-6. `trainer_conf`
+5. `trainer_conf`
 
     Network training configuration. 
     ```yaml

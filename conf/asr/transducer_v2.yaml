@@ -1,32 +1,30 @@
 # default conf
 
-nnet_type: "las"
+nnet_type: "common_transducer"
 
 nnet_conf:
   input_size: 80
   encoder_type: "tdnn"
   encoder_proj: 512
-  encoder_kwargs: 
+  encoder_kwargs:
     tdnn_dim: 512
     tdnn_layers: 3
     tdnn_stride: "2,2,2"
     tdnn_dilation: "1,1,2"
-    rnn: "lstm"
     rnn_layers: 3
-    rnn_bidir: True
+    rnn_hidden: 512
     rnn_dropout: 0.2
-    rnn_hidden: 320
-  decoder_dim: 512
+    rnn_project: 512
+    rnn_layernorm: True
   decoder_kwargs:
+    embed_size: 512
+    jot_dim: 512
     dec_rnn: "lstm"
-    rnn_layers: 2
-    rnn_hidden: 512  # must eq decoder_dim
-    rnn_dropout: 0
-    input_feeding: True
-    vocab_embeded: True
-  att_type: "ctx"
-  att_kwargs:
-    att_dim: 512
+    dec_layers: 3
+    dec_hidden: 512
+    dec_dropout: 0.2
+
+task: "transducer"
 
 asr_transform:
   feats: "fbank-log-cmvn-aug"
@@ -49,18 +47,10 @@ trainer_conf:
     min_lr: 1.0e-8
     patience: 1
     factor: 0.5
-  ss_scheduler: "linear"
-  ss_prob: 0.2
-  ss_scheduler_kwargs:
-    epoch_beg: 10
-    epoch_end: 26
-    update_interval: 4 
   no_impr: 6
-  no_impr_thres: 0.2
-  lsm_factor: 0.1
-  clip_gradient: 5
-  ctc_regularization: 0.2
-  stop_criterion: "accu"
+  no_impr_thres: 0.3
+  clip_gradient: 50
+  stop_criterion: "loss"
 
 data_conf:
   fmt: "wav"  # or "kaldi"

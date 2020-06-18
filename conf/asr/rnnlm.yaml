@@ -1,5 +1,5 @@
 
-nnet_type: "torch_lm"
+nnet: "rnn_lm"
 
 nnet_conf:
   embed_size: 650
@@ -8,6 +8,11 @@ nnet_conf:
   rnn_hidden: 650
   rnn_dropout: 0.5
   tie_weights: true
+
+task: "lm"
+
+task_conf:
+  repackage_hidden: false
 
 trainer_conf:
   optimizer: "adam"

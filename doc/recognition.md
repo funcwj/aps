@@ -1,6 +1,6 @@
 ## ASR - Quick Start
 
-Following steps to train and evaluate the AM (using aishell_v2 as example)
+Training acoustic models.
 
 ### Data Preparation
 
@@ -76,57 +76,93 @@ We need to prepare data dependencies for training and cross-validation, e.g., to
 
 Create .yaml configurations in `conf/<dataset>`, e.g., `conf/aishell_v2/1a.yaml` and configure the following keywords:
 
-1. `nnet_type`
+1. `nnet` & `nnet_conf`
 
-    Now the supported AM are defined in [src/asr/nn/\_\_init\_\_.py](src/asr/nn/__init__.py):
+    Now the supported AM (LM) are shown in [src/aps/asr/\_\_init\_\_.py](src/aps/asr/__init__.py):
     ```python
-    nnet_templ = {
-        "las": LasASR,
-        "mvdr_las": MvdrLasASR,
-        "beam_las": BeamLasASR,
+    nnet_cls = {
+        # LM
+        "rnn_lm": TorchRNNLM,
+        "transformer_lm": TorchTransformerLM,
+        # encoder-decoder structure, using RNN as decoder
+        "att": AttASR,
+        # AttASR with joint-mvdr front-end
+        "mvdr_att": MvdrAttASR,
+        # AttASR with fixed beamformer front-end
+        "beam_att": BeamAttASR,
+        # also encoder-decoder structure, but using transformer as decoder
         "transformer": TransformerASR,
+        # TransformerASR with fixed beamformer front-end
         "beam_transformer": BeamTransformerASR,
+        # TransformerASR with joint-mvdr front-end
         "mvdr_transformer": MvdrTransformerASR,
+        # Transducer using Transformer as decoder
         "transformer_transducer": TransformerTransducerASR,
+        # Transducer using RNN as decoder
         "common_transducer": TorchTransducerASR
     }
     ```
-
-2. `nnet_conf`
-
-    Parameters definition for AM defined in [src/asr/nn/\_\_init\_\_.py](src/asr/nn/__init__.py), e.g., `las_asr`:
+    Parameters definition for AM should be configured in `nnet_conf`, e.g., using `AttASR`:
     ```yaml
+    nnet: "att"
+
     nnet_conf:
-        input_size: 80
-        # tdnn, fsmn, common, custom
-        encoder_type: "tdnn"
-        encoder_proj: 512
-        encoder_kwargs: 
-            tdnn_dim: 512
-            tdnn_layers: 3
-            tdnn_stride: "2,2,2"
-            tdnn_dilation: "1,1,2"
-            rnn: "lstm"
-            rnn_layers: 3
-            rnn_bidir: True
-            rnn_dropout: 0.2
-            rnn_hidden: 320
-        decoder_dim: 512
-        decoder_kwargs:
-            dec_rnn: "lstm"
-            rnn_layers: 2
-            rnn_hidden: 512  # must eq decoder_dim
-            rnn_dropout: 0
-            input_feeding: True
-            vocab_embeded: True
-        att_type: "ctx"
-        att_kwargs:
-            att_dim: 512
+      input_size: 80
+      # tdnn, fsmn, common, custom
+      encoder_type: "tdnn"
+      encoder_proj: 512
+      encoder_kwargs: 
+        tdnn_dim: 512
+        tdnn_layers: 3
+        tdnn_stride: "2,2,2"
+        tdnn_dilation: "1,1,2"
+        rnn: "lstm"
+        rnn_layers: 3
+        rnn_bidir: True
+        rnn_dropout: 0.2
+        rnn_hidden: 320
+      decoder_dim: 512
+      decoder_kwargs:
+        dec_rnn: "lstm"
+        rnn_layers: 2
+        rnn_hidden: 512  # must eq decoder_dim
+        rnn_dropout: 0
+        input_feeding: True
+        vocab_embeded: True
+      att_type: "ctx"
+      att_kwargs:
+        att_dim: 512
+    ```
+
+2. `task` & `task_conf`
+
+    The supported `Task` classes are shown in [src/aps/task/\_\_init\_\_.py](src/aps/task/__init__.py):
+    ```python
+    task_cls = {
+        # for LM training
+        "lm": LmXentTask,
+        # for CTC & CE joint training
+        "ctc_xent": CtcXentHybridTask,
+        # for transducer training
+        "transducer": TransducerTask,
+        # for enhancement/separation task...
+        "unsuper_enh": UnsuperEnhTask,
+        "sisnr": SisnrTask,
+        "spectra_appro": SaTask
+    }
+    ```
+    Parameters for selected `Task` should be configured in `task_conf`, e.g., using `CtcXentHybridTask` for `AttASR`:
+    ```yaml
+    task: "ctc_xent"
+
+    task_conf:
+      lsm_factor: 0.1
+      ctc_regularization: 0.2
     ```
 
 3. `asr_transform` & `enh_transform`
 
-    Parameters of the feature tranformation (extraction) for ASR or enhancement front-end, defined in [src/asr/feats/asr.py](src/asr/feats/asr.py) and [src/asr/feats/asr.py](src/asr/feats/asr.py), e.g., for ASR task, to extract log mel-fbank features with spec-augumentation:
+    Parameters of the feature tranformation (extraction) for ASR or enhancement front-end, defined in [src/aps/feats/asr.py](src/aps/feats/asr.py) and [src/aps/feats/asr.py](src/aps/feats/asr.py), e.g., for ASR task, to extract log mel-fbank features with spec-augumentation:
     ```yaml
     asr_transform:
         feats: "fbank-log-cmvn-aug"
@@ -178,7 +214,7 @@ Create .yaml configurations in `conf/<dataset>`, e.g., `conf/aishell_v2/1a.yaml`
 
 5. `trainer_conf`
 
-    Network training configurations, e.g., training `las_asr` with CTC regularization on the encoder outputs:
+    Network training configurations, e.g., training `AttASR` with linear schedule sampling strategy:
     ```yaml
     trainer_conf:
         # optimizer

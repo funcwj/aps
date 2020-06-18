@@ -1,6 +1,6 @@
 # APS: ASR + Speech Front-End
 
-My repository for single/multi-channel speech enhancement & separation & E2E recognition task.
+My repository for single/multi-channel speech enhancement & speech separation & E2E speech recognition task.
 
 ## Support
 
@@ -8,7 +8,7 @@ My repository for single/multi-channel speech enhancement & separation & E2E rec
 2. Multi-channel acoustic model (Mainly based on the neural beamforming methods)
 3. Freqency & Time domain single & multi-channel speech enhancement/separation models
 4. Distributed training (now using Pytorch's DistributedDataParallel)
-5. Kaldi features & Module-based feature extraction
+5. Kaldi features & PyTorch-based feature extraction
 
 ## Quick Start
 
