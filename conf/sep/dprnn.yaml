@@ -1,0 +1,41 @@
+task: sisnr
+
+task_conf:
+  num_spks: 2
+  permute: true
+  
+nnet: dprnn
+
+nnet_conf:
+  conv_kernels: 16
+  conv_filters: 64
+  chunk_len: 100
+  dprnn_layers: 6
+  dprnn_bi_inter: true
+  dprnn_hidden: 128
+
+trainer_conf:
+  optimizer: "adam"
+  optimizer_kwargs:
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+  lr_scheduler_kwargs:
+    min_lr: 1.0e-8
+    patience: 1
+    factor: 0.5
+  no_impr: 4
+  no_impr_thres: 0.2
+  stop_criterion: "loss"
+  clip_gradient: 5
+
+data_conf:
+  fmt: "enh"
+  loader:
+    sr: 8000
+    chunk_size: 32000
+  train:
+    mix_scp: "data/wsj0_2mix/train/mix.scp"
+    ref_scp: "data/wsj0_2mix/train/spk1.scp,data/wsj0_2mix/train/spk2.scp"
+  valid:
+    mix_scp: "data/wsj0_2mix/dev/mix.scp"
+    ref_scp: "data/wsj0_2mix/dev/spk1.scp,data/wsj0_2mix/dev/spk2.scp"
