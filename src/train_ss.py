@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-# wujian@2019
+
+# wujian@2020
 
 import yaml
 import codecs
@@ -8,18 +9,41 @@ import pprint
 import pathlib
 import argparse
 
-import numpy as np
 import torch as th
+import numpy as np
 
 from aps.utils import StrToBoolAction
 from aps.trainer.ddp import Trainer
+
 from aps.loader import support_loader
-from aps.asr import support_nnet
+from aps.feats import support_transform
 from aps.task import support_task
+from aps.sep import support_nnet
 
 constrained_conf_keys = [
-    "nnet", "nnet_conf", "task", "task_conf", "data_conf", "trainer_conf"
+    "nnet", "nnet_conf", "task", "task_conf", "data_conf", "trainer_conf",
+    "enh_transform"
 ]
+
+
+def load_conf(yaml_conf):
+    """
+    Load yaml configurations
+    """
+    # load configurations
+    with open(yaml_conf, "r") as f:
+        conf = yaml.full_load(f)
+
+    # create task_conf if None
+    if "task_conf" not in conf:
+        conf["task_conf"] = {}
+
+    for key in conf.keys():
+        if key not in constrained_conf_keys:
+            raise ValueError(f"Invalid configuration item: {key}")
+
+    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
+    return conf
 
 
 def run(args):
@@ -40,59 +64,39 @@ def run(args):
     if last_checkpoint.exists():
         resume = last_checkpoint.as_posix()
 
-    # load configurations
-    with open(args.conf, "r") as f:
-        conf = yaml.full_load(f)
-        
-    # create task_conf if None
-    if "task_conf" not in conf:
-        conf["task_conf"] = {}
-
-    # add dictionary info
-    with codecs.open(args.dict, encoding="utf-8") as f:
-        vocab = {}
-        for line in f:
-            unit, idx = line.split()
-            vocab[unit] = int(idx)
-
-    if "<sos>" not in vocab or "<eos>" not in vocab:
-        raise ValueError(f"Missing <sos>/<eos> in {args.dict}")
-    eos = vocab["<eos>"]
-    sos = vocab["<sos>"]
-    conf["nnet_conf"]["vocab_size"] = len(vocab)
-
-    for key in conf.keys():
-        if key not in constrained_conf_keys:
-            raise ValueError(f"Invalid configuration item: {key}")
-
-    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
-    # dump configurations
-    with open(checkpoint / "train.yaml", "w") as f:
-        yaml.dump(conf, f)
-
+    conf = load_conf(args.conf)
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
-                                fmt=data_conf["fmt"],
                                 train=True,
+                                fmt=data_conf["fmt"],
                                 batch_size=args.batch_size,
                                 num_workers=args.num_workers,
-                                sos=sos,
-                                eos=eos)
+                                **data_conf["loader"])
     dev_loader = support_loader(**data_conf["valid"],
                                 train=False,
                                 fmt=data_conf["fmt"],
                                 batch_size=args.batch_size,
                                 num_workers=args.num_workers,
-                                sos=sos,
-                                eos=eos)
+                                **data_conf["loader"])
 
-    nnet = support_nnet(conf["nnet"])(**conf["nnet_conf"])
+    ss_cls = support_nnet(conf["nnet"])
+    if "enh_transform" in conf:
+        enh_transform = support_transform("enh")(**conf["enh_transform"])
+        nnet = ss_cls(enh_transform=enh_transform, **conf["nnet_conf"])
+    else:
+        nnet = ss_cls(**conf["nnet_conf"])
+
+    # dump configurations
+    with open(checkpoint / "train.yaml", "w") as f:
+        yaml.dump(conf, f)
+
     task = support_task(conf["task"], nnet, **conf["task_conf"])
 
     trainer = Trainer(task,
                       device_ids=args.device_id,
                       checkpoint=args.checkpoint,
                       resume=resume,
+                      init=args.init,
                       save_interval=args.save_interval,
                       prog_interval=args.prog_interval,
                       tensorboard=args.tensorboard,
@@ -109,16 +113,12 @@ def run(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Command to start LM training, configured by yaml files",
+        description="Command for speech separation/enhancement model training",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--conf",
                         type=str,
                         required=True,
                         help="Yaml configuration file for training")
-    parser.add_argument("--dict",
-                        type=str,
-                        required=True,
-                        help="Dictionary file")
     parser.add_argument("--device-id",
                         type=int,
                         default=0,
@@ -135,6 +135,10 @@ if __name__ == "__main__":
                         type=str,
                         default="",
                         help="Exist model to resume training from")
+    parser.add_argument("--init",
+                        type=str,
+                        default="",
+                        help="Exist model to initialize model training")
     parser.add_argument("--batch-size",
                         type=int,
                         default=32,
@@ -154,7 +158,7 @@ if __name__ == "__main__":
                         help="Interval to report the progress of the training")
     parser.add_argument("--num-workers",
                         type=int,
-                        default=0,
+                        default=4,
                         help="Number of workers used in script data loader")
     parser.add_argument("--tensorboard",
                         action=StrToBoolAction,

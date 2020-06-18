@@ -6,9 +6,9 @@ import argparse
 import torch as th
 import numpy as np
 
-from asr.utils import get_logger
-from asr.eval import Computer
-from asr.loader.am.wav import WaveReader
+from aps.utils import get_logger
+from aps.eval import Computer
+from aps.loader.am import WaveReader
 
 from kaldi_python_io import ScriptReader
 from kaldi_python_io import Reader as BaseReader

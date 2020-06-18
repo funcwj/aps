@@ -8,10 +8,10 @@ import torch as th
 
 from torch.nn.utils.rnn import pad_sequence
 
-from asr.utils import get_logger, io_wrapper
-from asr.utils import StrToBoolAction
-from asr.eval import Computer
-from asr.loader.am.wav import WaveReader
+from aps.loader.am.wav import WaveReader
+from aps.utils import get_logger, io_wrapper
+from aps.utils import StrToBoolAction
+from aps.eval import Computer
 
 from kaldi_python_io import ScriptReader
 

@@ -31,7 +31,7 @@ python src/train_lm.py \
   --conf $conf \
   --dict $dict \
   --seed $seed \
-  --device-ids $gpu \
+  --device-id $gpu \
   --tensorboard $tensorboard \
   --checkpoint exp/$data/rnnlm/$exp_id \
   --batch-size $batch_size \
@@ -41,4 +41,4 @@ python src/train_lm.py \
   --save-interval $save_interval \
   > $data.train_lm.$exp_id.log 2>&1
 
-mv $data.train_lm.$exp_id.log exp/$data/rnnlm/$exp_id
+cp $data.train_lm.$exp_id.log exp/$data/rnnlm/$exp_id

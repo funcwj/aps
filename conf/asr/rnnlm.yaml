@@ -1,0 +1,36 @@
+
+nnet: "rnn_lm"
+
+nnet_conf:
+  embed_size: 650
+  rnn: "lstm"
+  rnn_layers: 3
+  rnn_hidden: 650
+  rnn_dropout: 0.5
+  tie_weights: true
+
+task: "lm"
+
+task_conf:
+  repackage_hidden: false
+
+trainer_conf:
+  optimizer: "adam"
+  optimizer_kwargs:
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+  lr_scheduler_kwargs:
+    min_lr: 1.0e-8
+    patience: 1
+    factor: 0.5
+  no_impr: 4
+  no_impr_thres: 0.2
+  clip_gradient: 10
+  stop_criterion: "accu"
+
+data_conf:
+  fmt: "utt"
+  train:
+    token: "data/aishell_v2/train/token"
+  valid:
+    token: "data/aishell_v2/dev/token"

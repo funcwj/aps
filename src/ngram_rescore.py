@@ -6,9 +6,9 @@ import kenlm
 import codecs
 import argparse
 
-from asr.nn.lm.utils import NbestReader
-from asr.utils import get_logger, io_wrapper
-from asr.utils import StrToBoolAction
+from aps.asr.lm.utils import NbestReader
+from aps.utils import get_logger, io_wrapper
+from aps.utils import StrToBoolAction
 
 logger = get_logger(__name__)
 
