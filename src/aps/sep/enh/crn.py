@@ -149,7 +149,7 @@ class CRNet(nn.Module):
             raise RuntimeError("CRNet expects 2D tensor (training), " +
                                f"got {mix.dim()} instead")
         # N x T x F
-        feats, mix_stft, _ = self.enh_transform(mix, None)
+        feats, _, _ = self.enh_transform(mix, None)
         # N x 1 x T x F
         inp = feats[:, None]
         encoder_out = []
@@ -175,8 +175,6 @@ class CRNet(nn.Module):
             inp = th.cat([out, encoder_out[i]], 1)
             out = decoder(inp)
         out = self.out_nonlinear(out)
-        if self.mode == "masking":
-            out = out * mix_stft.abs()
         # N x T x F => N x F x T
         out = th.transpose(out[:, 0], 1, 2)
         return out
