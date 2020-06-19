@@ -6,11 +6,11 @@ task_conf:
   permute: false
   truncated: 1
   phase_sensitive: true
-  masking: true
 
 nnet_conf:
   output_nonlinear: "sigmoid"
   causal_conv: true
+  mode: "masking"
 
 enh_transform:
   feats: "spectrogram-log-cmvn"

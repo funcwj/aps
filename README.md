@@ -1,14 +1,13 @@
 # APS: ASR + Speech Front-End
 
-My repository for single/multi-channel speech enhancement & speech separation & E2E speech recognition task.
+My own repository for single/multi-channel speech enhancement & speech separation & E2E speech recognition task.
 
 ## Support
 
-1. Single channel acoustic model (Transducer & Encoder-Decoder structure with RNN, Transformer, TDNN, FSMN, ...)
-2. Multi-channel acoustic model (Mainly based on the neural beamforming methods)
-3. Freqency & Time domain single & multi-channel speech enhancement/separation models
-4. Distributed training (now using Pytorch's DistributedDataParallel)
-5. Kaldi features & PyTorch-based feature extraction
+1. Single channel & Multi-channel acoustic model (Transducer & Encoder-Decoder structure with RNN, Transformer, TDNN, FSMN, ...)
+2. Freqency & Time domain single & multi-channel speech enhancement/separation model
+3. Distributed training (now using Pytorch's DistributedDataParallel)
+4. Kaldi features & PyTorch-based feature extraction
 
 ## Quick Start
 

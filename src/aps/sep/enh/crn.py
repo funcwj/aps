@@ -75,6 +75,7 @@ class CRNet(nn.Module):
     def __init__(self,
                  num_bins=161,
                  causal_conv=False,
+                 mode="masking",
                  output_nonlinear="softplus",
                  enh_transform=None):
         super(CRNet, self).__init__()
@@ -88,6 +89,8 @@ class CRNet(nn.Module):
                 "Need feature extractor: enh_transform can not be None")
         if enh_transform.feats_dim != num_bins:
             raise RuntimeError(f"Feature dimention != num_bins (num_bins)")
+        if mode not in ["masking", "mapping"]:
+            raise RuntimeError(f"Unsupported mode: {mode}")
         num_encoders = 5
         K = [16, 32, 64, 128, 256]
         P = [0, 1, 0, 0, 0]
@@ -113,6 +116,7 @@ class CRNet(nn.Module):
                             2,
                             batch_first=True,
                             bidirectional=False)
+        self.mode = mode
 
     def infer(self, mix):
         """
@@ -130,6 +134,8 @@ class CRNet(nn.Module):
             pha = mix_stft.angle()
             # mag: N x T x F
             mag = self.forward(mix)
+            if self.mode == "masking":
+                mag = mag * mix_stft.abs()
             # enh: N x S
             enh = self.enh_transform.inverse_stft((mag, pha), input="polar")
             return enh[0]
@@ -143,7 +149,7 @@ class CRNet(nn.Module):
             raise RuntimeError("CRNet expects 2D tensor (training), " +
                                f"got {mix.dim()} instead")
         # N x T x F
-        feats, _, _ = self.enh_transform(mix, None)
+        feats, mix_stft, _ = self.enh_transform(mix, None)
         # N x 1 x T x F
         inp = feats[:, None]
         encoder_out = []
@@ -169,6 +175,8 @@ class CRNet(nn.Module):
             inp = th.cat([out, encoder_out[i]], 1)
             out = decoder(inp)
         out = self.out_nonlinear(out)
+        if self.mode == "masking":
+            out = out * mix_stft.abs()
         # N x T x F => N x F x T
         out = th.transpose(out[:, 0], 1, 2)
         return out

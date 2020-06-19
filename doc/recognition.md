@@ -165,28 +165,28 @@ Create .yaml configurations in `conf/<dataset>`, e.g., `conf/aishell_v2/1a.yaml`
     Parameters of the feature tranformation (extraction) for ASR or enhancement front-end, defined in [src/aps/feats/asr.py](src/aps/feats/asr.py) and [src/aps/feats/asr.py](src/aps/feats/asr.py), e.g., for ASR task, to extract log mel-fbank features with spec-augumentation:
     ```yaml
     asr_transform:
-        feats: "fbank-log-cmvn-aug"
-        frame_len: 400
-        frame_hop: 160
-        window: "hamm"
-        round_pow_of_two: True
-        sr: 16000
-        num_mels: 80
-        norm_mean: True
-        norm_var: True
-        aug_prob: 0.5
+      feats: "fbank-log-cmvn-aug"
+      frame_len: 400
+      frame_hop: 160
+      window: "hamm"
+      round_pow_of_two: True
+      sr: 16000
+      num_mels: 80
+      norm_mean: True
+      norm_var: True
+      aug_prob: 0.5
     ```
     and STFT features with cosIPD:
     ```yaml
     enh_transform:
-        feats: "spectrogram-log-cmvn-ipd"
-        frame_len: 400
-        frame_hop: 160
-        window: "hann"
-        norm_mean: True
-        norm_var: True
-        ipd_index: "1,0;2,0;3,0"
-        cos_ipd: True
+      feats: "spectrogram-log-cmvn-ipd"
+      frame_len: 400
+      frame_hop: 160
+      window: "hann"
+      norm_mean: True
+      norm_var: True
+      ipd_index: "1,0;2,0;3,0"
+      cos_ipd: True
     ```
 
 4. `data_conf`
@@ -194,21 +194,21 @@ Create .yaml configurations in `conf/<dataset>`, e.g., `conf/aishell_v2/1a.yaml`
     Training and cross-validation data configurations, e.g., using raw waveform dataloader:
     ```yaml
     data_conf:
-        fmt: "wav"  # or "kaldi", "conf"
-        loader:
-            max_token_num: 400
-            adapt_token_num: 150
-            max_dur: 30 # (s)
-            min_dur: 0.4 # (s)
-            adapt_dur: 10 # (s)
-        train:
-            wav_scp: "data/aishell_v2/train/wav.scp"
-            utt2dur: "data/aishell_v2/train/utt2dur"
-            token: "data/aishell_v2/train/token"
-        valid:
-            wav_scp: "data/aishell_v2/dev/wav.scp"
-            utt2dur: "data/aishell_v2/dev/utt2dur"
-            token: "data/aishell_v2/dev/token"
+      fmt: "wav"  # or "kaldi", "conf"
+      loader:
+        max_token_num: 400
+        adapt_token_num: 150
+        max_dur: 30 # (s)
+        min_dur: 0.4 # (s)
+        adapt_dur: 10 # (s)
+      train:
+        wav_scp: "data/aishell_v2/train/wav.scp"
+        utt2dur: "data/aishell_v2/train/utt2dur"
+        token: "data/aishell_v2/train/token"
+      valid:
+        wav_scp: "data/aishell_v2/dev/wav.scp"
+        utt2dur: "data/aishell_v2/dev/utt2dur"
+        token: "data/aishell_v2/dev/token"
     ```
     The supported dataloader for AM training is defined in [src/asr/loader/am](src/asr/loader/am).
 
@@ -217,28 +217,26 @@ Create .yaml configurations in `conf/<dataset>`, e.g., `conf/aishell_v2/1a.yaml`
     Network training configurations, e.g., training `AttASR` with linear schedule sampling strategy:
     ```yaml
     trainer_conf:
-        # optimizer
-        optimizer: "adam"
-        optimizer_kwargs:
-            lr: 1.0e-3
-            weight_decay: 1.0e-5
-        lr_scheduler_kwargs:
-            min_lr: 1.0e-8
-            patience: 1
-            factor: 0.5
-        # scheduler sampling
-        ss_scheduler: "linear"
-        ss_scheduler_kwargs:
-            ssr: 0.3
-            epoch_beg: 10
-            epoch_end: 26
-            update_interval: 4 
-        no_impr: 6 # early stop
-        no_impr_thres: 0.2
-        lsm_factor: 0.1     # label smooth factor
-        clip_gradient: 5    # gradient clipping
-        ctc_regularization: 0.2 # CTC factor
-        stop_criterion: "accu"
+      # optimizer
+      optimizer: "adam"
+      optimizer_kwargs:
+        lr: 1.0e-3
+        weight_decay: 1.0e-5
+      lr_scheduler_kwargs:
+        min_lr: 1.0e-8
+        patience: 1
+        factor: 0.5
+      # scheduler sampling
+      ss_scheduler: "linear"
+      ss_scheduler_kwargs:
+        ssr: 0.3
+        epoch_beg: 10
+        epoch_end: 26
+        update_interval: 4 
+      no_impr: 6 # early stop
+      no_impr_thres: 0.2
+      clip_gradient: 5    # gradient clipping
+      stop_criterion: "accu"
     ```
 
 ### Training and Decoding
