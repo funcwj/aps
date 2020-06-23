@@ -186,6 +186,54 @@ class SisnrTask(Task):
         return -th.mean(snr), None
 
 
+class WaTask(Task):
+    """
+    Time domain waveform approximation loss function
+    """
+    def __init__(self, nnet, objf="L1", num_spks=2, permute=True):
+        # L2 or L1 loss
+        self.objf = tf.mse_loss if objf == "L2" else tf.l1_loss
+        self.num_spks = num_spks
+        self.permute = permute
+
+    def _perm_objf(self, permute, out, ref):
+        # for one permute
+        return sum([
+            self.objf(out[s], ref[t], reduction="none").sum(-1)
+            for s, t in enumerate(permute)
+        ]) / len(permute)
+
+    def forward(self, egs, **kwargs):
+        """
+        egs contains:
+            mix (Tensor): N x (C) x S
+            ref (Tensor or [Tensor, ...]): N x S
+        """
+        ref = egs["ref"]
+        # do separation or enhancement
+        # out: Tensor or [Tensor, ...], N x S
+        out = self.nnet(egs["mix"])
+
+        if isinstance(out, th.Tensor):
+            snr = sisnr(out, ref)
+        else:
+            num_spks = len(out)
+            if num_spks != self.num_spks:
+                raise RuntimeError(f"Got {num_spks} from nnet, " +
+                                   f"but registered {self.num_spks}")
+            if self.permute:
+                # P x N
+                sisnr_mat = th.stack([
+                    self._perm_sisnr(p, out, ref)
+                    for p in permutations(range(num_spks))
+                ])
+                snr, _ = th.max(sisnr_mat, dim=0)
+            else:
+                snr = [sisnr(o, r) for o, r in zip(out, ref)]
+                snr = sum(snr) / self.num_spks
+        return -th.mean(snr), None
+
+
 class SaTask(Task):
     """
     Frequency domain spectrum approximation (MSA or tPSA) loss function
