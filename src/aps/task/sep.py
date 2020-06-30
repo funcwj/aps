@@ -11,7 +11,7 @@ from .task import Task
 
 EPSILON = th.finfo(th.float32).eps
 
-__all__ = ["SisnrTask", "SaTask", "UnsuperEnhTask"]
+__all__ = ["SisnrTask", "SaTask", "WaTask", "UnsuperEnhTask"]
 
 
 def sisnr(x, s, eps=1e-8):
@@ -191,6 +191,7 @@ class WaTask(Task):
     Time domain waveform approximation loss function
     """
     def __init__(self, nnet, objf="L1", num_spks=2, permute=True):
+        super(WaTask, self).__init__(nnet)
         # L2 or L1 loss
         self.objf = tf.mse_loss if objf == "L2" else tf.l1_loss
         self.num_spks = num_spks
@@ -215,7 +216,7 @@ class WaTask(Task):
         out = self.nnet(egs["mix"])
 
         if isinstance(out, th.Tensor):
-            snr = sisnr(out, ref)
+            loss = self.objf(out, ref, reduction="none").sum(-1)
         else:
             num_spks = len(out)
             if num_spks != self.num_spks:
@@ -223,15 +224,18 @@ class WaTask(Task):
                                    f"but registered {self.num_spks}")
             if self.permute:
                 # P x N
-                sisnr_mat = th.stack([
-                    self._perm_sisnr(p, out, ref)
+                loss_mat = th.stack([
+                    self._perm_objf(p, out, ref)
                     for p in permutations(range(num_spks))
                 ])
-                snr, _ = th.max(sisnr_mat, dim=0)
+                loss, _ = th.max(loss_mat, dim=0)
             else:
-                snr = [sisnr(o, r) for o, r in zip(out, ref)]
-                snr = sum(snr) / self.num_spks
-        return -th.mean(snr), None
+                loss = [
+                    self.objf(o, r, reduction="none").sum(-1)
+                    for o, r in zip(out, ref)
+                ]
+                loss = sum(loss) / self.num_spks
+        return th.mean(loss), None
 
 
 class SaTask(Task):

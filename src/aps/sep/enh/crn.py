@@ -118,21 +118,27 @@ class CRNet(nn.Module):
                             bidirectional=False)
         self.mode = mode
 
+    def check_args(self, mix, training=True):
+        if not training and mix.dim() != 1:
+            raise RuntimeError("CRNet expects 1D tensor (inference), " +
+                               f"got {mix.dim()} instead")
+        if training and mix.dim() not in [2]:
+            raise RuntimeError("CRNet expects 2D tensor (training), " +
+                               f"got {mix.dim()} instead")
+
     def infer(self, mix):
         """
         Args:
             mix: (Tensor): N x S
         """
+        self.check_args(mix, training=False)
         with th.no_grad():
-            if mix.dim() != 1:
-                raise RuntimeError("CRNet expects 1D tensor (inference), " +
-                                   f"got {mix.dim()} instead")
             mix = mix[None, :]
-            # N x T x F
+            # N x F x T
             _, mix_stft, _ = self.enh_transform(mix, None)
-            # pha: N x T x F
+            # pha: N x F x T
             pha = mix_stft.angle()
-            # mag: N x T x F
+            # mag: N x F x T
             mag = self.forward(mix)
             if self.mode == "masking":
                 mag = mag * mix_stft.abs()
@@ -145,9 +151,7 @@ class CRNet(nn.Module):
         Args:
             mix (Tensor): N x S
         """
-        if mix.dim() not in [2]:
-            raise RuntimeError("CRNet expects 2D tensor (training), " +
-                               f"got {mix.dim()} instead")
+        self.check_args(mix, training=True)
         # N x T x F
         feats, _, _ = self.enh_transform(mix, None)
         # N x 1 x T x F

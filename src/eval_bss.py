@@ -51,17 +51,14 @@ class Separator(Computer):
                         zero = th.zeros(src.shape[0], -pad, device=self.device)
                     c = th.cat([src[..., t:], zero], 0)
                 s = self.nnet.infer(c)
-                if pad > 0:
-                    chunks.append(s[..., :-pad])
-                else:
-                    chunks.append(s)
-            sep = th.zeros_like(src)
+                chunks.append(s)
+            sep = th.zeros(N)
             for i, c in enumerate(chunks):
                 beg = i * chunk_hop
                 if i == len(chunks) - 1:
-                    sep[..., beg:] = c[..., :N - beg]
+                    sep[beg:] = c[:N - beg]
                 else:
-                    sep[..., beg:beg + chunk_len] = c
+                    sep[beg:beg + chunk_len] = c
             return sep
 
 

@@ -4,15 +4,17 @@ task_conf:
   num_spks: 2
   permute: true
   
-nnet: dprnn
+nnet: time_dprnn
 
 nnet_conf:
-  conv_kernels: 16
+  num_spks: 2
+  conv_kernels: 32
   conv_filters: 64
   chunk_len: 100
   dprnn_layers: 6
-  dprnn_bi_inter: true
+  dprnn_bi_inter: True
   dprnn_hidden: 128
+  non_linear: "relu"
 
 trainer_conf:
   optimizer: "adam"

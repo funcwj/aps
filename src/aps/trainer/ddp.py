@@ -341,8 +341,7 @@ class Trainer(object):
         }
         if optimizer not in supported_optimizer:
             raise ValueError(f"Unknown optimizer: {optimizer}")
-        opt = supported_optimizer[optimizer](self.task.nnet.parameters(),
-                                             **kwargs)
+        opt = supported_optimizer[optimizer](self.task.parameters(), **kwargs)
         self.reporter.log(f"Create optimizer {optimizer}: {kwargs}")
         if state is not None:
             opt.load_state_dict(state)
@@ -369,7 +368,7 @@ class Trainer(object):
             # clip gradient after backward
             norm = -1
             if self.clip_gradient:
-                norm = clip_grad_norm_(self.task.nnet.parameters(),
+                norm = clip_grad_norm_(self.task.parameters(),
                                        self.clip_gradient)
 
             loss = loss.item()
@@ -377,7 +376,7 @@ class Trainer(object):
                 self.optimizer.step()
 
                 if self.gaussian_noise_std:
-                    add_gaussian_noise(self.task.nnet,
+                    add_gaussian_noise(self.task,
                                        std=self.gaussian_noise_std)
 
                 self.reporter.add("norm", norm)
@@ -508,14 +507,14 @@ class Trainer(object):
 
                 norm = -1
                 if self.clip_gradient:
-                    norm = clip_grad_norm_(self.task.nnet.parameters(),
+                    norm = clip_grad_norm_(self.task.parameters(),
                                            self.clip_gradient)
                 loss = loss.item()
                 if math.isfinite(norm) and math.isfinite(loss):
                     self.optimizer.step()
 
                     if self.gaussian_noise_std:
-                        add_gaussian_noise(self.task.nnet,
+                        add_gaussian_noise(self.task,
                                            std=self.gaussian_noise_std)
 
                     self.reporter.add("norm", norm)

@@ -1,2 +1,2 @@
-from .tasnet import ConvTasNet
-from .dprnn import DPRNN
+from .tasnet import TimeConvTasNet, FreqConvTasNet
+from .dprnn import TimeDPRNN, FreqDPRNN
