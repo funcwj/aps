@@ -11,7 +11,7 @@ from .task import Task
 
 EPSILON = th.finfo(th.float32).eps
 
-__all__ = ["SisnrTask", "SaTask", "UnsuperEnhTask"]
+__all__ = ["SisnrTask", "SaTask", "WaTask", "UnsuperEnhTask"]
 
 
 def sisnr(x, s, eps=1e-8):
@@ -184,6 +184,58 @@ class SisnrTask(Task):
                 snr = [sisnr(o, r) for o, r in zip(out, ref)]
                 snr = sum(snr) / self.num_spks
         return -th.mean(snr), None
+
+
+class WaTask(Task):
+    """
+    Time domain waveform approximation loss function
+    """
+    def __init__(self, nnet, objf="L1", num_spks=2, permute=True):
+        super(WaTask, self).__init__(nnet)
+        # L2 or L1 loss
+        self.objf = tf.mse_loss if objf == "L2" else tf.l1_loss
+        self.num_spks = num_spks
+        self.permute = permute
+
+    def _perm_objf(self, permute, out, ref):
+        # for one permute
+        return sum([
+            self.objf(out[s], ref[t], reduction="none").sum(-1)
+            for s, t in enumerate(permute)
+        ]) / len(permute)
+
+    def forward(self, egs, **kwargs):
+        """
+        egs contains:
+            mix (Tensor): N x (C) x S
+            ref (Tensor or [Tensor, ...]): N x S
+        """
+        ref = egs["ref"]
+        # do separation or enhancement
+        # out: Tensor or [Tensor, ...], N x S
+        out = self.nnet(egs["mix"])
+
+        if isinstance(out, th.Tensor):
+            loss = self.objf(out, ref, reduction="none").sum(-1)
+        else:
+            num_spks = len(out)
+            if num_spks != self.num_spks:
+                raise RuntimeError(f"Got {num_spks} from nnet, " +
+                                   f"but registered {self.num_spks}")
+            if self.permute:
+                # P x N
+                loss_mat = th.stack([
+                    self._perm_objf(p, out, ref)
+                    for p in permutations(range(num_spks))
+                ])
+                loss, _ = th.max(loss_mat, dim=0)
+            else:
+                loss = [
+                    self.objf(o, r, reduction="none").sum(-1)
+                    for o, r in zip(out, ref)
+                ]
+                loss = sum(loss) / self.num_spks
+        return th.mean(loss), None
 
 
 class SaTask(Task):

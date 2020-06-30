@@ -4,7 +4,7 @@ task_conf:
   num_spks: 2
   permute: true
   
-nnet: conv_tasnet
+nnet: time_tasnet
 
 nnet_conf:
   L: 40

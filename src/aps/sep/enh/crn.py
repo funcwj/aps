@@ -75,6 +75,7 @@ class CRNet(nn.Module):
     def __init__(self,
                  num_bins=161,
                  causal_conv=False,
+                 mode="masking",
                  output_nonlinear="softplus",
                  enh_transform=None):
         super(CRNet, self).__init__()
@@ -88,6 +89,8 @@ class CRNet(nn.Module):
                 "Need feature extractor: enh_transform can not be None")
         if enh_transform.feats_dim != num_bins:
             raise RuntimeError(f"Feature dimention != num_bins (num_bins)")
+        if mode not in ["masking", "mapping"]:
+            raise RuntimeError(f"Unsupported mode: {mode}")
         num_encoders = 5
         K = [16, 32, 64, 128, 256]
         P = [0, 1, 0, 0, 0]
@@ -113,23 +116,32 @@ class CRNet(nn.Module):
                             2,
                             batch_first=True,
                             bidirectional=False)
+        self.mode = mode
+
+    def check_args(self, mix, training=True):
+        if not training and mix.dim() != 1:
+            raise RuntimeError("CRNet expects 1D tensor (inference), " +
+                               f"got {mix.dim()} instead")
+        if training and mix.dim() not in [2]:
+            raise RuntimeError("CRNet expects 2D tensor (training), " +
+                               f"got {mix.dim()} instead")
 
     def infer(self, mix):
         """
         Args:
             mix: (Tensor): N x S
         """
+        self.check_args(mix, training=False)
         with th.no_grad():
-            if mix.dim() != 1:
-                raise RuntimeError("CRNet expects 1D tensor (inference), " +
-                                   f"got {mix.dim()} instead")
             mix = mix[None, :]
-            # N x T x F
+            # N x F x T
             _, mix_stft, _ = self.enh_transform(mix, None)
-            # pha: N x T x F
+            # pha: N x F x T
             pha = mix_stft.angle()
-            # mag: N x T x F
+            # mag: N x F x T
             mag = self.forward(mix)
+            if self.mode == "masking":
+                mag = mag * mix_stft.abs()
             # enh: N x S
             enh = self.enh_transform.inverse_stft((mag, pha), input="polar")
             return enh[0]
@@ -139,9 +151,7 @@ class CRNet(nn.Module):
         Args:
             mix (Tensor): N x S
         """
-        if mix.dim() not in [2]:
-            raise RuntimeError("CRNet expects 2D tensor (training), " +
-                               f"got {mix.dim()} instead")
+        self.check_args(mix, training=True)
         # N x T x F
         feats, _, _ = self.enh_transform(mix, None)
         # N x 1 x T x F

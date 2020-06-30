@@ -82,6 +82,18 @@ def build_norm(norm, dim):
         return GlobalChannelLayerNorm(dim, elementwise_affine=True)
 
 
+def build_blocks(N, B, **kwargs):
+    """
+    Build Conv1D blocks
+    """
+    def one_block(B, **kwargs):
+        blocks = [Conv1DBlock(**kwargs, dilation=(2**n)) for n in range(B)]
+        return nn.Sequential(*blocks)
+
+    repeats = [one_block(B, **kwargs) for _ in range(N)]
+    return nn.Sequential(*repeats)
+
+
 class Conv1D(nn.Conv1d):
     """
     1D conv in ConvTasNet
@@ -120,10 +132,44 @@ class ConvTrans1D(nn.ConvTranspose1d):
         return x
 
 
+class DsConv1D(nn.Module):
+    """
+    Depth-wise separable conv1d block
+    """
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size,
+                 dilation=1,
+                 causal=False,
+                 bias=True):
+        super(DsConv1D, self).__init__()
+        self.dconv_causal = causal
+        self.pad_value = dilation * (kernel_size - 1)
+        self.dconv = nn.Conv1d(
+            in_channels,
+            in_channels,
+            kernel_size,
+            groups=in_channels,
+            padding=self.pad_value if causal else self.pad_value // 2,
+            dilation=dilation,
+            bias=True)
+        self.prelu = nn.PReLU()
+        self.norm = nn.BatchNorm1d(in_channels)
+        self.sconv = nn.Conv1d(in_channels, out_channels, 1, bias=True)
+
+    def forward(self, x):
+        x = self.dconv(x)
+        if self.dconv_causal:
+            x = x[:, :, :-self.dconv_pad // 2]
+        x = self.norm(self.prelu(x))
+        x = self.sconv(x)
+        return x
+
+
 class Conv1DBlock(nn.Module):
     """
-    1D convolutional block:
-        Conv1x1 - PReLU - Norm - DConv - PReLU - Norm - SConv
+    1D convolutional block in TasNet
     """
     def __init__(self,
                  in_channels=256,
@@ -134,40 +180,25 @@ class Conv1DBlock(nn.Module):
                  causal=False):
         super(Conv1DBlock, self).__init__()
         # 1x1 conv
-        self.conv1x1 = Conv1D(in_channels, conv_channels, 1)
-        self.prelu1 = nn.PReLU()
-        self.lnorm1 = build_norm(norm, conv_channels)
-        dconv_pad = (dilation * (kernel_size - 1)) // 2 if not causal else (
-            dilation * (kernel_size - 1))
-        # depthwise conv
-        self.dconv = nn.Conv1d(conv_channels,
-                               conv_channels,
+        self.conv = Conv1D(in_channels, conv_channels, 1)
+        self.prelu = nn.PReLU()
+        self.norm = build_norm(norm, conv_channels)
+        self.dsconv = DsConv1D(conv_channels,
+                               in_channels,
                                kernel_size,
-                               groups=conv_channels,
-                               padding=dconv_pad,
                                dilation=dilation,
+                               causal=causal,
                                bias=True)
-        self.prelu2 = nn.PReLU()
-        self.lnorm2 = build_norm(norm, conv_channels)
-        # 1x1 conv cross channel
-        self.sconv = nn.Conv1d(conv_channels, in_channels, 1, bias=True)
-        # different padding way
-        self.causal = causal
-        self.dconv_pad = dconv_pad
 
     def forward(self, x):
-        y = self.conv1x1(x)
-        y = self.lnorm1(self.prelu1(y))
-        y = self.dconv(y)
-        if self.causal:
-            y = y[:, :, :-self.dconv_pad]
-        y = self.lnorm2(self.prelu2(y))
-        y = self.sconv(y)
+        y = self.conv(x)
+        y = self.norm(self.prelu(y))
+        y = self.dsconv(y)
         x = x + y
         return x
 
 
-class ConvTasNet(nn.Module):
+class TimeConvTasNet(nn.Module):
     """
     Y. Luo, N. Mesgarani. Conv-tasnet: Surpassing Ideal Time–frequency Magnitude 
     Masking for Speech Separation[J]. IEEE/ACM transactions on audio, speech, 
@@ -181,19 +212,19 @@ class ConvTasNet(nn.Module):
                  B=256,
                  H=512,
                  P=3,
-                 norm="cLN",
+                 norm="BN",
                  num_spks=2,
                  non_linear="relu",
                  causal=False):
-        super(ConvTasNet, self).__init__()
+        super(TimeConvTasNet, self).__init__()
         supported_nonlinear = {
             "relu": F.relu,
             "sigmoid": th.sigmoid,
             "softmax": F.softmax
         }
         if non_linear not in supported_nonlinear:
-            raise RuntimeError("Unsupported non-linear function: {}",
-                               format(non_linear))
+            raise RuntimeError(
+                f"Unsupported non-linear function: {non_linear}")
         self.non_linear_type = non_linear
         self.non_linear = supported_nonlinear[non_linear]
         # n x S => n x N x T, S = 4s*8000 = 32000
@@ -204,13 +235,13 @@ class ConvTasNet(nn.Module):
         self.proj = Conv1D(N, B, 1)
         # repeat blocks
         # n x B x T => n x B x T
-        self.repeats = self._build_repeats(R,
-                                           X,
-                                           in_channels=B,
-                                           conv_channels=H,
-                                           kernel_size=P,
-                                           norm=norm,
-                                           causal=causal)
+        self.conv = build_blocks(R,
+                                 X,
+                                 in_channels=B,
+                                 conv_channels=H,
+                                 kernel_size=P,
+                                 norm=norm,
+                                 causal=causal)
         # n x B x T => n x 2N x T
         self.mask = Conv1D(B, num_spks * N, 1)
         # using ConvTrans1D: n x N x T => n x 1 x To
@@ -222,25 +253,16 @@ class ConvTasNet(nn.Module):
                                    bias=True)
         self.num_spks = num_spks
 
-    def _build_blocks(self, num_blocks, **block_kwargs):
+    def check_args(self, mix, training=True):
         """
-        Build Conv1D block
+        Check args training | inference
         """
-        blocks = [
-            Conv1DBlock(**block_kwargs, dilation=(2**b))
-            for b in range(num_blocks)
-        ]
-        return nn.Sequential(*blocks)
-
-    def _build_repeats(self, num_repeats, num_blocks, **block_kwargs):
-        """
-        Build Conv1D block repeats
-        """
-        repeats = [
-            self._build_blocks(num_blocks, **block_kwargs)
-            for r in range(num_repeats)
-        ]
-        return nn.Sequential(*repeats)
+        if mix.dim() != 1 and not training:
+            raise RuntimeError("ConvTasNet expects 1D tensor (inference), " +
+                               f"got {mix.dim()} instead")
+        if mix.dim() != 2 and training:
+            raise RuntimeError(f"ConvTasNet expects 2D tensor (training), " +
+                               f"but got {mix.dim()}")
 
     def infer(self, mix):
         """
@@ -249,11 +271,8 @@ class ConvTasNet(nn.Module):
         Return:
             sep ([Tensor, ...]): S
         """
+        self.check_args(mix, training=False)
         with th.no_grad():
-            if mix.dim() != 1:
-                raise RuntimeError(
-                    "ConvTasNet expects 1D tensor (inference), " +
-                    f"got {mix.dim()} instead")
             # when inference, only one utt
             mix = mix[None, ...]
             sep = self.forward(mix)
@@ -266,15 +285,13 @@ class ConvTasNet(nn.Module):
         Return:
             [Tensor, ...]: N x S
         """
-        if mix.dim() != 2:
-            raise RuntimeError(
-                f"ConvTasNet expects 2D tensor as input, but got {mix.dim()}")
+        self.check_args(mix, training=True)
         # n x 1 x S => n x N x T
         w = F.relu(self.encoder(mix))
         # n x B x T
         y = self.proj(self.ln(w))
         # n x B x T
-        y = self.repeats(y)
+        y = self.conv(y)
         # n x 2N x T
         e = th.chunk(self.mask(y), self.num_spks, 1)
         # n x N x T
@@ -286,3 +303,130 @@ class ConvTasNet(nn.Module):
         s = [w * m[n] for n in range(self.num_spks)]
         # spks x n x S
         return [self.decoder(x, squeeze=True) for x in s]
+
+
+class FreqConvTasNet(nn.Module):
+    """
+    Frequency domain ConvTasNet
+    """
+    def __init__(self,
+                 enh_transform=None,
+                 in_features=257,
+                 B=6,
+                 K=3,
+                 N=3,
+                 conv_channels=512,
+                 proj_channels=256,
+                 norm="BN",
+                 num_spks=2,
+                 num_bins=257,
+                 non_linear="relu",
+                 causal=False,
+                 training_mode="freq"):
+        super(FreqConvTasNet, self).__init__()
+        supported_nonlinear = {"relu": F.relu, "sigmoid": th.sigmoid}
+        if non_linear not in supported_nonlinear:
+            raise RuntimeError(
+                f"Unsupported non-linear function: {non_linear}")
+        if enh_transform is None:
+            raise RuntimeError(
+                "FreqConvTasNet: missing configuration for enh_transform")
+        if training_mode not in ["time", "freq"]:
+            raise ValueError(f"Unsupported mode: {training_mode}")
+        self.enh_transform = enh_transform
+        self.non_linear = supported_nonlinear[non_linear]
+        self.proj = Conv1D(in_features, proj_channels, 1)
+        # n x B x T => n x B x T
+        self.conv = build_blocks(N,
+                                 B,
+                                 in_channels=proj_channels,
+                                 conv_channels=conv_channels,
+                                 kernel_size=K,
+                                 causal=causal,
+                                 norm=norm)
+        self.mask = Conv1D(proj_channels, num_bins * num_spks, 1)
+        self.num_spks = num_spks
+        self.mode = training_mode
+
+    def check_args(self, mix, training=True):
+        """
+        Check args training | inference
+        """
+        if not training and mix.dim() not in [1, 2]:
+            raise RuntimeError(
+                "FreqConvTasNet expects 1/2D tensor (inference), " +
+                f"got {mix.dim()} instead")
+
+        if training and mix.dim() not in [2, 3]:
+            raise RuntimeError(
+                f"FreqConvTasNet expects 2/3D tensor (training), " +
+                f"got {mix.dim()} instead")
+
+    def _forward(self, mix, mode):
+        """
+        Forward function in time|freq mode
+        """
+        # mix_feat: N x T x F
+        # mix_stft: N x (C) x F x T
+        mix_feat, mix_stft, _ = self.enh_transform(mix, None)
+        if mix_stft.dim() == 4:
+            # N x F x T
+            mix_stft = mix_stft[:, 0]
+        # N x F x T
+        mix_feat = th.transpose(mix_feat, 1, 2)
+        # N x C x T
+        x = self.conv(self.proj(mix_feat))
+        # N x F* x T
+        masks = self.non_linear(self.mask(x))
+        if self.num_spks > 1:
+            masks = th.chunk(masks, self.num_spks, 1)
+        # N x F x T, ...
+        if mode == "freq":
+            return masks
+        else:
+            if self.num_spks == 1:
+                enh_stft = mix_stft * masks
+                enh = self.enh_transform.inverse_stft(
+                    (enh_stft.real, enh_stft.imag), input="complex")
+            else:
+                enh_stft = [mix_stft * m for m in masks]
+                enh = [
+                    self.enh_transform.inverse_stft((s.real, s.imag),
+                                                    input="complex")
+                    for s in enh_stft
+                ]
+            return enh
+
+    def infer(self, mix, mode="time"):
+        """
+        Args:
+            mix (Tensor): N x S
+        """
+        self.check_args(mix, training=False)
+        with th.no_grad():
+            mix = mix[None, :]
+            ret = self._forward(mix, mode=mode)
+            return ret[0] if self.num_spks == 1 else [r[0] for r in ret]
+
+    def forward(self, mix):
+        """
+        Args
+            mix (Tensor): N x (C) x S
+        Return
+            m (List(Tensor)): [N x F x T, ...] or
+            s (List(Tensor)): [N x S, ...]
+        """
+        self.check_args(mix, training=True)
+        return self._forward(mix, mode=self.mode)
+
+
+def run():
+    tasnet = TimeConvTasNet(num_spks=2)
+    print(tasnet)
+    x = th.rand(2, 64000)
+    m = tasnet(x)
+    print(m[0].shape)
+
+
+if __name__ == "__main__":
+    run()
