@@ -65,10 +65,10 @@ def train_worker(rank, nnet, conf, args):
     if args.eval_interval > 0:
         trainer.run_batch_per_epoch(trn_loader,
                                     dev_loader,
-                                    num_epoches=args.epoches,
+                                    num_epochs=args.epochs,
                                     eval_interval=args.eval_interval)
     else:
-        trainer.run(trn_loader, dev_loader, num_epoches=args.epoches)
+        trainer.run(trn_loader, dev_loader, num_epochs=args.epochs)
 
 
 def load_conf(yaml_conf, dict_path):
@@ -184,10 +184,10 @@ if __name__ == "__main__":
                         type=str,
                         required=True,
                         help="Dictionary file")
-    parser.add_argument("--epoches",
+    parser.add_argument("--epochs",
                         type=int,
                         default=50,
-                        help="Number of training epoches")
+                        help="Number of training epochs")
     parser.add_argument("--checkpoint",
                         type=str,
                         required=True,

@@ -214,9 +214,9 @@ class TimeDomainTask(Task):
                 loss = [self._objf(o, r) for o, r in zip(out, ref)]
                 loss = sum(loss) / self.num_spks
         if self.mode == "max":
-            return -th.mean(loss)
+            return -th.mean(loss), None
         else:
-            return th.mean(loss)
+            return th.mean(loss), None
 
 
 class SisnrTask(TimeDomainTask):
@@ -372,7 +372,7 @@ class FreqSaTask(Task):
                     for m, mix, r in zip(mask, mix_mag, ref)
                 ]
                 loss = sum(loss) / (self.num_spks * N)
-        return loss
+        return loss, None
 
 
 class SaTask(FreqSaTask):

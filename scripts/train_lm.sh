@@ -6,7 +6,7 @@ set -eu
 
 gpu=0
 seed=777
-epoches=100
+epochs=100
 tensorboard=false
 batch_size=128
 eval_interval=-1
@@ -35,7 +35,7 @@ python src/train_lm.py \
   --tensorboard $tensorboard \
   --checkpoint exp/$data/rnnlm/$exp_id \
   --batch-size $batch_size \
-  --epoches $epoches \
+  --epochs $epochs \
   --eval-interval $eval_interval \
   --prog-interval $prog_interval \
   --save-interval $save_interval \

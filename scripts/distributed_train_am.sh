@@ -5,7 +5,7 @@
 set -eu
 
 seed=777
-epoches=100
+epochs=100
 tensorboard=false
 batch_size=64
 num_workers=8
@@ -43,7 +43,7 @@ python -m torch.distributed.launch \
   --num-process $num_process \
   --checkpoint exp/$data/$exp_id \
   --batch-size $batch_size \
-  --epoches $epoches \
+  --epochs $epochs \
   --eval-interval $eval_interval \
   > $data.train_am.$exp_id.log 2>&1
 
