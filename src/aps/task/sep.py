@@ -7,7 +7,7 @@ import torch.nn.functional as tf
 import torch_complex.functional as cf
 
 from itertools import permutations
-from .task import Task
+from .base import Task
 
 EPSILON = th.finfo(th.float32).eps
 

@@ -1,5 +1,6 @@
 from .asr import *
 from .sep import *
+from .base import Task
 
 task_cls = {
     "lm": LmXentTask,
