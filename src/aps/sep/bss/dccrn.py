@@ -124,7 +124,7 @@ class LSTMWrapper(nn.Module):
         return out.view(N, C, -1, T)
 
 
-class DCRNet(nn.Module):
+class DCCRN(nn.Module):
     """
     Deep Complex CRN
     """
@@ -140,7 +140,7 @@ class DCRNet(nn.Module):
                  rnn_resize=1536,
                  causal_conv=False,
                  enh_transform=None):
-        super(DCRNet, self).__init__()
+        super(DCCRN, self).__init__()
         if enh_transform is None:
             raise RuntimeError("Missing configuration for enh_transform")
         self.cplx = cplx

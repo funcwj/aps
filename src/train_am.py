@@ -16,7 +16,7 @@ from aps.utils import StrToBoolAction
 from aps.trainer.ddp import Trainer
 
 from aps.loader import support_loader
-from aps.feats import support_transform
+from aps.transform import support_transform
 from aps.task import support_task
 from aps.asr import support_nnet
 

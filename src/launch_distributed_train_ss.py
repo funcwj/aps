@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# wujian@2019
+# wujian@2020
 
 import yaml
 import codecs
@@ -18,28 +18,21 @@ from aps.trainer.ddp import Trainer
 from aps.loader import support_loader
 from aps.transform import support_transform
 from aps.task import support_task
-from aps.asr import support_nnet
+from aps.sep import support_nnet
 
-blank_sym = "<blank>"
 constrained_conf_keys = [
     "nnet", "nnet_conf", "task", "task_conf", "data_conf", "trainer_conf",
-    "asr_transform", "enh_transform"
+    "enh_transform"
 ]
 
 
-def train_worker(rank, nnet, conf, args):
+def train_worker(rank, task, conf, args):
     """
     Initalize training workers
     """
-    # construct trainer
-    # torch.distributed.launch will provide
-    # environment variables, and requires that you use init_method="env://".
-
-    task = support_task(conf["task"], nnet, **conf["task_conf"])
-
     trainer = Trainer(task,
                       rank=rank,
-                      device_ids=tuple(i for i in range(args.num_process)),
+                      device_ids=tuple(range(args.num_process)),
                       checkpoint=args.checkpoint,
                       resume=args.resume,
                       init=args.init,
@@ -49,29 +42,30 @@ def train_worker(rank, nnet, conf, args):
                       **conf["trainer_conf"])
 
     data_conf = conf["data_conf"]
-    trn_loader = support_loader(**data_conf["train"],
-                                train=True,
+    trn_loader = support_loader(train=True,
+                                fmt=data_conf["fmt"],
+                                batch_size=args.batch_size // args.num_process,
+                                num_workers=args.num_workers,
                                 distributed=True,
+                                **data_conf["loader"],
+                                **data_conf["train"])
+    dev_loader = support_loader(train=False,
                                 fmt=data_conf["fmt"],
                                 batch_size=args.batch_size // args.num_process,
                                 num_workers=args.num_workers,
-                                **data_conf["loader"])
-    dev_loader = support_loader(**data_conf["valid"],
-                                train=False,
-                                fmt=data_conf["fmt"],
-                                batch_size=args.batch_size // args.num_process,
-                                num_workers=args.num_workers,
-                                **data_conf["loader"])
-    if args.eval_interval > 0:
-        trainer.run_batch_per_epoch(trn_loader,
-                                    dev_loader,
-                                    num_epochs=args.epochs,
-                                    eval_interval=args.eval_interval)
-    else:
-        trainer.run(trn_loader, dev_loader, num_epochs=args.epochs)
+                                distributed=False,
+                                **data_conf["loader"],
+                                **data_conf["valid"])
+    if args.eval_interval <= 0:
+        raise RuntimeError(
+            "For distributed training, --eval-interval must be larger than 0")
+    trainer.run_batch_per_epoch(trn_loader,
+                                dev_loader,
+                                num_epochs=args.epochs,
+                                eval_interval=args.eval_interval)
 
 
-def load_conf(yaml_conf, dict_path):
+def load_conf(yaml_conf):
     """
     Load yaml configurations
     """
@@ -79,38 +73,15 @@ def load_conf(yaml_conf, dict_path):
     with open(yaml_conf, "r") as f:
         conf = yaml.full_load(f)
 
-    nnet_conf = conf["nnet_conf"]
-    # add dictionary info
-    with codecs.open(dict_path, encoding="utf-8") as f:
-        vocab = {}
-        for line in f:
-            unit, idx = line.split()
-            vocab[unit] = int(idx)
-
-    nnet_conf["vocab_size"] = len(vocab)
+    # create task_conf if None
+    if "task_conf" not in conf:
+        conf["task_conf"] = {}
 
     for key in conf.keys():
         if key not in constrained_conf_keys:
             raise ValueError(f"Invalid configuration item: {key}")
-    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
 
-    trainer_conf = conf["trainer_conf"]
-    use_ctc = "ctc_regularization" in trainer_conf and trainer_conf[
-        "ctc_regularization"] > 0
-    is_transducer = conf["task"] == "transducer"
-    if not is_transducer:
-        nnet_conf["sos"] = vocab["<sos>"]
-        nnet_conf["eos"] = vocab["<eos>"]
-    # for CTC/RNNT
-    if use_ctc or is_transducer:
-        if blank_sym not in vocab:
-            raise RuntimeError(
-                f"Missing {blank_sym} in dictionary for CTC/RNNT training")
-        conf["task_conf"]["blank"] = vocab[blank_sym]
-        if is_transducer:
-            nnet_conf["blank"] = vocab[blank_sym]
-        else:
-            nnet_conf["ctc"] = use_ctc
+    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
     return conf
 
 
@@ -120,9 +91,6 @@ def run(args):
     np.random.seed(args.seed)
     th.random.manual_seed(args.seed)
 
-    if th.cuda.device_count() < args.num_process:
-        raise RuntimeError("--num-process exceeds number of the GPUs")
-
     # new logger instance
     print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
           flush=True)
@@ -131,39 +99,30 @@ def run(args):
     checkpoint.mkdir(exist_ok=True, parents=True)
     # if exist, resume training
     last_checkpoint = checkpoint / "last.pt.tar"
-    resume = args.resume
     if last_checkpoint.exists():
         args.resume = last_checkpoint.as_posix()
 
-    conf = load_conf(args.conf, args.dict)
-    asr_cls = support_nnet(conf["nnet"])
-    asr_transform = None
-    enh_transform = None
-    if "asr_transform" in conf:
-        asr_transform = support_transform("asr")(**conf["asr_transform"])
-    if "enh_transform" in conf:
-        enh_transform = support_transform("enh")(**conf["enh_transform"])
+    conf = load_conf(args.conf)
 
     # dump configurations
     with open(checkpoint / "train.yaml", "w") as f:
         yaml.dump(conf, f)
 
-    if enh_transform:
-        nnet = asr_cls(enh_transform=enh_transform,
-                       asr_transform=asr_transform,
-                       **conf["nnet_conf"])
-    elif asr_transform:
-        nnet = asr_cls(asr_transform=asr_transform, **conf["nnet_conf"])
+    ss_cls = support_nnet(conf["nnet"])
+    # with or without enh_tranform
+    if "enh_transform" in conf:
+        enh_transform = support_transform("enh")(**conf["enh_transform"])
+        nnet = ss_cls(enh_transform=enh_transform, **conf["nnet_conf"])
     else:
-        nnet = asr_cls(**conf["nnet_conf"])
+        nnet = ss_cls(**conf["nnet_conf"])
 
-    train_worker(args.local_rank, nnet, conf, args)
+    task = support_task(conf["task"], nnet, **conf["task_conf"])
+    train_worker(args.local_rank, task, conf, args)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description=
-        "Command to start ASR model training, configured by yaml files "
+        description="Command for speech separation/enhancement model training "
         "(support distributed mode on single node). "
         "Using python -m torch.distributed.launch to launch the command.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -180,10 +139,6 @@ if __name__ == "__main__":
                         type=str,
                         required=True,
                         help="Yaml configuration file for training")
-    parser.add_argument("--dict",
-                        type=str,
-                        required=True,
-                        help="Dictionary file")
     parser.add_argument("--epochs",
                         type=int,
                         default=50,
@@ -203,12 +158,13 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size",
                         type=int,
                         default=32,
-                        help="Number of utterances in each batch")
+                        help="Total batch-size, each process "
+                        "gets batch-size/num-process")
     parser.add_argument("--eval-interval",
                         type=int,
-                        default=-1,
+                        default=4000,
                         help="Number of batches trained per epoch "
-                        "(for larger training dataset)")
+                        "(for larger training dataset & distributed training)")
     parser.add_argument("--save-interval",
                         type=int,
                         default=-1,
@@ -220,7 +176,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-workers",
                         type=int,
                         default=4,
-                        help="Number of workers used in script data loader")
+                        help="Number of workers used in dataloader")
     parser.add_argument("--tensorboard",
                         action=StrToBoolAction,
                         default="false",

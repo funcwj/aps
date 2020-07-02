@@ -1,7 +1,6 @@
 # wujian@2019
 
 import math
-import time
 
 import torch as th
 import torch.distributed as dist
@@ -12,18 +11,16 @@ from pathlib import Path
 from collections import defaultdict
 
 from torch.nn.utils import clip_grad_norm_
-from torch.nn.parallel import DistributedDataParallel, DataParallel
+from torch.nn.parallel import DistributedDataParallel
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
 
+from .scheduler import support_ss_scheduler
+from .scheduler import NoamOpt
+
 from ..utils import load_obj, get_device_ids, get_logger
+from ..utils import SimpleTimer
 from ..task import Task
-"""
-Trainer to support:
-    1) distributed data parallel (now for multi-process, each with single-GPU)
-    2) data parallel (one process with multi-GPU only in forward)
-    3) single-GPU
-"""
 
 
 def add_gaussian_noise(nnet, std=0.075):
@@ -33,20 +30,6 @@ def add_gaussian_noise(nnet, std=0.075):
     for p in nnet.parameters():
         if p.requires_grad:
             p.data += th.randn(p.data.shape, device=nnet.device) * std
-
-
-class SimpleTimer(object):
-    """
-    A simple timer
-    """
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.start = time.time()
-
-    def elapsed(self):
-        return (time.time() - self.start) / 60
 
 
 class ProgressReporter(object):
@@ -169,7 +152,7 @@ class StopCriterion(object):
 
 class Trainer(object):
     """
-    A PyTorch trainer for (distributed) data-parallel
+    A PyTorch distributed trainer
     """
     def __init__(self,
                  task,
@@ -180,6 +163,8 @@ class Trainer(object):
                  optimizer="adam",
                  optimizer_kwargs=None,
                  lr_scheduler_kwargs=None,
+                 ss_scheduler="const",
+                 ss_scheduler_kwargs=None,
                  clip_gradient=None,
                  gaussian_noise_std=None,
                  prog_interval=100,
@@ -199,11 +184,9 @@ class Trainer(object):
         self.device_ids = device_ids
 
         if rank is None:
-            # single GPU or data-parallel
-            self.mode = "parallel" if self.cuda_devices > 1 else "single"
+            # single GPU
             self.default_device = th.device(f"cuda:{device_ids[0]:d}")
         else:
-            self.mode = "distributed"
             # in distributed mode
             if rank >= self.cuda_devices:
                 raise ValueError("rank value exceeds number of GPUs: " +
@@ -230,6 +213,7 @@ class Trainer(object):
         self.gaussian_noise_std = gaussian_noise_std
         self.cur_epoch = 0  # zero based
         self.save_interval = save_interval
+        self.ssr = 0
         self.no_impr = no_impr
 
         mode = "max" if stop_criterion == "accu" else "min"
@@ -262,24 +246,34 @@ class Trainer(object):
             self.task = self.setup_distributed(task, dist_url)
             self.optimizer = self.create_optimizer(optimizer, optimizer_kwargs)
 
-        # TODO: support more lr schedulers
-        self.lr_scheduler = ReduceLROnPlateau(self.optimizer,
-                                              mode=mode,
-                                              threshold_mode="abs",
-                                              threshold=no_impr_thres,
-                                              **lr_scheduler_kwargs)
+        if ss_scheduler_kwargs:
+            self.ss_scheduler = support_ss_scheduler(ss_scheduler,
+                                                     **ss_scheduler_kwargs)
+            self.reporter.log(f"Using schedule sampling: {ss_scheduler}")
+        else:
+            self.ss_scheduler = None
+
+        if optimizer == "noam":
+            self.lr_scheduler = None
+        else:
+            self.lr_scheduler = ReduceLROnPlateau(self.optimizer,
+                                                  mode=mode,
+                                                  threshold_mode="abs",
+                                                  threshold=no_impr_thres,
+                                                  **lr_scheduler_kwargs)
         self.num_params = sum(
             [param.nelement() for param in task.nnet.parameters()]) / 10.0**6
 
         # logging
         if rank is None:
-            self.reporter.log(f"Loading model to GPU:{self.device_ids}, " +
+            self.reporter.log(f"Loading model to GPU:{device_ids[0]}, " +
                               f"#param: {self.num_params:.2f}M")
         else:
             self.reporter.log(
                 f"Running process {rank} on GPU-{rank}/{self.cuda_devices}, " +
                 f"#param: {self.num_params:.2f}M")
 
+        self.reporter.log(f"Schedule sampling strategy: {ss_scheduler}")
         self.reporter.log(f"Stop criterion: {self.stop_on}")
         if clip_gradient:
             self.reporter.log(
@@ -296,7 +290,8 @@ class Trainer(object):
         th.cuda.set_device(self.default_device)
         # offload to cuda device
         nnet.to(self.default_device)
-        if self.mode == "distributed":
+        if self.cuda_devices >= 2:
+            self.distributed = True
             # do distributed
             dist.init_process_group(backend="nccl",
                                     init_method=dist_url,
@@ -306,9 +301,8 @@ class Trainer(object):
                 f"init process group, rank={self.rank}, " +
                 f"world_size={self.cuda_devices}, init_method={dist_url}")
             return DistributedDataParallel(nnet, device_ids=[self.rank])
-        elif self.mode == "parallel":
-            return DataParallel(nnet, device_ids=self.device_ids)
         else:
+            self.distributed = False
             return nnet
 
     def save_checkpoint(self, epoch, best=True):
@@ -320,8 +314,8 @@ class Trainer(object):
                 "epoch":
                 epoch,
                 "model_state_dict":
-                self.task.nnet.state_dict() if self.mode == "single" else
-                self.task.module.nnet.state_dict(),
+                self.task.module.nnet.state_dict()
+                if self.distributed else self.task.nnet.state_dict(),
                 "optim_state_dict":
                 self.optimizer.state_dict()
             }
@@ -343,12 +337,12 @@ class Trainer(object):
             "adagrad": th.optim.Adagrad,  # lr, lr_decay, weight_decay
             "adamax": th.optim.Adamax,  # lr, weight_decay
             "adamw": th.optim.AdamW,  # lr, weight_decay
+            "noam": NoamOpt
             # ...
         }
         if optimizer not in supported_optimizer:
             raise ValueError(f"Unknown optimizer: {optimizer}")
-        opt = supported_optimizer[optimizer](self.task.parameters(),
-                                             **kwargs)
+        opt = supported_optimizer[optimizer](self.task.parameters(), **kwargs)
         self.reporter.log(f"Create optimizer {optimizer}: {kwargs}")
         if state is not None:
             opt.load_state_dict(state)
@@ -365,13 +359,12 @@ class Trainer(object):
 
             self.optimizer.zero_grad()
 
-            loss = self.task(egs)
-            if self.mode == "parallel":
-                loss = loss.mean()
+            loss, stats = self.task(egs, ssr=self.ssr)
             loss.backward()
 
             # add to reporter
             self.reporter.add("loss", loss.item())
+            self.reporter.update(stats)
 
             # clip gradient after backward
             norm = -1
@@ -384,8 +377,7 @@ class Trainer(object):
                 self.optimizer.step()
 
                 if self.gaussian_noise_std:
-                    add_gaussian_noise(self.task,
-                                       std=self.gaussian_noise_std)
+                    add_gaussian_noise(self.task, std=self.gaussian_noise_std)
 
                 self.reporter.add("norm", norm)
                 self.reporter.add("rate", self.optimizer.param_groups[0]["lr"])
@@ -401,10 +393,10 @@ class Trainer(object):
             # for idx, egs in enumerate(data_loader):
             for egs in data_loader:
                 egs = load_obj(egs, self.default_device)
-                loss = self.task(egs)
-                if self.mode == "parallel":
-                    loss = loss.mean()
+                # ssr = 0, use ground truth
+                loss, stats = self.task(egs, ssr=0)
                 self.reporter.add("loss", loss.item())
+                self.reporter.update(stats)
 
     def _prep_train(self, dev_loader):
         """
@@ -418,6 +410,8 @@ class Trainer(object):
         self.eval(dev_loader)
         e = self.cur_epoch
         best_loss, best_accu, _ = self.reporter.report(e, 0)
+        if self.ss_scheduler:
+            self.ssr = self.ss_scheduler.step(e, best_accu)
         # make sure not inf
         best_value = best_loss if self.stop_on == "loss" else best_accu
         if self.lr_scheduler:
@@ -434,6 +428,9 @@ class Trainer(object):
         """
         Run on whole training set and evaluate
         """
+        self.reporter.log(
+            f"Number of batches (train/valid) = {len(trn_loader)}/{len(dev_loader)}"
+        )
         e = self._prep_train(dev_loader)
         while e < num_epochs:
             e += 1
@@ -446,6 +443,9 @@ class Trainer(object):
             # >> eval
             self.eval(dev_loader)
             cv_loss, cv_accu, sstr = self.reporter.report(e, cur_lr)
+            # schedule sampling for eval
+            if self.ss_scheduler:
+                sstr += f" | ssr = {self.ssr:.3f}"
 
             update_value = cv_loss if self.stop_on == "loss" else cv_accu
             better = self.stop_criterion.step(update_value)
@@ -462,6 +462,8 @@ class Trainer(object):
             # schedule here
             if self.lr_scheduler:
                 self.lr_scheduler.step(update_value)
+            if self.ss_scheduler:
+                self.ssr = self.ss_scheduler.step(e, cv_accu)
             # save last checkpoint
             self.save_checkpoint(e, best=False)
             # early stop
@@ -479,6 +481,8 @@ class Trainer(object):
         """
         Run on several batches and evaluate
         """
+        self.reporter.log("Number of batches (train/valid) = " +
+                          f"{len(trn_loader)}/{len(dev_loader)}")
         e = self._prep_train(dev_loader)
         stop = False
         trained_batches = 0
@@ -494,13 +498,12 @@ class Trainer(object):
                 egs = load_obj(egs, self.default_device)
                 self.optimizer.zero_grad()
 
-                loss = self.task(egs)
-                if self.mode == "parallel":
-                    loss = loss.mean()
+                loss, stats = self.task(egs, ssr=self.ssr)
                 loss.backward()
 
                 # add to reporter
                 self.reporter.add("loss", loss.item())
+                self.reporter.update(stats)
 
                 norm = -1
                 if self.clip_gradient:
@@ -528,7 +531,11 @@ class Trainer(object):
                     _, _, sstr = self.reporter.report(e, cur_lr)
                     self.reporter.log(sstr)
 
+                    self.eval(dev_loader)
                     cv_loss, cv_accu, sstr = self.reporter.report(e, cur_lr)
+                    # schedule sampling for eval
+                    if self.ss_scheduler:
+                        sstr += f" | ssr = {self.ssr:.3f}"
 
                     update_value = cv_loss if self.stop_on == "loss" else cv_accu
                     better = self.stop_criterion.step(update_value)
@@ -544,6 +551,7 @@ class Trainer(object):
                     # schedule here
                     if self.lr_scheduler:
                         self.lr_scheduler.step(update_value)
+                    self.ssr = self.ss_scheduler.step(e, cv_accu)
                     # save last checkpoint
                     self.save_checkpoint(e, best=False)
                     # reset reporter

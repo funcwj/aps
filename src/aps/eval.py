@@ -7,7 +7,7 @@ import torch as th
 
 from .asr import support_nnet as support_asr_nnet
 from .sep import support_nnet as support_sep_nnet
-from .feats import support_transform
+from .transform import support_transform
 
 
 class Computer(object):
