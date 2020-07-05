@@ -6,5 +6,7 @@ asset/
 src/test
 src/debug*
 egs/
+exp/
+checkpoint/
 
 .DS_Store

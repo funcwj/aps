@@ -13,7 +13,7 @@ import torch.nn.functional as tf
 # https://github.com/1ytic/warp-rnnt
 from warp_rnnt import rnnt_loss
 
-from .task import Task
+from .base import Task
 
 IGNORE_ID = -1  # in data loadern
 

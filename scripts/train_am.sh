@@ -6,7 +6,7 @@ set -eu
 
 gpu=0
 seed=777
-epoches=100
+epochs=100
 tensorboard=false
 batch_size=64
 num_workers=4
@@ -38,7 +38,7 @@ src/train_am.py \
   --num-workers $num_workers \
   --checkpoint exp/$data/$exp_id \
   --batch-size $batch_size \
-  --epoches $epoches \
+  --epochs $epochs \
   --device-id $gpu \
   --eval-interval $eval_interval \
   > $data.train_am.$exp_id.log 2>&1

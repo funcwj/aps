@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# wujian@2019
+# wujian@2020
 
 set -eu
 
@@ -8,10 +8,10 @@ seed=777
 port=10086
 epochs=100
 tensorboard=false
-batch_size=64
+batch_size=128
 num_workers=8
 num_process=2
-eval_interval=-1
+eval_interval=4000
 save_interval=-1
 prog_interval=100
 
@@ -23,10 +23,8 @@ echo "$0 $@"
 
 data=$1
 exp_id=$2
-dict=data/$data/dict
 conf=conf/$data/$exp_id.yaml
 
-[ ! -f $dict ] && echo "$0: missing dictionary $dict" && exit 1
 [ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
 
 export OMP_NUM_THREADS=24
@@ -35,9 +33,8 @@ python -m torch.distributed.launch \
   --nnodes=1 \
   --nproc_per_node=$num_process \
   --master_port=$port \
-  src/launch_distributed_train_am.py \
+  src/launch_distributed_train_ss.py \
   --conf $conf \
-  --dict $dict \
   --seed $seed \
   --tensorboard $tensorboard \
   --save-interval $save_interval \

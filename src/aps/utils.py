@@ -79,12 +79,17 @@ def get_device_ids(device_ids):
     """
     if not th.cuda.is_available():
         raise RuntimeError("CUDA device unavailable... exist")
-    if device_ids is None:
+    # None or 0
+    if not device_ids:
         # detect number of device available
         dev_cnt = th.cuda.device_count()
         device_ids = tuple(range(0, dev_cnt))
-    if isinstance(device_ids, int):
+    elif isinstance(device_ids, int):
         device_ids = (device_ids, )
+    elif isinstance(device_ids, str):
+        device_ids = tuple(map(int, device_ids.split(",")))
+    else:
+        raise ValueError(f"Unsupported value for device_ids: {device_ids}")
     return device_ids
 
 

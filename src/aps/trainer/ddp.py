@@ -178,7 +178,8 @@ class Trainer(object):
         if not isinstance(task, Task):
             raise TypeError(
                 f"Trainer accepts Task object, but got {type(task)}")
-        device_ids = get_device_ids(device_ids)
+        if not isinstance(device_ids, tuple):
+            device_ids = get_device_ids(device_ids)
         self.cuda_devices = len(device_ids)
         self.device_ids = device_ids
 
@@ -376,8 +377,7 @@ class Trainer(object):
                 self.optimizer.step()
 
                 if self.gaussian_noise_std:
-                    add_gaussian_noise(self.task,
-                                       std=self.gaussian_noise_std)
+                    add_gaussian_noise(self.task, std=self.gaussian_noise_std)
 
                 self.reporter.add("norm", norm)
                 self.reporter.add("rate", self.optimizer.param_groups[0]["lr"])
@@ -424,7 +424,7 @@ class Trainer(object):
         self.reporter.log(sstr)
         return e
 
-    def run(self, trn_loader, dev_loader, num_epoches=50):
+    def run(self, trn_loader, dev_loader, num_epochs=50):
         """
         Run on whole training set and evaluate
         """
@@ -432,7 +432,7 @@ class Trainer(object):
             f"Number of batches (train/valid) = {len(trn_loader)}/{len(dev_loader)}"
         )
         e = self._prep_train(dev_loader)
-        while e < num_epoches:
+        while e < num_epochs:
             e += 1
             cur_lr = self.optimizer.param_groups[0]["lr"]
             # >> train
@@ -471,12 +471,12 @@ class Trainer(object):
                 self.reporter.log("Stop training cause no impr for " +
                                   f"{self.no_impr} epochs")
                 break
-        self.reporter.log(f"Training for {e:d}/{num_epoches:d} epoches done!")
+        self.reporter.log(f"Training for {e:d}/{num_epochs:d} epochs done!")
 
     def run_batch_per_epoch(self,
                             trn_loader,
                             dev_loader,
-                            num_epoches=100,
+                            num_epochs=100,
                             eval_interval=4000):
         """
         Run on several batches and evaluate
@@ -531,6 +531,7 @@ class Trainer(object):
                     _, _, sstr = self.reporter.report(e, cur_lr)
                     self.reporter.log(sstr)
 
+                    self.eval(dev_loader)
                     cv_loss, cv_accu, sstr = self.reporter.report(e, cur_lr)
                     # schedule sampling for eval
                     if self.ss_scheduler:
@@ -550,7 +551,8 @@ class Trainer(object):
                     # schedule here
                     if self.lr_scheduler:
                         self.lr_scheduler.step(update_value)
-                    self.ssr = self.ss_scheduler.step(e, cv_accu)
+                    if self.ss_scheduler:
+                        self.ssr = self.ss_scheduler.step(e, cv_accu)
                     # save last checkpoint
                     self.save_checkpoint(e, best=False)
                     # reset reporter
@@ -561,7 +563,7 @@ class Trainer(object):
                                           f"{self.no_impr} epochs")
                         stop = True
                         break
-                    if e == num_epoches:
+                    if e == num_epochs:
                         stop = True
                         break
                     # enable train mode
@@ -570,4 +572,4 @@ class Trainer(object):
             self.reporter.log("Finished one epoch on training set")
             if stop:
                 break
-        self.reporter.log(f"Training for {e:d}/{num_epoches:d} epoches done!")
+        self.reporter.log(f"Training for {e:d}/{num_epochs:d} epochs done!")

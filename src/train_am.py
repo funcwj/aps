@@ -16,7 +16,7 @@ from aps.utils import StrToBoolAction
 from aps.trainer.ddp import Trainer
 
 from aps.loader import support_loader
-from aps.feats import support_transform
+from aps.transform import support_transform
 from aps.task import support_task
 from aps.asr import support_nnet
 
@@ -143,10 +143,10 @@ def run(args):
     if args.eval_interval > 0:
         trainer.run_batch_per_epoch(trn_loader,
                                     dev_loader,
-                                    num_epoches=args.epoches,
+                                    num_epochs=args.epochs,
                                     eval_interval=args.eval_interval)
     else:
-        trainer.run(trn_loader, dev_loader, num_epoches=args.epoches)
+        trainer.run(trn_loader, dev_loader, num_epochs=args.epochs)
 
 
 if __name__ == "__main__":
@@ -163,10 +163,10 @@ if __name__ == "__main__":
                         required=True,
                         help="Dictionary file")
     parser.add_argument("--device-id",
-                        type=int,
-                        default=0,
+                        type=str,
+                        default="0",
                         help="Training on which GPU device")
-    parser.add_argument("--epoches",
+    parser.add_argument("--epochs",
                         type=int,
                         default=50,
                         help="Number of training epoches")

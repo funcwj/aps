@@ -20,9 +20,9 @@ class ComplexConv2d(nn.Module):
     def forward(self, x):
         """
         Args:
-            x (Tensor): N x C x T x 2F
+            x (Tensor): N x C x 2F x T
         Return:
-            y (Tensor): N x C' x T' x F'
+            y (Tensor): N x C' x 2F' x T'
         """
         xr, xi = th.chunk(x, 2, -2)
         yr = self.real(xr) - self.imag(xi)
@@ -45,7 +45,7 @@ class ComplexConvTranspose2d(nn.Module):
         Args:
             x (Tensor): N x C x 2F x T
         Return:
-            y (Tensor): N x C' x F' x T'
+            y (Tensor): N x C' x 2F' x T'
         """
         xr, xi = th.chunk(x, 2, -2)
         yr = self.real(xr) - self.imag(xi)
@@ -189,11 +189,12 @@ class Decoder(nn.Module):
         S: strides
         C: output channels
     """
-    def __init__(self, cplx, K, S, C, causal=False):
+    def __init__(self, cplx, K, S, C, causal=False, connection="sum"):
         super(Decoder, self).__init__()
-
+        if connection not in ["cat", "sum"]:
+            raise ValueError(f"Unknown connection mode: {connection}")
         layers = [
-            DecoderBlock(C[i],
+            DecoderBlock(C[i] * 2 if connection == "cat" and i != 0 else C[i],
                          C[i + 1],
                          k,
                          stride=S[i],
@@ -202,6 +203,7 @@ class Decoder(nn.Module):
                          last_layer=(i == len(K) - 1)) for i, k in enumerate(K)
         ]
         self.layers = nn.ModuleList(layers)
+        self.connection = connection
 
     def forward(self, x, enc_h):
         # N = len(self.layers)
@@ -209,7 +211,11 @@ class Decoder(nn.Module):
             if index == 0:
                 x = layer(x)
             else:
-                x = layer(x + enc_h[index - 1])
+                if self.connection == "sum":
+                    inp = x + enc_h[index - 1]
+                else:
+                    inp = th.cat([x, enc_h[index - 1]], 1)
+                x = layer(inp)
             # print(f"encoder-{N - 1 - index}: {x.shape}")
         return x
 
@@ -267,7 +273,7 @@ class DCUNet(nn.Module):
         Return:
             Tensor: S
         """
-        self.check_args(s, training=False)
+        self.check_args(mix, training=False)
         with th.no_grad():
             mix = mix[None, :]
             sep = self.forward(mix)

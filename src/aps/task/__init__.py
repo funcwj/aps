@@ -1,5 +1,6 @@
 from .asr import *
 from .sep import *
+from .base import Task
 
 task_cls = {
     "lm": LmXentTask,
@@ -7,6 +8,7 @@ task_cls = {
     "transducer": TransducerTask,
     "unsuper_enh": UnsuperEnhTask,
     "sisnr": SisnrTask,
+    "snr": SnrTask,
     "waveform_appro": WaTask,
     "spectra_appro": SaTask
 }

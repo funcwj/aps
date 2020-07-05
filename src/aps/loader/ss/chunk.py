@@ -25,6 +25,7 @@ def DataLoader(train=True,
                emb_scp="",
                chunk_size=64000,
                batch_size=16,
+               distributed=False,
                num_workers=4):
     """
     Return a online-chunk dataloader for enhancement/separation tasks
@@ -57,7 +58,8 @@ def DataLoader(train=True,
                                train=train,
                                chunk_size=chunk_size,
                                batch_size=batch_size,
-                               num_workers=num_workers)
+                               num_workers=num_workers,
+                               distributed=distributed)
 
 
 class NumpyReader(BaseReader):
@@ -231,6 +233,7 @@ class WaveChunkDataLoader(object):
                  num_workers=4,
                  chunk_size=64000,
                  batch_size=16,
+                 distributed=False,
                  train=True):
         self.dataset = dataset
         self.train = train
@@ -238,11 +241,16 @@ class WaveChunkDataLoader(object):
         self.splitter = ChunkSplitter(chunk_size,
                                       train=train,
                                       hop=chunk_size // 2)
+        if distributed:
+            sampler = dat.DistributedSampler(dataset, shuffle=train)
+        else:
+            sampler = None
         # just return batch of egs, support multiple workers
         self.eg_loader = dat.DataLoader(self.dataset,
                                         batch_size=batch_size // 2,
                                         num_workers=num_workers,
-                                        shuffle=train,
+                                        sampler=sampler,
+                                        shuffle=(train and sampler is None),
                                         collate_fn=self._collate)
 
     def _collate(self, batch):
