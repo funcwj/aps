@@ -5,6 +5,7 @@
 set -eu
 
 seed=777
+port=10086
 epochs=100
 tensorboard=false
 batch_size=64
@@ -31,7 +32,9 @@ conf=conf/$data/$exp_id.yaml
 export OMP_NUM_THREADS=24
 
 python -m torch.distributed.launch \
+  --nnodes=1 \
   --nproc_per_node=$num_process \
+  --master_port=$port \
   src/launch_distributed_train_am.py \
   --conf $conf \
   --dict $dict \

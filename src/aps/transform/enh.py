@@ -344,11 +344,12 @@ class FeatureTransform(nn.Module):
                 feats_ipd = IpdTransform(ipd_index=ipd_index,
                                          cos=cos_ipd,
                                          sin=sin_ipd)
+                ipd_index = ipd_index.split(";")
                 base = 0 if i == 0 else 1
                 if cos_ipd and sin_ipd:
-                    feats_dim *= len(ipd_index) * (2 + base)
+                    feats_dim *= (len(ipd_index) * 2 + base)
                 else:
-                    feats_dim *= len(ipd_index) * (1 + base)
+                    feats_dim *= (len(ipd_index) + base)
             else:
                 raise RuntimeError(f"Unknown token {tok} in {feats}")
         if len(transform):

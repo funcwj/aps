@@ -551,7 +551,8 @@ class Trainer(object):
                     # schedule here
                     if self.lr_scheduler:
                         self.lr_scheduler.step(update_value)
-                    self.ssr = self.ss_scheduler.step(e, cv_accu)
+                    if self.ss_scheduler:
+                        self.ssr = self.ss_scheduler.step(e, cv_accu)
                     # save last checkpoint
                     self.save_checkpoint(e, best=False)
                     # reset reporter
