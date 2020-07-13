@@ -5,15 +5,8 @@
 import torch as th
 import torch.nn as nn
 
-from ..enh.dcunet import Encoder, Decoder
+from ..enh.dcunet import Encoder, Decoder, parse_1dstr, parse_2dstr
 
-
-def parse_1dstr(sstr):
-    return list(map(int, sstr.split(",")))
-
-
-def parse_2dstr(sstr):
-    return [parse_1dstr(tok) for tok in sstr.split(";")]
 
 
 class LSTMP(nn.Module):

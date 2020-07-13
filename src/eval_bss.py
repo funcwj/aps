@@ -9,7 +9,7 @@ import torch as th
 import numpy as np
 
 from aps.loader import WaveReader, write_wav
-from aps.utils import get_logger
+from aps.utils import get_logger, SimpleTimer
 from aps.eval import Computer
 
 logger = get_logger(__name__)
@@ -68,20 +68,21 @@ def run(args):
     mix_reader = WaveReader(args.wav_scp, sr=args.sr, channel=args.channel)
 
     for key, mix in mix_reader:
-        logger.info(f"Processing utterance {key}...")
         norm = np.max(np.abs(mix))
+        timer = SimpleTimer()
         sep = separator.run(mix,
                             chunk_hop=args.chunk_hop,
                             chunk_len=args.chunk_len)
         if isinstance(sep, th.Tensor):
             sep = sep.cpu().numpy()
-            sep = sep * norm / np.max(np.abs(sep))
-            write_wav(sep_dir / f"{key}.wav", sep, sr=args.sr)
         else:
-            sep = [s.cpu().numpy() for s in sep]
-            for i, s in enumerate(sep):
-                s = s * norm / np.max(np.abs(s))
-                write_wav(sep_dir / f"spk{i + 1}/{key}.wav", s, sr=args.sr)
+            sep = np.stack([s.cpu().numpy() for s in sep])
+        sep = sep * norm / np.max(np.abs(sep))
+        write_wav(sep_dir / f"{key}.wav", sep, sr=args.sr)
+        time_cost = timer.elapsed() * 60
+        dur = mix.shape[-1] / args.sr
+        logger.info(
+            f"Processing utterance {key} done, RTF = {time_cost / dur:.2f}")
     logger.info(f"Processed {len(mix_reader)} utterances done!")
 
 

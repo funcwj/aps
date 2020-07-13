@@ -8,6 +8,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def parse_1dstr(sstr):
+    return list(map(int, sstr.split(",")))
+
+
+def parse_2dstr(sstr):
+    return [parse_1dstr(tok) for tok in sstr.split(";")]
+
+
 class ComplexConv2d(nn.Module):
     """
     Complex 2D Convolution
@@ -227,25 +235,35 @@ class DCUNet(nn.Module):
     def __init__(self,
                  cplx=True,
                  num_layers=16,
+                 K="7,5;7,5;7,5;5,3;5,3;5,3;5,3;5,3",
+                 S="2,1;2,1;2,1;2,1;2,1;2,1;2,1;2,1",
+                 C="32,32,64,64,64,64,64,64",
+                 num_branch=1,
                  causal_conv=False,
-                 enh_transform=None):
+                 enh_transform=None,
+                 connection="sum"):
         super(DCUNet, self).__init__()
         if enh_transform is None:
             raise RuntimeError("Missing configuration for enh_transform")
         self.cplx = cplx
         self.forward_stft = enh_transform.ctx(name="forward_stft")
         self.inverse_stft = enh_transform.ctx(name="inverse_stft")
-        K, S, C = make_unet(num_layers, cplx=cplx)
-        self.encoder = Encoder(cplx, K, S, C, causal=causal_conv)
+        # K, S, C = make_unet(num_layers, cplx=cplx)
+        K = parse_2dstr(K)
+        # make sure stride size on time axis is 1
+        S = parse_2dstr(S)
+        C = parse_1dstr(C)
+        self.encoder = Encoder(cplx, K, S, [1] + C, causal=causal_conv)
         self.decoder = Decoder(cplx,
                                K[::-1],
                                S[::-1],
-                               C[::-1],
-                               causal=causal_conv)
+                               C[::-1] + [num_branch],
+                               causal=causal_conv,
+                               connection=connection)
+        self.num_branch = num_branch
 
     def sep(self, m, sr, si):
-        # N x 2F x T
-        m = m.squeeze(1)
+        # m: N x 2F x T
         if self.cplx:
             # N x F x T
             mr, mi = th.chunk(m, 2, -2)
@@ -277,7 +295,10 @@ class DCUNet(nn.Module):
         with th.no_grad():
             mix = mix[None, :]
             sep = self.forward(mix)
-            return sep[0]
+            if self.num_branch == 1:
+                return sep[0]
+            else:
+                return [s[0] for s in sep]
 
     def forward(self, s):
         """
@@ -303,7 +324,10 @@ class DCUNet(nn.Module):
         # decoder
         m = self.decoder(h, enc_h)
         # N x C x 2F x T
-        s = self.sep(m, sr, si)
+        if self.num_branch == 1:
+            s = self.sep(m[:, 0], sr, si)
+        else:
+            s = [self.sep(m[:, i], sr, si) for i in range(self.num_branch)]
         return s
 
 

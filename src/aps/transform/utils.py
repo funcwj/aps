@@ -10,7 +10,6 @@ import torch.nn.functional as tf
 import librosa.filters as filters
 
 from scipy.fftpack import dct
-from kaldi_python_io.functional import read_kaldi_mat
 
 EPSILON = th.finfo(th.float32).eps
 
@@ -97,18 +96,6 @@ def init_dct(num_ceps=13, num_mels=40):
     dct_mat = dct(np.eye(num_mels), norm="ortho")[:num_ceps]
     # num_ceps x num_mels
     return th.tensor(dct_mat, dtype=th.float32)
-
-
-def load_gcmvn_stats(cmvn_mat):
-    """
-    Compute mean/std from Kaldi's cmvn.mat
-    """
-    cmvn = read_kaldi_mat(cmvn_mat)
-    cmvn = th.tensor(cmvn, dtype=th.float32)
-    N = cmvn[0, -1]
-    mean = cmvn[0, :-1] / N
-    var = cmvn[1, :-1] / N - mean**2
-    return mean, var**0.5
 
 
 def _forward_stft(wav, kernel, output="polar", frame_hop=256, onesided=False):

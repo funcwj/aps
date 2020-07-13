@@ -16,7 +16,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .utils import STFT, EPSILON, init_melfilter, init_dct, load_gcmvn_stats
+from .utils import STFT, EPSILON, init_melfilter, init_dct
 from .spec_aug import tf_mask
 
 
@@ -194,7 +194,8 @@ class CmvnTransform(nn.Module):
         super(CmvnTransform, self).__init__()
         self.gmean, self.gstd = None, None
         if gcmvn:
-            mean, std = load_gcmvn_stats(gcmvn)
+            stats = np.load(gcmvn)
+            mean, std = stats[0], stats[1]
             self.gmean = nn.Parameter(mean, requires_grad=False)
             self.gstd = nn.Parameter(std, requires_grad=False)
         self.norm_mean = norm_mean
