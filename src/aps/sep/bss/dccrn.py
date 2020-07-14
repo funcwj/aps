@@ -4,9 +4,9 @@
 
 import torch as th
 import torch.nn as nn
+import torch.nn.functional as tf
 
 from ..enh.dcunet import Encoder, Decoder, parse_1dstr, parse_2dstr
-
 
 
 class LSTMP(nn.Module):
@@ -25,7 +25,10 @@ class LSTMP(nn.Module):
                             num_layers=num_layers,
                             bidirectional=bidirectional,
                             batch_first=batch_first)
-        self.proj = nn.Linear(hidden_size, in_features, bias=False)
+        self.proj = nn.Linear(hidden_size *
+                              2 if bidirectional else hidden_size,
+                              in_features,
+                              bias=False)
 
     def forward(self, inp):
         """
@@ -82,19 +85,24 @@ class LSTMWrapper(nn.Module):
     """
     R/C LSTM
     """
-    def __init__(self, in_features, num_layers=2, hidden_size=512, cplx=True):
+    def __init__(self,
+                 in_features,
+                 num_layers=2,
+                 hidden_size=512,
+                 cplx=True,
+                 bidirectional=False):
         super(LSTMWrapper, self).__init__()
         if cplx:
             self.lstm = ComplexLSTMP(in_features,
                                      hidden_size,
                                      num_layers=num_layers,
-                                     bidirectional=False,
+                                     bidirectional=bidirectional,
                                      batch_first=True)
         else:
             self.lstm = LSTMP(in_features,
                               hidden_size,
                               num_layers=num_layers,
-                              bidirectional=False,
+                              bidirectional=bidirectional,
                               batch_first=True)
 
     def forward(self, inp):
@@ -117,9 +125,12 @@ class LSTMWrapper(nn.Module):
         return out.view(N, C, -1, T)
 
 
+supported_nonlinear = {"relu": tf.relu, "sigmoid": th.sigmoid, "tanh": th.tanh}
+
+
 class DCCRN(nn.Module):
     """
-    Deep Complex CRN
+    Deep Complex Convolutional-RNN networks
     """
     def __init__(self,
                  cplx=True,
@@ -131,14 +142,19 @@ class DCCRN(nn.Module):
                  rnn_hidden=512,
                  rnn_layers=2,
                  rnn_resize=1536,
+                 rnn_bidir=False,
                  causal_conv=False,
-                 enh_transform=None):
+                 enh_transform=None,
+                 non_linear="tanh",
+                 training_mode="time"):
         super(DCCRN, self).__init__()
         if enh_transform is None:
             raise RuntimeError("Missing configuration for enh_transform")
+        if non_linear not in supported_nonlinear:
+            raise ValueError(f"Unsupported nonlinear: {non_linear}")
         self.cplx = cplx
-        self.forward_stft = enh_transform.ctx(name="forward_stft")
-        self.inverse_stft = enh_transform.ctx(name="inverse_stft")
+        self.non_linear = supported_nonlinear[non_linear]
+        self.enh_transform = enh_transform
         K = parse_2dstr(K)
         # make sure stride size on time axis is 1
         S = parse_2dstr(S)
@@ -155,58 +171,63 @@ class DCCRN(nn.Module):
         self.rnn = LSTMWrapper(rnn_resize // 2 if cplx else rnn_resize,
                                num_layers=rnn_layers,
                                hidden_size=rnn_hidden,
+                               bidirectional=rnn_bidir,
                                cplx=cplx)
         self.num_spks = num_spks
         self.connection = connection
+        self.mode = training_mode
 
-    def sep(self, m, sr, si):
+    def sep(self, m, sr, si, mode="freq"):
         # m: N x 2F x T
         if self.cplx:
             # N x F x T
             mr, mi = th.chunk(m, 2, -2)
             m_abs = (mr**2 + mi**2)**0.5
-            m_mag = th.tanh(m_abs)
-            mr, mi = m_mag * mr / m_abs, m_mag * mi / m_abs
-            s = self.inverse_stft((sr * mr - si * mi, sr * mi + si * mr),
-                                  input="complex")
+            m_mag = self.non_linear(m_abs)
+            if mode == "freq":
+                # s = (si**2 + sr**2)**0.5 * m_mag
+                s = m_mag
+            else:
+                mr, mi = m_mag * mr / m_abs, m_mag * mi / m_abs
+                s = self.enh_transform.inverse_stft(
+                    (sr * mr - si * mi, sr * mi + si * mr), input="complex")
         else:
-            s = self.inverse_stft((sr * m, si * m), input="complex")
+            m = self.non_linear(m)
+            if mode == "freq":
+                # s = (si**2 + sr**2)**0.5 * m
+                s = m
+            else:
+                s = self.enh_transform.inverse_stft((sr * m, si * m),
+                                                    input="complex")
         return s
 
     def check_args(self, mix, training=True):
         if not training and mix.dim() != 1:
-            raise RuntimeError("DCURN expects 1D tensor (inference), " +
+            raise RuntimeError("DCCRN expects 1D tensor (inference), " +
                                f"got {mix.dim()} instead")
         if training and mix.dim() != 2:
-            raise RuntimeError("DCURN expects 2D tensor (training), " +
+            raise RuntimeError("DCCRN expects 2D tensor (training), " +
                                f"got {mix.dim()} instead")
 
-    def infer(self, mix):
+    def infer(self, mix, mode="time"):
         """
         Args:
             mix (Tensor): S
         Return:
-            Tensor: S
+            Tensor: S or F x T
         """
         self.check_args(mix, training=False)
         with th.no_grad():
             mix = mix[None, :]
-            sep = self.forward(mix)
+            sep = self._forward(mix, mode=mode)
             if self.num_spks == 1:
                 return sep[0]
             else:
                 return [s[0] for s in sep]
 
-    def forward(self, s):
-        """
-        Args:
-            s (Tensor): N x S
-        Return:
-            Tensor: N x S
-        """
-        self.check_args(s, training=True)
+    def _forward(self, s, mode="freq"):
         # N x F x T
-        sr, si = self.forward_stft(s, output="complex")
+        sr, si = self.enh_transform.forward_stft(s, output="complex")
         if self.cplx:
             # N x 2F x T
             s = th.cat([sr, si], -2)
@@ -226,8 +247,19 @@ class DCCRN(nn.Module):
         # N x C x 2F x T
         spk_m = self.decoder(h, enc_h)
         if self.num_spks == 1:
-            return self.sep(spk_m[:, 0], sr, si)
+            return self.sep(spk_m[:, 0], sr, si, mode=mode)
         else:
             return [
-                self.sep(spk_m[:, i], sr, si) for i in range(self.num_spks)
+                self.sep(spk_m[:, i], sr, si, mode=mode)
+                for i in range(self.num_spks)
             ]
+
+    def forward(self, s):
+        """
+        Args:
+            s (Tensor): N x S
+        Return:
+            Tensor: N x S or N x F x T
+        """
+        self.check_args(s, training=True)
+        return self._forward(s, mode=self.mode)

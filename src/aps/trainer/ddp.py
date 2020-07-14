@@ -15,8 +15,9 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
 
-from .scheduler import support_ss_scheduler
-from .scheduler import NoamOpt
+from .ss import support_ss_scheduler
+from .ss import NoamOpt
+from .lr import support_lr_scheduler
 
 from ..utils import load_obj, get_device_ids, get_logger
 from ..utils import SimpleTimer
@@ -162,6 +163,7 @@ class Trainer(object):
                  checkpoint="cpt",
                  optimizer="adam",
                  optimizer_kwargs=None,
+                 lr_scheduler="reduce_lr",
                  lr_scheduler_kwargs=None,
                  ss_scheduler="const",
                  ss_scheduler_kwargs=None,
@@ -255,12 +257,19 @@ class Trainer(object):
 
         if optimizer == "noam":
             self.lr_scheduler = None
+        elif lr_scheduler == "reduce_lr":
+            self.lr_scheduler = support_lr_scheduler(lr_scheduler,
+                                                     self.optimizer,
+                                                     mode=mode,
+                                                     threshold_mode="abs",
+                                                     threshold=no_impr_thres,
+                                                     **lr_scheduler_kwargs)
         else:
-            self.lr_scheduler = ReduceLROnPlateau(self.optimizer,
-                                                  mode=mode,
-                                                  threshold_mode="abs",
-                                                  threshold=no_impr_thres,
-                                                  **lr_scheduler_kwargs)
+            self.lr_scheduler = support_lr_scheduler(lr_scheduler,
+                                                     self.optimizer,
+                                                     mode=mode,
+                                                     **lr_scheduler_kwargs)
+
         self.num_params = sum(
             [param.nelement() for param in task.nnet.parameters()]) / 10.0**6
 

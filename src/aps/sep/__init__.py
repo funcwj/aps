@@ -1,7 +1,7 @@
 from .unsupervised_enh import UnsupervisedEnh
 from .enh import DCUNet, CRNet
 from .bss import TimeConvTasNet, FreqConvTasNet, TimeDPRNN, FreqDPRNN, DCCRN
-from .toy import TimeDomainToyRNN, FreqDomainToyRNN
+from .toy import ToyRNN
 
 nnet_cls = {
     "unsupervised_enh": UnsupervisedEnh,
@@ -12,8 +12,7 @@ nnet_cls = {
     "dccrn": DCCRN,
     "time_dprnn": TimeDPRNN,
     "freq_dprnn": FreqDPRNN,
-    "time_toy": TimeDomainToyRNN,
-    "freq_toy": FreqDomainToyRNN
+    "base_rnn": ToyRNN
 }
 
 
