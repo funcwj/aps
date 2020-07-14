@@ -196,15 +196,20 @@ class Trainer(object):
             if dist_url == "env://":
                 if int(environ.get("RANK")) != rank:
                     raise RuntimeError(
-                        f"rank value {rank} mismatch with env[RANK]")
+                        f"rank value {rank} does not match with env[RANK]")
                 if int(environ.get("WORLD_SIZE")) != self.cuda_devices:
                     raise RuntimeError(
-                        f"world size {self.cuda_devices} mismatch with env[WORLD_SIZE]"
+                        f"world size {self.cuda_devices} does not match with env[WORLD_SIZE]"
                     )
             self.default_device = th.device(f"cuda:{device_ids[rank]:d}")
 
         self.rank = rank
         self.checkpoint = Path(checkpoint)
+        # if exist, resume training
+        last_checkpoint = self.checkpoint / "last.pt.tar"
+        if last_checkpoint.exists():
+            resume = last_checkpoint.as_posix()
+
         self.checkpoint.mkdir(parents=True, exist_ok=True)
         self.reporter = ProgressReporter(self.checkpoint,
                                          rank=rank,
@@ -234,6 +239,7 @@ class Trainer(object):
             self.cur_epoch = cpt["epoch"]
             task.nnet.load_state_dict(cpt["model_state_dict"])
             self.task = self.setup_distributed(task, dist_url)
+            lr_scheduler_dict = cpt["lr_scheduler_dict"]
             if resume:
                 self.reporter.log(f"Resume from checkpoint {cpt_path}: " +
                                   f"epoch {self.cur_epoch}")
@@ -269,6 +275,9 @@ class Trainer(object):
                                                      self.optimizer,
                                                      mode=mode,
                                                      **lr_scheduler_kwargs)
+
+        if lr_scheduler_dict:
+            self.lr_scheduler.load_state_dict(lr_scheduler_dict)
 
         self.num_params = sum(
             [param.nelement() for param in task.nnet.parameters()]) / 10.0**6
@@ -326,7 +335,9 @@ class Trainer(object):
                 self.task.module.nnet.state_dict()
                 if self.distributed else self.task.nnet.state_dict(),
                 "optim_state_dict":
-                self.optimizer.state_dict()
+                self.optimizer.state_dict(),
+                "lr_scheduler_dict":
+                self.lr_scheduler.state_dict()
             }
             cpt_name = "{}.pt.tar".format("best" if best else "last")
             th.save(cpt, self.checkpoint / cpt_name)

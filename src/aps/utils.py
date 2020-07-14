@@ -4,16 +4,13 @@
 
 import sys
 import time
+import random
 import codecs
 import argparse
 import logging
 
 import torch as th
-
-__all__ = [
-    "get_logger", "load_obj", "get_device_ids", "SimpleTimer",
-    "StrToBoolAction"
-]
+import numpy as np
 
 default_logger_format = "%(asctime)s [%(pathname)s:%(lineno)s - %(levelname)s ] %(message)s"
 
@@ -93,6 +90,22 @@ def get_device_ids(device_ids):
     return device_ids
 
 
+def set_seed(seed_str):
+    """
+    Set random seed for numpy & torch & cuda
+    """
+    # set random seed
+    if not seed_str or seed_str == "none":
+        return None
+    else:
+        seed = int(seed_str)
+        random.seed(seed)
+        np.random.seed(seed)
+        th.random.manual_seed(seed)
+        th.cuda.manual_seed_all(seed)
+        return seed
+
+
 class SimpleTimer(object):
     """
     A simple timer
@@ -113,9 +126,9 @@ class StrToBoolAction(argparse.Action):
     """
     def __call__(self, parser, namespace, values, option_string=None):
         def str2bool(value):
-            if value in ["true", "True"]:
+            if value.lower() in ["true", "y", "yes", "1"]:
                 return True
-            elif value in ["False", "false"]:
+            elif value in ["false", "n", "no", "0"]:
                 return False
             else:
                 raise ValueError

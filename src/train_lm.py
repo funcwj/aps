@@ -11,7 +11,7 @@ import argparse
 import numpy as np
 import torch as th
 
-from aps.utils import StrToBoolAction
+from aps.utils import StrToBoolAction, set_seed
 from aps.trainer.ddp import Trainer
 from aps.loader import support_loader
 from aps.asr import support_nnet
@@ -24,26 +24,14 @@ constrained_conf_keys = [
 
 def run(args):
     # set random seed
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    th.random.manual_seed(args.seed)
-
-    # new logger instance
-    print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
-          flush=True)
-
-    checkpoint = pathlib.Path(args.checkpoint)
-    checkpoint.mkdir(exist_ok=True, parents=True)
-    # if exist, resume training
-    last_checkpoint = checkpoint / "last.pt.tar"
-    resume = args.resume
-    if last_checkpoint.exists():
-        resume = last_checkpoint.as_posix()
+    seed = set_seed(args.seed)
+    if seed is not None:
+        print(f"Set random seed as {seed}")
 
     # load configurations
     with open(args.conf, "r") as f:
         conf = yaml.full_load(f)
-        
+
     # create task_conf if None
     if "task_conf" not in conf:
         conf["task_conf"] = {}
@@ -66,9 +54,6 @@ def run(args):
             raise ValueError(f"Invalid configuration item: {key}")
 
     print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
-    # dump configurations
-    with open(checkpoint / "train.yaml", "w") as f:
-        yaml.dump(conf, f)
 
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
@@ -92,7 +77,7 @@ def run(args):
     trainer = Trainer(task,
                       device_ids=args.device_id,
                       checkpoint=args.checkpoint,
-                      resume=resume,
+                      resume=args.resume,
                       save_interval=args.save_interval,
                       prog_interval=args.prog_interval,
                       tensorboard=args.tensorboard,
@@ -105,6 +90,10 @@ def run(args):
                                     eval_interval=args.eval_interval)
     else:
         trainer.run(trn_loader, dev_loader, num_epochs=args.epochs)
+
+    # dump configurations
+    with open(f"{args.checkpoint} / train.yaml", "w") as f:
+        yaml.dump(conf, f)
 
 
 if __name__ == "__main__":
@@ -161,8 +150,10 @@ if __name__ == "__main__":
                         default="false",
                         help="Flags to use the tensorboad")
     parser.add_argument("--seed",
-                        type=int,
-                        default=777,
+                        type=str,
+                        default="777",
                         help="Random seed used for random package")
     args = parser.parse_args()
+    print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
+          flush=True)
     run(args)

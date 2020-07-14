@@ -12,7 +12,7 @@ import argparse
 import torch as th
 import numpy as np
 
-from aps.utils import StrToBoolAction
+from aps.utils import StrToBoolAction, set_seed
 from aps.trainer.ddp import Trainer
 
 from aps.loader import support_loader
@@ -76,21 +76,9 @@ def load_conf(yaml_conf, dict_path):
 
 def run(args):
     # set random seed
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    th.random.manual_seed(args.seed)
-
-    # new logger instance
-    print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
-          flush=True)
-
-    checkpoint = pathlib.Path(args.checkpoint)
-    checkpoint.mkdir(exist_ok=True, parents=True)
-    # if exist, resume training
-    last_checkpoint = checkpoint / "last.pt.tar"
-    resume = args.resume
-    if last_checkpoint.exists():
-        resume = last_checkpoint.as_posix()
+    seed = set_seed(args.seed)
+    if seed is not None:
+        print(f"Set random seed as {seed}")
 
     conf = load_conf(args.conf, args.dict)
     data_conf = conf["data_conf"]
@@ -133,7 +121,7 @@ def run(args):
     trainer = Trainer(task,
                       device_ids=args.device_id,
                       checkpoint=args.checkpoint,
-                      resume=resume,
+                      resume=args.resume,
                       init=args.init,
                       save_interval=args.save_interval,
                       prog_interval=args.prog_interval,
@@ -148,6 +136,9 @@ def run(args):
     else:
         trainer.run(trn_loader, dev_loader, num_epochs=args.epochs)
 
+    # dump configurations
+    with open(f"{args.checkpoint} / train.yaml", "w") as f:
+        yaml.dump(conf, f)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -208,8 +199,10 @@ if __name__ == "__main__":
                         default="false",
                         help="Flags to use the tensorboad")
     parser.add_argument("--seed",
-                        type=int,
-                        default=777,
+                        type=str,
+                        default="777",
                         help="Random seed used for random package")
     args = parser.parse_args()
+    print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
+          flush=True)
     run(args)
