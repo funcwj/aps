@@ -5,20 +5,16 @@
 Dataloader for raw waveforms in asr tasks
 """
 import io
-import os
 
 import numpy as np
 import torch as th
-import soundfile as sf
 import torch.utils.data as dat
 
 from torch.nn.utils.rnn import pad_sequence
 from kaldi_python_io import Reader as BaseReader
 
 from .utils import process_token, run_command, BatchSampler
-
-MAX_INT16 = np.iinfo(np.int16).max
-EPSILON = np.finfo(np.float32).eps
+from ..audio import read_wav
 
 
 def DataLoader(train=True,
@@ -54,57 +50,6 @@ def DataLoader(train=True,
                           min_batch_size=min_batch_size)
 
 
-def read_wav(fname,
-             beg=0,
-             end=None,
-             norm=True,
-             transpose=True,
-             return_sr=False):
-    """
-    Read wave files using soundfile (support multi-channel)
-    args:
-        fname: file name or object
-        beg, end: begin and end index for chunk-level reading
-        norm: normalized samples between -1 and 1
-        return_sr: return audio sample rate
-    return:
-        samps: in shape C x N
-        sr: sample rate
-    """
-    # samps: N x C or N
-    #   N: number of samples
-    #   C: number of channels
-    samps, sr = sf.read(fname,
-                        start=beg,
-                        stop=end,
-                        dtype="float32" if norm else "int16")
-    if not norm:
-        samps = samps.astype("float32")
-    # put channel axis first
-    # N x C => C x N
-    if samps.ndim != 1 and transpose:
-        samps = np.transpose(samps)
-    if return_sr:
-        return sr, samps
-    return samps
-
-
-def write_wav(fname, samps, sr=16000, normalize=True):
-    """
-    Write wav files, support single/multi-channel
-    """
-    samps = samps.astype("float32" if normalize else "int16")
-    # for multi-channel, accept ndarray [num_samples, num_channels]
-    if samps.ndim != 1 and samps.shape[0] < samps.shape[1]:
-        samps = np.transpose(samps)
-        samps = np.squeeze(samps)
-    # make dirs
-    fdir = os.path.dirname(fname)
-    if fdir and not os.path.exists(fdir):
-        os.makedirs(fdir)
-    sf.write(fname, samps, sr)
-
-
 class WaveReader(BaseReader):
     """
         Sequential/Random Reader for single/multiple channel wave
@@ -136,15 +81,12 @@ class WaveReader(BaseReader):
             wav_ark = self.mngr[fname]
             # seek and read
             wav_ark.seek(offset)
-            sr, samps = read_wav(wav_ark, norm=self.norm, return_sr=True)
+            samps = read_wav(wav_ark, norm=self.norm, sr=self.sr)
         else:
             if fname[-1] == "|":
                 shell, _ = run_command(fname[:-1], wait=True)
                 fname = io.BytesIO(shell)
-            sr, samps = read_wav(fname, norm=self.norm, return_sr=True)
-        # if given sample rate, check it
-        if sr != self.sr:
-            raise RuntimeError(f"Sample rate mismatch: {sr:d} vs {self.sr:d}")
+            samps = read_wav(fname, norm=self.norm, sr=self.sr)
         # get one channel
         if self.ch >= 0 and samps.ndim == 2:
             samps = samps[self.ch]

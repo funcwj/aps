@@ -1,16 +1,16 @@
-from .am import kaldi, conf, wav
-from .lm import bptt, utt
-from .ss import chunk
+from . import am, lm, ss
 
-from .am import WaveReader, write_wav
+from .am import WaveReader
+from .audio import read_wav, write_wav
 
 loader_cls = {
-    "kaldi": kaldi.DataLoader,
-    "conf": conf.DataLoader,
-    "wav": wav.DataLoader,
-    "enh": chunk.DataLoader,
-    "bptt": bptt.DataLoader,
-    "utt": utt.DataLoader
+    "am_kaldi": am.kaldi.DataLoader,
+    "am_online": am.online.DataLoader,
+    "am_wav": am.wav.DataLoader,
+    "ss_chunk": ss.chunk.DataLoader,
+    "ss_online": ss.online.DataLoader,
+    "lm_bptt": lm.bptt.DataLoader,
+    "lm_utt": lm.utt.DataLoader
 }
 
 

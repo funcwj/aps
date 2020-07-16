@@ -1,1 +1,1 @@
-from .wav import WaveReader, write_wav
+from .wav import WaveReader

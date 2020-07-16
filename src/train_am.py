@@ -103,10 +103,6 @@ def run(args):
     if "enh_transform" in conf:
         enh_transform = support_transform("enh")(**conf["enh_transform"])
 
-    # dump configurations
-    with open(checkpoint / "train.yaml", "w") as f:
-        yaml.dump(conf, f)
-
     if enh_transform:
         nnet = asr_cls(enh_transform=enh_transform,
                        asr_transform=asr_transform,
@@ -137,7 +133,7 @@ def run(args):
         trainer.run(trn_loader, dev_loader, num_epochs=args.epochs)
 
     # dump configurations
-    with open(f"{args.checkpoint} / train.yaml", "w") as f:
+    with open(f"{args.checkpoint}/train.yaml", "w") as f:
         yaml.dump(conf, f)
 
 if __name__ == "__main__":

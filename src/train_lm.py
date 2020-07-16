@@ -92,7 +92,7 @@ def run(args):
         trainer.run(trn_loader, dev_loader, num_epochs=args.epochs)
 
     # dump configurations
-    with open(f"{args.checkpoint} / train.yaml", "w") as f:
+    with open(f"{args.checkpoint}/train.yaml", "w") as f:
         yaml.dump(conf, f)
 
 

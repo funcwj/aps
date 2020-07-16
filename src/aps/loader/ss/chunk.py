@@ -2,7 +2,7 @@
 
 # wujian@2020
 """
-Dataloader for raw waveforms in enhancement/separation tasks
+Dataloader of the raw waveform in enhancement/separation tasks
 """
 import random
 import torch as th
@@ -48,8 +48,7 @@ def DataLoader(train=True,
     doa_scp = parse_args(doa_scp)
     ref_scp = parse_args(ref_scp)
 
-    dataset = ScriptDataset(shuffle=train,
-                            sr=sr,
+    dataset = ScriptDataset(sr=sr,
                             mix_scp=mix_scp,
                             emb_scp=emb_scp,
                             doa_scp=doa_scp,
@@ -78,7 +77,6 @@ class ScriptDataset(object):
     Dataset configured by scripts
     """
     def __init__(self,
-                 shuffle=False,
                  mix_scp="",
                  doa_scp="",
                  emb_scp="",
@@ -110,8 +108,6 @@ class ScriptDataset(object):
 
         self.emb = NumpyReader(emb_scp) if emb_scp else None
 
-        self.shuffle = shuffle
-
     def _make_ref(self, key):
         return self.ref[key] if self.num_ref == 1 else [
             reader[key] for reader in self.ref
@@ -142,8 +138,6 @@ class ScriptDataset(object):
         return len(self.mix)
 
     def __iter__(self):
-        if self.shuffle:
-            random.shuffle(self.mix.index_keys)
         for key, mix in self.mix:
             eg = self._idx(key)
             eg["mix"] = mix
@@ -246,8 +240,9 @@ class WaveChunkDataLoader(object):
         else:
             sampler = None
         # just return batch of egs, support multiple workers
+        # NOTE: batch_size is not the batch_size of the audio chunk
         self.eg_loader = dat.DataLoader(self.dataset,
-                                        batch_size=batch_size // 2,
+                                        batch_size=min(batch_size, 64),
                                         num_workers=num_workers,
                                         sampler=sampler,
                                         shuffle=(train and sampler is None),

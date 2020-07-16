@@ -105,7 +105,7 @@ def run(args):
     train_worker(args.local_rank, task, conf, args)
 
     # dump configurations
-    with open(f"{args.checkpoint} / train.yaml", "w") as f:
+    with open(f"{args.checkpoint}/train.yaml", "w") as f:
         yaml.dump(conf, f)
 
 

@@ -230,6 +230,7 @@ class Trainer(object):
                                             no_impr_thres=no_impr_thres)
 
         self.reporter.log(f"Model summary:\n{task.nnet}")
+        lr_scheduler_dict = None
         if resume or init:
             cpt_path = resume if resume else init
             if not Path(cpt_path).exists():
