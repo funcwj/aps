@@ -6,6 +6,7 @@ import argparse
 import numpy as np
 
 from .audio import read_wav, add_room_response, EPSILON
+from ...aps.utils import StrToBoolAction
 
 
 def coeff_snr(sig_pow, ref_pow, snr):
@@ -109,29 +110,32 @@ def add_point_noise(mix_nsamps,
     return mix
 
 
-def run_simu(args):
+def load_audio(src_args, beg=None, end=None, sr=16000):
     """
-    Accept args from argparse.parse_args()
+    Load audio from args.xxx
     """
-    def arg_audio(src_args, beg=None):
-        if src_args:
-            src_path = src_args.split(",")
-            if beg:
-                beg = [int(v) for v in beg.split(",")]
-                return [
-                    read_wav(s, sr=args.sr, beg=b)
-                    for s, b in zip(src_path, beg)
-                ]
-            else:
-                return [read_wav(s, sr=args.sr) for s in src_path]
-        else:
-            return None
+    if src_args:
+        src_path = src_args.split(",")
+        beg_int = [None for _ in src_path]
+        end_int = [None for _ in src_path]
+        if beg:
+            beg_int = [int(v) for v in beg.split(",")]
+        if end:
+            end_int = [int(v) for v in end.split(",")]
+        return [
+            read_wav(s, sr=sr, beg=b, end=e)
+            for s, b, e in zip(src_path, beg_int, end_int)
+        ]
+    else:
+        return None
 
+
+def run_simu(args):
     def arg_float(src_args):
         return [float(s) for s in src_args.split(",")] if src_args else None
 
-    src_spk = arg_audio(args.src_spk)
-    src_rir = arg_audio(args.src_rir)
+    src_spk = load_audio(args.src_spk, sr=args.sr)
+    src_rir = load_audio(args.src_rir, sr=args.sr)
     if src_rir:
         if len(src_rir) != len(src_spk):
             raise RuntimeError(
@@ -156,9 +160,17 @@ def run_simu(args):
     # number samples of the mixture
     mix_nsamps = max([b + s.size for b, s in zip(src_begin, src_spk)])
 
-    point_noise = arg_audio(args.point_noise, beg=args.point_noise_offset)
-    point_noise_rir = arg_audio(args.point_noise_rir)
-    if point_noise:
+    point_noise_rir = load_audio(args.point_noise_rir, sr=args.sr)
+
+    point_noise_end = [
+        str(int(v) + mix_nsamps) for v in args.point_noise_offset.split()
+    ]
+    point_noise = load_audio(args.point_noise,
+                             beg=args.point_noise_offset,
+                             end=",".join(point_noise_end),
+                             sr=args.sr)
+
+    if args.point_noise:
         if point_noise_rir:
             if len(point_noise) != len(point_noise_rir):
                 raise RuntimeError(
@@ -179,8 +191,11 @@ def run_simu(args):
         else:
             point_begin = [0 for _ in point_noise]
 
-    isotropic_noise = arg_audio(args.isotropic_noise,
-                                beg=str(args.isotropic_noise_offset))
+    isotropic_noise = load_audio(args.isotropic_noise,
+                                 beg=str(args.isotropic_noise_offset),
+                                 end=str(args.isotropic_noise_offset +
+                                         mix_nsamps),
+                                 sr=args.sr)
     if isotropic_noise:
         isotropic_noise = isotropic_noise[0]
         isotropic_snr = arg_float(args.isotropic_noise_snr)

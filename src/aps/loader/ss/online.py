@@ -13,7 +13,7 @@ from .chunk import type_seq, WaveChunkDataLoader
 
 def DataLoader(train=True,
                sr=16000,
-               simu_opts="",
+               simu_cfg="",
                noise_label=False,
                chunk_size=64000,
                batch_size=16,
@@ -22,7 +22,7 @@ def DataLoader(train=True,
     """
     Return a online simulation dataloader for enhancement/separation tasks
     """
-    dataset = SimuOptsDataset(simu_opts=simu_opts, noise=noise_label)
+    dataset = SimuOptsDataset(simu_cfg=simu_cfg, noise=noise_label)
     return WaveChunkDataLoader(dataset,
                                train=train,
                                chunk_size=chunk_size,
@@ -35,8 +35,8 @@ class SimuOptsDataset(object):
     """
     Dataset configured by the simulation command options
     """
-    def __init__(self, simu_opts="", noise=False):
-        self.simu_opts = BaseReader(simu_opts, num_tokens=-1)
+    def __init__(self, simu_cfg="", noise=False):
+        self.simu_cfg = BaseReader(simu_cfg, num_tokens=-1)
         self.noise = noise
         self.parser = make_argparse()
 
@@ -52,11 +52,11 @@ class SimuOptsDataset(object):
         return egs
 
     def __getitem__(self, index):
-        return self._simu(self.simu_opts[index])
+        return self._simu(self.simu_cfg[index])
 
     def __len__(self):
-        return len(self.simu_opts)
+        return len(self.simu_cfg)
 
     def __iter__(self):
-        for _, opts_str in self.simu_opts:
+        for _, opts_str in self.simu_cfg:
             yield self._simu(opts_str)
