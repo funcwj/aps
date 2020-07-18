@@ -1,1 +1,1 @@
-from .wav import WaveReader
+from . import wav, kaldi

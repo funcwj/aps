@@ -11,10 +11,9 @@ import torch as th
 import torch.utils.data as dat
 
 from torch.nn.utils.rnn import pad_sequence
-from kaldi_python_io import Reader as BaseReader
 
 from .utils import process_token, run_command, BatchSampler
-from ..audio import read_wav
+from ..audio import WaveReader
 
 
 def DataLoader(train=True,
@@ -48,71 +47,6 @@ def DataLoader(train=True,
                           adapt_token_num=adapt_token_num,
                           batch_size=batch_size,
                           min_batch_size=min_batch_size)
-
-
-class WaveReader(BaseReader):
-    """
-        Sequential/Random Reader for single/multiple channel wave
-        Format of wav.scp follows Kaldi's definition:
-            key1 /path/to/key1.wav
-            ...
-        or
-            key1 sox /home/data/key1.wav -t wav - remix 1 |
-            ...
-    """
-    def __init__(self, wav_scp, sr=16000, norm=True, channel=-1):
-        super(WaveReader, self).__init__(wav_scp, num_tokens=2)
-        self.sr = sr
-        self.ch = channel
-        self.norm = norm
-        self.mngr = {}
-
-    def _load(self, key):
-        fname = self.index_dict[key]
-        # return C x N or N
-        if ":" in fname:
-            tokens = fname.split(":")
-            if len(tokens) != 2:
-                raise RuntimeError(f"Value format error: {fname}")
-            fname, offset = tokens[0], int(tokens[1])
-            # get ark object
-            if fname not in self.mngr:
-                self.mngr[fname] = open(fname, "rb")
-            wav_ark = self.mngr[fname]
-            # seek and read
-            wav_ark.seek(offset)
-            samps = read_wav(wav_ark, norm=self.norm, sr=self.sr)
-        else:
-            if fname[-1] == "|":
-                shell, _ = run_command(fname[:-1], wait=True)
-                fname = io.BytesIO(shell)
-            samps = read_wav(fname, norm=self.norm, sr=self.sr)
-        # get one channel
-        if self.ch >= 0 and samps.ndim == 2:
-            samps = samps[self.ch]
-        return samps
-
-    def nsamps(self, key):
-        """
-        Number of samples
-        """
-        data = self._load(key)
-        return data.shape[-1]
-
-    def power(self, key):
-        """
-        Power of utterance
-        """
-        data = self._load(key)
-        s = data if data.ndim == 1 else data[0]
-        return np.linalg.norm(s, 2)**2 / data.size
-
-    def duration(self, key):
-        """
-        Utterance duration
-        """
-        N = self.nsamps(key)
-        return N / self.sr
 
 
 class Dataset(dat.Dataset):

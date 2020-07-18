@@ -177,7 +177,7 @@ class ToyRNN(BaseEncoder):
             else:
                 return spk
 
-    def infer(self, mix, mode="freq"):
+    def infer(self, mix, mode="time"):
         """
         Args:
             mix (Tensor): (C) x S
