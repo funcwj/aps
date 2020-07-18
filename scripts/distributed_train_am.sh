@@ -35,7 +35,7 @@ python -m torch.distributed.launch \
   --nnodes=1 \
   --nproc_per_node=$num_process \
   --master_port=$port \
-  src/launch_distributed_train_am.py \
+  bin/launch_distributed_train_am.py \
   --conf $conf \
   --dict $dict \
   --seed $seed \

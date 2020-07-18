@@ -41,14 +41,13 @@ class SimuOptsDataset(object):
         self.parser = make_argparse()
 
     def _simu(self, opts_str):
-        args = self.parser.parse_args(opts_str.split(" "))
+        args = self.parser.parse_args(opts_str)
         mix, spk_ref, noise = run_simu(args)
-        egs = {"mix": mix, "ref": spk_ref}
         if self.noise and noise is not None:
-            if isinstance(egs["ref"], type_seq):
-                egs["ref"].append(noise)
-            else:
-                egs["ref"] = [egs["ref"], noise]
+            spk_ref.append(noise)
+        if len(spk_ref) == 1:
+            spk_ref = spk_ref[0]
+        egs = {"mix": mix, "ref": spk_ref}
         return egs
 
     def __getitem__(self, index):

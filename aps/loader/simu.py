@@ -6,7 +6,7 @@ import argparse
 import numpy as np
 
 from .audio import read_wav, add_room_response, EPSILON
-from ...aps.utils import StrToBoolAction
+from ..utils import StrToBoolAction
 
 
 def coeff_snr(sig_pow, ref_pow, snr):
@@ -49,7 +49,7 @@ def add_speaker(mix_nsamps,
             spk_power.append(p)
     # make mix
     N, _ = spk_image[0].shape
-    mix = [np.zeros([N, mix_nsamps]) for _ in src_spk]
+    mix = [np.zeros([N, mix_nsamps], dtype=np.float32) for _ in src_spk]
     # start mixing
     ref_power = spk_power[0]
     for i, image in enumerate(spk_image):
@@ -101,7 +101,7 @@ def add_point_noise(mix_nsamps,
             image_power.append(revb_power)
     # make noise mix
     N, _ = image[0].shape
-    mix = np.zeros([N, mix_nsamps])
+    mix = np.zeros([N, mix_nsamps], dtype=np.float32)
     # start mixing
     for i, img in enumerate(image):
         beg = noise_begin[i]
@@ -269,24 +269,19 @@ def run_simu(args):
 
     factor = args.norm_factor / (np.max(np.abs(mix)) + EPSILON)
 
-    mix = mix * factor
-    spk = [s * factor for s in spk]
+    mix = mix.squeeze() * factor
+    spk = [s[0] * factor for s in spk]
 
     if noise is None:
         return mix, spk, None
     else:
-        return mix, spk, noise * factor
+        return mix, spk, noise[0] * factor
 
 
 def make_argparse():
     parser = argparse.ArgumentParser(
         description="Command to do audio data simulation",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("mix", type=str, help="Audio to output")
-    parser.add_argument("--dump-ref-dir",
-                        type=str,
-                        default="",
-                        help="Directory of the reference audio to output")
     parser.add_argument("--src-spk",
                         type=str,
                         required=True,
