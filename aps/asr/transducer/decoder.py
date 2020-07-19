@@ -16,10 +16,10 @@ except:
 
 from queue import PriorityQueue
 
-from ..transformer.embedding import IOEmbedding
-from ..transformer.decoder import prep_sub_mask
-from ..base.attention import padding_mask
-from ..base.decoder import OneHotEmbedding
+from aps.asr.transformer.embedding import IOEmbedding
+from aps.asr.transformer.decoder import prep_sub_mask
+from aps.asr.base.attention import padding_mask
+from aps.asr.base.decoder import OneHotEmbedding
 
 IGNORE_ID = -1
 

@@ -12,8 +12,8 @@ import torch.utils.data as dat
 
 from torch.nn.utils.rnn import pad_sequence
 
-from .utils import process_token, run_command, BatchSampler
-from ..audio import WaveReader
+from aps.loader.am.utils import process_token, BatchSampler
+from aps.loader.audio import WaveReader
 
 
 def DataLoader(train=True,

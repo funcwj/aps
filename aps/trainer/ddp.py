@@ -15,13 +15,13 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
 
-from .ss import support_ss_scheduler
-from .ss import NoamOpt
-from .lr import support_lr_scheduler
+from aps.trainer.ss import support_ss_scheduler
+from aps.trainer.ss import NoamOpt
+from aps.trainer.lr import support_lr_scheduler
 
-from ..utils import load_obj, get_device_ids, get_logger
-from ..utils import SimpleTimer
-from ..task import Task
+from aps.utils import load_obj, get_device_ids, get_logger
+from aps.utils import SimpleTimer
+from aps.task import Task
 
 
 def add_gaussian_noise(nnet, std=0.075):
@@ -592,6 +592,7 @@ class Trainer(object):
                     # enable train mode
                     self.reporter.log("Set train mode...")
                     self.task.train()
+                    self.reporter.train()
             self.reporter.log("Finished one epoch on training set")
             if stop:
                 break

@@ -7,11 +7,11 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
-from .att_asr import AttASR
-from .base.encoder import TorchEncoder
-from .enh.mvdr import MvdrBeamformer
-from .enh.google import CLPFsBeamformer  # same as TimeInvariantEnh
-from .enh.conv import TimeInvariantEnh, TimeVariantEnh, TimeInvariantAttEnh
+from aps.asr.att import AttASR
+from aps.asr.base.encoder import TorchRNNEncoder
+from aps.asr.enh.mvdr import MvdrBeamformer
+from aps.asr.enh.google import CLPFsBeamformer  # same as TimeInvariantEnh
+from aps.asr.enh.conv import TimeInvariantEnh, TimeVariantEnh, TimeInvariantAttEnh
 
 
 class EnhAttASR(nn.Module):
@@ -127,7 +127,7 @@ class MvdrAttASR(EnhAttASR):
         # Front-end feature extraction
         self.enh_transform = enh_transform
         # TF-mask estimation network
-        self.mask_net = TorchEncoder(
+        self.mask_net = TorchRNNEncoder(
             enh_input_size, num_bins * 2 if mask_net_noise else num_bins,
             **mask_net_kwargs)
         self.mask_net_noise = mask_net_noise

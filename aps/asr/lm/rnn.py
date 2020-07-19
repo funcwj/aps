@@ -3,7 +3,7 @@
 import torch as th
 import torch.nn as nn
 
-from ..base.decoder import OneHotEmbedding
+from aps.asr.base.decoder import OneHotEmbedding
 
 
 def repackage_hidden(h):

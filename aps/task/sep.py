@@ -7,7 +7,8 @@ import torch.nn.functional as tf
 import torch_complex.functional as cf
 
 from itertools import permutations
-from .base import Task
+
+from aps.task.base import Task
 
 EPSILON = th.finfo(th.float32).eps
 
@@ -404,4 +405,4 @@ class SaTask(FreqSaTask):
             loss = tf.l1_loss(out, ref, reduction=reduction)
         else:
             loss = tf.mse_loss(out, ref, reduction=reduction)
-        return loss
+        return loss, None

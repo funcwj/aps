@@ -1,8 +1,8 @@
-from .att_asr import AttASR
-from .enh_att_asr import MvdrAttASR, BeamAttASR
-from .transformer_asr import TransformerASR
-from .enh_transformer_asr import BeamTransformerASR, MvdrTransformerASR
-from .transducer_asr import TransformerTransducerASR, TorchTransducerASR
+from .att import AttASR
+from .enh_att import MvdrAttASR, BeamAttASR
+from .transformers import TransformerASR
+from .enh_transformers import BeamTransformerASR, MvdrTransformerASR
+from .transducers import TransformerTransducerASR, TorchTransducerASR
 from .lm.rnn import TorchRNNLM
 from .lm.transformer import TorchTransformerLM
 

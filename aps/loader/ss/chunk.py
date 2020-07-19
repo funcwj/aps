@@ -12,7 +12,7 @@ import torch.utils.data as dat
 from torch.utils.data.dataloader import default_collate
 from kaldi_python_io import Reader as BaseReader
 
-from ..am.wav import WaveReader
+from aps.loader.audio import WaveReader
 
 type_seq = (list, tuple)
 

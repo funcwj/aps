@@ -11,7 +11,7 @@ import torch as th
 
 import torch.utils.data as dat
 
-from .utt import Dataset
+from aps.loader.lm.utt import Dataset
 from kaldi_python_io import Reader as BaseReader
 
 

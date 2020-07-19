@@ -8,9 +8,9 @@ try:
 except:
     raise ImportError("import Transformer module failed")
 
-from ..transformer.embedding import IOEmbedding
-from ..transformer.decoder import prep_sub_mask
-from ..base.attention import padding_mask
+from aps.asr.transformer.embedding import IOEmbedding
+from aps.asr.transformer.decoder import prep_sub_mask
+from aps.asr.base.attention import padding_mask
 
 
 class TorchTransformerLM(nn.Module):

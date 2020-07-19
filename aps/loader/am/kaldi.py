@@ -15,7 +15,7 @@ from torch.utils.data.dataloader import default_collate
 
 from kaldi_python_io import ScriptReader
 
-from .utils import process_token, BatchSampler
+from aps.loader.am.utils import process_token, BatchSampler
 
 
 def DataLoader(train=True,

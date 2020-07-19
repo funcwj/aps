@@ -7,8 +7,8 @@ Online simulation dataloader for speech enhancement & separation tasks
 
 from kaldi_python_io import Reader as BaseReader
 
-from ..simu import run_simu, make_argparse
-from .chunk import type_seq, WaveChunkDataLoader
+from aps.loader.simu import run_simu, make_argparse
+from aps.loader.ss.chunk import type_seq, WaveChunkDataLoader
 
 
 def DataLoader(train=True,

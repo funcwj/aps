@@ -6,9 +6,9 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .transformer.encoder import TorchTransformerEncoder
-from .transducer.decoder import TorchTransformerDecoder, TorchRNNDecoder
-from .base.encoder import encoder_instance
+from aps.asr.transformer.encoder import TorchTransformerEncoder
+from aps.asr.transducer.decoder import TorchTransformerDecoder, TorchRNNDecoder
+from aps.asr.base.encoder import encoder_instance
 
 
 class TorchTransducerASR(nn.Module):

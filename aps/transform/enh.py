@@ -11,8 +11,8 @@ import torch.nn as nn
 
 from torch_complex.tensor import ComplexTensor
 
-from .utils import STFT, iSTFT, EPSILON
-from .asr import LogTransform, CmvnTransform, SpecAugTransform
+from aps.transform.utils import STFT, iSTFT, EPSILON
+from aps.transform.asr import LogTransform, CmvnTransform, SpecAugTransform
 
 MATH_PI = math.pi
 

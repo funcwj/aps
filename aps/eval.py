@@ -5,9 +5,9 @@ import pathlib
 
 import torch as th
 
-from .asr import support_nnet as support_asr_nnet
-from .sep import support_nnet as support_sep_nnet
-from .transform import support_transform
+from aps.asr import support_nnet as support_asr_nnet
+from aps.sep import support_nnet as support_sep_nnet
+from aps.transform import support_transform
 
 
 class Computer(object):

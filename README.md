@@ -1,6 +1,6 @@
-# APS: ASR + Speech Front-End
+# APS: ASR + Speech front-end workspace
 
-My own repository for single/multi-channel speech enhancement & speech separation & E2E speech recognition task.
+My own workspace for speech tasks, including single/multi-channel speech enhancement & separation & E2E speech recognition.
 
 ## Support
 

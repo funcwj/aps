@@ -9,7 +9,7 @@ import torch.nn.functional as tf
 
 from torch_complex.tensor import ComplexTensor
 
-from ...transform.utils import init_melfilter
+from aps.transform.utils import init_melfilter
 
 
 class ComplexConvXd(nn.Module):
@@ -137,7 +137,7 @@ class TimeInvariantEnh(nn.Module):
         return f
 
 
-from ..base.encoder import TorchEncoder
+from aps.asr.base.encoder import TorchRNNEncoder
 
 
 class TimeInvariantAttEnh(nn.Module):
@@ -169,10 +169,10 @@ class TimeInvariantAttEnh(nn.Module):
                                  bias=False)
 
         if query_type == "rnn":
-            self.pred_q = TorchEncoder(num_bins,
-                                       num_bins,
-                                       rnn_dropout=0.2,
-                                       rnn_hidden=512)
+            self.pred_q = TorchRNNEncoder(num_bins,
+                                          num_bins,
+                                          rnn_dropout=0.2,
+                                          rnn_hidden=512)
         else:
             self.pred_q = beamformer(1)
         self.conv_k = beamformer(spatial_filters)

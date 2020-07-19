@@ -46,26 +46,6 @@ def process_token(token,
             f"Too less utterances: {N}, check data configurations")
     return token_set
 
-def run_command(command, wait=True):
-    """ 
-    Runs shell commands. These are usually a sequence of 
-    commands connected by pipes, so we use shell=True
-    """
-    p = subprocess.Popen(command,
-                         shell=True,
-                         stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE)
-
-    if wait:
-        [stdout, stderr] = p.communicate()
-        if p.returncode != 0:
-            stderr_str = bytes.decode(stderr)
-            raise Exception("There was an error while running the " +
-                            f"command \"{command}\":\n{stderr_str}\n")
-        return stdout, stderr
-    else:
-        return p
-
 
 class BatchSampler(dat.Sampler):
     """

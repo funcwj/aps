@@ -3,6 +3,9 @@
 # wujian@2019
 
 import os
+import io
+import subprocess
+
 import soundfile as sf
 import numpy as np
 import scipy.signal as ss
@@ -89,6 +92,27 @@ def add_room_response(spk, rir, early_energy=False, sr=16000):
         return revb, np.mean(early_rev**2)
     else:
         return revb, np.mean(revb[0]**2)
+
+
+def run_command(command, wait=True):
+    """ 
+    Runs shell commands. These are usually a sequence of 
+    commands connected by pipes, so we use shell=True
+    """
+    p = subprocess.Popen(command,
+                         shell=True,
+                         stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE)
+
+    if wait:
+        [stdout, stderr] = p.communicate()
+        if p.returncode != 0:
+            stderr_str = bytes.decode(stderr)
+            raise Exception("There was an error while running the " +
+                            f"command \"{command}\":\n{stderr_str}\n")
+        return stdout, stderr
+    else:
+        return p
 
 
 class WaveReader(BaseReader):

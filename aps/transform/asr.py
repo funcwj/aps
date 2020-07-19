@@ -16,8 +16,8 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .utils import STFT, EPSILON, init_melfilter, init_dct
-from .spec_aug import tf_mask
+from aps.transform.utils import STFT, EPSILON, init_melfilter, init_dct
+from aps.transform.spec_aug import tf_mask
 
 
 class SpectrogramTransform(STFT):

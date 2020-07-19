@@ -6,10 +6,10 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..asr.base.encoder import TorchEncoder
+from aps.asr.base.encoder import TorchRNNEncoder
 
 
-class UnsupervisedEnh(TorchEncoder):
+class UnsupervisedEnh(TorchRNNEncoder):
     """
     A recurrent network for unsupervised training
     """
@@ -28,11 +28,12 @@ class UnsupervisedEnh(TorchEncoder):
                                               rnn_layers=rnn_layers,
                                               rnn_hidden=rnn_hidden,
                                               rnn_dropout=rnn_dropout,
-                                              rnn_bidir=rnn_bidir)
+                                              rnn_bidir=rnn_bidir,
+                                              non_linear="sigmoid")
         self.enh_transform = enh_transform
         if enh_transform is None:
             raise ValueError("enh_transform can not be None")
-        
+
     def infer(self, noisy):
         """
         Args
@@ -46,7 +47,7 @@ class UnsupervisedEnh(TorchEncoder):
                     "UnsupervisedEnh expects 2D tensor (training), " +
                     f"got {noisy.dim()} instead")
             noisy = noisy[None, ...]
-            masks, _ = self.forward(noisy)
+            _, masks = self.forward(noisy)
             return masks[0]
 
     def forward(self, noisy):
@@ -64,7 +65,5 @@ class UnsupervisedEnh(TorchEncoder):
         # feats: N x T x F
         # cspec: N x C x F x T
         feats, cspec, _ = self.enh_transform(noisy, None, norm_obs=True)
-        feats, _ = self.rnns(feats)
-        # N x T x F
-        masks = th.sigmoid(self.proj(feats))
+        masks = super().forward(feats, None)
         return cspec, masks

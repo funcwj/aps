@@ -12,9 +12,9 @@ try:
 except:
     raise ImportError("import Transformer module failed")
 
-from .embedding import IOEmbedding
-from ..base.attention import padding_mask
-from ..base.decoder import NEG_INF
+from aps.asr.transformer.embedding import IOEmbedding
+from aps.asr.base.attention import padding_mask
+from aps.asr.base.decoder import NEG_INF
 
 IGNORE_ID = -1
 

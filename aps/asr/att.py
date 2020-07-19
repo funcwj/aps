@@ -7,9 +7,9 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
-from .base.decoder import TorchDecoder
-from .base.encoder import encoder_instance
-from .base.attention import att_instance
+from aps.asr.base.decoder import TorchDecoder
+from aps.asr.base.encoder import encoder_instance
+from aps.asr.base.attention import att_instance
 
 
 class AttASR(nn.Module):

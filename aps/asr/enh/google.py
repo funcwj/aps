@@ -10,10 +10,11 @@ import librosa.filters as filters
 
 import torch.nn.functional as F
 
-from ...transform.utils import init_melfilter
-from ...transform.enh import FixedBeamformer
+from aps.transform.utils import init_melfilter
+from aps.transform.enh import FixedBeamformer
 
 from torch_complex.tensor import ComplexTensor
+
 
 class _FsBeamformer(nn.Module):
     """
