@@ -41,7 +41,7 @@ for n in $(seq $nj); do wav_sp_scp="$wav_sp_scp $log_dir/wav.$n.scp"; done
 
 python=$(which python)
 $cmd JOB=1:$nj $log_dir/decode.JOB.log \
-    $python src/decode.py \
+    $python bin/decode.py \
     $log_dir/wav.JOB.scp \
     $log_dir/beam${beam_size}.JOB.decode \
     --beam-size $beam_size \

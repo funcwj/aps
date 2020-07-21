@@ -35,7 +35,7 @@ exp_dir=exp/$mdl_id/$exp_id
 
 mkdir -p $dec_dir
 if [ $batch_size -eq 1 ]; then
-  src/decode.py \
+  bin/decode.py \
     $tst_scp \
     $dec_dir/beam${beam_size}.decode \
     --beam-size $beam_size \
@@ -53,7 +53,7 @@ if [ $batch_size -eq 1 ]; then
     --vectorized true \
     > $mdl_id.decode.$exp_id.log 2>&1
 else
-  src/batch_decode.py \
+  bin/decode_batch.py \
     $tst_scp \
     $dec_dir/beam${beam_size}.decode \
     --beam-size $beam_size \

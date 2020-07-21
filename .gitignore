@@ -8,5 +8,7 @@ src/debug*
 egs/
 exp/
 checkpoint/
+test/
+cache/
 
 .DS_Store
