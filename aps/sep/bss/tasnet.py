@@ -142,7 +142,8 @@ class DsConv1D(nn.Module):
                  kernel_size,
                  dilation=1,
                  causal=False,
-                 bias=True):
+                 bias=True,
+                 norm="BN"):
         super(DsConv1D, self).__init__()
         self.dconv_causal = causal
         self.pad_value = dilation * (kernel_size - 1)
@@ -155,7 +156,7 @@ class DsConv1D(nn.Module):
             dilation=dilation,
             bias=True)
         self.prelu = nn.PReLU()
-        self.norm = nn.BatchNorm1d(in_channels)
+        self.norm = build_norm(norm, in_channels)
         self.sconv = nn.Conv1d(in_channels, out_channels, 1, bias=True)
 
     def forward(self, x):
@@ -188,7 +189,8 @@ class Conv1DBlock(nn.Module):
                                kernel_size,
                                dilation=dilation,
                                causal=causal,
-                               bias=True)
+                               bias=True,
+                               norm=norm)
 
     def forward(self, x):
         y = self.conv(x)
