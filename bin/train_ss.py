@@ -12,7 +12,8 @@ import argparse
 import torch as th
 import numpy as np
 
-from aps.utils import StrToBoolAction, set_seed
+from aps.utils import set_seed
+from aps.opts import BaseTrainParser
 from aps.trainer.ddp import Trainer
 
 from aps.loader import support_loader
@@ -102,60 +103,12 @@ def run(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Command for speech separation/enhancement model training",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--conf",
-                        type=str,
-                        required=True,
-                        help="Yaml configuration file for training")
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        parents=[BaseTrainParser.parser])
     parser.add_argument("--device-id",
                         type=str,
                         default="0",
                         help="Training on which GPU device")
-    parser.add_argument("--epochs",
-                        type=int,
-                        default=50,
-                        help="Number of training epochs")
-    parser.add_argument("--checkpoint",
-                        type=str,
-                        required=True,
-                        help="Directory to save models")
-    parser.add_argument("--resume",
-                        type=str,
-                        default="",
-                        help="Exist model to resume training from")
-    parser.add_argument("--init",
-                        type=str,
-                        default="",
-                        help="Exist model to initialize model training")
-    parser.add_argument("--batch-size",
-                        type=int,
-                        default=32,
-                        help="Number of utterances in each batch")
-    parser.add_argument("--eval-interval",
-                        type=int,
-                        default=-1,
-                        help="Number of batches trained per epoch "
-                        "(for larger training dataset)")
-    parser.add_argument("--save-interval",
-                        type=int,
-                        default=-1,
-                        help="Interval to save the checkpoint")
-    parser.add_argument("--prog-interval",
-                        type=int,
-                        default=100,
-                        help="Interval to report the progress of the training")
-    parser.add_argument("--num-workers",
-                        type=int,
-                        default=4,
-                        help="Number of workers used in script data loader")
-    parser.add_argument("--tensorboard",
-                        action=StrToBoolAction,
-                        default="false",
-                        help="Flags to use the tensorboad")
-    parser.add_argument("--seed",
-                        type=str,
-                        default="777",
-                        help="Random seed used for random package")
     args = parser.parse_args()
     print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
           flush=True)
