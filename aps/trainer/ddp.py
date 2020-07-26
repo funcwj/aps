@@ -16,7 +16,6 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
 
 from aps.trainer.ss import support_ss_scheduler
-from aps.trainer.ss import NoamOpt
 from aps.trainer.lr import support_lr_scheduler
 
 from aps.utils import load_obj, get_device_ids, get_logger
@@ -207,6 +206,9 @@ class Trainer(object):
                     )
             self.default_device = th.device(f"cuda:{device_ids[rank]:d}")
 
+        # avoid alloc memory from gpu0
+        th.cuda.set_device(self.default_device)
+
         self.rank = rank
         self.checkpoint = Path(checkpoint)
         # if exist, resume training
@@ -268,9 +270,7 @@ class Trainer(object):
         else:
             self.ss_scheduler = None
 
-        if optimizer == "noam":
-            self.lr_scheduler = None
-        elif lr_scheduler == "reduce_lr":
+        if lr_scheduler == "reduce_lr":
             self.lr_scheduler = support_lr_scheduler(lr_scheduler,
                                                      self.optimizer,
                                                      mode=mode,
@@ -311,7 +311,6 @@ class Trainer(object):
         """
         Setup environment for distributed training
         """
-        th.backends.cudnn.benchmark = True
         th.cuda.set_device(self.default_device)
         # offload to cuda device
         nnet.to(self.default_device)
@@ -364,7 +363,8 @@ class Trainer(object):
             "adagrad": th.optim.Adagrad,  # lr, lr_decay, weight_decay
             "adamax": th.optim.Adamax,  # lr, weight_decay
             "adamw": th.optim.AdamW,  # lr, weight_decay
-            "noam": NoamOpt
+            # NOTE: move to lr scheduler
+            # "noam": NoamOpt
             # ...
         }
         if optimizer not in supported_optimizer:
@@ -429,10 +429,6 @@ class Trainer(object):
         """
         Prepare for training
         """
-        # avoid alloc memory from gpu0
-        th.cuda.set_device(self.default_device)
-        # make dilated conv faster
-        th.backends.cudnn.benchmark = True
         # eval
         self.eval(dev_loader)
         e = self.cur_epoch

@@ -6,7 +6,8 @@ import subprocess
 import torch as th
 
 import torch.utils.data as dat
-import torch.distributed as dist
+# import torch.distributed as dist
+import aps.distributed as dist
 
 from kaldi_python_io import Reader as BaseReader
 
@@ -61,11 +62,8 @@ class BatchSampler(dat.Sampler):
                  distributed=False):
         self.distributed = distributed
         if distributed:
-            if not dist.is_available():
-                raise RuntimeError(
-                    "Requires distributed package to be available")
-            self.world_size = dist.get_world_size()
-            self.rank = dist.get_rank()
+            self.world_size = dist.world_size()
+            self.rank = dist.rank()
         batches = self._work_batch_index(dataset,
                                          adapt_dur,
                                          adapt_token_num,
