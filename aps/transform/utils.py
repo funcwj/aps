@@ -98,7 +98,12 @@ def init_dct(num_ceps=13, num_mels=40):
     return th.tensor(dct_mat, dtype=th.float32)
 
 
-def _forward_stft(wav, kernel, output="polar", frame_hop=256, onesided=False):
+def _forward_stft(wav,
+                  kernel,
+                  output="polar",
+                  frame_hop=256,
+                  onesided=False,
+                  center=False):
     """
     STFT inner function
     Args:
@@ -110,6 +115,7 @@ def _forward_stft(wav, kernel, output="polar", frame_hop=256, onesided=False):
             real: return [real; imag] Tensor
         frame_hop: frame hop size in number samples
         onesided: return half FFT bins
+        center: if true, we assumed to have centered frames
     Return:
         transform (Tensor or [Tensor, Tensor]), STFT transform results
     """
@@ -122,6 +128,10 @@ def _forward_stft(wav, kernel, output="polar", frame_hop=256, onesided=False):
     # else: reshape NC x 1 x S
     N, S = wav.shape[0], wav.shape[-1]
     wav = wav.view(-1, 1, S)
+    # NC x 1 x S+2P
+    if center:
+        ps = (frame_hop, frame_hop, 0, 0, 0, 0)
+        wav = tf.pad(wav, ps, mode="constant", value=0)
     # STFT
     packed = tf.conv1d(wav, kernel, stride=frame_hop, padding=0)
     # NC x 2B x T => N x C x 2B x T
@@ -149,7 +159,8 @@ def _inverse_stft(transform,
                   window,
                   input="polar",
                   frame_hop=256,
-                  onesided=False):
+                  onesided=False,
+                  center=False):
     """
     iSTFT inner function
     Args:
@@ -161,6 +172,7 @@ def _inverse_stft(transform,
             real: return [real; imag] Tensor
         frame_hop: frame hop size in number samples
         onesided: return half FFT bins
+        center: used in _forward_stft
     Return:
         wav (Tensor), N x S
     """
@@ -205,6 +217,9 @@ def _inverse_stft(transform,
     I = th.eye(window.shape[0], device=win.device)[:, None]
     # 1 x 1 x T
     norm = tf.conv_transpose1d(win**2, I, stride=frame_hop, padding=0)
+    if center:
+        s = s[..., frame_hop:-frame_hop]
+        norm = norm[..., frame_hop:-frame_hop]
     s = s / (norm + EPSILON)
     # N x S
     s = s.squeeze(1)
@@ -218,7 +233,8 @@ def forward_stft(wav,
                  window="sqrthann",
                  round_pow_of_two=True,
                  normalized=False,
-                 onesided=True):
+                 onesided=True,
+                 center=False):
     """
     STFT function implementation, equals to STFT layer
     """
@@ -233,7 +249,8 @@ def forward_stft(wav,
                          K.to(wav.device),
                          output=output,
                          frame_hop=frame_hop,
-                         onesided=onesided)
+                         onesided=onesided,
+                         center=center)
 
 
 def inverse_stft(transform,
@@ -243,7 +260,8 @@ def inverse_stft(transform,
                  window="sqrthann",
                  round_pow_of_two=True,
                  normalized=False,
-                 onesided=True):
+                 onesided=True,
+                 center=False):
     """
     iSTFT function implementation, equals to iSTFT layer
     """
@@ -263,7 +281,8 @@ def inverse_stft(transform,
                          w.to(device),
                          input=input,
                          frame_hop=frame_hop,
-                         onesided=onesided)
+                         onesided=onesided,
+                         center=center)
 
 
 class STFTBase(nn.Module):
@@ -277,7 +296,8 @@ class STFTBase(nn.Module):
                  round_pow_of_two=True,
                  normalized=False,
                  onesided=True,
-                 inverse=False):
+                 inverse=False,
+                 center=False):
         super(STFTBase, self).__init__()
         w = init_window(window, frame_len)
         K = init_kernel(frame_len,
@@ -291,10 +311,11 @@ class STFTBase(nn.Module):
         self.frame_len = frame_len
         self.frame_hop = frame_hop
         self.onesided = onesided
+        self.center = center
         self.num_bins = self.K.shape[0] // 4 + 1
         self.expr = (
             f"window={window}, stride={frame_hop}, onesided={onesided}, " +
-            f"normalized={normalized}, " +
+            f"normalized={normalized}, center={self.center}, " +
             f"kernel_size={self.num_bins}x{self.K.shape[2]}")
 
     def num_frames(self, num_samples):
@@ -326,7 +347,8 @@ class STFT(STFTBase):
                              self.K,
                              output=output,
                              frame_hop=self.frame_hop,
-                             onesided=self.onesided)
+                             onesided=self.onesided,
+                             center=self.center)
 
 
 class iSTFT(STFTBase):
@@ -349,4 +371,5 @@ class iSTFT(STFTBase):
                              self.w,
                              input=input,
                              frame_hop=self.frame_hop,
-                             onesided=self.onesided)
+                             onesided=self.onesided,
+                             center=self.center)

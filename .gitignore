@@ -1,3 +1,4 @@
+# vscode
 .vscode/
 __pycache__/
 .py[cod]
@@ -8,7 +9,10 @@ src/debug*
 egs/
 exp/
 checkpoint/
-test/
 cache/
 
+# pytest
+.pytest_cache/
+
+# MAC
 .DS_Store
