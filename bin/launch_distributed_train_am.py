@@ -93,11 +93,8 @@ def load_conf(yaml_conf, dict_path):
     for key in conf.keys():
         if key not in constrained_conf_keys:
             raise ValueError(f"Invalid configuration item: {key}")
-    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
-
-    trainer_conf = conf["trainer_conf"]
-    use_ctc = "ctc_regularization" in trainer_conf and trainer_conf[
-        "ctc_regularization"] > 0
+    task_conf = conf["task_conf"]
+    use_ctc = "ctc_weight" in task_conf and task_conf["ctc_weight"] > 0
     is_transducer = conf["task"] == "transducer"
     if not is_transducer:
         nnet_conf["sos"] = vocab["<sos>"]
@@ -125,6 +122,8 @@ def run(args):
         raise RuntimeError("--num-process exceeds number of the GPUs")
 
     conf = load_conf(args.conf, args.dict)
+    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
+
     asr_cls = support_nnet(conf["nnet"])
     asr_transform = None
     enh_transform = None
