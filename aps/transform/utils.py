@@ -71,7 +71,8 @@ def init_melfilter(frame_len,
                    sr=16000,
                    num_mels=80,
                    fmin=0.0,
-                   fmax=None):
+                   fmax=None,
+                   norm=False):
     """
     Return mel-filters
     """
@@ -85,6 +86,13 @@ def init_melfilter(frame_len,
     fmax = sr // 2 if fmax is None else min(fmax, sr // 2)
     # mel-matrix
     mel = filters.mel(sr, N, n_mels=num_mels, fmax=fmax, fmin=fmin, htk=True)
+    # normalize filters
+    if norm:
+        # num_bins
+        csum = np.sum(mel, 0)
+        csum[csum == 0] = -1
+        # num_mels x num_bins
+        mel = mel @ np.diag(1 / csum)
     # num_mels x (N // 2 + 1)
     return th.tensor(mel, dtype=th.float32)
 

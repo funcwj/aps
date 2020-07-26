@@ -134,6 +134,10 @@ class StopCriterion(object):
     def stop(self):
         return self.no_impr == self.max_no_impr
 
+    @property
+    def best(self):
+        return self.best_criterion
+
     def step(self, update_value):
         is_better = True
         # loss
@@ -437,7 +441,8 @@ class Trainer(object):
             self.ssr = self.ss_scheduler.step(e, best_accu)
         # make sure not inf
         best_value = best_loss if self.stop_on == "loss" else best_accu
-        if self.lr_scheduler:
+        # for ReduceLROnPlateau
+        if hasattr(self.lr_scheduler, "best"):
             self.lr_scheduler.best = best_value
         self.stop_criterion.reset(best_value)
         # log here
@@ -475,10 +480,7 @@ class Trainer(object):
             if better:
                 self.save_checkpoint(e, best=True)
             else:
-                if self.lr_scheduler:
-                    sstr += f" | no impr, best = {self.lr_scheduler.best:.4f}"
-                else:
-                    sstr += " | no impr"
+                sstr += f" | no impr, best = {self.stop_criterion.best:.4f}"
 
             self.reporter.log(sstr)
             # << eval
@@ -565,10 +567,7 @@ class Trainer(object):
                     if better:
                         self.save_checkpoint(e, best=True)
                     else:
-                        if self.lr_scheduler:
-                            sstr += f" | no impr, best = {self.lr_scheduler.best:.4f}"
-                        else:
-                            sstr += " | no impr"
+                        sstr += f" | no impr, best = {self.stop_criterion.best:.4f}"
 
                     self.reporter.log(sstr)
                     # schedule here

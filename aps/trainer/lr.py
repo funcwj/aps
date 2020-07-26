@@ -4,18 +4,28 @@
 
 import math
 
-from torch.optim.lr_scheduler import ReduceLROnPlateau, MultiStepLR, ExponentialLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau, MultiStepLR, StepLR, ExponentialLR
+
+
+class CustomStepLR(StepLR):
+    """
+    To add custom features for StepLR
+    """
+    def __init__(self, optimizer, step_size=10, gamma=0.1, last_epoch=-1):
+        super(CustomStepLR, self).__init__(optimizer,
+                                           step_size,
+                                           gamma=gamma,
+                                           last_epoch=last_epoch)
+
+    def step(self, value):
+        super().step()
 
 
 class CustomMultiStepLR(MultiStepLR):
     """
     Using lr_conf to set milestones & gamma, e.g., 0.1@10,20,40
     """
-    def __init__(self,
-                 optimizer,
-                 lr_conf="0.5@10,20,30,40",
-                 last_epoch=-1,
-                 mode="min"):
+    def __init__(self, optimizer, lr_conf="0.5@10,20,30,40", last_epoch=-1):
         lr_str = lr_conf.split("@")
         if len(lr_str) != 2:
             raise RuntimeError(f"Wrong format for lr_conf={lr_conf}")
@@ -25,38 +35,27 @@ class CustomMultiStepLR(MultiStepLR):
                                                 milestones,
                                                 gamma=gamma,
                                                 last_epoch=last_epoch)
-        self.best = math.inf if mode == "min" else -math.inf
-        self.mode = mode
 
     def step(self, value):
-        if value < self.best and self.mode == "min":
-            self.best = value
-        if value > self.best and self.mode == "max":
-            self.best = value
         super().step()
 
 
 class CustomExponentialLR(ExponentialLR):
     """
-    Add custom features for ExponentialLR
+    To add custom features for ExponentialLR
     """
-    def __init__(self, optimizer, gamma, last_epoch=-1, mode="min"):
+    def __init__(self, optimizer, gamma, last_epoch=-1):
         super(CustomExponentialLR, self).__init__(optimizer,
                                                   gamma,
                                                   last_epoch=last_epoch)
-        self.best = math.inf if mode == "min" else -math.inf
-        self.mode = mode
 
     def step(self, value):
-        if value < self.best and self.mode == "min":
-            self.best = value
-        if value > self.best and self.mode == "max":
-            self.best = value
         super().step()
 
 
 scheduler_cls = {
     "reduce_lr": ReduceLROnPlateau,
+    "step_lr": CustomStepLR,
     "multi_step_lr": CustomMultiStepLR,
     "exponential_lr": CustomExponentialLR
 }
