@@ -12,13 +12,14 @@ from aps.loader.am import WaveReader
 
 from kaldi_python_io import Reader as BaseReader
 
+
 class SpeakersReader(object):
-    def __init__(self, scps):
+    def __init__(self, scps, sr=16000):
         split_scps = scps.split(",")
         if len(split_scps) == 1:
             raise RuntimeError("Construct SpeakersReader need more "
                                "than one script, got {}".format(scps))
-        self.readers = [WaveReader(scp) for scp in split_scps]
+        self.readers = [WaveReader(scp, sr=sr) for scp in split_scps]
 
     def __len__(self):
         first_reader = self.readers[0]
@@ -69,8 +70,8 @@ def run(args):
     details = open(args.details, "w") if args.details else None
 
     if single_speaker:
-        sep_reader = WaveReader(args.sep_scp)
-        ref_reader = WaveReader(args.ref_scp)
+        sep_reader = WaveReader(args.sep_scp, sr=args.sr)
+        ref_reader = WaveReader(args.ref_scp, sr=args.sr)
         for key, sep in tqdm(sep_reader):
             ref = ref_reader[key]
             if sep.size != ref.size:
@@ -82,8 +83,8 @@ def run(args):
             if details:
                 details.write("{}\t{:.2f}\n".format(key, snr))
     else:
-        sep_reader = SpeakersReader(args.sep_scp)
-        ref_reader = SpeakersReader(args.ref_scp)
+        sep_reader = SpeakersReader(args.sep_scp, sr=args.sr)
+        ref_reader = SpeakersReader(args.ref_scp, sr=args.sr)
         for key, sep_list in tqdm(sep_reader):
             ref_list = ref_reader[key]
             if sep_list[0].size != ref_list[0].size:
@@ -122,5 +123,9 @@ if __name__ == "__main__":
                         default="",
                         help="If assigned, report snr "
                         "improvement for each utterance")
+    parser.add_argument("--sr",
+                        type=int,
+                        default=16000,
+                        help="Sample rate of the audio")
     args = parser.parse_args()
     run(args)

@@ -20,6 +20,7 @@ from aps.loader import support_loader
 from aps.transform import support_transform
 from aps.task import support_task
 from aps.asr import support_nnet
+from aps import distributed
 
 blank_sym = "<blank>"
 constrained_conf_keys = [
@@ -48,6 +49,11 @@ def train_worker(rank, nnet, conf, args):
                       prog_interval=args.prog_interval,
                       tensorboard=args.tensorboard,
                       **conf["trainer_conf"])
+
+    # dump configurations
+    if rank == 0:
+        with open(f"{args.checkpoint}/train.yaml", "w") as f:
+            yaml.dump(conf, f)
 
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
@@ -113,6 +119,7 @@ def load_conf(yaml_conf, dict_path):
 
 
 def run(args):
+    distributed.init("torch")
     # set random seed
     seed = set_seed(args.seed)
     if seed is not None:
@@ -142,10 +149,6 @@ def run(args):
         nnet = asr_cls(**conf["nnet_conf"])
 
     train_worker(args.local_rank, nnet, conf, args)
-
-    # dump configurations
-    with open(f"{args.checkpoint}/train.yaml", "w") as f:
-        yaml.dump(conf, f)
 
 
 if __name__ == "__main__":

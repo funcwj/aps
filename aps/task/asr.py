@@ -120,7 +120,7 @@ class CtcXentHybridTask(Task):
             loss = ce_loss(outs, tgts)
 
         stats = {}
-        if self.ctc_factor > 0:
+        if self.ctc_weight > 0:
             # add log-softmax, N x T x V => T x N x V
             log_prob = tf.log_softmax(ctc_branch, dim=-1).transpose(0, 1)
             # CTC loss
