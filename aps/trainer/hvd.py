@@ -4,21 +4,20 @@ import math
 from os import environ
 
 import torch as th
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel
+import aps.distributed as dist
 
+from torch.nn.parallel import DistributedDataParallel
 from aps.trainer.base import Trainer
 
 
-class DdpTrainer(Trainer):
+class HvdTrainer(Trainer):
     """
-    A PyTorch data distributed parallel (DDP) trainer
+    A Horovod Trainer
     """
     def __init__(self,
                  task,
                  rank=None,
                  device_ids=0,
-                 dist_url="env://",
                  checkpoint="cpt",
                  optimizer="adam",
                  optimizer_kwargs=None,
@@ -36,7 +35,7 @@ class DdpTrainer(Trainer):
                  stop_criterion="loss",
                  no_impr=6,
                  no_impr_thres=1e-3):
-        super(DdpTrainer,
+        super(HvdTrainer,
               self).__init__(task,
                              rank=rank,
                              device_ids=device_ids,
@@ -57,35 +56,25 @@ class DdpTrainer(Trainer):
                              stop_criterion=stop_criterion,
                              no_impr=no_impr,
                              no_impr_thres=no_impr_thres)
-        self.setup_distributed(dist_url)
+        if dist.get_backend() != "horovod":
+            raise ValueError(
+                f"aps.distributed do not using horovod as backend")
+        if not dist.hvd_available:
+            raise ValueError(
+                f"horovod is not installed in current environment")
+        self.setup_distributed()
 
-    def setup_distributed(self, dist_url):
+    def setup_distributed(self):
         """
         Setup environment for distributed training
         """
-        if self.cuda_devices >= 2:
-            if dist_url == "env://":
-                if int(environ.get("RANK")) != self.rank:
-                    raise RuntimeError(
-                        f"DDP: rank value {self.rank} does not match with env[RANK]"
-                    )
-                if int(environ.get("WORLD_SIZE")) != self.cuda_devices:
-                    raise RuntimeError(
-                        f"DDP: world size {self.cuda_devices} does not match with env[WORLD_SIZE]"
-                    )
-            self.distributed = True
-            # do distributed
-            dist.init_process_group(backend="nccl",
-                                    init_method=dist_url,
-                                    rank=self.rank,
-                                    world_size=self.cuda_devices)
-            self.reporter.log(
-                f"DDP: init process group, rank={self.rank}, " +
-                f"world_size={self.cuda_devices}, init_method={dist_url}")
-            self.task = DistributedDataParallel(self.task,
-                                                device_ids=[self.rank])
-        else:
-            self.distributed = False
+        import horovod.torch as hvd
+        hvd.broadcast_parameters(self.task.state_dict(), root_rank=0)
+        hvd.broadcast_optimizer_state(self.optimizer, root_rank=0)
+        self.optimizer = hvd.DistributedOptimizer(
+            self.optimizer, named_parameters=self.task.named_parameters())
+        self.reporter.log(f"HVD: init horovod, rank = {self.rank}, " +
+                          f"world_size={dist.world_size()}")
 
     def save_checkpoint(self, epoch, best=True):
         """
@@ -93,15 +82,10 @@ class DdpTrainer(Trainer):
         """
         if self.rank in [0, None]:
             cpt = {
-                "epoch":
-                epoch,
-                "model_state_dict":
-                self.task.module.nnet.state_dict()
-                if self.distributed else self.task.nnet.state_dict(),
-                "optim_state_dict":
-                self.optimizer.state_dict(),
-                "lr_scheduler_dict":
-                self.lr_scheduler.state_dict()
+                "epoch": epoch,
+                "model_state_dict": self.task.nnet.state_dict(),
+                "optim_state_dict": self.optimizer.state_dict(),
+                "lr_scheduler_dict": self.lr_scheduler.state_dict()
             }
             cpt_name = "{}.pt.tar".format("best" if best else "last")
             th.save(cpt, self.checkpoint / cpt_name)

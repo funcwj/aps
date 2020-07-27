@@ -13,7 +13,7 @@ import torch as th
 
 from aps.utils import set_seed
 from aps.opts import BaseTrainParser
-from aps.trainer.ddp import Trainer
+from aps.trainer.ddp import DdpTrainer
 from aps.loader import support_loader
 from aps.asr import support_nnet
 from aps.task import support_task
@@ -75,14 +75,14 @@ def run(args):
     nnet = support_nnet(conf["nnet"])(**conf["nnet_conf"])
     task = support_task(conf["task"], nnet, **conf["task_conf"])
 
-    trainer = Trainer(task,
-                      device_ids=args.device_id,
-                      checkpoint=args.checkpoint,
-                      resume=args.resume,
-                      save_interval=args.save_interval,
-                      prog_interval=args.prog_interval,
-                      tensorboard=args.tensorboard,
-                      **conf["trainer_conf"])
+    trainer = DdpTrainer(task,
+                         device_ids=args.device_id,
+                         checkpoint=args.checkpoint,
+                         resume=args.resume,
+                         save_interval=args.save_interval,
+                         prog_interval=args.prog_interval,
+                         tensorboard=args.tensorboard,
+                         **conf["trainer_conf"])
     # dump configurations
     with open(f"{args.checkpoint}/train.yaml", "w") as f:
         yaml.dump(conf, f)

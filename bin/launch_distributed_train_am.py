@@ -14,7 +14,7 @@ import numpy as np
 
 from aps.utils import set_seed
 from aps.opts import BaseTrainParser
-from aps.trainer.ddp import Trainer
+from aps.trainer.ddp import DdpTrainer
 
 from aps.loader import support_loader
 from aps.transform import support_transform
@@ -33,22 +33,24 @@ def train_worker(rank, nnet, conf, args):
     """
     Initalize training workers
     """
+    # init torch backend
+    distributed.init("torch")
     # construct trainer
     # torch.distributed.launch will provide
     # environment variables, and requires that you use init_method="env://".
 
     task = support_task(conf["task"], nnet, **conf["task_conf"])
 
-    trainer = Trainer(task,
-                      rank=rank,
-                      device_ids=tuple(i for i in range(args.num_process)),
-                      checkpoint=args.checkpoint,
-                      resume=args.resume,
-                      init=args.init,
-                      save_interval=args.save_interval,
-                      prog_interval=args.prog_interval,
-                      tensorboard=args.tensorboard,
-                      **conf["trainer_conf"])
+    trainer = DdpTrainer(task,
+                         rank=rank,
+                         device_ids=tuple(i for i in range(args.num_process)),
+                         checkpoint=args.checkpoint,
+                         resume=args.resume,
+                         init=args.init,
+                         save_interval=args.save_interval,
+                         prog_interval=args.prog_interval,
+                         tensorboard=args.tensorboard,
+                         **conf["trainer_conf"])
 
     # dump configurations
     if rank == 0:
@@ -119,7 +121,6 @@ def load_conf(yaml_conf, dict_path):
 
 
 def run(args):
-    distributed.init("torch")
     # set random seed
     seed = set_seed(args.seed)
     if seed is not None:
