@@ -4,6 +4,7 @@
 
 set -eu
 
+gpu="0,1"
 seed=777
 port=10086
 epochs=100
@@ -27,24 +28,26 @@ conf=conf/$data/$exp_id.yaml
 
 [ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
 
-export OMP_NUM_THREADS=24
+export OMP_NUM_THREADS=4
 
 python -m torch.distributed.launch \
   --nnodes=1 \
   --nproc_per_node=$num_process \
-  --master_port=$port \
-  bin/launch_distributed_train_ss.py \
+  --master_port=$port 
+  --use_env true \
+  bin/distributed_train_ss.py \
   --conf $conf \
   --seed $seed \
+  --device-ids $gpu \
+  --distributed "torch" \
   --tensorboard $tensorboard \
   --save-interval $save_interval \
   --prog-interval $prog_interval \
+  --eval-interval $eval_interval \
   --num-workers $num_workers \
-  --num-process $num_process \
   --checkpoint exp/$data/$exp_id \
   --batch-size $batch_size \
   --epochs $epochs \
-  --eval-interval $eval_interval \
   > $data.train_am.$exp_id.log 2>&1
 
 cp $data.train_am.$exp_id.log exp/$data/$exp_id

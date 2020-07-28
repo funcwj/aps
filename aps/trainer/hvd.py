@@ -58,7 +58,7 @@ class HvdTrainer(Trainer):
                              no_impr_thres=no_impr_thres)
         if dist.get_backend() != "horovod":
             raise ValueError(
-                f"aps.distributed do not using horovod as backend")
+                f"aps.distributed doesn't use horovod as backend")
         if not dist.hvd_available:
             raise ValueError(
                 f"horovod is not installed in current environment")
@@ -73,7 +73,7 @@ class HvdTrainer(Trainer):
         hvd.broadcast_optimizer_state(self.optimizer, root_rank=0)
         self.optimizer = hvd.DistributedOptimizer(
             self.optimizer, named_parameters=self.task.named_parameters())
-        self.reporter.log(f"HVD: init horovod, rank = {self.rank}, " +
+        self.reporter.log(f"HVD: using horovod, rank = {self.rank}, " +
                           f"world_size={dist.world_size()}")
 
     def save_checkpoint(self, epoch, best=True):

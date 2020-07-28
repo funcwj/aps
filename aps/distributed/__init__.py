@@ -1,3 +1,4 @@
+from os import environ
 import torch.distributed as dist
 
 try:
@@ -18,6 +19,16 @@ def init(backend):
     BACKEND = backend
     if backend == "horovod":
         hvd.init()
+    if backend == "torch":
+        for env in ["LOCAL_RANK", "WORLD_SIZE"]:
+            if "LOCAL_RANK" not in environ:
+                raise RuntimeError(
+                    f"Not found in {env} environments, using python "
+                    "-m torch.distributed.launch to launch the command")
+        dist.init_process_group(backend="nccl",
+                                init_method="env://",
+                                rank=int(environ["LOCAL_RANK"]),
+                                world_size=int(environ["WORLD_SIZE"]))
 
 
 def get_backend():

@@ -9,12 +9,14 @@ import pprint
 import pathlib
 import argparse
 
+from os import environ
+
 import torch as th
 import numpy as np
 
 from aps.utils import set_seed
 from aps.opts import BaseTrainParser
-from aps.trainer.ddp import DdpTrainer
+from aps.trainer import HvdTrainer, DdpTrainer
 
 from aps.loader import support_loader
 from aps.transform import support_transform
@@ -28,47 +30,53 @@ constrained_conf_keys = [
 ]
 
 
-def train_worker(rank, task, conf, args):
+def train_worker(task, conf, args):
     """
     Initalize training workers
     """
-    # init torch backend
-    distributed.init("torch")
+    # init torch/horovod backend
+    distributed.init(args.distributed)
 
-    trainer = DdpTrainer(task,
-                         rank=rank,
-                         device_ids=tuple(range(args.num_process)),
-                         checkpoint=args.checkpoint,
-                         resume=args.resume,
-                         init=args.init,
-                         save_interval=args.save_interval,
-                         prog_interval=args.prog_interval,
-                         tensorboard=args.tensorboard,
-                         **conf["trainer_conf"])
+    if args.distributed == "horovod":
+        Trainer = HvdTrainer
+    else:
+        Trainer = DdpTrainer
+
+    trainer = Trainer(task,
+                      rank=distributed.rank(),
+                      device_ids=args.device_ids,
+                      checkpoint=args.checkpoint,
+                      resume=args.resume,
+                      init=args.init,
+                      save_interval=args.save_interval,
+                      prog_interval=args.prog_interval,
+                      tensorboard=args.tensorboard,
+                      **conf["trainer_conf"])
 
     # dump configurations
     if rank == 0:
         with open(f"{args.checkpoint}/train.yaml", "w") as f:
             yaml.dump(conf, f)
 
+    num_process = len(args.device_ids.split(","))
     data_conf = conf["data_conf"]
     trn_loader = support_loader(train=True,
                                 fmt=data_conf["fmt"],
-                                batch_size=args.batch_size // args.num_process,
-                                num_workers=args.num_workers,
+                                batch_size=args.batch_size // num_process,
+                                num_workers=args.num_workers // num_process,
                                 distributed=True,
                                 **data_conf["loader"],
                                 **data_conf["train"])
     dev_loader = support_loader(train=False,
                                 fmt=data_conf["fmt"],
-                                batch_size=args.batch_size // args.num_process,
-                                num_workers=args.num_workers,
+                                batch_size=args.batch_size // num_process,
+                                num_workers=args.num_workers // num_process,
                                 distributed=False,
                                 **data_conf["loader"],
                                 **data_conf["valid"])
     if args.eval_interval <= 0:
-        raise RuntimeError(
-            "For distributed training, --eval-interval must be larger than 0")
+        raise RuntimeError("For distributed training of SE/SS model, "
+                           "--eval-interval must be larger than 0")
     trainer.run_batch_per_epoch(trn_loader,
                                 dev_loader,
                                 num_epochs=args.epochs,
@@ -112,7 +120,7 @@ def run(args):
         nnet = ss_cls(**conf["nnet_conf"])
 
     task = support_task(conf["task"], nnet, **conf["task_conf"])
-    train_worker(args.local_rank, task, conf, args)
+    train_worker(task, conf, args)
 
 
 if __name__ == "__main__":
@@ -122,15 +130,15 @@ if __name__ == "__main__":
         "Using python -m torch.distributed.launch to launch the command.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[BaseTrainParser.parser])
-    parser.add_argument("--local_rank",
-                        type=int,
-                        default=0,
-                        help="Local rank value, supplied automatically "
-                        "by torch.distributed.launch")
-    parser.add_argument("--num-process",
-                        type=int,
-                        default=2,
-                        help="Number of process for distributed training")
+    parser.add_argument("--device-ids",
+                        type=str,
+                        default="0,1",
+                        help="Training on which GPU devices")
+    parser.add_argument("--distributed",
+                        type=str,
+                        default="torch",
+                        choices=["torch", "horovod"],
+                        help="Which distributed backend to use")
     args = parser.parse_args()
     print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
           flush=True)

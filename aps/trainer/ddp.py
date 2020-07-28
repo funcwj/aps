@@ -4,21 +4,20 @@ import math
 from os import environ
 
 import torch as th
-import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 
 from aps.trainer.base import Trainer
+import aps.distributed as dist
 
 
 class DdpTrainer(Trainer):
     """
-    A PyTorch data distributed parallel (DDP) trainer
+    A PyTorch distributed data parallel (DDP) Trainer
     """
     def __init__(self,
                  task,
                  rank=None,
                  device_ids=0,
-                 dist_url="env://",
                  checkpoint="cpt",
                  optimizer="adam",
                  optimizer_kwargs=None,
@@ -57,31 +56,19 @@ class DdpTrainer(Trainer):
                              stop_criterion=stop_criterion,
                              no_impr=no_impr,
                              no_impr_thres=no_impr_thres)
-        self.setup_distributed(dist_url)
+        if dist.get_backend() != "torch":
+            raise ValueError(f"aps.distributed doesn't use torch as backend")
+        self.setup_distributed()
 
-    def setup_distributed(self, dist_url):
+    def setup_distributed(self):
         """
         Setup environment for distributed training
         """
         if self.cuda_devices >= 2:
-            if dist_url == "env://":
-                if int(environ.get("RANK")) != self.rank:
-                    raise RuntimeError(
-                        f"DDP: rank value {self.rank} does not match with env[RANK]"
-                    )
-                if int(environ.get("WORLD_SIZE")) != self.cuda_devices:
-                    raise RuntimeError(
-                        f"DDP: world size {self.cuda_devices} does not match with env[WORLD_SIZE]"
-                    )
             self.distributed = True
-            # do distributed
-            dist.init_process_group(backend="nccl",
-                                    init_method=dist_url,
-                                    rank=self.rank,
-                                    world_size=self.cuda_devices)
             self.reporter.log(
-                f"DDP: init process group, rank={self.rank}, " +
-                f"world_size={self.cuda_devices}, init_method={dist_url}")
+                f"DDP: using distributed data parallel (DDP), rank={self.rank}, "
+                + f"world_size={dist.world_size()}")
             self.task = DistributedDataParallel(self.task,
                                                 device_ids=[self.rank])
         else:
