@@ -88,13 +88,13 @@ class CtcXentHybridTask(Task):
     """
     CTC & Attention AM
     """
-    def __init__(self, nnet, lsm_factor=0, ctc_regularization=0, ctc_blank=0):
+    def __init__(self, nnet, lsm_factor=0, ctc_weight=0, blank=0):
         super(CtcXentHybridTask, self).__init__(nnet)
-        self.ctc_blank = ctc_blank
-        self.ctc_factor = ctc_regularization
+        self.ctc_blank = blank
+        self.ctc_weight = ctc_weight
         self.lsm_factor = lsm_factor
 
-    def compute_loss(self, egs, ssr=0, **kwargs):
+    def forward(self, egs, ssr=0, **kwargs):
         """
         Compute CTC & Attention loss, egs contains:
             src_pad (Tensor): N x Ti x F
@@ -109,8 +109,10 @@ class CtcXentHybridTask(Task):
                                            eos=self.nnet.eos)
         # outs: N x (To+1) x V
         # alis: N x (To+1) x Ti
-        pack = (egs["src_pad"], egs["src_len"], tgt_pad, ssr)
-        outs, _, ctc_branch, enc_len = self.nnet(pack)
+        outs, _, ctc_branch, enc_len = self.nnet(egs["src_pad"],
+                                                 egs["src_len"],
+                                                 tgt_pad,
+                                                 ssr=ssr)
         # compute loss
         if self.lsm_factor > 0:
             loss = ls_loss(outs, tgts, lsm_factor=self.lsm_factor)
@@ -118,7 +120,7 @@ class CtcXentHybridTask(Task):
             loss = ce_loss(outs, tgts)
 
         stats = {}
-        if self.ctc_factor > 0:
+        if self.ctc_weight > 0:
             # add log-softmax, N x T x V => T x N x V
             log_prob = tf.log_softmax(ctc_branch, dim=-1).transpose(0, 1)
             # CTC loss
@@ -129,7 +131,7 @@ class CtcXentHybridTask(Task):
                                    blank=self.ctc_blank,
                                    reduction="mean",
                                    zero_infinity=True)
-            loss = self.ctc_factor * ctc_loss + (1 - self.ctc_factor) * loss
+            loss = self.ctc_weight * ctc_loss + (1 - self.ctc_weight) * loss
             stats["fctc"] = ctc_loss.item()
         # compute accu
         accu = compute_accu(outs, tgts)

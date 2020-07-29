@@ -14,7 +14,7 @@ import numpy as np
 
 from aps.utils import set_seed
 from aps.opts import BaseTrainParser
-from aps.trainer.ddp import Trainer
+from aps.trainer.ddp import DdpTrainer
 
 from aps.loader import support_loader
 from aps.transform import support_transform
@@ -54,10 +54,8 @@ def load_conf(yaml_conf, dict_path):
     for key in conf.keys():
         if key not in constrained_conf_keys:
             raise ValueError(f"Invalid configuration item: {key}")
-    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
-    trainer_conf = conf["trainer_conf"]
-    use_ctc = "ctc_regularization" in trainer_conf and trainer_conf[
-        "ctc_regularization"] > 0
+    task_conf = conf["task_conf"]
+    use_ctc = "ctc_weight" in task_conf and task_conf["ctc_weight"] > 0
     is_transducer = conf["task"] == "transducer"
     if not is_transducer:
         nnet_conf["sos"] = vocab["<sos>"]
@@ -82,6 +80,7 @@ def run(args):
         print(f"Set random seed as {seed}")
 
     conf = load_conf(args.conf, args.dict)
+    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
                                 train=True,
@@ -115,15 +114,18 @@ def run(args):
 
     task = support_task(conf["task"], nnet, **conf["task_conf"])
 
-    trainer = Trainer(task,
-                      device_ids=args.device_id,
-                      checkpoint=args.checkpoint,
-                      resume=args.resume,
-                      init=args.init,
-                      save_interval=args.save_interval,
-                      prog_interval=args.prog_interval,
-                      tensorboard=args.tensorboard,
-                      **conf["trainer_conf"])
+    trainer = DdpTrainer(task,
+                         device_ids=args.device_id,
+                         checkpoint=args.checkpoint,
+                         resume=args.resume,
+                         init=args.init,
+                         save_interval=args.save_interval,
+                         prog_interval=args.prog_interval,
+                         tensorboard=args.tensorboard,
+                         **conf["trainer_conf"])
+    # dump configurations
+    with open(f"{args.checkpoint}/train.yaml", "w") as f:
+        yaml.dump(conf, f)
 
     if args.eval_interval > 0:
         trainer.run_batch_per_epoch(trn_loader,
@@ -132,10 +134,6 @@ def run(args):
                                     eval_interval=args.eval_interval)
     else:
         trainer.run(trn_loader, dev_loader, num_epochs=args.epochs)
-
-    # dump configurations
-    with open(f"{args.checkpoint}/train.yaml", "w") as f:
-        yaml.dump(conf, f)
 
 
 if __name__ == "__main__":

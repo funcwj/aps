@@ -8,6 +8,7 @@ import random
 import torch as th
 import numpy as np
 import torch.utils.data as dat
+import aps.distributed as dist
 
 from torch.utils.data.dataloader import default_collate
 from kaldi_python_io import Reader as BaseReader
@@ -236,7 +237,10 @@ class WaveChunkDataLoader(object):
                                       train=train,
                                       hop=chunk_size // 2)
         if distributed:
-            sampler = dat.DistributedSampler(dataset, shuffle=train)
+            sampler = dat.DistributedSampler(dataset,
+                                             shuffle=train,
+                                             num_replicas=dist.world_size(),
+                                             rank=dist.rank())
         else:
             sampler = None
         # just return batch of egs, support multiple workers

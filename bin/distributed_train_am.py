@@ -9,17 +9,20 @@ import pprint
 import pathlib
 import argparse
 
+from os import environ
+
 import torch as th
 import numpy as np
 
 from aps.utils import set_seed
 from aps.opts import BaseTrainParser
-from aps.trainer.ddp import Trainer
+from aps.trainer import DdpTrainer, HvdTrainer
 
 from aps.loader import support_loader
 from aps.transform import support_transform
 from aps.task import support_task
 from aps.asr import support_nnet
+from aps import distributed
 
 blank_sym = "<blank>"
 constrained_conf_keys = [
@@ -28,19 +31,21 @@ constrained_conf_keys = [
 ]
 
 
-def train_worker(rank, nnet, conf, args):
+def train_worker(task, conf, args):
     """
     Initalize training workers
     """
+    # init torch/horovod backend
+    distributed.init(args.distributed)
+    rank = distributed.rank()
+
+    Trainer = {"torch": DdpTrainer, "horovod": HvdTrainer}[args.distributed]
     # construct trainer
     # torch.distributed.launch will provide
     # environment variables, and requires that you use init_method="env://".
-
-    task = support_task(conf["task"], nnet, **conf["task_conf"])
-
     trainer = Trainer(task,
                       rank=rank,
-                      device_ids=tuple(i for i in range(args.num_process)),
+                      device_ids=args.device_ids,
                       checkpoint=args.checkpoint,
                       resume=args.resume,
                       init=args.init,
@@ -49,19 +54,25 @@ def train_worker(rank, nnet, conf, args):
                       tensorboard=args.tensorboard,
                       **conf["trainer_conf"])
 
+    # dump configurations
+    if rank == 0:
+        with open(f"{args.checkpoint}/train.yaml", "w") as f:
+            yaml.dump(conf, f)
+
+    num_process = len(args.device_ids.split(","))
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
                                 train=True,
                                 distributed=True,
                                 fmt=data_conf["fmt"],
-                                batch_size=args.batch_size // args.num_process,
-                                num_workers=args.num_workers,
+                                batch_size=args.batch_size // num_process,
+                                num_workers=args.num_workers // num_process,
                                 **data_conf["loader"])
     dev_loader = support_loader(**data_conf["valid"],
                                 train=False,
                                 fmt=data_conf["fmt"],
-                                batch_size=args.batch_size // args.num_process,
-                                num_workers=args.num_workers,
+                                batch_size=args.batch_size // num_process,
+                                num_workers=args.num_workers // num_process,
                                 **data_conf["loader"])
     if args.eval_interval > 0:
         trainer.run_batch_per_epoch(trn_loader,
@@ -93,11 +104,8 @@ def load_conf(yaml_conf, dict_path):
     for key in conf.keys():
         if key not in constrained_conf_keys:
             raise ValueError(f"Invalid configuration item: {key}")
-    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
-
-    trainer_conf = conf["trainer_conf"]
-    use_ctc = "ctc_regularization" in trainer_conf and trainer_conf[
-        "ctc_regularization"] > 0
+    task_conf = conf["task_conf"]
+    use_ctc = "ctc_weight" in task_conf and task_conf["ctc_weight"] > 0
     is_transducer = conf["task"] == "transducer"
     if not is_transducer:
         nnet_conf["sos"] = vocab["<sos>"]
@@ -125,6 +133,8 @@ def run(args):
         raise RuntimeError("--num-process exceeds number of the GPUs")
 
     conf = load_conf(args.conf, args.dict)
+    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
+
     asr_cls = support_nnet(conf["nnet"])
     asr_transform = None
     enh_transform = None
@@ -142,11 +152,8 @@ def run(args):
     else:
         nnet = asr_cls(**conf["nnet_conf"])
 
-    train_worker(args.local_rank, nnet, conf, args)
-
-    # dump configurations
-    with open(f"{args.checkpoint}/train.yaml", "w") as f:
-        yaml.dump(conf, f)
+    task = support_task(conf["task"], nnet, **conf["task_conf"])
+    train_worker(task, conf, args)
 
 
 if __name__ == "__main__":
@@ -157,19 +164,19 @@ if __name__ == "__main__":
         "Using python -m torch.distributed.launch to launch the command.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[BaseTrainParser.parser])
-    parser.add_argument("--local_rank",
-                        type=int,
-                        default=0,
-                        help="Local rank value, supplied automatically "
-                        "by torch.distributed.launch")
-    parser.add_argument("--num-process",
-                        type=int,
-                        default=2,
-                        help="Number of process for distributed training")
+    parser.add_argument("--device-ids",
+                        type=str,
+                        default="0,1",
+                        help="Training on which GPU devices")
     parser.add_argument("--dict",
                         type=str,
                         required=True,
                         help="Dictionary file")
+    parser.add_argument("--distributed",
+                        type=str,
+                        default="torch",
+                        choices=["torch", "horovod"],
+                        help="Which distributed backend to use")
     args = parser.parse_args()
     print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
           flush=True)

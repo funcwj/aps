@@ -162,10 +162,13 @@ class DiscreteCosineTransform(nn.Module):
         self.num_ceps = num_ceps
         self.dct = nn.Parameter(init_dct(num_ceps, num_mels),
                                 requires_grad=False)
-        cepstral_lifter = 1 + lifter * 0.5 * th.sin(
-            math.pi * th.arange(1, 1 + num_ceps) / lifter)
-        self.cepstral_lifter = nn.Parameter(cepstral_lifter,
-                                            requires_grad=False)
+        if lifter > 0:
+            cepstral_lifter = 1 + lifter * 0.5 * th.sin(
+                math.pi * th.arange(1, 1 + num_ceps) / lifter)
+            self.cepstral_lifter = nn.Parameter(cepstral_lifter,
+                                                requires_grad=False)
+        else:
+            self.cepstral_lifter = None
 
     def dim(self):
         return self.num_ceps
@@ -182,7 +185,8 @@ class DiscreteCosineTransform(nn.Module):
             f (Tensor): mfcc, N x (C) x T x P
         """
         f = F.linear(x, self.dct, bias=None)
-        f = f * self.cepstral_lifter
+        if self.cepstral_lifter is not None:
+            f = f * self.cepstral_lifter
         return f
 
 

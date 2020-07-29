@@ -14,7 +14,7 @@ import numpy as np
 
 from aps.utils import set_seed
 from aps.opts import BaseTrainParser
-from aps.trainer.ddp import Trainer
+from aps.trainer.ddp import DdpTrainer
 
 from aps.loader import support_loader
 from aps.transform import support_transform
@@ -77,15 +77,19 @@ def run(args):
 
     task = support_task(conf["task"], nnet, **conf["task_conf"])
 
-    trainer = Trainer(task,
-                      device_ids=args.device_id,
-                      checkpoint=args.checkpoint,
-                      resume=args.resume,
-                      init=args.init,
-                      save_interval=args.save_interval,
-                      prog_interval=args.prog_interval,
-                      tensorboard=args.tensorboard,
-                      **conf["trainer_conf"])
+    trainer = DdpTrainer(task,
+                         device_ids=args.device_id,
+                         checkpoint=args.checkpoint,
+                         resume=args.resume,
+                         init=args.init,
+                         save_interval=args.save_interval,
+                         prog_interval=args.prog_interval,
+                         tensorboard=args.tensorboard,
+                         **conf["trainer_conf"])
+
+    # dump configurations
+    with open(f"{args.checkpoint}/train.yaml", "w") as f:
+        yaml.dump(conf, f)
 
     if args.eval_interval > 0:
         trainer.run_batch_per_epoch(trn_loader,
@@ -94,10 +98,6 @@ def run(args):
                                     eval_interval=args.eval_interval)
     else:
         trainer.run(trn_loader, dev_loader, num_epochs=args.epochs)
-
-    # dump configurations
-    with open(f"{args.checkpoint}/train.yaml", "w") as f:
-        yaml.dump(conf, f)
 
 
 if __name__ == "__main__":

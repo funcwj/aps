@@ -4,8 +4,10 @@
 
 set -eu
 
+gpu="0,1"
 seed=777
 port=10086
+distributed="torch"
 epochs=100
 tensorboard=false
 batch_size=64
@@ -29,25 +31,52 @@ conf=conf/$data/$exp_id.yaml
 [ ! -f $dict ] && echo "$0: missing dictionary $dict" && exit 1
 [ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
 
-export OMP_NUM_THREADS=24
+export OMP_NUM_THREADS=4
 
-python -m torch.distributed.launch \
-  --nnodes=1 \
-  --nproc_per_node=$num_process \
-  --master_port=$port \
-  bin/launch_distributed_train_am.py \
-  --conf $conf \
-  --dict $dict \
-  --seed $seed \
-  --tensorboard $tensorboard \
-  --save-interval $save_interval \
-  --prog-interval $prog_interval \
-  --num-workers $num_workers \
-  --num-process $num_process \
-  --checkpoint exp/$data/$exp_id \
-  --batch-size $batch_size \
-  --epochs $epochs \
-  --eval-interval $eval_interval \
-  > $data.train_am.$exp_id.log 2>&1
+case $distributed in 
+  "torch" )
+    python -m torch.distributed.launch \
+      --nnodes=1 \
+      --nproc_per_node $num_process \
+      --master_port $port \
+      --use_env true \
+      python bin/distributed_train_am.py \
+      --conf $conf \
+      --dict $dict \
+      --seed $seed \
+      --device-ids $gpu \
+      --distributed "torch" \
+      --tensorboard $tensorboard \
+      --save-interval $save_interval \
+      --prog-interval $prog_interval \
+      --eval-interval $eval_interval \
+      --num-workers $num_workers \
+      --checkpoint exp/$data/$exp_id \
+      --batch-size $batch_size \
+      --epochs $epochs \
+      > $data.train_am.$exp_id.log 2>&1
+    ;;
+  "horovod" )
+    horovodrun -np $num_process -H localhost:$num_process \
+      python bin/distributed_train_am.py \
+        --conf $conf \
+        --dict $dict \
+        --seed $seed \
+        --device-ids $gpu \
+        --distributed "horovod" \
+        --tensorboard $tensorboard \
+        --save-interval $save_interval \
+        --prog-interval $prog_interval \
+        --eval-interval $eval_interval \
+        --num-workers $num_workers \
+        --checkpoint exp/$data/$exp_id \
+        --batch-size $batch_size \
+        --epochs $epochs \
+        > $data.train_am.$exp_id.log 2>&1
+    ;;
+  * )
+    echo "$0: Unknown --distributed $distributed" && exit 1
+    ;;
+esac
 
 cp $data.train_am.$exp_id.log exp/$data/$exp_id

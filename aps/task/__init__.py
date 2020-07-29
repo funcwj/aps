@@ -10,8 +10,11 @@ task_cls = {
     "unsuper_enh": UnsuperEnhTask,
     "sisnr": SisnrTask,
     "snr": SnrTask,
-    "waveform_appro": WaTask,
-    "spectra_appro": SaTask
+    "wa": WaTask,
+    "linear_sa": LinearFreqSaTask,
+    "mel_sa": MelFreqSaTask,
+    "time_linear_sa": LinearTimeSaTask,
+    "time_mel_sa": MelTimeSaTask
 }
 
 

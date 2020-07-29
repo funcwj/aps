@@ -4,15 +4,15 @@ import math
 from os import environ
 
 import torch as th
-from torch.nn.parallel import DistributedDataParallel
-
-from aps.trainer.base import Trainer
 import aps.distributed as dist
 
+from torch.nn.parallel import DistributedDataParallel
+from aps.trainer.base import Trainer
 
-class DdpTrainer(Trainer):
+
+class HvdTrainer(Trainer):
     """
-    A PyTorch distributed data parallel (DDP) Trainer
+    A Horovod Trainer
     """
     def __init__(self,
                  task,
@@ -35,7 +35,7 @@ class DdpTrainer(Trainer):
                  stop_criterion="loss",
                  no_impr=6,
                  no_impr_thres=1e-3):
-        super(DdpTrainer,
+        super(HvdTrainer,
               self).__init__(task,
                              rank=rank,
                              device_ids=device_ids,
@@ -56,23 +56,25 @@ class DdpTrainer(Trainer):
                              stop_criterion=stop_criterion,
                              no_impr=no_impr,
                              no_impr_thres=no_impr_thres)
-        if dist.get_backend() != "torch":
-            raise ValueError(f"aps.distributed doesn't use torch as backend")
+        if dist.get_backend() != "horovod":
+            raise ValueError(
+                f"aps.distributed doesn't use horovod as backend")
+        if not dist.hvd_available:
+            raise ValueError(
+                f"horovod is not installed in current environment")
         self.setup_distributed()
 
     def setup_distributed(self):
         """
         Setup environment for distributed training
         """
-        if self.cuda_devices >= 2:
-            self.distributed = True
-            self.reporter.log(
-                f"DDP: using distributed data parallel (DDP), rank={self.rank}, "
-                + f"world_size={dist.world_size()}")
-            self.task = DistributedDataParallel(self.task,
-                                                device_ids=[self.rank])
-        else:
-            self.distributed = False
+        import horovod.torch as hvd
+        hvd.broadcast_parameters(self.task.state_dict(), root_rank=0)
+        hvd.broadcast_optimizer_state(self.optimizer, root_rank=0)
+        self.optimizer = hvd.DistributedOptimizer(
+            self.optimizer, named_parameters=self.task.named_parameters())
+        self.reporter.log(f"HVD: using horovod, rank = {self.rank}, " +
+                          f"world_size={dist.world_size()}")
 
     def save_checkpoint(self, epoch, best=True):
         """
@@ -80,15 +82,10 @@ class DdpTrainer(Trainer):
         """
         if self.rank in [0, None]:
             cpt = {
-                "epoch":
-                epoch,
-                "model_state_dict":
-                self.task.module.nnet.state_dict()
-                if self.distributed else self.task.nnet.state_dict(),
-                "optim_state_dict":
-                self.optimizer.state_dict(),
-                "lr_scheduler_dict":
-                self.lr_scheduler.state_dict()
+                "epoch": epoch,
+                "model_state_dict": self.task.nnet.state_dict(),
+                "optim_state_dict": self.optimizer.state_dict(),
+                "lr_scheduler_dict": self.lr_scheduler.state_dict()
             }
             cpt_name = "{}.pt.tar".format("best" if best else "last")
             th.save(cpt, self.checkpoint / cpt_name)

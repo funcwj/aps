@@ -225,15 +225,19 @@ class DCCRN(nn.Module):
             else:
                 return [s[0] for s in sep]
 
-    def _forward(self, s, mode="freq"):
-        # N x F x T
-        sr, si = self.enh_transform.forward_stft(s, output="complex")
+    def _forward(self, mix, mode="freq"):
         if self.cplx:
+            # N x F x T
+            sr, si = self.enh_transform.forward_stft(mix, output="complex")
             # N x 2F x T
             s = th.cat([sr, si], -2)
         else:
             # N x F x T
-            s = (sr**2 + si**2)**0.5
+            # s = (sr**2 + si**2)**0.5
+            s, stft, _ = self.enh_transform(mix, None)
+            # N x F x T
+            s = s.transpose(1, 2)
+            sr, si = stft.real, stft.imag
         # encoder
         enc_h, h = self.encoder(s[:, None])
         out_h = self.rnn(h)
