@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from collections import defaultdict
 from aps.metric.snr import si_snr, permute_si_snr
-from aps.loader.am import WaveReader
+from aps.loader import WaveReader
 
 from kaldi_python_io import Reader as BaseReader
 

@@ -9,9 +9,9 @@ import argparse
 import torch as th
 
 from aps.eval import Computer
+from aps.opts import StrToBoolAction
 from aps.utils import get_logger, io_wrapper
-from aps.utils import StrToBoolAction
-from aps.loader.am import WaveReader
+from aps.loader import WaveReader
 
 from kaldi_python_io import ScriptReader
 

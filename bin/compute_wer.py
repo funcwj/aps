@@ -6,7 +6,7 @@ import argparse
 
 from collections import defaultdict
 
-from aps.utils import StrToBoolAction
+from aps.opts import StrToBoolAction
 from aps.metric.wer import permute_ed
 
 from kaldi_python_io import Reader as BaseReader

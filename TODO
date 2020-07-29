@@ -1,3 +1,6 @@
 1. RNN LM shallow fusion
 2. Beam search in batch mode
-3. ...
+3. Test cases
+4. Instructions
+5. More distributed feature support
+6. ...

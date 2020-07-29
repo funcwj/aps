@@ -37,16 +37,14 @@ def train_worker(task, conf, args):
     """
     # init torch/horovod backend
     distributed.init(args.distributed)
+    rank = distributed.rank()
 
-    if args.distributed == "horovod":
-        Trainer = HvdTrainer
-    else:
-        Trainer = DdpTrainer
+    Trainer = {"torch": DdpTrainer, "horovod": HvdTrainer}[args.distributed]
     # construct trainer
     # torch.distributed.launch will provide
     # environment variables, and requires that you use init_method="env://".
     trainer = Trainer(task,
-                      rank=distributed.rank(),
+                      rank=rank,
                       device_ids=args.device_ids,
                       checkpoint=args.checkpoint,
                       resume=args.resume,

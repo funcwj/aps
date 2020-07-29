@@ -8,9 +8,9 @@ import torch as th
 
 from torch.nn.utils.rnn import pad_sequence
 
-from aps.loader.am.wav import WaveReader
+from aps.loader import WaveReader
 from aps.utils import get_logger, io_wrapper
-from aps.utils import StrToBoolAction
+from aps.opts import StrToBoolAction
 from aps.eval import Computer
 
 from kaldi_python_io import ScriptReader

@@ -36,12 +36,9 @@ def train_worker(task, conf, args):
     """
     # init torch/horovod backend
     distributed.init(args.distributed)
+    rank = distributed.rank()
 
-    if args.distributed == "horovod":
-        Trainer = HvdTrainer
-    else:
-        Trainer = DdpTrainer
-
+    Trainer = {"torch": DdpTrainer, "horovod": HvdTrainer}[args.distributed]
     trainer = Trainer(task,
                       rank=distributed.rank(),
                       device_ids=args.device_ids,

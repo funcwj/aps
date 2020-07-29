@@ -6,6 +6,8 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from .tasnet import ChannelWiseLayerNorm
+
 
 class DpB(nn.Module):
     """
@@ -167,6 +169,7 @@ class TimeDPRNN(DPRNN):
                  num_spks=2,
                  conv_kernels=16,
                  conv_filters=64,
+                 input_layernorm=False,
                  chunk_len=100,
                  dprnn_layers=6,
                  dprnn_bi_inter=True,
@@ -193,6 +196,10 @@ class TimeDPRNN(DPRNN):
                                           stride=conv_kernels // 2,
                                           bias=False,
                                           padding=0)
+        if input_layernorm:
+            self.ln = ChannelWiseLayerNorm(conv_filters)
+        else:
+            self.ln = None
 
     def infer(self, mix):
         """
@@ -217,6 +224,9 @@ class TimeDPRNN(DPRNN):
         self.check_args(mix, training=True)
         # N x 1 x S => N x F x T
         w = tf.relu(self.encoder(mix[:, None, :]))
+        # N x F x T
+        if self.ln:
+            w = self.ln(w)
         # N x S x F x T
         masks = super().forward(w)
         if self.num_spks == 1:
