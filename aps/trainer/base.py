@@ -176,6 +176,8 @@ class Trainer(object):
         if not isinstance(task, Task):
             raise TypeError(
                 f"Trainer accepts Task object, but got {type(task)}")
+        if rank < 0:
+            raise ValueError(f"Got invalid rank value: {rank}")
         if not isinstance(device_ids, tuple):
             device_ids = get_device_ids(device_ids)
         self.cuda_devices = len(device_ids)
@@ -279,7 +281,7 @@ class Trainer(object):
                               f"#param: {self.num_params:.2f}M")
         else:
             self.reporter.log(
-                f"Loading model {rank} to GPU-{rank}/{self.cuda_devices}, " +
+                f"Loading model to GPU-{rank}/{self.cuda_devices}, " +
                 f"#param: {self.num_params:.2f}M")
 
         self.reporter.log(f"Schedule sampling strategy: {ss_scheduler}")

@@ -34,9 +34,9 @@ export OMP_NUM_THREADS=4
 case $distributed in 
   "torch" )
     python -m torch.distributed.launch \
-      --nnodes=1 \
-      --nproc_per_node=$num_process \
-      --master_port=$port 
+      --nnodes 1 \
+      --nproc_per_node $num_process \
+      --master_port $port \
       --use_env true \
       bin/distributed_train_ss.py \
       --conf $conf \

@@ -16,6 +16,7 @@ def init(backend):
     """
     if backend not in ["torch", "horovod", "none"]:
         raise ValueError(f"Unsupported backend: {backend}")
+    global BACKEND
     BACKEND = backend
     if backend == "horovod":
         hvd.init()
@@ -42,10 +43,10 @@ def rank():
     """
     Return rank id
     """
+    if BACKEND not in ["horovod", "torch"]:
+        raise RuntimeError("distributed backend is not initialized")
     if BACKEND == "horovod" and not hvd_available:
         raise RuntimeError("horovod not installed!")
-    if BACKEND == "none":
-        return -1
     elif BACKEND == "torch":
         return dist.get_rank()
     else:
@@ -56,10 +57,10 @@ def world_size():
     """
     Return world size
     """
+    if BACKEND not in ["horovod", "torch"]:
+        raise RuntimeError("distributed backend is not initialized")
     if BACKEND == "horovod" and not hvd_available:
         raise RuntimeError("horovod not installed!")
-    if BACKEND == "none":
-        return 0
     elif BACKEND == "torch":
         return dist.get_world_size()
     else:

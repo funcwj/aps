@@ -37,8 +37,8 @@ case $distributed in
   "torch" )
     python -m torch.distributed.launch \
       --nnodes=1 \
-      --nproc_per_node=$num_process \
-      --master_port=$port \
+      --nproc_per_node $num_process \
+      --master_port $port \
       --use_env true \
       python bin/distributed_train_am.py \
       --conf $conf \
