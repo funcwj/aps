@@ -326,12 +326,15 @@ class FeatureTransform(nn.Module):
         trans_tokens = feats.split("-") if feats else []
         transform = []
         feats_dim = 0
-        feats_ipd = None
+        self.ipd_transform = None
         for i, tok in enumerate(trans_tokens):
             if i == 0:
                 if tok != "spectrogram" and tok != "ipd":
-                    raise RuntimeError("Now only support spectrogram features")
+                    raise RuntimeError("Now only support spectrogram features "
+                                       "or IPD features only")
                 feats_dim = self.forward_stft.num_bins
+            if tok == "spectrogram":
+                pass
             elif tok == "log":
                 transform.append(LogTransform(eps=EPSILON))
             elif tok == "cmvn":
@@ -341,9 +344,9 @@ class FeatureTransform(nn.Module):
                                   gcmvn=gcmvn,
                                   eps=eps))
             elif tok == "ipd":
-                feats_ipd = IpdTransform(ipd_index=ipd_index,
-                                         cos=cos_ipd,
-                                         sin=sin_ipd)
+                self.ipd_transform = IpdTransform(ipd_index=ipd_index,
+                                                  cos=cos_ipd,
+                                                  sin=sin_ipd)
                 ipd_index = ipd_index.split(";")
                 base = 0 if i == 0 else 1
                 if cos_ipd and sin_ipd:
@@ -356,7 +359,6 @@ class FeatureTransform(nn.Module):
             self.mag_transform = nn.Sequential(*transform)
         else:
             self.mag_transform = None
-        self.ipd_transform = feats_ipd
         if aug_prob > 0:
             self.aug_transform = SpecAugTransform(p=aug_prob,
                                                   max_bands=aug_max_bands,
@@ -381,18 +383,18 @@ class FeatureTransform(nn.Module):
             raise ValueError(f"Unknown task context: {name}")
         return ctx[name]
 
-    def forward(self, x_pad, x_len, norm_obs=False):
+    def forward(self, wav_pad, wav_len, norm_obs=False):
         """
         Args:
-            x_pad (Tensor): raw waveform, N x C x S or N x S
-            x_len (Tensor or None): number samples in x_pad, N or None
+            wav_pad (Tensor): raw waveform, N x C x S or N x S
+            wav_len (Tensor or None): number samples in wav_pad, N or None
         Return:
             feats (Tensor): spatial + spectral features, N x T x ...
             cplx (ComplexTensor): STFT of reference channels, N x (C) x F x T
-            f_len (Tensor or None): number frames in each batch, N or None
+            num_frames (Tensor or None): number frames in each batch, N or None
         """
         # N x C x F x T
-        mag, pha = self.forward_stft(x_pad)
+        mag, pha = self.forward_stft(wav_pad)
         multi_channel = mag.dim() == 4
         mag_ref = mag[:, 0] if multi_channel else mag
 
@@ -428,6 +430,6 @@ class FeatureTransform(nn.Module):
                 feats = th.cat([feats, ipd], -1)
             else:
                 feats = ipd
-        f_len = self.forward_stft.num_frames(
-            x_len) if x_len is not None else None
-        return feats, cplx, f_len
+        num_frames = self.forward_stft.num_frames(
+            wav_len) if wav_len is not None else None
+        return feats, cplx, num_frames

@@ -13,6 +13,8 @@ Notations:
 import math
 
 import torch as th
+import numpy as np
+
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -444,6 +446,7 @@ class FeatureTransform(nn.Module):
                                             lifter=lifter)
                 ]
                 transform += log_fbank
+                feats_dim = transform[-1].dim()
             elif tok == "mel":
                 transform.append(
                     MelTransform(frame_len,
@@ -489,28 +492,28 @@ class FeatureTransform(nn.Module):
         self.feats_dim = feats_dim
         self.downsample_rate = downsample_rate
 
-    def num_frames(self, x_len):
+    def num_frames(self, wav_len):
         """
         Work out number of frames
         """
         if not isinstance(self.transform[0], SpectrogramTransform):
             raise RuntimeError(
                 "0-th layer of transform is not SpectrogramTransform")
-        return self.transform[0].len(x_len)
+        return self.transform[0].len(wav_len)
 
-    def forward(self, x_pad, x_len):
+    def forward(self, wav_pad, wav_len):
         """
         Args:
-            x_pad (Tensor): raw waveform: N x C x S or N x S
-            x_len (Tensor or None): N or None
+            wav_pad (Tensor): raw waveform: N x C x S or N x S
+            wav_len (Tensor or None): N or None
         Return:
             feats_pad (Tensor): acoustic features: N x C x T x ...
-            feats_len (Tensor or None): number of frames
+            num_frames (Tensor or None): number of frames
         """
-        feats_pad = self.transform(x_pad)
-        if x_len is None:
-            feats_len = None
+        feats_pad = self.transform(wav_pad)
+        if wav_len is None:
+            num_frames = None
         else:
-            feats_len = self.num_frames(x_len)
-            feats_len = feats_len // self.downsample_rate
-        return feats_pad, feats_len
+            num_frames = self.num_frames(wav_len)
+            num_frames = num_frames // self.downsample_rate
+        return feats_pad, num_frames

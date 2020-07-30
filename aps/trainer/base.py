@@ -341,6 +341,9 @@ class Trainer(object):
         # backward if not nan/inf
         if math.isfinite(loss.item()):
             loss.backward()
+        else:
+            self.reporter.log(f"Invalid loss {loss.item():.3f}, skip...")
+            return
 
         # clip gradient after backward
         norm = -1
@@ -348,7 +351,7 @@ class Trainer(object):
             norm = clip_grad_norm_(self.task.parameters(), self.clip_gradient)
 
         # step optimizer and update statistics
-        if math.isfinite(norm) and math.isfinite(loss.item()):
+        if math.isfinite(norm):
             self.optimizer.step()
 
             if self.gaussian_noise_std:
@@ -359,8 +362,7 @@ class Trainer(object):
             self.reporter.add("rate", self.optimizer.param_groups[0]["lr"])
             self.reporter.update(stats)
         else:
-            self.reporter.log(f"Invalid gradient {norm:.3f} or " +
-                              f"loss {loss:.3f}, skip...")
+            self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
 
     def train(self, data_loader):
         self.task.train()
