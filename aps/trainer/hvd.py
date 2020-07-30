@@ -4,10 +4,11 @@ import math
 from os import environ
 
 import torch as th
+from torch.nn.utils import clip_grad_norm_
+
 import aps.distributed as dist
 
-from torch.nn.parallel import DistributedDataParallel
-from aps.trainer.base import Trainer
+from aps.trainer.base import Trainer, add_gaussian_noise
 
 
 class HvdTrainer(Trainer):
@@ -57,8 +58,7 @@ class HvdTrainer(Trainer):
                              no_impr=no_impr,
                              no_impr_thres=no_impr_thres)
         if dist.get_backend() != "horovod":
-            raise ValueError(
-                f"aps.distributed doesn't use horovod as backend")
+            raise ValueError(f"aps.distributed doesn't use horovod as backend")
         if not dist.hvd_available:
             raise ValueError(
                 f"horovod is not installed in current environment")
@@ -75,6 +75,47 @@ class HvdTrainer(Trainer):
             self.optimizer, named_parameters=self.task.named_parameters())
         self.reporter.log(f"HVD: using horovod, rank = {self.rank}, " +
                           f"world_size={dist.world_size()}")
+
+    def train_one_step(self, egs):
+        """
+        Make one training step for hovorod
+
+        1) Zero optimizer
+        2) Forward & Backword
+        3) Clip Gradient
+        4) Step optimizer
+        """
+        self.optimizer.zero_grad()
+
+        loss, stats = self.task(egs, ssr=self.ssr)
+
+        # backward if not nan/inf
+        if math.isfinite(loss.item()):
+            loss.backward()
+
+        # clip gradient after backward
+        norm = -1
+        if self.clip_gradient:
+            # for horovod
+            self.optimizer.synchronize()
+            norm = clip_grad_norm_(self.task.parameters(), self.clip_gradient)
+
+        # step optimizer and update statistics
+        if math.isfinite(norm) and math.isfinite(loss.item()):
+            # for horovod
+            with self.optimizer.skip_synchronize():
+                self.optimizer.step()
+
+            if self.gaussian_noise_std:
+                add_gaussian_noise(self.task, std=self.gaussian_noise_std)
+            if norm != -1:
+                self.reporter.add("norm", norm)
+            self.reporter.add("loss", loss.item())
+            self.reporter.add("rate", self.optimizer.param_groups[0]["lr"])
+            self.reporter.update(stats)
+        else:
+            self.reporter.log(f"Invalid gradient {norm:.3f} or " +
+                              f"loss {loss:.3f}, skip...")
 
     def save_checkpoint(self, epoch, best=True):
         """

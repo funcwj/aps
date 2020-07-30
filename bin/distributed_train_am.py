@@ -161,7 +161,8 @@ if __name__ == "__main__":
         description=
         "Command to start ASR model training, configured by yaml files "
         "(support distributed mode on single node). "
-        "Using python -m torch.distributed.launch to launch the command.",
+        "Using python -m torch.distributed.launch or horovodrun to launch the command. "
+        "See scripts/distributed_train_am.sh ",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[BaseTrainParser.parser])
     parser.add_argument("--device-ids",

@@ -40,7 +40,8 @@ class ProgressReporter(object):
             self.header = f"Rank {rank}"
 
         self.logger = get_logger(logger_loc, file=True)
-        if tensorboard:
+        # only for rank-0
+        if tensorboard and rank in [0, None]:
             self.board_writer = SummaryWriter(checkpoint)
         else:
             self.board_writer = None
@@ -324,6 +325,43 @@ class Trainer(object):
         """
         raise NotImplementedError
 
+    def train_one_step(self, egs):
+        """
+        Make one training step
+
+        1) Zero optimizer
+        2) Forward & Backword
+        3) Clip Gradient
+        4) Step optimizer
+        """
+        self.optimizer.zero_grad()
+
+        loss, stats = self.task(egs, ssr=self.ssr)
+
+        # backward if not nan/inf
+        if math.isfinite(loss.item()):
+            loss.backward()
+
+        # clip gradient after backward
+        norm = -1
+        if self.clip_gradient:
+            norm = clip_grad_norm_(self.task.parameters(), self.clip_gradient)
+
+        # step optimizer and update statistics
+        if math.isfinite(norm) and math.isfinite(loss.item()):
+            self.optimizer.step()
+
+            if self.gaussian_noise_std:
+                add_gaussian_noise(self.task, std=self.gaussian_noise_std)
+            if norm != -1:
+                self.reporter.add("norm", norm)
+            self.reporter.add("loss", loss.item())
+            self.reporter.add("rate", self.optimizer.param_groups[0]["lr"])
+            self.reporter.update(stats)
+        else:
+            self.reporter.log(f"Invalid gradient {norm:.3f} or " +
+                              f"loss {loss:.3f}, skip...")
+
     def train(self, data_loader):
         self.task.train()
         self.reporter.train()
@@ -331,34 +369,8 @@ class Trainer(object):
         for egs in data_loader:
             # load to gpu
             egs = load_obj(egs, self.default_device)
-
-            self.optimizer.zero_grad()
-
-            loss, stats = self.task(egs, ssr=self.ssr)
-            loss.backward()
-
-            # add to reporter
-            self.reporter.add("loss", loss.item())
-            self.reporter.update(stats)
-
-            # clip gradient after backward
-            norm = -1
-            if self.clip_gradient:
-                norm = clip_grad_norm_(self.task.parameters(),
-                                       self.clip_gradient)
-
-            loss = loss.item()
-            if math.isfinite(norm) and math.isfinite(loss):
-                self.optimizer.step()
-
-                if self.gaussian_noise_std:
-                    add_gaussian_noise(self.task, std=self.gaussian_noise_std)
-
-                self.reporter.add("norm", norm)
-                self.reporter.add("rate", self.optimizer.param_groups[0]["lr"])
-            else:
-                self.reporter.log(f"Invalid gradient {norm:.3f} or " +
-                                  f"loss {loss:.3f}, skip...")
+            # make one training step
+            self.train_one_step(egs)
 
     def eval(self, data_loader):
         self.task.eval()
@@ -367,9 +379,11 @@ class Trainer(object):
         with th.no_grad():
             # for idx, egs in enumerate(data_loader):
             for egs in data_loader:
+                # load to gpu
                 egs = load_obj(egs, self.default_device)
                 # ssr = 0, use ground truth
                 loss, stats = self.task(egs, ssr=0)
+                # update statistics
                 self.reporter.add("loss", loss.item())
                 self.reporter.update(stats)
 
