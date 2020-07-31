@@ -236,15 +236,15 @@ class FreqSaTask(Task):
         Compute reference magnitude for SA
         """
         ref_mag, ref_pha = self.ctx(ref, output="polar")
-        if self.truncated is None:
-            return ref_mag
-        # truncated
-        ref_mag = th.min(ref_mag, self.truncated * mix_mag)
-        if not self.phase_sensitive:
-            return ref_mag
         # use phase-sensitive
-        pha_dif = th.clamp(th.cos(ref_pha - mix_pha), min=0)
-        return ref_mag * pha_dif
+        if self.phase_sensitive:
+            # non-negative
+            pha_dif = th.clamp(th.cos(ref_pha - mix_pha), min=0)
+            ref_mag = ref_mag * pha_dif
+        # truncated
+        if self.truncated is not None:
+            ref_mag = th.min(ref_mag, self.truncated * mix_mag)
+        return ref_mag
 
     def _permu_sa(self, permute, mix_mag, out, ref):
         """
