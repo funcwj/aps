@@ -19,10 +19,11 @@ def process_token(token,
                   max_dur=3000,
                   min_dur=40):
     utt2dur = BaseReader(utt2dur, value_processor=float)
-    token_reader = BaseReader(token,
-                              value_processor=lambda l: [int(n) for n in l],
-                              num_tokens=-1,
-                              restrict=False)
+    token_reader = BaseReader(
+        token,
+        value_processor=lambda toks: list(map(int, toks)),
+        num_tokens=-1,
+        restrict=False)
     token_set = []
     for key, token in token_reader:
         L = len(token)

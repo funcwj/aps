@@ -12,7 +12,7 @@ loader_cls = {
 }
 
 
-def support_loader(fmt="wav", **kwargs):
+def support_loader(fmt="am_wav", **kwargs):
     if fmt not in loader_cls:
         raise RuntimeError(f"Unsupported DataLoader type: {fmt}")
     return loader_cls[fmt](**kwargs)
