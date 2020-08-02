@@ -86,7 +86,7 @@ def egs_collate(egs):
 
     return {
         "src_pad":  # N x S
-        pad_seq([th.from_numpy("feats") for eg in egs], value=0),
+        pad_seq([th.from_numpy(eg["feats"].copy()) for eg in egs], value=0),
         "tgt_pad":  # N x T
         pad_seq([th.as_tensor(eg["token"]) for eg in egs], value=-1),
         "src_len":  # N, number of the frames

@@ -20,7 +20,7 @@ __all__ = [
 ]
 
 
-def sisnr(x, s, eps=1e-8):
+def sisnr(x, s, eps=1e-8, zero_mean=True):
     """
     Computer SiSNR
     Args:
@@ -35,11 +35,12 @@ def sisnr(x, s, eps=1e-8):
     if x.shape != s.shape:
         raise RuntimeError("Dimention mismatch when calculate " +
                            f"si-snr, {x.shape} vs {s.shape}")
-    x_zm = x - th.mean(x, dim=-1, keepdim=True)
-    s_zm = s - th.mean(s, dim=-1, keepdim=True)
-    t = th.sum(x_zm * s_zm, dim=-1,
-               keepdim=True) * s_zm / (l2norm(s_zm, keepdim=True)**2 + eps)
-    return 20 * th.log10(eps + l2norm(t) / (l2norm(x_zm - t) + eps))
+    if zero_mean:
+        x = x - th.mean(x, dim=-1, keepdim=True)
+        s = s - th.mean(s, dim=-1, keepdim=True)
+    t = th.sum(x * s, dim=-1,
+               keepdim=True) * s / (l2norm(s, keepdim=True)**2 + eps)
+    return 20 * th.log10(eps + l2norm(t) / (l2norm(x - t) + eps))
 
 
 def snr(x, s, eps=1e-8):
@@ -64,11 +65,7 @@ class TimeDomainTask(Task):
     """
     Time domain task (to be implemented)
     """
-    def __init__(self,
-                 nnet,
-                 num_spks=2,
-                 permute=True,
-                 mode="max",
+    def __init__(self, nnet, num_spks=2, permute=True, mode="max",
                  weight=None):
         super(TimeDomainTask, self).__init__(nnet, weight=weight)
         self.num_spks = num_spks
@@ -154,15 +151,21 @@ class SisnrTask(TimeDomainTask):
     """
     Time domain sisnr loss function
     """
-    def __init__(self, nnet, num_spks=2, permute=True, weight=None):
+    def __init__(self,
+                 nnet,
+                 num_spks=2,
+                 permute=True,
+                 weight=None,
+                 zero_mean=True):
         super(SisnrTask, self).__init__(nnet,
                                         num_spks=num_spks,
                                         permute=permute,
                                         mode="max",
                                         weight=weight)
+        self.zero_mean = zero_mean
 
     def _objf(self, out, ref):
-        return sisnr(out, ref)
+        return sisnr(out, ref, zero_mean=self.zero_mean)
 
 
 class SnrTask(TimeDomainTask):

@@ -1,0 +1,43 @@
+# DPRNN
+
+nnet: time_dprnn
+
+nnet_conf:
+  num_spks: 2
+  conv_kernels: 8
+  conv_filters: 64
+  chunk_len: 150
+  dprnn_layers: 6
+  dprnn_bi_inter: True
+  dprnn_hidden: 128
+
+task: "sisnr"
+
+task_conf:
+  num_spks: 2
+  permute: true
+
+trainer_conf:
+  optimizer: "adam"
+  optimizer_kwargs:
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+  lr_scheduler_kwargs:
+    min_lr: 1.0e-8
+    patience: 1
+    factor: 0.5
+  clip_gradient: 10
+  no_impr: 6
+  no_impr_thres: 0.1
+
+data_conf:
+  fmt: "ss_chunk"
+  loader:
+    chunk_size: 32000
+    sr: 8000
+  train:
+    mix_scp: "data/wsj0_2mix/train/mix.scp"
+    ref_scp: "data/wsj0_2mix/train/spk1.scp,data/wsj0_2mix/train/spk2.scp"
+  valid:
+    mix_scp: "data/wsj0_2mix/dev/mix.scp"
+    ref_scp: "data/wsj0_2mix/dev/spk1.scp,data/wsj0_2mix/dev/spk2.scp"

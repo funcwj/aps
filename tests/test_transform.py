@@ -14,7 +14,7 @@ from aps.loader import read_wav, write_wav
 from aps.transform import AsrTransform, EnhTransform, FixedBeamformer, DfTransform
 
 
-@pytest.mark.parametrize("wav", [read_wav("data/egs1.wav", sr=16000)])
+@pytest.mark.parametrize("wav", [read_wav("data/transform/egs1.wav", sr=16000)])
 @pytest.mark.parametrize("frame_len, frame_hop", [(512, 256), (1024, 256),
                                                   (256, 128)])
 @pytest.mark.parametrize("window", ["hann", "hamm", "sqrthann"])
@@ -30,7 +30,7 @@ def test_forward_inverse_stft(wav, frame_len, frame_hop, window, center):
     assert th.sum((out - wav)**2).item() < 1e-5
 
 
-@pytest.mark.parametrize("wav", [read_wav("data/egs1.wav", sr=16000)])
+@pytest.mark.parametrize("wav", [read_wav("data/transform/egs1.wav", sr=16000)])
 @pytest.mark.parametrize("feats,shape", [("spectrogram-log", [1, 808, 257]),
                                          ("fbank-log-cmvn", [1, 808, 80]),
                                          ("mfcc", [1, 808, 13]),
@@ -48,7 +48,7 @@ def test_asr_transform(wav, feats, shape):
     assert transform.feats_dim == shape[-1]
 
 
-@pytest.mark.parametrize("wav", [read_wav("data/egs2.wav", sr=16000)])
+@pytest.mark.parametrize("wav", [read_wav("data/transform/egs2.wav", sr=16000)])
 @pytest.mark.parametrize("feats,shape",
                          [("spectrogram-log-cmvn-ipd", [1, 366, 257 * 5]),
                           ("ipd", [1, 366, 257 * 4])])
