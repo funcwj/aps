@@ -6,10 +6,11 @@ __pycache__/
 asset/
 src/test
 src/debug*
-egs/
 exp/
 checkpoint/
 cache/
+*.log
+egs/*/*/exp
 
 # pytest
 .pytest_cache/

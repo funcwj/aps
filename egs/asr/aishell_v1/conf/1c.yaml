@@ -1,0 +1,68 @@
+# default conf
+
+nnet: "transformer_transducer"
+
+nnet_conf:
+  input_size: 80
+  encoder_type: "transformer"
+  encoder_kwargs:
+    input_embed: "conv2d"
+    att_dim: 256
+    nhead: 4
+    feedforward_dim: 512
+    pos_dropout: 0.1
+    att_dropout: 0.2
+    num_layers: 6
+  decoder_type: "transformer"
+  decoder_kwargs:
+    att_dim: 256
+    nhead: 4
+    feedforward_dim: 512
+    pos_dropout: 0.1
+    att_dropout: 0.2
+    num_layers: 6
+
+task: "transducer"
+
+asr_transform:
+  feats: "fbank-log-cmvn-aug"
+  frame_len: 400
+  frame_hop: 160
+  window: "hamm"
+  round_pow_of_two: True
+  sr: 16000
+  num_mels: 80
+  norm_mean: True
+  norm_var: True
+  aug_prob: 0.5
+
+trainer_conf:
+  optimizer: "adam"
+  optimizer_kwargs:
+    lr: 1.0e-4
+    weight_decay: 1.0e-5
+  lr_scheduler_kwargs:
+    min_lr: 1.0e-8
+    patience: 1
+    factor: 0.5
+  no_impr: 6
+  no_impr_thres: 0.002
+  clip_gradient: 10
+  stop_criterion: "loss"
+
+data_conf:
+  fmt: "am_wav"
+  loader:
+    max_token_num: 400
+    adapt_token_num: 150
+    max_dur: 30 # (s)
+    min_dur: 0.4 # (s)
+    adapt_dur: 10 # (s)
+  train:
+    wav_scp: "data/aishell_v2/train/wav.scp"
+    utt2dur: "data/aishell_v2/train/utt2dur"
+    token: "data/aishell_v2/train/token"
+  valid:
+    wav_scp: "data/aishell_v2/dev/wav.scp"
+    utt2dur: "data/aishell_v2/dev/utt2dur"
+    token: "data/aishell_v2/dev/token"

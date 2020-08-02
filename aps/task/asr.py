@@ -11,7 +11,11 @@ import torch.nn.functional as tf
 # from https://github.com/HawkAaron/warp-transducer
 # from warprnnt_pytorch import rnnt_loss
 # https://github.com/1ytic/warp-rnnt
-from warp_rnnt import rnnt_loss
+try:
+    from warp_rnnt import rnnt_loss
+    rnnt_loss_available = True
+except ImportError:
+    rnnt_loss_available = False
 
 from aps.task.base import Task
 
@@ -132,7 +136,7 @@ class CtcXentHybridTask(Task):
                                    reduction="mean",
                                    zero_infinity=True)
             loss = self.ctc_weight * ctc_loss + (1 - self.ctc_weight) * loss
-            stats["fctc"] = ctc_loss.item()
+            stats["=ctc"] = ctc_loss.item()
         # compute accu
         accu = compute_accu(outs, tgts)
         # add to reporter
@@ -147,6 +151,8 @@ class TransducerTask(Task):
     def __init__(self, nnet, blank=0):
         super(TransducerTask, self).__init__(nnet)
         self.blank = blank
+        if not rnnt_loss_available:
+            raise ImportError(f"from warp_rnnt import rnnt_loss failed")
 
     def forward(self, egs, **kwargs):
         """

@@ -1,6 +1,6 @@
 # APS
 
-My own workspace for speech tasks, including single/multi-channel speech enhancement & separation & E2E speech recognition.
+My own workspace for several speech tasks, including single/multi-channel speech enhancement & separation & E2E speech recognition.
 
 ## Support
 
@@ -9,8 +9,6 @@ My own workspace for speech tasks, including single/multi-channel speech enhance
 3. Distributed training (now using Pytorch's DistributedDataParallel)
 4. Kaldi features & PyTorch-based feature extraction
 
-## Quick Start
+## Acknowledge
 
-* [Speech Recognition](doc/recognition.md)
-* [Speech Enhancement](doc/enhancement.md)
-* [Speech Separation](doc/separation.md)
+The author started the project when he was an member of the Audio, Speech and Language Processing Group (ASLP) in Northwestern Polytechnical University (NWPU), Xian, China
