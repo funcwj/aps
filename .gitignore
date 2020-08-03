@@ -11,6 +11,7 @@ checkpoint/
 cache/
 *.log
 egs/*/*/exp
+egs/*/*/data
 
 # pytest
 .pytest_cache/

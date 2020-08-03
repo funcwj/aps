@@ -59,10 +59,10 @@ data_conf:
     min_dur: 0.4 # (s)
     adapt_dur: 10 # (s)
   train:
-    wav_scp: "data/aishell_v2/train/wav.scp"
-    utt2dur: "data/aishell_v2/train/utt2dur"
-    token: "data/aishell_v2/train/token"
+    wav_scp: "data/aishell_v1/train/wav.scp"
+    utt2dur: "data/aishell_v1/train/utt2dur"
+    token: "data/aishell_v1/train/token"
   valid:
-    wav_scp: "data/aishell_v2/dev/wav.scp"
-    utt2dur: "data/aishell_v2/dev/utt2dur"
-    token: "data/aishell_v2/dev/token"
+    wav_scp: "data/aishell_v1/dev/wav.scp"
+    utt2dur: "data/aishell_v1/dev/utt2dur"
+    token: "data/aishell_v1/dev/token"

@@ -24,7 +24,6 @@ prog_interval=100
 data_dir=$1
 
 prepare_scp () {
-  [ $# -ne 2 ] && echo "Parameter format error: prepare_scp <suffix> <dir>" && return
   find $2 -name "*.$1" | awk -F '/' '{printf("%s\t%s\n", $NF, $0)}' | sed "s:.$1::"
 }
 
@@ -33,14 +32,14 @@ if [ $stage -le 1 ]; then
     data_dir=$(cd $data_dir && pwd)
     mkdir -p data/$dataset/{train,dev,tst}
     # make mix.scp
-    prepare_scp wav $data_dir/tr/mix > $data_dir/train/mix.scp
-    prepare_scp wav $data_dir/cv/mix > $data_dir/dev/mix.scp
-    prepare_scp wav $data_dir/tt/mix > $data_dir/test/mix.scp
+    prepare_scp wav $data_dir/tr/mix > data/$dataset/train/mix.scp
+    prepare_scp wav $data_dir/cv/mix > data/$dataset/dev/mix.scp
+    prepare_scp wav $data_dir/tt/mix > data/$dataset/test/mix.scp
     # make spk{1,2}.scp
     for spk in {1..2}; do
-        prepare_scp wav $data_dir/tr/s$spk > $data_dir/train/spk$spk.scp
-        prepare_scp wav $data_dir/cv/s$spk > $data_dir/dev/spk$spk.scp
-        prepare_scp wav $data_dir/tt/s$spk > $data_dir/tst/spk$spk.scp
+        prepare_scp wav $data_dir/tr/s$spk > data/$dataset/train/spk$spk.scp
+        prepare_scp wav $data_dir/cv/s$spk > data/$dataset/dev/spk$spk.scp
+        prepare_scp wav $data_dir/tt/s$spk > data/$dataset/tst/spk$spk.scp
     done
     echo "$0: Prepare data done under data/$dataset"
 fi
