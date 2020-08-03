@@ -56,7 +56,7 @@ class DdpTrainer(Trainer):
                              stop_criterion=stop_criterion,
                              no_impr=no_impr,
                              no_impr_thres=no_impr_thres)
-        if dist.get_backend() != "torch":
+        if dist.get_backend() not in ["torch", "none"]:
             raise ValueError(f"aps.distributed doesn't use torch as backend")
         self.setup_distributed()
 

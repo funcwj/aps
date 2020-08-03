@@ -39,8 +39,8 @@ case $distributed in
       --nnodes=1 \
       --nproc_per_node $num_process \
       --master_port $port \
-      --use_env true \
-      python bin/distributed_train_am.py \
+      --use_env \
+      bin/distributed_train_am.py \
       --conf $conf \
       --dict $dict \
       --seed $seed \

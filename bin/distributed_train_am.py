@@ -129,9 +129,6 @@ def run(args):
     if seed is not None:
         print(f"Set random seed as {seed}")
 
-    if th.cuda.device_count() < args.num_process:
-        raise RuntimeError("--num-process exceeds number of the GPUs")
-
     conf = load_conf(args.conf, args.dict)
     print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
 

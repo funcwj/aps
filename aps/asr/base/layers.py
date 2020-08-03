@@ -14,6 +14,7 @@ class Normalize1d(nn.Module):
     Wrapper for BatchNorm1d & LayerNorm
     """
     def __init__(self, name, in_features):
+        super(Normalize1d, self).__init__()
         name = name.upper()
         if name not in ["BN", "LN"]:
             raise ValueError(f"Unknown type of Normalize1d: {name}")

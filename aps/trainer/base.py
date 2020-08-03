@@ -177,7 +177,7 @@ class Trainer(object):
         if not isinstance(task, Task):
             raise TypeError(
                 f"Trainer accepts Task object, but got {type(task)}")
-        if rank < 0:
+        if rank is not None and rank < 0:
             raise ValueError(f"Got invalid rank value: {rank}")
         if not isinstance(device_ids, tuple):
             device_ids = get_device_ids(device_ids)

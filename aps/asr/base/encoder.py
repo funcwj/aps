@@ -218,6 +218,7 @@ class TDNNEncoder(nn.Module):
                  stride="2,2,2",
                  dilation="1,1,1",
                  dropout=0):
+        super(TDNNEncoder, self).__init__()
         stride_conf = parse_str_int(stride, num_layers)
         dilation_conf = parse_str_int(dilation, num_layers)
         tdnns = [
@@ -244,8 +245,6 @@ class TDNNEncoder(nn.Module):
             out (Tensor): N x To x O
             out_len (Tensor or None)
         """
-        if x_len is not None:
-            x_len = x_len // (2**self.tdnn_layers)
         out = self.tdnn_enc(inp)
         if inp_len is not None:
             inp_len = inp_len // self.sub_sampling

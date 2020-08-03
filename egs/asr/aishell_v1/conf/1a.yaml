@@ -32,7 +32,7 @@ task: "ctc_xent"
 
 task_conf:
   lsm_factor: 0.1
-  ctc_regularization: 0.2
+  ctc_weight: 0.2
 
 asr_transform:
   feats: "fbank-log-cmvn-aug"
@@ -56,8 +56,8 @@ trainer_conf:
     patience: 1
     factor: 0.5
   ss_scheduler: "linear"
-  ss_prob: 0.2
   ss_scheduler_kwargs:
+    ssr: 0.2
     epoch_beg: 10
     epoch_end: 26
     update_interval: 4 

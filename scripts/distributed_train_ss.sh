@@ -37,7 +37,7 @@ case $distributed in
       --nnodes 1 \
       --nproc_per_node $num_process \
       --master_port $port \
-      --use_env true \
+      --use_env \
       bin/distributed_train_ss.py \
       --conf $conf \
       --seed $seed \
@@ -68,7 +68,7 @@ case $distributed in
       --checkpoint exp/$data/$exp_id \
       --batch-size $batch_size \
       --epochs $epochs \
-      > $data.train_am.$exp_id.log 2>&1
+      > $data.train_ss.$exp_id.log 2>&1
     ;;
   * )
     echo "$0: Unknown --distributed $distributed" && exit 1
