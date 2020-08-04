@@ -26,24 +26,21 @@ class PositionalEncoding(nn.Module):
         # Tmax x 1 x D
         self.register_buffer("pos_enc", pos_enc[:, None])
         self.dropout = nn.Dropout(p=dropout)
-        self.scale = embed_dim**0.5
 
-    def forward(self, x, t=0):
+    def forward(self, inp, t=0):
         """
-        args:
-            x: N x T x D 
-        return:
-            y: T x N x D (keep same as transformer definition)
+        Args:
+            inp: N x T x D 
+        Return:
+            out: T x N x D (keep same as transformer definition)
         """
-        _, T, _ = x.shape
+        _, T, _ = inp.shape
         # T x N x D
-        x = x.transpose(0, 1)
+        inp = inp.transpose(0, 1)
         # Tmax x 1 x D
-        x = x * self.scale + self.pos_enc[t:t + T, :]
-        # before commit 85cd010423ae975ecb04df0fb27430c3df0c301e
-        # x = x + self.pos_enc[t:t + T, :]
-        x = self.dropout(x)
-        return x
+        inp = inp + self.pos_enc[t:t + T, :]
+        out = self.dropout(inp)
+        return out
 
 
 class LinearEmbedding(nn.Module):
@@ -55,14 +52,16 @@ class LinearEmbedding(nn.Module):
         self.proj = nn.Linear(input_size, embed_dim)
         self.norm = nn.LayerNorm(embed_dim)
 
-    def forward(self, x):
+    def forward(self, inp):
         """
-        args:
-            x: features from asr transform, N x T x F
+        Args:
+            inp: features from asr transform, N x T x F
+        Return:
+            out: N x T x D
         """
-        x = self.norm(self.proj(x))
-        x = F.relu(x)
-        return x
+        inp = self.norm(self.proj(inp))
+        out = F.relu(inp)
+        return out
 
 
 class Conv1dEmbedding(nn.Module):
@@ -82,30 +81,30 @@ class Conv1dEmbedding(nn.Module):
                                stride=2,
                                padding=1)
 
-    def forward(self, x):
+    def forward(self, inp):
         """
-        args:
-            x: features from front-end or asr transform, N x B x T x F or N x T x F
+        Args:
+            inp: features from front-end or asr transform, N x B x T x F or N x T x F
         """
-        if x.dim() not in [3, 4]:
+        if inp.dim() not in [3, 4]:
             raise RuntimeError(
-                f"Conv1dEmbedding expect 3/4D tensor, got {x.dim()} instead")
-        if x.dim() == 3:
-            _, T, _ = x.shape
+                f"Conv1dEmbedding expect 3/4D tensor, got {inp.dim()} instead")
+        if inp.dim() == 3:
+            _, T, _ = inp.shape
             # N x T x F => N x F x T
-            x = x.transpose(1, 2)
+            inp = inp.transpose(1, 2)
         else:
-            N, _, T, _ = x.shape
+            N, _, T, _ = inp.shape
             # N x B x D x T
-            x = x.transpose(-1, -2)
-            x = x.contiguous()
+            inp = inp.transpose(-1, -2)
+            inp = inp.contiguous()
             # N x BD x T
-            x = x.view(N, -1, T)
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
+            inp = inp.view(N, -1, T)
+        inp = F.relu(self.conv1(inp))
+        out = F.relu(self.conv2(inp))
         # N x F x T/4 => N x T/4 x F
-        x = x.transpose(1, 2)
-        return x[:, :T // 4]
+        out = out.transpose(1, 2)
+        return out[:, :T // 4]
 
 
 class Conv2dEmbedding(nn.Module):
@@ -125,28 +124,27 @@ class Conv2dEmbedding(nn.Module):
         input_size = (input_size - 1) // 2 + 1
         self.proj = nn.Linear(input_size * embed_dim, embed_dim)
 
-    def forward(self, x):
+    def forward(self, inp):
         """
-        args:
-            x: N x T x F (from asr transform) or 
-               N x C x T x F (from front-end processing)
+        Args:
+            inp: N x T x F (from asr transform) or N x C x T x F (from front-end processing)
         """
-        if x.dim() not in [3, 4]:
+        if inp.dim() not in [3, 4]:
             raise RuntimeError(
-                f"Conv2dEmbedding expect 3/4D tensor, got {x.dim()} instead")
-        L = x.size(-2)
+                f"Conv2dEmbedding expect 3/4D tensor, got {inp.dim()} instead")
+        L = inp.size(-2)
         # N x 1 x T x F => N x A x T' x F'
-        x = F.relu(self.conv1(x[:, None] if x.dim() == 3 else x))
+        out = F.relu(self.conv1(inp[:, None] if inp.dim() == 3 else inp))
         # N x A x T' x F'
-        x = F.relu(self.conv2(x))
+        out = F.relu(self.conv2(out))
         # N x T' x A x F'
-        x = x.transpose(1, 2)
-        N, T, _, _ = x.shape
-        x = x.contiguous()
-        x = x.view(N, T, -1)
+        out = out.transpose(1, 2)
+        N, T, _, _ = out.shape
+        out = out.contiguous()
+        out = out.view(N, T, -1)
         # N x T' x D
-        x = self.proj(x[:, :L // 4])
-        return x
+        out = self.proj(out[:, :L // 4])
+        return out
 
 
 class IOEmbedding(nn.Module):
@@ -182,13 +180,13 @@ class IOEmbedding(nn.Module):
             raise RuntimeError(f"Unsupported embedding type: {embed_type}")
         self.posencode = PositionalEncoding(embed_dim, dropout=dropout)
 
-    def forward(self, x, t=0):
+    def forward(self, inp, t=0):
         """
-        args:
-            x: N x T x F (from asr transform)
-        return:
-            y: T' x N x F (to feed transformer)
+        Args:
+            inp: N x T x F (from asr transform)
+        Return:
+            out: T' x N x F (to feed transformer)
         """
-        y = self.embed(x)
-        y = self.posencode(y, t=t)
-        return y
+        out = self.embed(inp)
+        out = self.posencode(out, t=t)
+        return out

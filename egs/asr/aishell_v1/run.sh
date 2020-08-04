@@ -41,26 +41,26 @@ fi
 if [ $stage -le 2 ]; then
     ./scripts/train_am.sh \
         --seed $seed \
-	--gpu $gpu \
-	--epochs $epochs \
-	--num-workers $num_workers \
-	--batch-size $batch_size \
-	--tensorboard $tensorboard \
-	--prog-interval $prog_interval \
-	$dataset $exp
+		--gpu $gpu \
+		--epochs $epochs \
+		--num-workers $num_workers \
+		--batch-size $batch_size \
+		--tensorboard $tensorboard \
+		--prog-interval $prog_interval \
+		$dataset $exp
 fi
 
 if [ $stage -le 3 ]; then
     # decoding
     ./scripts/decode.sh \
         --gpu $gpu \
-	--beam-size $beam_size \
+		--beam-size $beam_size \
        	--nbest $nbest \
-	--max-len 50 \
-	--dict data/$dataset/dict \
-	$dataset $exp \
-	data/$dataset/test/wav.scp \
-	exp/$dataset/$exp/dec
+		--max-len 50 \
+		--dict data/$dataset/dict \
+		$dataset $exp \
+		data/$dataset/test/wav.scp \
+		exp/$dataset/$exp/dec
     # wer
     ./bin/compute_wer.py \
         exp/$dataset/$exp/dec/beam24.decode data/$dataset/test/text

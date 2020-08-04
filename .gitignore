@@ -4,12 +4,14 @@ __pycache__/
 .py[cod]
 
 asset/
-src/test
-src/debug*
+bin/debug*
 exp/
 checkpoint/
 cache/
 *.log
+
+# egs
+egs/*/*/log
 egs/*/*/exp
 egs/*/*/data
 
