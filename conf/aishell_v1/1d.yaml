@@ -1,6 +1,6 @@
 # default conf
 
-nnet_type: "common_transducer"
+nnet: "common_transducer"
 
 nnet_conf:
   input_size: 80
@@ -41,7 +41,7 @@ asr_transform:
 trainer_conf:
   optimizer: "adam"
   optimizer_kwargs:
-    lr: 1.0e-3
+    lr: 1.0e-4
     weight_decay: 1.0e-5
   lr_scheduler_kwargs:
     min_lr: 1.0e-8

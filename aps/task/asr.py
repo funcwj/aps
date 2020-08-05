@@ -8,11 +8,11 @@ import torch.nn as nn
 
 import torch.nn.functional as tf
 
-# from https://github.com/HawkAaron/warp-transducer
-# from warprnnt_pytorch import rnnt_loss
+# https://github.com/HawkAaron/warp-transducer
 # https://github.com/1ytic/warp-rnnt
 try:
     from warp_rnnt import rnnt_loss
+    # from warprnnt_pytorch import rnnt_loss
     rnnt_loss_available = True
 except ImportError:
     rnnt_loss_available = False
@@ -136,7 +136,7 @@ class CtcXentHybridTask(Task):
                                    reduction="mean",
                                    zero_infinity=True)
             loss = self.ctc_weight * ctc_loss + (1 - self.ctc_weight) * loss
-            stats["=ctc"] = ctc_loss.item()
+            stats[" ctc"] = ctc_loss.item()
         # compute accu
         accu = compute_accu(outs, tgts)
         # add to reporter
@@ -166,8 +166,8 @@ class TransducerTask(Task):
         ignore_mask = egs["tgt_pad"] == IGNORE_ID
         tgt_pad = egs["tgt_pad"].masked_fill(ignore_mask, self.blank)
         # N x Ti x To+1 x V
-        pack = (egs["src_pad"], egs["src_len"], tgt_pad, egs["tgt_len"])
-        outs, enc_len = self.nnet(pack)
+        outs, enc_len = self.nnet(egs["src_pad"], egs["src_len"], tgt_pad,
+                                  egs["tgt_len"])
         # add log_softmax if use https://github.com/1ytic/warp-rnnt
         outs = tf.log_softmax(outs, -1)
         # compute loss

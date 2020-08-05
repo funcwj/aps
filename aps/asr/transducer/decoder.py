@@ -176,7 +176,7 @@ class TorchRNNDecoder(nn.Module):
         nbest = min(beam, nbest)
         if beam > self.vocab_size:
             raise RuntimeError(f"Beam size({beam}) > vocabulary size")
-        if lm.vocab_size < self.vocab_size:
+        if lm and lm.vocab_size < self.vocab_size:
             raise RuntimeError("lm.vocab_size < am.vocab_size, "
                                "seems different dictionary is used")
 

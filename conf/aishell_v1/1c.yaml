@@ -13,7 +13,6 @@ nnet_conf:
     pos_dropout: 0.1
     att_dropout: 0.2
     num_layers: 6
-  decoder_type: "transformer"
   decoder_kwargs:
     att_dim: 256
     nhead: 4
