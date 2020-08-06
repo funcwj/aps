@@ -1,0 +1,45 @@
+nnet: "unsupervised_enh"
+
+nnet_conf:
+  input_size: 1285
+  input_project: 512
+  num_bins: 257
+  rnn: "lstm"
+  rnn_dropout: 0.2
+  rnn_bidir: True
+  rnn_hidden: 512
+  rnn_layers: 3
+
+task: "unsuper_enh"
+
+enh_transform:
+  feats: "spectrogram-log-cmvn-ipd"
+  frame_len: 512
+  frame_hop: 256
+  window: "hann"
+  ipd_index: "0,1;0,2;0,3;0,4"
+  cos_ipd: true
+
+trainer_conf:
+  optimizer: "adam"
+  optimizer_kwargs:
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+  lr_scheduler_kwargs:
+    min_lr: 1.0e-8
+    patience: 1
+    factor: 0.5
+  no_impr: 3
+  no_impr_thres: 0.01
+  clip_gradient: 10
+  stop_criterion: "loss"
+
+data_conf:
+  fmt: "ss_chunk"
+  loader:
+    sr: 16000
+    chunk_size: 64000
+  train:
+    mix_scp: "data/chime4_unsuper/trn.scp"
+  valid:
+    mix_scp: "data/chime4_unsuper/dev.scp"

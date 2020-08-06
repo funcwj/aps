@@ -5,6 +5,7 @@
 set -eu
 
 timit_data=/scratch/jwu/TIMIT-LDC93S1/TIMIT
+dataset="timit"
 stage=1
 # training
 gpu=0
@@ -23,7 +24,7 @@ nbest=8
 . ./utils/parse_options.sh || exit 1
 
 if [ $stage -le 1 ]; then
-    ./local/timit_data_prep.sh $timit_data
+    ./local/timit_data_prep.sh --dataset $dataset $timit_data
 fi
 
 if [ $stage -le 2 ]; then

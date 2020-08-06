@@ -13,7 +13,7 @@ data=/scratch/jwu/aishell_v1
 data_url=www.openslr.org/resources/33
 
 stage=1
-dataset=aishell_v1 # prepare data in data/aishell_v1/{train,dev,test}
+dataset="aishell_v1" # prepare data in data/aishell_v1/{train,dev,test}
 # training
 gpu=0
 exp=1a # load training configuration in conf/aishell_v1/1a.yaml

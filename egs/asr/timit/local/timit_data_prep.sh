@@ -6,14 +6,18 @@
 
 set -eu
 
+dataset="timit"
+
+. ./utils/parse_options.sh || exit 1
+
 if [ $# -ne 1 ]; then
    echo "Argument should be the Timit directory, see ../run.sh for example."
    exit 1;
 fi
 
 dir=data/local
-data_dir=data/timit
-conf=$PWD/conf/timit
+data_dir=data/$dataset
+conf=$PWD/conf/$dataset
 local=$PWD/local
 
 mkdir -p $dir
