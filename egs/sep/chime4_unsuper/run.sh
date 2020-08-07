@@ -14,17 +14,17 @@ gpu=0
 seed=777
 epochs=100
 tensorboard=false
-batch_size=8
+batch_size=32
 num_workers=4
 eval_interval=-1
 save_interval=-1
-prog_interval=100
+prog_interval=50
 
 . ./utils/parse_options.sh || exit 1
 
-[ $stage -le 1 ] && local/prep_data.sh --dataset $dataset $chime4_data $cache_dir || exit 1
+[ $stage -le 1 ] && local/prep_data.sh --dataset $dataset $chime4_data $cache_dir
 
-if [ $stage -le 2]; then
+if [ $stage -le 2 ]; then
     ./scripts/train_ss.sh \
         --gpu $gpu --seed $seed \
         --epochs $epochs --batch-size $batch_size \
@@ -35,4 +35,11 @@ if [ $stage -le 2]; then
         --tensorboard $tensorboard \
         $dataset $exp
     echo "$0: Train model done under exp/$dataset/$exp"
+fi
+
+if [ $stage -le 3 ]; then
+    ./local/eval.py \
+        --checkpoint exp/$dataset/$exp \
+        --sr 16000 \
+        data/$dataset/tst.scp exp/$dataset/$exp/mask
 fi

@@ -18,6 +18,8 @@ cache_dir=$2
 mkdir -p $cache_dir/{tr05,dt05,et05}
 for name in tr05 dt05 et05; do
   echo "$0: Merging wave to $cache_dir/$name ..."
+  # Although our dataloader supports pipe style input, here we merge the single-channel audio to
+  # multi-channel using sox
   find $track_6ch/${name}_*_{simu,real} -name "*.wav" | grep CH1 | \
     awk -F '[/.]' '{printf("%s %s\n", $(NF-2), $0)}' | sed 's:CH1:CH{1,3,4,5,6}:' | \
     awk -v dir=$cache_dir/$name '{printf("sox -M %s %s/%s.wav\n", $2, dir, $1)}' | bash

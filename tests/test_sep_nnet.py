@@ -43,6 +43,7 @@ def test_unsuper_enh():
     inp = th.rand(2, 5, 64000)
     x, y = unsuper_enh(inp)
     assert x.shape == th.Size([2, 5, 257, 249])
+    assert th.isnan(x.real).sum() + th.isnan(x.imag).sum() == 0
     assert y.shape == th.Size([2, 249, 257])
     z = unsuper_enh.infer(inp[0])
     assert z.shape == th.Size([249, 257])

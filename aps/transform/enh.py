@@ -416,9 +416,7 @@ class FeatureTransform(nn.Module):
         if norm_obs and multi_channel:
             mag_norm = th.norm(mag, p=2, dim=1, keepdim=True)
             mag = mag / th.clamp(mag_norm, min=EPSILON)
-        real = mag * th.cos(pha)
-        imag = mag * th.sin(pha)
-        cplx = ComplexTensor(real, imag)
+        cplx = ComplexTensor(mag * th.cos(pha), mag * th.sin(pha))
         # ipd transform
         if self.ipd_transform:
             # N x T x ...

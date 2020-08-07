@@ -285,7 +285,6 @@ class Trainer(object):
                 f"Loading model to GPU-{rank}/{self.cuda_devices}, " +
                 f"#param: {self.num_params:.2f}M")
 
-        self.reporter.log(f"Schedule sampling strategy: {ss_scheduler}")
         self.reporter.log(f"Stop criterion: {self.stop_on}")
         if clip_gradient:
             self.reporter.log(

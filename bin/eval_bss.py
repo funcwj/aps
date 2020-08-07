@@ -25,7 +25,7 @@ class Separator(Computer):
                                         task="enh")
         logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
 
-    def run(self, src, chunk_len=-1, chunk_hop=-1):
+    def run(self, src, chunk_len=-1, chunk_hop=-1, mode="time"):
         """
         Args:
             src (Array): (C) x S
@@ -35,8 +35,10 @@ class Separator(Computer):
         N = src.shape[-1]
         src = th.from_numpy(src).to(self.device)
         if chunk_len == -1:
-            return self.nnet.infer(src)
+            return self.nnet.infer(src, mode=mode)
         else:
+            if mode != "time":
+                raise RuntimeError("Now only supports time inference mode")
             chunks = []
             # now only for enhancement task
             for t in range(0, N, chunk_hop):
@@ -50,7 +52,7 @@ class Separator(Computer):
                     else:
                         zero = th.zeros(src.shape[0], -pad, device=self.device)
                     c = th.cat([src[..., t:], zero], 0)
-                s = self.nnet.infer(c)
+                s = self.nnet.infer(c, mode=mode)
                 chunks.append(s)
             sep = th.zeros(N)
             for i, c in enumerate(chunks):
@@ -64,6 +66,7 @@ class Separator(Computer):
 
 def run(args):
     sep_dir = pathlib.Path(args.sep_dir)
+    sep_dir.mkdir(parents=True, exist_ok=True)
     separator = Separator(args.checkpoint, device_id=args.device_id)
     mix_reader = WaveReader(args.wav_scp, sr=args.sr, channel=args.channel)
 
@@ -72,13 +75,19 @@ def run(args):
         timer = SimpleTimer()
         sep = separator.run(mix,
                             chunk_hop=args.chunk_hop,
-                            chunk_len=args.chunk_len)
+                            chunk_len=args.chunk_len,
+                            mode=args.mode)
         if isinstance(sep, th.Tensor):
             sep = sep.cpu().numpy()
         else:
             sep = np.stack([s.cpu().numpy() for s in sep])
-        sep = sep * norm / np.max(np.abs(sep))
-        write_wav(sep_dir / f"{key}.wav", sep, sr=args.sr)
+        if args.mode == "time":
+            sep = sep * norm / np.max(np.abs(sep))
+            # save audio
+            write_wav(sep_dir / f"{key}.wav", sep, sr=args.sr)
+        else:
+            # save TF-mask
+            np.save(sep_dir / f"{key}", sep)
         time_cost = timer.elapsed() * 60
         dur = mix.shape[-1] / args.sr
         logger.info(
@@ -96,6 +105,11 @@ if __name__ == "__main__":
     parser.add_argument("sep_dir",
                         type=str,
                         help="Directory to dump enhanced/separated output")
+    parser.add_argument("--mode",
+                        type=str,
+                        choices=["time", "freq"],
+                        default="time",
+                        help="Inference mode of the bss model")
     parser.add_argument("--checkpoint",
                         type=str,
                         required=True,
