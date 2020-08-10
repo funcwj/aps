@@ -63,5 +63,6 @@ if [ $stage -le 3 ]; then
 		exp/$dataset/$exp/dec
     # wer
     ./bin/compute_wer.py \
-        exp/$dataset/$exp/dec/beam24.decode data/$dataset/test/text
+        exp/$dataset/$exp/dec/beam${beam_size}.decode \
+		data/$dataset/test/text
 fi

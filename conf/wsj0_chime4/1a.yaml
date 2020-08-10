@@ -1,0 +1,82 @@
+nnet: "att"
+
+nnet_conf:
+  input_size: 80
+  encoder_type: "tdnn_rnn"
+  encoder_proj: 512
+  encoder_kwargs:
+    tdnn_dim: 512
+    tdnn_layers: 2
+    tdnn_stride: "2,2"
+    tdnn_dilation: "1,1"
+    rnn: "lstm"
+    rnn_layers: 3
+    rnn_bidir: True
+    rnn_dropout: 0.2
+    rnn_hidden: 320
+  decoder_dim: 512
+  decoder_kwargs:
+    dec_rnn: "lstm"
+    rnn_layers: 2
+    rnn_hidden: 512  # must eq decoder_dim
+    rnn_dropout: 0
+    input_feeding: True
+    vocab_embeded: True
+  att_type: "ctx"
+  att_kwargs:
+    att_dim: 512
+
+task: "ctc_xent"
+
+task_conf:
+  lsm_factor: 0.1
+  ctc_weight: 0.2
+
+asr_transform:
+  feats: "fbank-log-cmvn-aug"
+  frame_len: 400
+  frame_hop: 160
+  window: "hamm"
+  round_pow_of_two: True
+  sr: 16000
+  num_mels: 80
+  norm_mean: True
+  norm_var: True
+  aug_prob: 0.5
+
+trainer_conf:
+  optimizer: "adam"
+  optimizer_kwargs:
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+  lr_scheduler_kwargs:
+    min_lr: 1.0e-8
+    patience: 1
+    factor: 0.5
+  ss_scheduler: "linear"
+  ss_scheduler_kwargs:
+    ssr: 0.2
+    epoch_beg: 8
+    epoch_end: 20
+    update_interval: 3
+  no_impr: 6
+  no_impr_thres: 0.1
+  clip_gradient: 5
+  stop_criterion: "accu"
+
+data_conf:
+  fmt: "am_wav"
+  loader:
+    max_token_num: 400
+    adapt_token_num: 150
+    max_dur: 30 # (s)
+    min_dur: 0.4 # (s)
+    adapt_dur: 10 # (s)
+  train:
+    wav_scp: "data/wsj0_chime4/train/wav.scp"
+    utt2dur: "data/wsj0_chime4/train/utt2dur"
+    token: "data/wsj0_chime4/train/token"
+  valid:
+    wav_scp: "data/wsj0_chime4/dev/wav.scp"
+    utt2dur: "data/wsj0_chime4/dev/utt2dur"
+    token: "data/wsj0_chime4/dev/token"
