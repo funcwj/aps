@@ -89,13 +89,14 @@ class EncoderBlock(nn.Module):
                  kernel_size,
                  stride=1,
                  causal=False,
-                 cplx=True):
+                 cplx=True,
+                 freq_padding=True):
         super(EncoderBlock, self).__init__()
         conv_impl = ComplexConv2d if cplx else nn.Conv2d
         # NOTE: time stride should be 1
         var_kt = kernel_size[1] - 1
         time_axis_pad = var_kt if causal else var_kt // 2
-        freq_axis_pad = (kernel_size[0] - 1) // 2
+        freq_axis_pad = (kernel_size[0] - 1) // 2 if freq_padding else 0
         self.conv = conv_impl(in_channels,
                               out_channels,
                               kernel_size,
@@ -128,12 +129,13 @@ class DecoderBlock(nn.Module):
                  stride=1,
                  causal=False,
                  cplx=True,
+                 freq_padding=True,
                  last_layer=False):
         super(DecoderBlock, self).__init__()
         conv_impl = ComplexConvTranspose2d if cplx else nn.ConvTranspose2d
         var_kt = kernel_size[1] - 1
         time_axis_pad = var_kt if causal else var_kt // 2
-        freq_axis_pad = (kernel_size[0] - 1) // 2
+        freq_axis_pad = (kernel_size[0] - 1) // 2 if freq_padding else 0
         self.trans_conv = conv_impl(in_channels,
                                     out_channels,
                                     kernel_size,
@@ -167,7 +169,7 @@ class Encoder(nn.Module):
         S: strides
         C: output channels
     """
-    def __init__(self, cplx, K, S, C, causal=False):
+    def __init__(self, cplx, K, S, C, causal=False, freq_padding=True):
         super(Encoder, self).__init__()
         layers = [
             EncoderBlock(C[i],
@@ -175,6 +177,7 @@ class Encoder(nn.Module):
                          k,
                          stride=S[i],
                          cplx=cplx,
+                         freq_padding=freq_padding,
                          causal=causal) for i, k in enumerate(K)
         ]
         self.layers = nn.ModuleList(layers)
@@ -197,7 +200,7 @@ class Decoder(nn.Module):
         S: strides
         C: output channels
     """
-    def __init__(self, cplx, K, S, C, causal=False, connection="sum"):
+    def __init__(self, cplx, K, S, C, causal=False, freq_padding=True, connection="sum"):
         super(Decoder, self).__init__()
         if connection not in ["cat", "sum"]:
             raise ValueError(f"Unknown connection mode: {connection}")
@@ -208,6 +211,7 @@ class Decoder(nn.Module):
                          stride=S[i],
                          causal=causal,
                          cplx=cplx,
+                         freq_padding=freq_padding,
                          last_layer=(i == len(K) - 1)) for i, k in enumerate(K)
         ]
         self.layers = nn.ModuleList(layers)
@@ -216,6 +220,7 @@ class Decoder(nn.Module):
     def forward(self, x, enc_h):
         # N = len(self.layers)
         for index, layer in enumerate(self.layers):
+            # print(layer)
             if index == 0:
                 x = layer(x)
             else:
@@ -224,7 +229,7 @@ class Decoder(nn.Module):
                 else:
                     inp = th.cat([x, enc_h[index - 1]], 1)
                 x = layer(inp)
-            # print(f"encoder-{N - 1 - index}: {x.shape}")
+            # print(f"decoder-{N - 1 - index}: {x.shape}")
         return x
 
 
@@ -240,6 +245,7 @@ class DCUNet(nn.Module):
                  num_branch=1,
                  causal_conv=False,
                  enh_transform=None,
+                 freq_padding=True,
                  connection="sum"):
         super(DCUNet, self).__init__()
         if enh_transform is None:
@@ -252,12 +258,13 @@ class DCUNet(nn.Module):
         # make sure stride size on time axis is 1
         S = parse_2dstr(S)
         C = parse_1dstr(C)
-        self.encoder = Encoder(cplx, K, S, [1] + C, causal=causal_conv)
+        self.encoder = Encoder(cplx, K, S, [1] + C, causal=causal_conv, freq_padding=freq_padding)
         self.decoder = Decoder(cplx,
                                K[::-1],
                                S[::-1],
                                C[::-1] + [num_branch],
                                causal=causal_conv,
+                               freq_padding=freq_padding,
                                connection=connection)
         self.num_branch = num_branch
 

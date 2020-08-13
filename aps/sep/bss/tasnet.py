@@ -162,7 +162,7 @@ class DsConv1D(nn.Module):
     def forward(self, x):
         x = self.dconv(x)
         if self.dconv_causal:
-            x = x[:, :, :-self.dconv_pad // 2]
+            x = x[:, :, :-self.pad_value]
         x = self.norm(self.prelu(x))
         x = self.sconv(x)
         return x
@@ -217,6 +217,8 @@ class TimeConvTasNet(nn.Module):
                  norm="BN",
                  num_spks=2,
                  non_linear="relu",
+                 input_norm="cLN",
+                 block_residual=False,
                  causal=False):
         super(TimeConvTasNet, self).__init__()
         supported_nonlinear = {
@@ -232,7 +234,7 @@ class TimeConvTasNet(nn.Module):
         # n x S => n x N x T, S = 4s*8000 = 32000
         self.encoder = Conv1D(1, N, L, stride=L // 2, padding=0)
         # before repeat blocks, always cLN
-        self.ln = ChannelWiseLayerNorm(N)
+        self.ln = build_norm(input_norm, N)
         # n x N x T => n x B x T
         self.proj = Conv1D(N, B, 1)
         # repeat blocks
@@ -254,6 +256,7 @@ class TimeConvTasNet(nn.Module):
                                    stride=L // 2,
                                    bias=True)
         self.num_spks = num_spks
+        self.block_residual = block_residual
 
     def check_args(self, mix, training=True):
         """
@@ -293,7 +296,11 @@ class TimeConvTasNet(nn.Module):
         # n x B x T
         y = self.proj(self.ln(w))
         # n x B x T
-        y = self.conv(y)
+        if self.block_residual:
+            for layer in self.conv:
+                y = y + layer(y)
+        else:
+            y = self.conv(y)
         # n x 2N x T
         e = th.chunk(self.mask(y), self.num_spks, 1)
         # n x N x T
@@ -304,7 +311,8 @@ class TimeConvTasNet(nn.Module):
         # spks x [n x N x T]
         s = [w * m[n] for n in range(self.num_spks)]
         # spks x n x S
-        return [self.decoder(x, squeeze=True) for x in s]
+        spk = [self.decoder(x, squeeze=True) for x in s]
+        return spk[0] if self.num_spks == 1 else spk
 
 
 class FreqConvTasNet(nn.Module):
@@ -324,6 +332,7 @@ class FreqConvTasNet(nn.Module):
                  num_bins=257,
                  non_linear="relu",
                  causal=False,
+                 block_residual=False,
                  training_mode="freq"):
         super(FreqConvTasNet, self).__init__()
         supported_nonlinear = {"relu": F.relu, "sigmoid": th.sigmoid}
@@ -349,6 +358,7 @@ class FreqConvTasNet(nn.Module):
         self.mask = Conv1D(proj_channels, num_bins * num_spks, 1)
         self.num_spks = num_spks
         self.mode = training_mode
+        self.block_residual = block_residual
 
     def check_args(self, mix, training=True):
         """
@@ -377,7 +387,13 @@ class FreqConvTasNet(nn.Module):
         # N x F x T
         mix_feat = th.transpose(mix_feat, 1, 2)
         # N x C x T
-        x = self.conv(self.proj(mix_feat))
+        x = self.proj(mix_feat)
+        # n x B x T
+        if self.block_residual:
+            for layer in self.conv:
+                x = x + layer(x)
+        else:
+            x = self.conv(x)
         # N x F* x T
         masks = self.non_linear(self.mask(x))
         if self.num_spks > 1:

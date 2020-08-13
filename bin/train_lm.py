@@ -37,6 +37,7 @@ def run(args):
     if "task_conf" not in conf:
         conf["task_conf"] = {}
 
+    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
     # add dictionary info
     with codecs.open(args.dict, encoding="utf-8") as f:
         vocab = {}
@@ -53,8 +54,6 @@ def run(args):
     for key in conf.keys():
         if key not in constrained_conf_keys:
             raise ValueError(f"Invalid configuration item: {key}")
-
-    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
 
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
@@ -84,6 +83,7 @@ def run(args):
                          tensorboard=args.tensorboard,
                          **conf["trainer_conf"])
     # dump configurations
+    conf["cmd_args"] = vars(args)
     with open(f"{args.checkpoint}/train.yaml", "w") as f:
         yaml.dump(conf, f)
 

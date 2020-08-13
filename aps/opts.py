@@ -66,7 +66,7 @@ class BaseTrainParser(object):
                         help="Number of workers used in dataloader")
     parser.add_argument("--tensorboard",
                         action=StrToBoolAction,
-                        default="false",
+                        default=False,
                         help="Flags to use the tensorboad")
     parser.add_argument("--seed",
                         type=str,

@@ -124,6 +124,7 @@ def run(args):
                          tensorboard=args.tensorboard,
                          **conf["trainer_conf"])
     # dump configurations
+    conf["cmd_args"] = vars(args)
     with open(f"{args.checkpoint}/train.yaml", "w") as f:
         yaml.dump(conf, f)
 

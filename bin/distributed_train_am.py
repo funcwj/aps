@@ -56,6 +56,7 @@ def train_worker(task, conf, args):
 
     # dump configurations
     if rank == 0:
+        conf["cmd_args"] = vars(args)
         with open(f"{args.checkpoint}/train.yaml", "w") as f:
             yaml.dump(conf, f)
 

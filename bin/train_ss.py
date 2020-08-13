@@ -54,6 +54,8 @@ def run(args):
         print(f"Set random seed as {seed}")
 
     conf = load_conf(args.conf)
+    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
+
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
                                 train=True,
@@ -88,6 +90,7 @@ def run(args):
                          **conf["trainer_conf"])
 
     # dump configurations
+    conf["cmd_args"] = vars(args)
     with open(f"{args.checkpoint}/train.yaml", "w") as f:
         yaml.dump(conf, f)
 

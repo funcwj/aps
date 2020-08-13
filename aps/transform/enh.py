@@ -299,6 +299,7 @@ class FeatureTransform(nn.Module):
                  window="sqrthann",
                  round_pow_of_two=True,
                  stft_normalized=False,
+                 center=False,
                  sr=16000,
                  gcmvn="",
                  norm_mean=True,
@@ -317,6 +318,7 @@ class FeatureTransform(nn.Module):
         self.frame_hop = frame_hop
         self.stft_kwargs = {
             "window": window,
+            "center": center,
             "normalized": stft_normalized,
             "round_pow_of_two": round_pow_of_two
         }

@@ -28,6 +28,47 @@ def test_phasen():
     assert z.shape == th.Size([64000])
 
 
+def test_dcunet():
+    nnet_cls = support_nnet("dcunet")
+    transform = EnhTransform(feats="", frame_len=512, frame_hop=256)
+    dcunet = nnet_cls(enh_transform=transform,
+                      K="7,5;7,5;5,3;5,3;3,3;3,3",
+                      S="2,1;2,1;2,1;2,1;2,1;2,1",
+                      C="32,32,64,64,64,128",
+                      num_branch=1,
+                      cplx=True,
+                      causal_conv=False,
+                      freq_padding=True,
+                      connection="cat")
+    inp = th.rand(4, 64000)
+    x = dcunet(inp)
+    assert x.shape == th.Size([4, 64000])
+    y = dcunet.infer(inp[1])
+    assert y.shape == th.Size([64000])
+
+
+def test_tasnet():
+    nnet_cls = support_nnet("time_tasnet")
+    tasnet = nnet_cls(L=40,
+                      N=256,
+                      X=8,
+                      R=4,
+                      B=256,
+                      H=512,
+                      P=3,
+                      input_norm="gLN",
+                      norm="BN",
+                      num_spks=1,
+                      non_linear="relu",
+                      block_residual=True,
+                      causal=False)
+    inp = th.rand(4, 64000)
+    x = tasnet(inp)
+    assert x.shape == th.Size([4, 64000])
+    y = tasnet.infer(inp[1])
+    assert y.shape == th.Size([64000])
+
+
 def test_unsuper_enh():
     nnet_cls = support_nnet("unsupervised_enh")
     transform = EnhTransform(feats="spectrogram-log-cmvn-ipd",
@@ -50,4 +91,4 @@ def test_unsuper_enh():
 
 
 if __name__ == "__main__":
-    test_unsuper_enh()
+    test_tasnet()

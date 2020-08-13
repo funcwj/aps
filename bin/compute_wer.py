@@ -16,11 +16,12 @@ class TransReader(object):
     """
     Class to handle single/multi-speaker transcriptions
     """
-    def __init__(self, text_descriptor):
+    def __init__(self, text_descriptor, cer=False):
         self.readers = [
             BaseReader(t, num_tokens=-1, restrict=False)
             for t in text_descriptor.split(",")
         ]
+        self.cer = cer
 
     def __len__(self):
         return len(self.readers)
@@ -28,7 +29,17 @@ class TransReader(object):
     def __getitem__(self, key):
         if not self._check(key):
             raise RuntimeError(f"Missing {key} in one of the text files")
-        return [reader[key] for reader in self.readers]
+        ret = [reader[key] for reader in self.readers]
+        if self.cer:
+            char_ret = []
+            for ref in ret:
+                char_list = []
+                for r in ref:
+                    char_list += list(r)
+                char_ret.append(char_list)
+            return char_ret
+        else:
+            return ret
 
     def _check(self, key):
         status = [key in reader for reader in self.readers]
@@ -70,8 +81,8 @@ class Report(object):
 
 
 def run(args):
-    hyp_reader = TransReader(args.hyp)
-    ref_reader = TransReader(args.ref)
+    hyp_reader = TransReader(args.hyp, cer=args.cer)
+    ref_reader = TransReader(args.ref, cer=args.cer)
     if len(hyp_reader) != len(ref_reader):
         raise RuntimeError(
             "Looks number of speakers do not match in hyp & ref")
@@ -84,9 +95,9 @@ def run(args):
         ref_len = sum([len(r) for r in ref])
         if each_utt:
             if ref_len != 0:
-                each_utt.write("{}\t{:.3f}\n".format(key, err / ref_len))
+                each_utt.write(f"{key}\t{err / ref_len:.3f}\n")
             else:
-                each_utt.write("{}\tINF\n".format(key))
+                each_utt.write(f"{key}\tINF\n")
         reporter.add(key, err, ref_len)
     reporter.report()
 
@@ -113,5 +124,9 @@ if __name__ == "__main__":
                         default="",
                         help="If assigned, report results "
                         "per-class (gender or degree)")
+    parser.add_argument("--cer",
+                        action=StrToBoolAction,
+                        default=False,
+                        help="Compute CER instead of WER")
     args = parser.parse_args()
     run(args)
