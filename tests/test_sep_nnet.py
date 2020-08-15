@@ -69,6 +69,24 @@ def test_tasnet():
     assert y.shape == th.Size([64000])
 
 
+def test_dprnn():
+    nnet_cls = support_nnet("time_dprnn")
+    dprnn = nnet_cls(num_spks=1,
+                     conv_kernels=32,
+                     conv_filters=64,
+                     chunk_len=100,
+                     dprnn_layers=2,
+                     dprnn_bi_inter=False,
+                     dprnn_hidden=128,
+                     dprnn_block="mc",
+                     non_linear="relu")
+    inp = th.rand(4, 64000)
+    x = dprnn(inp)
+    assert x.shape == th.Size([4, 64000])
+    y = dprnn.infer(inp[1])
+    assert y.shape == th.Size([64000])
+
+
 def test_unsuper_enh():
     nnet_cls = support_nnet("unsupervised_enh")
     transform = EnhTransform(feats="spectrogram-log-cmvn-ipd",
@@ -91,4 +109,4 @@ def test_unsuper_enh():
 
 
 if __name__ == "__main__":
-    test_tasnet()
+    test_dprnn()

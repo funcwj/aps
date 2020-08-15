@@ -9,6 +9,7 @@ nnet_conf:
     tdnn_layers: 2
     tdnn_stride: "2,2"
     tdnn_dilation: "1,1"
+    tdnn_dropout: 0.2
     rnn: "lstm"
     rnn_layers: 3
     rnn_bidir: True
@@ -19,7 +20,7 @@ nnet_conf:
     dec_rnn: "lstm"
     rnn_layers: 2
     rnn_hidden: 512  # must eq decoder_dim
-    rnn_dropout: 0
+    rnn_dropout: 0.2
     input_feeding: True
     vocab_embeded: True
   att_type: "ctx"
@@ -42,7 +43,7 @@ asr_transform:
   num_mels: 80
   norm_mean: True
   norm_var: True
-  aug_prob: 0.5
+  aug_prob: 0.3
 
 trainer_conf:
   optimizer: "adam"
@@ -56,12 +57,12 @@ trainer_conf:
   ss_scheduler: "linear"
   ss_scheduler_kwargs:
     ssr: 0.2
-    epoch_beg: 8
+    epoch_beg: 4
     epoch_end: 20
-    update_interval: 3
+    update_interval: 4
   no_impr: 6
   no_impr_thres: 0.1
-  clip_gradient: 5
+  clip_gradient: 10
   stop_criterion: "accu"
 
 data_conf:

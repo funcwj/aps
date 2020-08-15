@@ -12,7 +12,7 @@ gpu=0
 exp=1a
 dataset=wsj0_chime4
 num_workers=4
-batch_size=64
+batch_size=32
 
 beam_size=16
 nbest=8

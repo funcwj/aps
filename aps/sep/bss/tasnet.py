@@ -436,15 +436,3 @@ class FreqConvTasNet(nn.Module):
         """
         self.check_args(mix, training=True)
         return self._forward(mix, mode=self.mode)
-
-
-def run():
-    tasnet = TimeConvTasNet(num_spks=2)
-    print(tasnet)
-    x = th.rand(2, 64000)
-    m = tasnet(x)
-    print(m[0].shape)
-
-
-if __name__ == "__main__":
-    run()

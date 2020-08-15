@@ -136,7 +136,7 @@ class CtcXentHybridTask(Task):
                                    reduction="mean",
                                    zero_infinity=True)
             loss = self.ctc_weight * ctc_loss + (1 - self.ctc_weight) * loss
-            stats[" ctc"] = ctc_loss.item()
+            stats["@ctc"] = ctc_loss.item()
         # compute accu
         accu = compute_accu(outs, tgts)
         # add to reporter

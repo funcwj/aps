@@ -87,6 +87,103 @@ class DpB(nn.Module):
         return inter_out.permute(0, -1, 1, 2)
 
 
+class McB(nn.Module):
+    """
+    The multiply and concat (MULCAT) block
+    """
+    def __init__(self, input_size, hidden_size, bi_inter=True):
+        super(McB, self).__init__()
+        self.inter_rnn = nn.ModuleList([
+            nn.LSTM(input_size,
+                    hidden_size,
+                    1,
+                    batch_first=True,
+                    bidirectional=bi_inter) for _ in range(2)
+        ])
+        self.inter_proj = nn.Linear(
+            hidden_size * 2 + input_size if bi_inter else hidden_size +
+            input_size, input_size)
+
+        self.intra_rnn = nn.ModuleList([
+            nn.LSTM(input_size,
+                    hidden_size,
+                    1,
+                    batch_first=True,
+                    bidirectional=True) for _ in range(2)
+        ])
+        self.intra_proj = nn.Linear(hidden_size * 2 + input_size, input_size)
+
+    def _intra(self, chunk):
+        """
+        Go through intra block
+        """
+        N, F, K, L = chunk.shape
+        # N x L x K x F
+        chunk = chunk.permute(0, -1, 2, 1).contiguous()
+        # NL x K x F
+        intra_inp = chunk.view(-1, K, F)
+        intra_out = []
+        for rnn in self.intra_rnn:
+            out, _ = rnn(intra_inp)
+            intra_out.append(out)
+        # NL x K x H
+        intra_mul = intra_out[0] * intra_out[1]
+        # NL x K x (H+F)
+        intra_cat = th.cat([intra_mul, intra_inp], dim=-1)
+        # NL x K x F
+        intra_out = self.intra_proj(intra_cat)
+        # NL x K x F
+        intra_out = intra_out + intra_inp
+        # N x L x K x F
+        return intra_out.view(N, L, K, F)
+
+    def _inter(self, chunk):
+        """
+        Go through inter block
+        """
+        N, L, K, F = chunk.shape
+        # N x K x L x F
+        chunk = chunk.transpose(1, 2).contiguous()
+        # NK x L x F
+        inter_inp = chunk.view(-1, L, F)
+        inter_out = []
+        for rnn in self.inter_rnn:
+            out, _ = rnn(inter_inp)
+            inter_out.append(out)
+        # NK x L x H
+        inter_mul = inter_out[0] * inter_out[1]
+        # NK x L x (H+F)
+        inter_cat = th.cat([inter_mul, inter_inp], dim=-1)
+        # NK x L x F
+        inter_out = self.inter_proj(inter_cat)
+        inter_out = inter_out + inter_inp
+        # N x K x L x F
+        return inter_out.view(N, K, L, F)
+
+    def forward(self, chunk):
+        """
+        Args:
+            chunk (Tensor): N x F x K x L
+        Return:
+            ...
+        """
+        if chunk.dim() not in [3, 4]:
+            raise RuntimeError(
+                f"DpB expects 3/4D tensor, got {chunk.dim()} instead")
+        if chunk.dim() == 3:
+            chunk = chunk[None, ...]
+        for rnn in self.inter_rnn:
+            rnn.flatten_parameters()
+        for rnn in self.intra_rnn:
+            rnn.flatten_parameters()
+        # N x L x K x F
+        intra_out = self._intra(chunk)
+        # N x K x L x F
+        inter_out = self._inter(intra_out)
+        # N x F x K x L
+        return inter_out.permute(0, -1, 1, 2)
+
+
 class DPRNN(nn.Module):
     """
     For DPRNN parts
@@ -98,6 +195,7 @@ class DPRNN(nn.Module):
                  dprnn_layers=6,
                  dprnn_hidden=128,
                  dprnn_bi_inter=True,
+                 dprnn_block="dp",
                  non_linear="sigmoid"):
         super(DPRNN, self).__init__()
         supported_nonlinear = {
@@ -108,9 +206,12 @@ class DPRNN(nn.Module):
         if non_linear not in supported_nonlinear:
             raise RuntimeError(
                 f"Unsupported non-linear function: {non_linear}")
+        if dprnn_block not in ["dp", "mc"]:
+            raise RuntimeError(f"Unsupported DPRNN block: {dprnn_block}")
+        BLOCK = {"dp": DpB, "mc": McB}[dprnn_block]
         self.non_linear = supported_nonlinear[non_linear]
         self.dprnn = nn.Sequential(*[
-            DpB(conv_filters, dprnn_hidden, bi_inter=dprnn_bi_inter)
+            BLOCK(conv_filters, dprnn_hidden, bi_inter=dprnn_bi_inter)
             for _ in range(dprnn_layers)
         ])
         self.mask = nn.Conv2d(conv_filters, num_spks * conv_filters, 1)
@@ -172,6 +273,7 @@ class TimeDPRNN(DPRNN):
                  dprnn_layers=6,
                  dprnn_bi_inter=True,
                  dprnn_hidden=128,
+                 dprnn_block="dp",
                  non_linear=""):
         super(TimeDPRNN, self).__init__(num_spks=num_spks,
                                         chunk_len=chunk_len,
@@ -179,6 +281,7 @@ class TimeDPRNN(DPRNN):
                                         conv_filters=conv_filters,
                                         dprnn_layers=dprnn_layers,
                                         dprnn_hidden=dprnn_hidden,
+                                        dprnn_block=dprnn_block,
                                         dprnn_bi_inter=dprnn_bi_inter)
         # conv1d encoder
         self.encoder = nn.Conv1d(1,
@@ -206,7 +309,7 @@ class TimeDPRNN(DPRNN):
         with th.no_grad():
             mix = mix[None, ...]
             sep = self.forward(mix)
-            return [s[0] for s in sep]
+            return sep[0] if self.num_spks == 1 else [s[0] for s in sep]
 
     def forward(self, mix):
         """
@@ -242,6 +345,7 @@ class FreqDPRNN(DPRNN):
                  dprnn_layers=6,
                  dprnn_bi_inter=True,
                  dprnn_hidden=128,
+                 dprnn_block="dp",
                  training_mode="freq"):
         super(FreqDPRNN, self).__init__(num_spks=num_spks,
                                         chunk_len=chunk_len,
@@ -249,6 +353,7 @@ class FreqDPRNN(DPRNN):
                                         conv_filters=num_bins,
                                         dprnn_layers=dprnn_layers,
                                         dprnn_hidden=dprnn_hidden,
+                                        dprnn_block=dprnn_block,
                                         dprnn_bi_inter=dprnn_bi_inter)
         if enh_transform is None:
             raise RuntimeError("FreqDPRNN: enh_transform can not be None")
@@ -309,15 +414,3 @@ class FreqDPRNN(DPRNN):
         """
         self.check_args(mix, training=True)
         return self._forward(mix, self.mode)
-
-
-def run():
-    dprnn = TimeDPRNN(num_spks=2, chunk_len=100, conv_kernels=32)
-    print(dprnn)
-    x = th.rand(2, 64000)
-    m = dprnn(x)
-    print(m[0].shape)
-
-
-if __name__ == "__main__":
-    run()
