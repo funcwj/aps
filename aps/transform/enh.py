@@ -12,7 +12,7 @@ import torch.nn as nn
 from torch_complex.tensor import ComplexTensor
 
 from aps.transform.utils import STFT, iSTFT, EPSILON
-from aps.transform.asr import LogTransform, CmvnTransform, SpecAugTransform
+from aps.transform.asr import LogTransform, AbsTransform, CmvnTransform, SpecAugTransform
 
 MATH_PI = math.pi
 
@@ -333,10 +333,10 @@ class FeatureTransform(nn.Module):
             if i == 0:
                 if tok != "spectrogram" and tok != "ipd":
                     raise RuntimeError("Now only support spectrogram features "
-                                       "or IPD features only")
+                                       "or IPD features")
                 feats_dim = self.forward_stft.num_bins
             if tok == "spectrogram":
-                pass
+                transform.append(AbsTransform(eps=EPSILON))
             elif tok == "log":
                 transform.append(LogTransform(eps=EPSILON))
             elif tok == "cmvn":

@@ -87,6 +87,25 @@ def test_dprnn():
     assert y.shape == th.Size([64000])
 
 
+def test_dccrn():
+    nnet_cls = support_nnet("dccrn")
+    transform = EnhTransform(feats="", frame_len=512, frame_hop=256)
+    dccrn = nnet_cls(enh_transform=transform,
+                     cplx=True,
+                     K="3,3;3,3;3,3;3,3;3,3;3,3;3,3",
+                     S="2,1;2,1;2,1;2,1;2,1;2,1;2,1",
+                     C="16,32,64,64,128,128,256",
+                     num_spks=1,
+                     rnn_resize=1536,
+                     non_linear="sigmoid",
+                     connection="cat")
+    inp = th.rand(4, 64000)
+    x = dccrn(inp)
+    assert x.shape == th.Size([4, 64000])
+    y = dccrn.infer(inp[1])
+    assert y.shape == th.Size([64000])
+
+
 def test_unsuper_enh():
     nnet_cls = support_nnet("unsupervised_enh")
     transform = EnhTransform(feats="spectrogram-log-cmvn-ipd",
@@ -109,4 +128,4 @@ def test_unsuper_enh():
 
 
 if __name__ == "__main__":
-    test_dprnn()
+    test_dccrn()

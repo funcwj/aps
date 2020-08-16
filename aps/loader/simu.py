@@ -88,7 +88,7 @@ def add_point_noise(mix_nsamps,
             src = noise[None, ...] if noise.ndim == 1 else noise
 
             image.append(src)
-            image_power.append(np.mean(src[0, :dur]**2))
+            image_power.append(np.mean(src[0, :dur]**2) if dur > 0 else 0)
         else:
             rir = noise_rir[i]
             if rir.ndim == 1:
@@ -229,10 +229,14 @@ def run_simu(args):
                                 channel=args.dump_channel,
                                 repeat=args.point_noise_repeat,
                                 sr=args.sr)
-        if spk_utt.shape[0] != noise.shape[0]:
-            raise RuntimeError("Channel mismatch between source speaker " +
-                               "configuration and pointsource noise's, " +
-                               f"{spk_utt.shape[0]} vs {noise.shape[0]}")
+        num_channels = spk_utt.shape[0]
+        if num_channels != noise.shape[0]:
+            if num_channels == 1:
+                noise = noise[0:1]
+            else:
+                raise RuntimeError("Channel mismatch between source speaker " +
+                                   "configuration and pointsource noise's, " +
+                                   f"{num_channels} vs {noise.shape[0]}")
         mix = spk_utt + noise
     else:
         noise = None
