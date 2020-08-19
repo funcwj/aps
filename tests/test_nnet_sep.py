@@ -8,6 +8,25 @@ from aps.sep import support_nnet
 from aps.transform import EnhTransform
 
 
+def test_base_rnn():
+    nnet_cls = support_nnet("base_rnn")
+    transform = EnhTransform(feats="spectrogram-log-cmvn",
+                             frame_len=512,
+                             frame_hop=256)
+    base_rnn = nnet_cls(enh_transform=transform,
+                        num_bins=257,
+                        input_size=257,
+                        input_project=512,
+                        rnn_layers=2,
+                        num_spks=1,
+                        rnn_hidden=512)
+    inp = th.rand(2, 64000)
+    x = base_rnn(inp)
+    assert x.shape == th.Size([2, 257, 249])
+    z = base_rnn.infer(inp[0])
+    assert z.shape == th.Size([64000])
+
+
 def test_phasen():
     nnet_cls = support_nnet("phasen")
     transform = EnhTransform(feats="", frame_len=512, frame_hop=256)
@@ -128,4 +147,4 @@ def test_unsuper_enh():
 
 
 if __name__ == "__main__":
-    test_dccrn()
+    test_base_rnn()
