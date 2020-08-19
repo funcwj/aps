@@ -11,11 +11,9 @@ import torch.nn as nn
 
 from torch_complex.tensor import ComplexTensor
 
-from aps.transform.utils import STFT, iSTFT, EPSILON
+from aps.transform.utils import STFT, iSTFT
 from aps.transform.asr import LogTransform, AbsTransform, CmvnTransform, SpecAugTransform
-
-MATH_PI = math.pi
-
+from aps.const import MATH_PI, EPSILON
 
 class IpdTransform(nn.Module):
     """

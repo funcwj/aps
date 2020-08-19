@@ -8,9 +8,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from aps.asr.base.encoder import TorchRNNEncoder
+from aps.const import EPSILON
+
 from scipy.optimize import linear_sum_assignment
 
-EPSILON = th.finfo(th.float32).eps
 
 supported_plan = {
     257: [[20, 70, 170], [2, 90, 190], [2, 50, 150], [2, 110, 210],

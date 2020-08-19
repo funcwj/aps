@@ -6,12 +6,13 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from aps.const import EPSILON
+
 batchnorm_non_linear = {
     "relu": tf.relu,
     "sigmoid": th.sigmoid,
     "": lambda inp: inp
 }
-EPSILON = th.finfo(th.float32).eps
 
 
 class PhasenConv2d(nn.Conv2d):

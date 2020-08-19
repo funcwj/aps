@@ -11,8 +11,7 @@ from itertools import permutations
 
 from aps.task.base import Task
 from aps.transform.utils import STFT, init_melfilter
-
-EPSILON = th.finfo(th.float32).eps
+from aps.const import EPSILON
 
 __all__ = [
     "SisnrTask", "SnrTask", "WaTask", "LinearFreqSaTask", "LinearTimeSaTask",
@@ -20,7 +19,7 @@ __all__ = [
 ]
 
 
-def sisnr(x, s, eps=1e-8, zero_mean=True):
+def sisnr(x, s, eps=1e-8, zero_mean=True, non_nagetive=False):
     """
     Computer SiSNR
     Args:
@@ -40,10 +39,15 @@ def sisnr(x, s, eps=1e-8, zero_mean=True):
         s = s - th.mean(s, dim=-1, keepdim=True)
     t = th.sum(x * s, dim=-1,
                keepdim=True) * s / (l2norm(s, keepdim=True)**2 + eps)
-    return 20 * th.log10(eps + l2norm(t) / (l2norm(x - t) + eps))
+
+    snr_linear = l2norm(t) / (l2norm(x - t) + eps)
+    if non_nagetive:
+        return 10 * th.log10(1 + snr_linear**2)
+    else:
+        return 20 * th.log10(eps + snr_linear)
 
 
-def snr(x, s, eps=1e-8):
+def snr(x, s, eps=1e-8, non_nagetive=False):
     """
     Computer SNR
     Args:
@@ -58,14 +62,22 @@ def snr(x, s, eps=1e-8):
     if x.shape != s.shape:
         raise RuntimeError("Dimention mismatch when calculate " +
                            f"si-snr, {x.shape} vs {s.shape}")
-    return 20 * th.log10(eps + l2norm(s) / (l2norm(x - s) + eps))
+    snr_linear = l2norm(s) / (l2norm(x - s) + eps)
+    if non_nagetive:
+        return 10 * th.log10(1 + snr_linear**2)
+    else:
+        return 20 * th.log10(eps + snr_linear)
 
 
 class TimeDomainTask(Task):
     """
     Time domain task (to be implemented)
     """
-    def __init__(self, nnet, num_spks=2, permute=True, mode="max",
+    def __init__(self,
+                 nnet,
+                 num_spks=2,
+                 permute=True,
+                 mode="max",
                  weight=None):
         super(TimeDomainTask, self).__init__(nnet, weight=weight)
         self.num_spks = num_spks
@@ -156,31 +168,42 @@ class SisnrTask(TimeDomainTask):
                  num_spks=2,
                  permute=True,
                  weight=None,
-                 zero_mean=True):
+                 zero_mean=True,
+                 non_nagetive=False):
         super(SisnrTask, self).__init__(nnet,
                                         num_spks=num_spks,
                                         permute=permute,
                                         mode="max",
                                         weight=weight)
         self.zero_mean = zero_mean
+        self.non_nagetive = non_nagetive
 
     def _objf(self, out, ref):
-        return sisnr(out, ref, zero_mean=self.zero_mean)
+        return sisnr(out,
+                     ref,
+                     zero_mean=self.zero_mean,
+                     non_nagetive=self.non_nagetive)
 
 
 class SnrTask(TimeDomainTask):
     """
     Time domain sisnr loss function
     """
-    def __init__(self, nnet, num_spks=2, permute=True, weight=None):
+    def __init__(self,
+                 nnet,
+                 num_spks=2,
+                 permute=True,
+                 weight=None,
+                 non_nagetive=False):
         super(SnrTask, self).__init__(nnet,
                                       num_spks=num_spks,
                                       permute=permute,
                                       mode="max",
                                       weight=weight)
+        self.non_nagetive = non_nagetive
 
     def _objf(self, out, ref):
-        return snr(out, ref)
+        return snr(out, ref, non_nagetive=self.non_nagetive)
 
 
 class WaTask(TimeDomainTask):
@@ -234,6 +257,12 @@ class FreqSaTask(Task):
         """
         raise NotImplementedError
 
+    def _post(self, tensor):
+        """
+        Post processing on out/ref before calling _objf
+        """
+        raise NotImplementedError
+
     def _ref_mag(self, mix_mag, mix_pha, ref):
         """
         Compute reference magnitude for SA
@@ -249,7 +278,7 @@ class FreqSaTask(Task):
             ref_mag = th.min(ref_mag, self.truncated * mix_mag)
         return ref_mag
 
-    def _permu_sa(self, permute, mix_mag, out, ref):
+    def _permu_objf(self, permute, out, ref):
         """
         SA computation in permutation mode
         """
@@ -257,9 +286,7 @@ class FreqSaTask(Task):
         # for one permutation
         for s, t in enumerate(permute):
             # N x F x T
-            loss_mat = self._objf(out[s] * mix_mag if self.masking else out[s],
-                                  ref[t],
-                                  reduction="none")
+            loss_mat = self._objf(out[s], ref[t], reduction="none")
             loss_utt = th.sum(loss_mat.mean(-1), -1)  # x N, per-frame
             permu_loss.append(loss_utt)
         # per-speaker
@@ -286,9 +313,11 @@ class FreqSaTask(Task):
         if isinstance(mask, th.Tensor):
             # F x T
             ref = self._ref_mag(mix_mag, mix_pha, egs["ref"])
-            loss = self._objf(mask * mix_mag if self.masking else mask,
-                              ref,
-                              reduction="sum")
+            # post processing
+            out = self._post(mask * mix_mag if self.masking else mask)
+            ref = self._post(ref)
+            # loss
+            loss = self._objf(out, ref, reduction="sum")
             # per-frame, per-minibatch
             loss = loss / (N * T)
         else:
@@ -299,10 +328,16 @@ class FreqSaTask(Task):
                 )
             # for each reference
             ref = [self._ref_mag(mix_mag, mix_pha, r) for r in egs["ref"]]
+            if self.masking:
+                out = [m * mix_mag for m in mask]
+            else:
+                out = mask
+            ref = [self._post(r) for r in ref]
+            out = [self._post(o) for o in out]
             if self.permute:
                 # P x N
                 permu_loss = th.stack([
-                    self._permu_sa(p, mix_mag, mask, ref)
+                    self._permu_objf(p, out, ref)
                     for p in permutations(range(self.num_spks))
                 ])
                 # N, per-frame per-speaker
@@ -323,10 +358,8 @@ class FreqSaTask(Task):
                         )
                     res_loss = [
                         # scale, per-frame, per-minibatch
-                        self._objf(m * mix_mag if self.masking else m,
-                                   r,
-                                   reduction="sum") / (N * T) for m, r in
-                        zip(mask[self.num_spks:], ref[self.num_spks:])
+                        self._objf(o, r, reduction="sum") / (N * T) for o, r in
+                        zip(out[self.num_spks:], ref[self.num_spks:])
                     ]
                     res_loss = sum(
                         [s * l for s, l in zip(self.weight[1:], res_loss)])
@@ -341,10 +374,8 @@ class FreqSaTask(Task):
                     )
                 loss = [
                     # per-frame, per-minibatch
-                    self._objf(m * mix_mag if self.masking else m,
-                               r,
-                               reduction="sum") / (N * T)
-                    for m, r in zip(mask, ref)
+                    self._objf(o, r, reduction="sum") / (N * T)
+                    for o, r in zip(out, ref)
                 ]
                 # weight and sum
                 loss = sum([s * l for s, l in zip(self.weight, loss)])
@@ -384,6 +415,12 @@ class LinearFreqSaTask(FreqSaTask):
             loss = tf.mse_loss(out, ref, reduction=reduction)
         return loss
 
+    def _post(self, tensor):
+        """
+        Just return itself
+        """
+        return tensor
+
 
 class MelFreqSaTask(FreqSaTask):
     """
@@ -398,8 +435,9 @@ class MelFreqSaTask(FreqSaTask):
                  num_spks=2,
                  num_bins=257,
                  masking=True,
+                 power_mag=False,
                  num_mels=80,
-                 log_mel=False,
+                 mel_log=False,
                  mel_scale=1,
                  mel_norm=True,
                  sr=16000,
@@ -419,20 +457,26 @@ class MelFreqSaTask(FreqSaTask):
                              norm=mel_norm)
         self.mel = nn.Parameter(mel[..., None] * mel_scale,
                                 requires_grad=False)
-        self.log = log_mel
+        self.log = mel_log
+        self.power_mag = power_mag
+
+    def _post(self, tensor):
+        """
+        Return mel spectrogram
+        """
+        if self.power_mag:
+            tensor = tensor**2
+        # N x F x T => N x M x T
+        mel = tf.conv1d(tensor, self.mel.to(tensor.device), bias=None)
+        if self.log:
+            mel = th.log(1 + mel)
+        return mel
 
     def _objf(self, out, ref, reduction="none"):
         """
         Computer MSE after mel-transform
         """
-        # N x F x T => N x M x T
-        out_mel = tf.conv1d(out, self.mel, bias=None)
-        ref_mel = tf.conv1d(ref, self.mel, bias=None)
-        if self.log:
-            out_mel = th.log(1 + out_mel)
-            ref_mel = th.log(1 + ref_mel)
-        # Then MSE
-        return tf.mse_loss(out_mel, ref_mel, reduction=reduction)
+        return tf.mse_loss(out, ref, reduction=reduction)
 
 
 class TimeSaTask(Task):
@@ -443,9 +487,11 @@ class TimeSaTask(Task):
                  nnet,
                  frame_len=512,
                  frame_hop=256,
+                 center=False,
                  window="sqrthann",
                  round_pow_of_two=True,
                  stft_normalized=False,
+                 pre_emphasis=0,
                  permute=True,
                  weight=None,
                  num_spks=2):
@@ -453,11 +499,13 @@ class TimeSaTask(Task):
         sa_ctx = STFT(frame_len,
                       frame_hop,
                       window=window,
+                      center=center,
                       round_pow_of_two=round_pow_of_two,
                       normalized=stft_normalized)
         super(TimeSaTask, self).__init__(nnet, ctx=sa_ctx, weight=weight)
         self.permute = permute
         self.num_spks = num_spks
+        self.pre_emphasis = pre_emphasis
 
     def _objf(self, out, ref, reduction="none"):
         """
@@ -465,12 +513,21 @@ class TimeSaTask(Task):
         """
         raise NotImplementedError
 
-    def _ref_mag(self, ref):
+    def _post(self, tensor):
         """
-        Compute reference magnitude for SA
+        Post processing on tensor
         """
-        ref_mag, _ = self.ctx(ref, output="polar")
-        return ref_mag
+        raise NotImplementedError
+
+    def _stft_mag(self, wav):
+        """
+        Compute STFT magnitude for SA loss
+        """
+        # for ASR (do pre-emphasis)
+        if self.pre_emphasis > 0:
+            wav[:, 1:] = wav[:, 1:] - self.pre_emphasis * wav[:, :-1]
+        mag, _ = self.ctx(wav, output="polar")
+        return mag
 
     def _permu_sa(self, permute, out, ref):
         """
@@ -500,8 +557,12 @@ class TimeSaTask(Task):
 
         if isinstance(spk, th.Tensor):
             # F x T
-            spk_mag = self._ref_mag(spk)
-            ref_mag = self._ref_mag(egs["ref"])
+            spk_mag = self._stft_mag(spk)
+            ref_mag = self._stft_mag(egs["ref"])
+            # post process
+            spk_mag = self._post(spk_mag)
+            ref_mag = self._post(ref_mag)
+            # loss
             loss = self._objf(spk_mag, ref_mag, reduction="sum")
             # per-frame loss
             loss = loss / (N * ref_mag.shape[-1])
@@ -511,9 +572,13 @@ class TimeSaTask(Task):
                 raise RuntimeError(
                     f"Got {len(egs['ref'])} reference but with {num_branch} outputs"
                 )
-            spk_mag = [self._ref_mag(s) for s in spk]
+            spk_mag = [self._stft_mag(s) for s in spk]
             # for each reference
-            ref_mag = [self._ref_mag(r) for r in egs["ref"]]
+            ref_mag = [self._stft_mag(r) for r in egs["ref"]]
+            # post
+            spk_mag = [self._post(s) for s in spk_mag]
+            ref_mag = [self._post(r) for r in ref_mag]
+
             _, _, T = spk_mag[0].shape
 
             if self.permute:
@@ -560,7 +625,7 @@ class TimeSaTask(Task):
                 ]
                 # weight and sum
                 loss = sum([s * l for s, l in zip(self.weight, loss)])
-        return loss
+        return loss, None
 
 
 class LinearTimeSaTask(TimeSaTask):
@@ -571,6 +636,7 @@ class LinearTimeSaTask(TimeSaTask):
                  nnet,
                  frame_len=512,
                  frame_hop=256,
+                 center=False,
                  window="sqrthann",
                  round_pow_of_two=True,
                  stft_normalized=False,
@@ -583,6 +649,7 @@ class LinearTimeSaTask(TimeSaTask):
                              frame_len=frame_len,
                              frame_hop=frame_hop,
                              window=window,
+                             center=center,
                              round_pow_of_two=round_pow_of_two,
                              stft_normalized=stft_normalized,
                              permute=permute,
@@ -601,6 +668,12 @@ class LinearTimeSaTask(TimeSaTask):
             loss = tf.mse_loss(out, ref, reduction=reduction)
         return loss
 
+    def _post(self, tensor):
+        """
+        Just return itself
+        """
+        return tensor
+
 
 class MelTimeSaTask(TimeSaTask):
     """
@@ -611,6 +684,7 @@ class MelTimeSaTask(TimeSaTask):
                  frame_len=512,
                  frame_hop=256,
                  window="sqrthann",
+                 center=False,
                  round_pow_of_two=True,
                  stft_normalized=False,
                  permute=True,
@@ -618,7 +692,8 @@ class MelTimeSaTask(TimeSaTask):
                  num_spks=2,
                  num_bins=257,
                  num_mels=80,
-                 log_mel=False,
+                 power_mag=False,
+                 mel_log=False,
                  mel_scale=1,
                  mel_norm=True,
                  sr=16000,
@@ -627,6 +702,7 @@ class MelTimeSaTask(TimeSaTask):
                                             frame_len=frame_len,
                                             frame_hop=frame_hop,
                                             window=window,
+                                            center=center,
                                             round_pow_of_two=round_pow_of_two,
                                             stft_normalized=stft_normalized,
                                             permute=permute,
@@ -640,17 +716,23 @@ class MelTimeSaTask(TimeSaTask):
                              norm=mel_norm)
         self.mel = nn.Parameter(mel[..., None] * mel_scale,
                                 requires_grad=False)
-        self.log = log_mel
+        self.log = mel_log
+        self.power_mag = power_mag
+
+    def _post(self, tensor):
+        """
+        Return mel spectrogram
+        """
+        if self.power_mag:
+            tensor = tensor**2
+        # N x F x T => N x M x T
+        mel = tf.conv1d(tensor, self.mel, bias=None)
+        if self.log:
+            mel = th.log(1 + mel)
+        return mel
 
     def _objf(self, out, ref, reduction="none"):
         """
-        Computer MSE after mel-transform
+        Computer MSE
         """
-        # N x F x T => N x M x T
-        out_mel = tf.conv1d(out, self.mel, bias=None)
-        ref_mel = tf.conv1d(ref, self.mel, bias=None)
-        if self.log:
-            out_mel = th.log(1 + out_mel)
-            ref_mel = th.log(1 + ref_mel)
-        # Then MSE
-        return tf.mse_loss(out_mel, ref_mel, reduction=reduction)
+        return tf.mse_loss(out, ref, reduction=reduction)

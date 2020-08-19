@@ -5,8 +5,9 @@
 import argparse
 import numpy as np
 
-from aps.loader.audio import read_wav, add_room_response, EPSILON
+from aps.loader.audio import read_wav, add_room_response
 from aps.opts import StrToBoolAction
+from aps.const import EPSILON
 
 
 def coeff_snr(sig_pow, ref_pow, snr):

@@ -44,10 +44,7 @@ class AttASR(nn.Module):
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         self.sos = sos
         self.eos = eos
-        # if use CTC, eos & sos should be V and V - 1
-        self.ctc = nn.Linear(encoder_proj, vocab_size -
-                             2 if sos != eos else vocab_size -
-                             1) if ctc else None
+        self.ctc = nn.Linear(encoder_proj, vocab_size) if ctc else None
         self.asr_transform = asr_transform
 
     def forward(self, x_pad, x_len, y_pad, ssr=0):

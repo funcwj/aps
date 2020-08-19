@@ -18,7 +18,7 @@ class SpeakersReader(object):
         split_scps = scps.split(",")
         if len(split_scps) == 1:
             raise RuntimeError("Construct SpeakersReader need more "
-                               "than one script, got {}".format(scps))
+                               f"than one script, got {scps}")
         self.readers = [WaveReader(scp, sr=sr) for scp in split_scps]
 
     def __len__(self):
@@ -55,13 +55,12 @@ class Report(object):
         print("SI-SDR(dB) Report: ")
         tot_utt = sum([self.cnt[cls_str] for cls_str in self.cnt])
         tot_snr = sum([self.snr[cls_str] for cls_str in self.snr])
-        print("Total: {:d}/{:.3f}".format(tot_utt, tot_snr / tot_utt))
+        print(f"Total: {tot_utt:d}/{tot_snr / tot_utt:.3f}")
         if len(self.snr) != 1:
             for cls_str in self.snr:
                 cls_snr = self.snr[cls_str]
                 num_utt = self.cnt[cls_str]
-                print("\t{}: {:d}/{:.3f}".format(cls_str, num_utt,
-                                                 cls_snr / num_utt))
+                print(f"\t{cls_str}: {num_utt:d}/{cls_snr / num_utt:.3f}")
 
 
 def run(args):
@@ -81,7 +80,7 @@ def run(args):
             snr = si_snr(sep, ref)
             reporter.add(key, snr)
             if details:
-                details.write("{}\t{:.2f}\n".format(key, snr))
+                details.write(f"{key}\t{snr:.2f}\n")
     else:
         sep_reader = SpeakersReader(args.sep_scp, sr=args.sr)
         ref_reader = SpeakersReader(args.ref_scp, sr=args.sr)
@@ -94,7 +93,7 @@ def run(args):
             snr = permute_si_snr(sep_list, ref_list)
             reporter.add(key, snr)
             if details:
-                details.write("{}\t{:.2f}\n".format(key, snr))
+                details.write(f"{key}\t{snr:.2f}\n")
     reporter.report()
     if details:
         details.close()

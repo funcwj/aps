@@ -10,9 +10,7 @@ import torch.nn.functional as F
 import torch_complex.functional as cF
 
 from aps.asr.base.attention import padding_mask
-
-EPSILON = th.finfo(th.float32).eps
-
+from aps.const import EPSILON
 
 def trace(cplx_mat):
     """

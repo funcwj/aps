@@ -12,8 +12,7 @@ import scipy.signal as ss
 
 from kaldi_python_io import Reader as BaseReader
 
-MAX_INT16 = np.iinfo(np.int16).max
-EPSILON = np.finfo(np.float32).eps
+from aps.const import MAX_INT16, EPSILON
 
 
 def read_wav(fname, beg=0, end=None, norm=True, sr=16000):

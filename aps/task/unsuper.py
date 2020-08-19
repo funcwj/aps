@@ -3,9 +3,7 @@ import torch as th
 import torch_complex.functional as cf
 
 from aps.task.base import Task
-
-EPSILON = th.finfo(th.float32).eps
-
+from aps.const import EPSILON
 
 def hermitian_det(Bk, eps=EPSILON):
     """

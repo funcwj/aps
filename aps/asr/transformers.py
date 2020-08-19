@@ -47,10 +47,8 @@ class TransformerASR(nn.Module):
         self.sos = sos
         self.eos = eos
         self.asr_transform = asr_transform
-        # if use CTC, eos & sos should be V and V - 1
-        self.ctc = nn.Linear(decoder_kwargs["att_dim"], vocab_size -
-                             2 if sos != eos else vocab_size -
-                             1) if ctc else None
+        self.ctc = nn.Linear(decoder_kwargs["att_dim"],
+                             vocab_size) if ctc else None
 
     def forward(self, x_pad, x_len, y_pad, ssr=0):
         """

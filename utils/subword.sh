@@ -4,7 +4,7 @@
 
 set -eu
 
-mode="unigram"
+mode="word" # bpe, char, word, unigram
 stage=1
 encode="id"
 decode="id"

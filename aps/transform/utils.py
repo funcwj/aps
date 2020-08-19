@@ -6,12 +6,10 @@ import numpy as np
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
-
 import librosa.filters as filters
 
 from scipy.fftpack import dct
-
-EPSILON = th.finfo(th.float32).eps
+from aps.const import EPSILON
 
 
 def init_window(wnd, frame_len):
@@ -157,7 +155,7 @@ def _forward_stft(wav,
     elif output == "real":
         return th.stack([real, imag], dim=-1)
     else:
-        mag = (real**2 + imag**2)**0.5
+        mag = (real**2 + imag**2 + EPSILON)**0.5
         pha = th.atan2(imag, real)
         return (mag, pha)
 

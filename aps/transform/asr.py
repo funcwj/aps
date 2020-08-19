@@ -18,9 +18,9 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
-from aps.transform.utils import STFT, EPSILON, init_melfilter, init_dct
+from aps.transform.utils import STFT, init_melfilter, init_dct
 from aps.transform.spec_aug import tf_mask
-
+from aps.const import EPSILON
 
 class SpectrogramTransform(STFT):
     """
