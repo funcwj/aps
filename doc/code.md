@@ -2,7 +2,7 @@
 
 Provide a simple description of the code structure here.
 
-### `aps.transform`
+## `aps.transform`
 
 Customized feature transform module in aps. The feature transform layer from `aps.transform` is stacked as the feature extractor for ASR or enhancement/separation tasks, e.g., a stack of `SpectrogramTransform-AbsTransform-MelTransform-LogTransform` can used to extract log mel-filter bank features. Currently the supported feature transform layers are shown in the following:
 
@@ -17,10 +17,11 @@ Customized feature transform module in aps. The feature transform layer from `ap
 * `DeltaTransform`
 * `IpdTransform`
 * `DfTransform`
+* `FixedBeamformer`
 
 The instance of `AsrTransform` or `EnhTransform` is passed to network prototype defined in `aps.asr`/`aps.sep` as a parameter for user-specific feature extraction.
 
-### `aps.trainer`
+## `aps.trainer`
 
 Trainer module in aps. Now we use `horovod` & `torch.nn.parallel.DistributedDataParallel` for distributed training.
 
@@ -29,7 +30,7 @@ Trainer module in aps. Now we use `horovod` & `torch.nn.parallel.DistributedData
 
 The learning rate and schedule sampling scheduler is defined in `aps.trainer.lr` and `aps.trainer.ss`.
 
-### `aps.task`
+## `aps.task`
 
 Supported task in aps. `Task` class is responsible for computation of an user-specific objective function, which is defined in the `forward` function. The supported task are shown below:
 
@@ -45,7 +46,7 @@ Supported task in aps. `Task` class is responsible for computation of an user-sp
 * `LinearFreqSaTask`: spectral approximation loss for time domain enhancement/separation model
 * `MelTimeSaTask`: mel domain spectral approximation loss for time domain enhancement/separation model
 
-### `aps.loader`
+## `aps.loader`
 
 Supported data loader in aps. For acoustic model training, we have
 
@@ -57,11 +58,11 @@ For enhancement/separation model, we have
 * `ss_chunk`: Raw waveform data loader and also no need to prepare features
 * `ss_online`: Online data loader which generate training audio (noisy, single/multi-speaker, close-talk/far-field) on-the-fly
 
-### `aps.distributed`
+## `aps.distributed`
 
 A package to handle distributed training and manage common interface.
 
-### `aps.asr`
+## `aps.asr`
 
 Language model & E2E acoustic model. The implemented AM are:
 
@@ -86,7 +87,7 @@ and attention type:
 * `LocAttention`: location aware attention and its multi-head version `MHLocAttention`
 * `CtxAttention`: context attention and its multi-head version `MHCtxAttention`
 
-### `aps.sep`
+## `aps.sep`
 
 Speech enhancement/separation model. The implemented model are shown below:
 
