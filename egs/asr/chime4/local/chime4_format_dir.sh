@@ -25,10 +25,10 @@ mv $chime4_dir/tr05 $chime4_dir/train
 mv $chime4_dir/dt05 $chime4_dir/dev
 mv $chime4_dir/et05 $chime4_dir/tst
 
-echo -e "<blank> 0\n<sos> 1\n<eos> 2\n<unk> 3" > $chime4_dir/dict
+echo -e "<sos> 0\n<eos> 1\n<unk> 2" > $chime4_dir/dict
 cat $chime4_dir/train/text | utils/tokenizer.pl --space "<space>" - | \
   cut -d" " -f 2- | tr ' ' '\n' | sort | \
-  uniq | awk '{print $1" "NR + 3}' >> $chime4_dir/dict || exit 1
+  uniq | awk '{print $1" "NR + 2}' >> $chime4_dir/dict || exit 1
 
 for name in train dev; do    
   cat $chime4_dir/$name/text | utils/tokenizer.pl --space "<space>" - | \

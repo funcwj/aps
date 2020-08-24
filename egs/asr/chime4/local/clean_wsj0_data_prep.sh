@@ -133,10 +133,10 @@ mv $dstdir/tr05 $dstdir/train
 mv $dstdir/dt05 $dstdir/dev
 mv $dstdir/et05 $dstdir/tst
 
-echo -e "<blank> 0\n<sos> 1\n<eos> 2\n<unk> 3" > $dstdir/dict
+echo -e "<sos> 0\n<eos> 1\n<unk> 2" > $dstdir/dict
 cat $dstdir/train/text | utils/tokenizer.pl --space "<space>" - | \
   cut -d" " -f 2- | tr ' ' '\n' | sort | \
-  uniq | awk '{print $1" "NR + 3}' >> $dstdir/dict || exit 1
+  uniq | awk '{print $1" "NR + 2}' >> $dstdir/dict || exit 1
 
 for x in train dev; do    
   cat $dstdir/$x/text | utils/tokenizer.pl --space "<space>" - | \

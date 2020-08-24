@@ -41,7 +41,8 @@ class TransformerASR(nn.Module):
                                             encoder_proj, **encoder_proj)
         if decoder_type != "transformer":
             raise ValueError("TransformerASR: decoder must be transformer")
-        self.decoder = TorchTransformerDecoder(vocab_size,
+        self.decoder = TorchTransformerDecoder(vocab_size -
+                                               1 if ctc else vocab_size,
                                                enc_dim=encoder_proj,
                                                **decoder_kwargs)
         self.sos = sos
