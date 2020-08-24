@@ -39,7 +39,9 @@ class AttASR(nn.Module):
                                         **encoder_kwargs)
         decoder_kwargs["attention"] = att_instance(att_type, encoder_proj,
                                                    decoder_dim, **att_kwargs)
-        self.decoder = TorchDecoder(encoder_proj, vocab_size, **decoder_kwargs)
+        self.decoder = TorchDecoder(encoder_proj,
+                                    vocab_size - 1 if ctc else vocab_size,
+                                    **decoder_kwargs)
         if eos < 0 or sos < 0:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         self.sos = sos

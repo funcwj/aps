@@ -24,7 +24,6 @@ from aps.task import support_task
 from aps.asr import support_nnet
 from aps import distributed
 
-blank_sym = "<blank>"
 constrained_conf_keys = [
     "nnet", "nnet_conf", "task", "task_conf", "data_conf", "trainer_conf",
     "asr_transform", "enh_transform"
@@ -113,12 +112,11 @@ def load_conf(yaml_conf, dict_path):
         nnet_conf["eos"] = vocab["<eos>"]
     # for CTC/RNNT
     if use_ctc or is_transducer:
-        if blank_sym not in vocab:
-            raise RuntimeError(
-                f"Missing {blank_sym} in dictionary for CTC/RNNT training")
-        conf["task_conf"]["blank"] = vocab[blank_sym]
+        conf["task_conf"]["blank"] = len(vocab)
+        # add blank
+        nnet_conf["vocab_size"] += 1
         if is_transducer:
-            nnet_conf["blank"] = vocab[blank_sym]
+            nnet_conf["blank"] = len(vocab)
         else:
             nnet_conf["ctc"] = use_ctc
     return conf

@@ -52,9 +52,9 @@ for f in wav.scp text; do
 done
 
 echo "$0: Prepare dictionary..."
-echo -e "<blank> 0\n<sos> 1\n<eos> 2\n<unk> 3" > $aishell_data_dir/dict
+echo -e "<sos> 0\n<eos> 1\n<unk> 2" > $aishell_data_dir/dict
 cat $aishell_data_dir/train/text | cut -d" " -f 2- | tr ' ' '\n' | sort | \
-    uniq | awk '{print $1" "NR + 3}' >> $aishell_data_dir/dict
+    uniq | awk '{print $1" "NR + 2}' >> $aishell_data_dir/dict
 for dir in train dev; do
     ./utils/token2idx.pl $aishell_data_dir/dict \
         < $aishell_data_dir/$dir/text > $aishell_data_dir/$dir/token
