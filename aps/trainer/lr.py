@@ -5,20 +5,6 @@
 from torch.optim import lr_scheduler
 
 
-class CustomStepLR(lr_scheduler.StepLR):
-    """
-    To add custom features for StepLR
-    """
-    def __init__(self, optimizer, step_size=10, gamma=0.1, last_epoch=-1):
-        super(CustomStepLR, self).__init__(optimizer,
-                                           step_size,
-                                           gamma=gamma,
-                                           last_epoch=last_epoch)
-
-    def step(self, value):
-        super().step()
-
-
 class CustomMultiStepLR(lr_scheduler.MultiStepLR):
     """
     Using lr_conf to set milestones & gamma, e.g., 0.1@10,20,40
@@ -38,24 +24,8 @@ class CustomMultiStepLR(lr_scheduler.MultiStepLR):
         milestones = list(map(int, lr_str[0].split(",")))
         return gamma, milestones
 
-    def step(self, value):
-        super().step()
 
-
-class CustomExponentialLR(lr_scheduler.ExponentialLR):
-    """
-    To add custom features for ExponentialLR
-    """
-    def __init__(self, optimizer, gamma, last_epoch=-1):
-        super(CustomExponentialLR, self).__init__(optimizer,
-                                                  gamma,
-                                                  last_epoch=last_epoch)
-
-    def step(self, value):
-        super().step()
-
-
-class NoamOpt(lr_scheduler._LRScheduler):
+class NoamLR(lr_scheduler._LRScheduler):
     """
     Lr schuduler for Transformer
     """
@@ -65,10 +35,9 @@ class NoamOpt(lr_scheduler._LRScheduler):
                  factor=1,
                  warmup=8000,
                  last_epoch=-1):
-        super(NoamOpt, self).__init__(optimizer, last_epoch=last_epoch)
-        self.cur_step = 1
         self.warmup = warmup
         self.const = factor * transformer_dim**(-0.5)
+        super(NoamLR, self).__init__(optimizer, last_epoch=last_epoch)
 
     def info(self):
         beg_lr = self.get_lr(1)[0]
@@ -84,23 +53,19 @@ class NoamOpt(lr_scheduler._LRScheduler):
         3) cur_step = warmup:   const * warmup**(-0.5)
         """
         if step is None:
-            step = self.cur_step
+            step = self._step_count
         return [
             self.const * min(step**(-0.5), step * self.warmup**(-1.5))
             for _ in self.optimizer.param_groups
         ]
 
-    def step(self, value):
-        self.cur_step += 1
-        super().step()
-
 
 scheduler_cls = {
     "reduce_lr": lr_scheduler.ReduceLROnPlateau,
-    "step_lr": CustomStepLR,
+    "step_lr": lr_scheduler.StepLR,
     "multi_step_lr": CustomMultiStepLR,
-    "exponential_lr": CustomExponentialLR,
-    "noam_opt": NoamOpt
+    "exponential_lr": lr_scheduler.ExponentialLR,
+    "noam_lr": NoamLR
 }
 
 

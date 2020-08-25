@@ -141,7 +141,8 @@ class CtcXentHybridTask(Task):
         accu = compute_accu(outs, tgts)
         # add to reporter
         stats["accu"] = accu
-        return loss, stats
+        stats["loss"] = loss
+        return stats
 
 
 class TransducerTask(Task):
@@ -178,7 +179,7 @@ class TransducerTask(Task):
                          blank=self.blank,
                          reduction="mean",
                          gather=True)
-        return loss, None
+        return {"loss": loss}
 
 
 class LmXentTask(Task):
@@ -206,5 +207,5 @@ class LmXentTask(Task):
             pred, _ = self.nnet(pack)
         loss = ce_loss(pred, egs["tgt"])
         accu = compute_accu(pred, egs["tgt"])
-        stats = {"accu": accu}
-        return loss, stats
+        stats = {"accu": accu, "loss": loss}
+        return stats

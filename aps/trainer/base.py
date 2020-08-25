@@ -1,6 +1,8 @@
 # wujian@2019
 
 import math
+import warnings
+
 from os import environ
 from pathlib import Path
 from collections import defaultdict
@@ -9,6 +11,7 @@ import torch as th
 from torch.nn.utils import clip_grad_norm_
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.tensorboard import SummaryWriter
+from torch.optim import lr_scheduler
 
 from aps.trainer.ss import support_ss_scheduler
 from aps.trainer.lr import support_lr_scheduler
@@ -32,6 +35,7 @@ class ProgressReporter(object):
     """
     def __init__(self, checkpoint, period=100, tensorboard=True, rank=None):
         self.period = period
+        self.rank = rank
         if rank is None:
             logger_loc = (checkpoint / "trainer.log").as_posix()
             self.header = "Trainer"
@@ -67,8 +71,10 @@ class ProgressReporter(object):
     def update(self, dict_obj):
         if dict_obj is None:
             return
-        for key in dict_obj:
-            self.add(key, dict_obj[key])
+        for key, value in dict_obj.items():
+            if isinstance(value, th.Tensor):
+                value = value.item()
+            self.add(key, value)
 
     def add(self, key, value):
         self.stats[key].append(value)
@@ -162,6 +168,7 @@ class Trainer(object):
                  optimizer_kwargs=None,
                  lr_scheduler="reduce_lr",
                  lr_scheduler_kwargs=None,
+                 lr_scheduler_period="epoch",
                  ss_scheduler="const",
                  ss_scheduler_kwargs=None,
                  clip_gradient=None,
@@ -177,6 +184,9 @@ class Trainer(object):
         if not isinstance(task, Task):
             raise TypeError(
                 f"Trainer accepts Task object, but got {type(task)}")
+        if lr_scheduler_period not in ["epoch", "step"]:
+            raise TypeError(
+                f"Unsupported lr_scheduler_period: {lr_scheduler_period}")
         if rank is not None and rank < 0:
             raise ValueError(f"Got invalid rank value: {rank}")
         if not isinstance(device_ids, tuple):
@@ -233,9 +243,6 @@ class Trainer(object):
         lr_scheduler_dict = None
         if resume or init:
             cpt_path = resume if resume else init
-            if not Path(cpt_path).exists():
-                raise FileNotFoundError(
-                    f"Could not find checkpoint: {cpt_path}")
             cpt = th.load(cpt_path, map_location="cpu")
             self.cur_epoch = cpt["epoch"]
             task.nnet.load_state_dict(cpt["model_state_dict"])
@@ -261,6 +268,10 @@ class Trainer(object):
             self.ss_scheduler = None
 
         if lr_scheduler == "reduce_lr":
+            if lr_scheduler_period != "epoch":
+                warnings.warn("For reduce_lr scheduler, lr_scheduler_period " +
+                              "shoule be \'epoch\'")
+                lr_scheduler_period = "epoch"
             self.lr_scheduler = support_lr_scheduler(lr_scheduler,
                                                      self.optimizer,
                                                      mode=mode,
@@ -270,8 +281,8 @@ class Trainer(object):
         else:
             self.lr_scheduler = support_lr_scheduler(lr_scheduler,
                                                      self.optimizer,
-                                                     mode=mode,
                                                      **lr_scheduler_kwargs)
+        self.lr_scheduler_period = lr_scheduler_period
 
         if lr_scheduler_dict:
             self.lr_scheduler.load_state_dict(lr_scheduler_dict)
@@ -305,8 +316,6 @@ class Trainer(object):
             "adagrad": th.optim.Adagrad,  # lr, lr_decay, weight_decay
             "adamax": th.optim.Adamax,  # lr, weight_decay
             "adamw": th.optim.AdamW,  # lr, weight_decay
-            # NOTE: move to lr scheduler
-            # "noam": NoamOpt
             # ...
         }
         if optimizer not in supported_optimizer:
@@ -335,14 +344,14 @@ class Trainer(object):
         """
         self.optimizer.zero_grad()
 
-        loss, stats = self.task(egs, ssr=self.ssr)
-
+        stats = self.task(egs, ssr=self.ssr)
+        loss = stats["loss"].item()
         # backward if not nan/inf
-        if math.isfinite(loss.item()):
-            loss.backward()
+        if math.isfinite(loss):
+            stats["loss"].backward()
         else:
-            self.reporter.log(f"Invalid loss {loss.item():.3f}, skip...")
-            return
+            self.reporter.log(f"Invalid loss {loss:.3f}, skip...")
+            return False
 
         # clip gradient after backward
         norm = -1
@@ -356,12 +365,25 @@ class Trainer(object):
             if self.gaussian_noise_std:
                 add_gaussian_noise(self.task, std=self.gaussian_noise_std)
             if norm != -1:
-                self.reporter.add("norm", norm)
-            self.reporter.add("loss", loss.item())
-            self.reporter.add("rate", self.optimizer.param_groups[0]["lr"])
+                stats["norm"] = norm
+            stats["rate"] = self.optimizer.param_groups[0]["lr"]
             self.reporter.update(stats)
+            return True
         else:
             self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
+            return False
+
+    def lr_scheduler_step(self, update_value):
+        """
+        Make one step in lr scheduler
+        """
+        if self.lr_scheduler_period == "step":
+            self.lr_scheduler.step()
+        else:
+            if isinstance(self.lr_scheduler, lr_scheduler.ReduceLROnPlateau):
+                self.lr_scheduler.step(update_value)
+            else:
+                self.lr_scheduler.step()
 
     def train(self, data_loader):
         self.task.train()
@@ -372,6 +394,8 @@ class Trainer(object):
             egs = load_obj(egs, self.default_device)
             # make one training step
             self.train_one_step(egs)
+            # run lr scheduler if needed
+            self.lr_scheduler_step(None)
 
     def eval(self, data_loader):
         self.task.eval()
@@ -383,9 +407,8 @@ class Trainer(object):
                 # load to gpu
                 egs = load_obj(egs, self.default_device)
                 # ssr = 0, use ground truth
-                loss, stats = self.task(egs, ssr=0)
+                stats = self.task(egs, ssr=0)
                 # update statistics
-                self.reporter.add("loss", loss.item())
                 self.reporter.update(stats)
 
     def _prep_train(self, dev_loader):
@@ -416,8 +439,7 @@ class Trainer(object):
         Run on whole training set and evaluate
         """
         self.reporter.log(
-            f"Number of batches (train/valid) = {len(trn_loader)}/{len(dev_loader)}"
-        )
+            f"Number of batches: {len(trn_loader)}/{len(dev_loader)}")
         e = self._prep_train(dev_loader)
         while e < num_epochs:
             e += 1
@@ -443,9 +465,8 @@ class Trainer(object):
 
             self.reporter.log(sstr)
             # << eval
-            # schedule here
-            if self.lr_scheduler:
-                self.lr_scheduler.step(update_value)
+            # lr schedule here
+            self.lr_scheduler_step(update_value)
             if self.ss_scheduler:
                 self.ssr = self.ss_scheduler.step(e, cv_accu)
             # save last checkpoint
@@ -465,8 +486,8 @@ class Trainer(object):
         """
         Run on several batches and evaluate
         """
-        self.reporter.log("Number of batches (train/valid) = " +
-                          f"{len(trn_loader)}/{len(dev_loader)}")
+        self.reporter.log(
+            f"Number of batches: {len(trn_loader)}/{len(dev_loader)}")
         e = self._prep_train(dev_loader)
         stop = False
         trained_batches = 0
@@ -477,36 +498,10 @@ class Trainer(object):
             # trained on several batches
             # for idx, egs in enumerate(trn_loader):
             for egs in trn_loader:
-                trained_batches = (trained_batches + 1) % eval_interval
                 # update per-batch
                 egs = load_obj(egs, self.default_device)
-                self.optimizer.zero_grad()
-
-                loss, stats = self.task(egs, ssr=self.ssr)
-                loss.backward()
-
-                # add to reporter
-                self.reporter.add("loss", loss.item())
-                self.reporter.update(stats)
-
-                norm = -1
-                if self.clip_gradient:
-                    norm = clip_grad_norm_(self.task.parameters(),
-                                           self.clip_gradient)
-                loss = loss.item()
-                if math.isfinite(norm) and math.isfinite(loss):
-                    self.optimizer.step()
-
-                    if self.gaussian_noise_std:
-                        add_gaussian_noise(self.task,
-                                           std=self.gaussian_noise_std)
-
-                    self.reporter.add("norm", norm)
-                    self.reporter.add("rate",
-                                      self.optimizer.param_groups[0]["lr"])
-                else:
-                    self.reporter.log(f"Invalid gradient {norm:.3f} or " +
-                                      f"loss {loss:.3f}, skip...")
+                if self.train_one_step(egs):
+                    trained_batches = (trained_batches + 1) % eval_interval
 
                 # if trained on batches done, start evaluation
                 if trained_batches == 0:
@@ -529,9 +524,8 @@ class Trainer(object):
                         sstr += f" | no impr, best = {self.stop_criterion.best:.4f}"
 
                     self.reporter.log(sstr)
-                    # schedule here
-                    if self.lr_scheduler:
-                        self.lr_scheduler.step(update_value)
+                    # lr schedule here
+                    self.lr_scheduler_step(update_value)
                     if self.ss_scheduler:
                         self.ssr = self.ss_scheduler.step(e, cv_accu)
                     # save last checkpoint
