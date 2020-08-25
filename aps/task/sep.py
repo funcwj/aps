@@ -154,9 +154,9 @@ class TimeDomainTask(Task):
                 loss = [self._objf(o, r) for o, r in zip(out, ref)]
                 loss = sum([s * l for s, l in zip(self.weight, loss)])
         if self.mode == "max":
-            return -th.mean(loss), None
+            return {"loss": -th.mean(loss)}
         else:
-            return th.mean(loss), None
+            return {"loss": th.mean(loss)}
 
 
 class SisnrTask(TimeDomainTask):
@@ -379,7 +379,7 @@ class FreqSaTask(Task):
                 ]
                 # weight and sum
                 loss = sum([s * l for s, l in zip(self.weight, loss)])
-        return loss, None
+        return {"loss": loss}
 
 
 class LinearFreqSaTask(FreqSaTask):
@@ -625,7 +625,7 @@ class TimeSaTask(Task):
                 ]
                 # weight and sum
                 loss = sum([s * l for s, l in zip(self.weight, loss)])
-        return loss, None
+        return {"loss": loss}
 
 
 class LinearTimeSaTask(TimeSaTask):

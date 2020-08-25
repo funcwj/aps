@@ -1,9 +1,9 @@
-
 import torch as th
 import torch_complex.functional as cf
 
 from aps.task.base import Task
 from aps.const import EPSILON
+
 
 def hermitian_det(Bk, eps=EPSILON):
     """
@@ -106,4 +106,4 @@ class UnsuperEnhTask(Task):
         log_pdf = th.log((th.exp(ps) + th.exp(pn)) * 0.5)
         # to maxinmum log_pdf
         loss = -th.mean(log_pdf)
-        return loss, None
+        return {"loss": loss}

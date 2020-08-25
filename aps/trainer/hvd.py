@@ -23,6 +23,7 @@ class HvdTrainer(Trainer):
                  optimizer="adam",
                  optimizer_kwargs=None,
                  lr_scheduler="reduce_lr",
+                 lr_scheduler_period="epoch",
                  lr_scheduler_kwargs=None,
                  ss_scheduler="const",
                  ss_scheduler_kwargs=None,
@@ -45,6 +46,7 @@ class HvdTrainer(Trainer):
                              optimizer_kwargs=optimizer_kwargs,
                              lr_scheduler=lr_scheduler,
                              lr_scheduler_kwargs=lr_scheduler_kwargs,
+                             lr_scheduler_period=lr_scheduler_period,
                              ss_scheduler=ss_scheduler,
                              ss_scheduler_kwargs=ss_scheduler_kwargs,
                              clip_gradient=clip_gradient,
@@ -87,14 +89,14 @@ class HvdTrainer(Trainer):
         """
         self.optimizer.zero_grad()
 
-        loss, stats = self.task(egs, ssr=self.ssr)
-
+        stats = self.task(egs, ssr=self.ssr)
+        loss = stats["loss"].item()
         # backward if not nan/inf
-        if math.isfinite(loss.item()):
-            loss.backward()
+        if math.isfinite(loss):
+            stats["loss"].backward()
         else:
-            self.reporter.log(f"Invalid loss {loss.item():.3f}, skip...")
-            return
+            self.reporter.log(f"Invalid loss {loss:.3f}, skip...")
+            return False
 
         # clip gradient after backward
         norm = -1
@@ -112,12 +114,13 @@ class HvdTrainer(Trainer):
             if self.gaussian_noise_std:
                 add_gaussian_noise(self.task, std=self.gaussian_noise_std)
             if norm != -1:
-                self.reporter.add("norm", norm)
-            self.reporter.add("loss", loss.item())
-            self.reporter.add("rate", self.optimizer.param_groups[0]["lr"])
+                stats["norm"] = norm
+            stats["rate"] = self.optimizer.param_groups[0]["lr"]
             self.reporter.update(stats)
+            return True
         else:
             self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
+            return False
 
     def save_checkpoint(self, epoch, best=True):
         """
