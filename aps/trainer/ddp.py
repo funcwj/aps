@@ -94,6 +94,6 @@ class DdpTrainer(Trainer):
             }
             cpt_name = "{}.pt.tar".format("best" if best else "last")
             th.save(cpt, self.checkpoint / cpt_name)
-            self.reporter.log(f"Save checkpoint {cpt_name}")
+            self.reporter.log(f"Save checkpoint {self.checkpoint / cpt_name}")
             if self.save_interval > 0 and epoch % self.save_interval == 0:
                 th.save(cpt, self.checkpoint / f"{epoch}.pt.tar")

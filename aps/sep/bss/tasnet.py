@@ -402,15 +402,14 @@ class FreqConvTasNet(nn.Module):
         if mode == "freq":
             return masks
         else:
+            decoder = self.enh_transform.inverse_stft
             if self.num_spks == 1:
                 enh_stft = mix_stft * masks
-                enh = self.enh_transform.inverse_stft(
-                    (enh_stft.real, enh_stft.imag), input="complex")
+                enh = decoder((enh_stft.real, enh_stft.imag), input="complex")
             else:
                 enh_stft = [mix_stft * m for m in masks]
                 enh = [
-                    self.enh_transform.inverse_stft((s.real, s.imag),
-                                                    input="complex")
+                    decoder((s.real, s.imag), input="complex")
                     for s in enh_stft
                 ]
             return enh

@@ -91,13 +91,15 @@ def test_tasnet():
 def test_dprnn():
     nnet_cls = support_nnet("time_dprnn")
     dprnn = nnet_cls(num_spks=1,
-                     conv_kernels=32,
+                     input_norm="cLN",
+                     conv_kernels=16,
                      conv_filters=64,
+                     proj_filters=64,
                      chunk_len=100,
                      dprnn_layers=2,
-                     dprnn_bi_inter=False,
-                     dprnn_hidden=128,
-                     dprnn_block="mc",
+                     dprnn_bi_inter=True,
+                     dprnn_hidden=64,
+                     dprnn_block="dp",
                      non_linear="relu")
     inp = th.rand(4, 64000)
     x = dprnn(inp)
@@ -147,4 +149,4 @@ def test_unsuper_enh():
 
 
 if __name__ == "__main__":
-    test_base_rnn()
+    test_dprnn()

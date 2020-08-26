@@ -108,7 +108,10 @@ class HvdTrainer(Trainer):
         # step optimizer and update statistics
         if math.isfinite(norm):
             # for horovod
-            with self.optimizer.skip_synchronize():
+            if norm != -1:
+                with self.optimizer.skip_synchronize():
+                    self.optimizer.step()
+            else:
                 self.optimizer.step()
 
             if self.gaussian_noise_std:
@@ -117,6 +120,7 @@ class HvdTrainer(Trainer):
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
             self.reporter.update(stats)
+            self.lr_scheduler_step(None, end_at="step")
             return True
         else:
             self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
@@ -135,6 +139,6 @@ class HvdTrainer(Trainer):
             }
             cpt_name = "{}.pt.tar".format("best" if best else "last")
             th.save(cpt, self.checkpoint / cpt_name)
-            self.reporter.log(f"Save checkpoint {cpt_name}")
+            self.reporter.log(f"Save checkpoint {self.checkpoint / cpt_name}")
             if self.save_interval > 0 and epoch % self.save_interval == 0:
                 th.save(cpt, self.checkpoint / f"{epoch}.pt.tar")

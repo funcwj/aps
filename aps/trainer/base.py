@@ -368,18 +368,20 @@ class Trainer(object):
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
             self.reporter.update(stats)
+            # schedule lr if needed
+            self.lr_scheduler_step(None, end_at="step")
             return True
         else:
             self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
             return False
 
-    def lr_scheduler_step(self, update_value):
+    def lr_scheduler_step(self, update_value, end_at="epoch"):
         """
         Make one step in lr scheduler
         """
-        if self.lr_scheduler_period == "step":
+        if end_at == "step" and self.lr_scheduler_period == "step":
             self.lr_scheduler.step()
-        else:
+        if end_at == "epoch" and self.lr_scheduler_period == "epoch":
             if isinstance(self.lr_scheduler, lr_scheduler.ReduceLROnPlateau):
                 self.lr_scheduler.step(update_value)
             else:
@@ -394,8 +396,6 @@ class Trainer(object):
             egs = load_obj(egs, self.default_device)
             # make one training step
             self.train_one_step(egs)
-            # run lr scheduler if needed
-            self.lr_scheduler_step(None)
 
     def eval(self, data_loader):
         self.task.eval()
@@ -466,7 +466,7 @@ class Trainer(object):
             self.reporter.log(sstr)
             # << eval
             # lr schedule here
-            self.lr_scheduler_step(update_value)
+            self.lr_scheduler_step(update_value, end_at="epoch")
             if self.ss_scheduler:
                 self.ssr = self.ss_scheduler.step(e, cv_accu)
             # save last checkpoint
@@ -525,7 +525,7 @@ class Trainer(object):
 
                     self.reporter.log(sstr)
                     # lr schedule here
-                    self.lr_scheduler_step(update_value)
+                    self.lr_scheduler_step(update_value, end_at="epoch")
                     if self.ss_scheduler:
                         self.ssr = self.ss_scheduler.step(e, cv_accu)
                     # save last checkpoint

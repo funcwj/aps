@@ -6,6 +6,8 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from .tasnet import build_norm
+
 
 class DpB(nn.Module):
     """
@@ -77,8 +79,6 @@ class DpB(nn.Module):
                 f"DpB expects 3/4D tensor, got {chunk.dim()} instead")
         if chunk.dim() == 3:
             chunk = chunk[None, ...]
-        self.inter_rnn.flatten_parameters()
-        self.intra_rnn.flatten_parameters()
         # N x L x K x F
         intra_out = self._intra(chunk)
         # N x K x L x F
@@ -93,25 +93,34 @@ class McB(nn.Module):
     """
     def __init__(self, input_size, hidden_size, bi_inter=True):
         super(McB, self).__init__()
-        self.inter_rnn = nn.ModuleList([
-            nn.LSTM(input_size,
-                    hidden_size,
-                    1,
-                    batch_first=True,
-                    bidirectional=bi_inter) for _ in range(2)
-        ])
-        self.inter_proj = nn.Linear(
-            hidden_size * 2 + input_size if bi_inter else hidden_size +
-            input_size, input_size)
-
-        self.intra_rnn = nn.ModuleList([
-            nn.LSTM(input_size,
-                    hidden_size,
-                    1,
-                    batch_first=True,
-                    bidirectional=True) for _ in range(2)
-        ])
-        self.intra_proj = nn.Linear(hidden_size * 2 + input_size, input_size)
+        self.inter_rnn1 = nn.LSTM(input_size,
+                                  hidden_size,
+                                  1,
+                                  batch_first=True,
+                                  bidirectional=bi_inter)
+        self.inter_rnn2 = nn.LSTM(input_size,
+                                  hidden_size,
+                                  1,
+                                  batch_first=True,
+                                  bidirectional=bi_inter)
+        self.inter_proj = nn.Linear(hidden_size * 2 +
+                                    input_size if bi_inter else hidden_size +
+                                    input_size,
+                                    input_size,
+                                    bias=False)
+        self.intra_rnn1 = nn.LSTM(input_size,
+                                  hidden_size,
+                                  1,
+                                  batch_first=True,
+                                  bidirectional=True)
+        self.intra_rnn2 = nn.LSTM(input_size,
+                                  hidden_size,
+                                  1,
+                                  batch_first=True,
+                                  bidirectional=True)
+        self.intra_proj = nn.Linear(hidden_size * 2 + input_size,
+                                    input_size,
+                                    bias=False)
 
     def _intra(self, chunk):
         """
@@ -122,14 +131,10 @@ class McB(nn.Module):
         chunk = chunk.permute(0, -1, 2, 1).contiguous()
         # NL x K x F
         intra_inp = chunk.view(-1, K, F)
-        intra_out = []
-        for rnn in self.intra_rnn:
-            out, _ = rnn(intra_inp)
-            intra_out.append(out)
-        # NL x K x H
-        intra_mul = intra_out[0] * intra_out[1]
+        rnn1, _ = self.intra_rnn1(intra_inp)
+        rnn2, _ = self.intra_rnn2(intra_inp)
         # NL x K x (H+F)
-        intra_cat = th.cat([intra_mul, intra_inp], dim=-1)
+        intra_cat = th.cat([rnn1 * rnn2, intra_inp], dim=-1)
         # NL x K x F
         intra_out = self.intra_proj(intra_cat)
         # NL x K x F
@@ -146,14 +151,10 @@ class McB(nn.Module):
         chunk = chunk.transpose(1, 2).contiguous()
         # NK x L x F
         inter_inp = chunk.view(-1, L, F)
-        inter_out = []
-        for rnn in self.inter_rnn:
-            out, _ = rnn(inter_inp)
-            inter_out.append(out)
-        # NK x L x H
-        inter_mul = inter_out[0] * inter_out[1]
+        rnn1, _ = self.inter_rnn1(inter_inp)
+        rnn2, _ = self.inter_rnn2(inter_inp)
         # NK x L x (H+F)
-        inter_cat = th.cat([inter_mul, inter_inp], dim=-1)
+        inter_cat = th.cat([rnn1 * rnn2, inter_inp], dim=-1)
         # NK x L x F
         inter_out = self.inter_proj(inter_cat)
         inter_out = inter_out + inter_inp
@@ -172,10 +173,6 @@ class McB(nn.Module):
                 f"DpB expects 3/4D tensor, got {chunk.dim()} instead")
         if chunk.dim() == 3:
             chunk = chunk[None, ...]
-        for rnn in self.inter_rnn:
-            rnn.flatten_parameters()
-        for rnn in self.intra_rnn:
-            rnn.flatten_parameters()
         # N x L x K x F
         intra_out = self._intra(chunk)
         # N x K x L x F
@@ -191,30 +188,37 @@ class DPRNN(nn.Module):
     def __init__(self,
                  num_spks=2,
                  chunk_len=100,
+                 input_norm="cLN",
                  conv_filters=64,
+                 proj_filters=128,
                  dprnn_layers=6,
                  dprnn_hidden=128,
                  dprnn_bi_inter=True,
                  dprnn_block="dp",
-                 non_linear="sigmoid"):
+                 output_non_linear="sigmoid"):
         super(DPRNN, self).__init__()
         supported_nonlinear = {
             "relu": tf.relu,
             "sigmoid": th.sigmoid,
             "": None
         }
-        if non_linear not in supported_nonlinear:
+        if output_non_linear not in supported_nonlinear:
             raise RuntimeError(
-                f"Unsupported non-linear function: {non_linear}")
+                f"Unsupported non-linear function: {output_non_linear}")
         if dprnn_block not in ["dp", "mc"]:
             raise RuntimeError(f"Unsupported DPRNN block: {dprnn_block}")
         BLOCK = {"dp": DpB, "mc": McB}[dprnn_block]
-        self.non_linear = supported_nonlinear[non_linear]
+        self.non_linear = supported_nonlinear[output_non_linear]
         self.dprnn = nn.Sequential(*[
-            BLOCK(conv_filters, dprnn_hidden, bi_inter=dprnn_bi_inter)
+            BLOCK(proj_filters, dprnn_hidden, bi_inter=dprnn_bi_inter)
             for _ in range(dprnn_layers)
         ])
-        self.mask = nn.Conv2d(conv_filters, num_spks * conv_filters, 1)
+        self.norm = build_norm(input_norm,
+                               conv_filters) if input_norm else None
+        self.proj = nn.Conv1d(conv_filters, proj_filters, 1)
+        # NOTE: add prelu here
+        self.mask = nn.Sequential(
+            nn.PReLU(), nn.Conv2d(proj_filters, num_spks * conv_filters, 1))
         self.chunk_hop, self.chunk_len = chunk_len // 2, chunk_len
         self.num_spks = num_spks
 
@@ -237,15 +241,19 @@ class DPRNN(nn.Module):
             masks: N x S x F x T
         """
         N, F, T = inp.shape
+        # proj + norm
+        if self.norm:
+            inp = self.norm(inp)
+        inp = self.proj(inp)
         # N x F x T x 1 => N x FK x L
         rnn_inp = tf.unfold(inp[..., None], (self.chunk_len, 1),
                             stride=self.chunk_hop)
         L = rnn_inp.shape[-1]
         # N x F x K x L
-        rnn_inp = rnn_inp.view(N, F, self.chunk_len, L)
+        rnn_inp = rnn_inp.view(N, inp.shape[1], self.chunk_len, L)
         # N x F x K x L
         rnn_out = self.dprnn(rnn_inp)
-        # N x 2F x K x L
+        # N x SF x K x L
         rnn_out = self.mask(rnn_out).contiguous()
         # NS x FK x L
         rnn_out = rnn_out.view(N * self.num_spks, -1, L)
@@ -266,23 +274,27 @@ class TimeDPRNN(DPRNN):
     """
     def __init__(self,
                  num_spks=2,
+                 input_norm="cLN",
                  conv_kernels=16,
                  conv_filters=64,
-                 input_layernorm=False,
+                 proj_filters=128,
                  chunk_len=100,
                  dprnn_layers=6,
                  dprnn_bi_inter=True,
                  dprnn_hidden=128,
                  dprnn_block="dp",
-                 non_linear=""):
+                 non_linear="relu",
+                 masking=True):
         super(TimeDPRNN, self).__init__(num_spks=num_spks,
                                         chunk_len=chunk_len,
-                                        non_linear=non_linear,
+                                        input_norm=input_norm,
                                         conv_filters=conv_filters,
+                                        proj_filters=proj_filters,
                                         dprnn_layers=dprnn_layers,
                                         dprnn_hidden=dprnn_hidden,
                                         dprnn_block=dprnn_block,
-                                        dprnn_bi_inter=dprnn_bi_inter)
+                                        dprnn_bi_inter=dprnn_bi_inter,
+                                        output_non_linear=non_linear)
         # conv1d encoder
         self.encoder = nn.Conv1d(1,
                                  conv_filters,
@@ -297,6 +309,7 @@ class TimeDPRNN(DPRNN):
                                           stride=conv_kernels // 2,
                                           bias=False,
                                           padding=0)
+        self.masking = masking
 
     def infer(self, mix):
         """
@@ -323,6 +336,9 @@ class TimeDPRNN(DPRNN):
         w = tf.relu(self.encoder(mix[:, None, :]))
         # N x S x F x T
         masks = super().forward(w)
+        # masking or not
+        if not self.masking:
+            w = 1
         if self.num_spks == 1:
             return self.decoder(masks[:, 0] * w)[:, 0]
         else:
@@ -340,7 +356,9 @@ class FreqDPRNN(DPRNN):
                  enh_transform=None,
                  num_spks=2,
                  num_bins=257,
-                 non_linear="",
+                 non_linear="relu",
+                 input_norm="",
+                 proj_filters=256,
                  chunk_len=64,
                  dprnn_layers=6,
                  dprnn_bi_inter=True,
@@ -349,12 +367,14 @@ class FreqDPRNN(DPRNN):
                  training_mode="freq"):
         super(FreqDPRNN, self).__init__(num_spks=num_spks,
                                         chunk_len=chunk_len,
-                                        non_linear=non_linear,
+                                        input_norm=input_norm,
                                         conv_filters=num_bins,
+                                        proj_filters=proj_filters,
                                         dprnn_layers=dprnn_layers,
                                         dprnn_hidden=dprnn_hidden,
                                         dprnn_block=dprnn_block,
-                                        dprnn_bi_inter=dprnn_bi_inter)
+                                        dprnn_bi_inter=dprnn_bi_inter,
+                                        output_non_linear=non_linear)
         if enh_transform is None:
             raise RuntimeError("FreqDPRNN: enh_transform can not be None")
         self.enh_transform = enh_transform
@@ -374,22 +394,22 @@ class FreqDPRNN(DPRNN):
         w = th.transpose(mix_feat, 1, 2)
         # N x 2 x F x T
         masks = super().forward(w)
-        masks = masks[:, 0] if self.num_spks == 1 else [
-            masks[:, s] for s in range(self.num_spks)
-        ]
+        if self.num_spks == 1:
+            masks = masks[:, 0]
+        else:
+            masks = [masks[:, s] for s in range(self.num_spks)]
         # N x F x T, ...
         if mode == "freq":
             return masks
         else:
+            decoder = self.enh_transform.inverse_stft
             if self.num_spks == 1:
                 enh_stft = mix_stft * masks
-                enh = self.enh_transform.inverse_stft(
-                    (enh_stft.real, enh_stft.imag), input="complex")
+                enh = decoder((enh_stft.real, enh_stft.imag), input="complex")
             else:
                 enh_stft = [mix_stft * m for m in masks]
                 enh = [
-                    self.enh_transform.inverse_stft((s.real, s.imag),
-                                                    input="complex")
+                    decoder((s.real, s.imag), input="complex")
                     for s in enh_stft
                 ]
             return enh
