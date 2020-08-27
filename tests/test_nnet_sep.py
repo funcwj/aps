@@ -54,6 +54,8 @@ def test_dcunet():
                       K="7,5;7,5;5,3;5,3;3,3;3,3",
                       S="2,1;2,1;2,1;2,1;2,1;2,1",
                       C="32,32,64,64,64,128",
+                      P="1,1,1,1,1,0",
+                      O="0,0,1,1,1,0",
                       num_branch=1,
                       cplx=True,
                       causal_conv=False,
@@ -63,6 +65,36 @@ def test_dcunet():
     x = dcunet(inp)
     assert x.shape == th.Size([4, 64000])
     y = dcunet.infer(inp[1])
+    assert y.shape == th.Size([64000])
+
+
+def test_dense_unet():
+    nnet_cls = support_nnet("dense_unet")
+    transform = EnhTransform(feats="spectrogram-log-cmvn",
+                             frame_len=512,
+                             frame_hop=256)
+    dense_unet = nnet_cls(cplx=False,
+                          K="3,3;3,3;3,3;3,3;3,3;3,3;3,3",
+                          S="2,1;2,1;2,1;2,1;2,1;2,1;2,1",
+                          P="1,1;1,1;1,1;1,1;1,1;0,1;0,1",
+                          O="0,0,0,0,0,0,1",
+                          enc_channel="32,32,32,64,128,256,512",
+                          dec_channel="32,32,32,64,64,128,256",
+                          num_spks=1,
+                          connection="cat",
+                          rnn_hidden=512,
+                          rnn_layers=2,
+                          rnn_resize=512,
+                          rnn_bidir=False,
+                          init_beta=1,
+                          num_dense_blocks=4,
+                          enh_transform=transform,
+                          non_linear="tanh",
+                          training_mode="time")
+    inp = th.rand(4, 64000)
+    x = dense_unet(inp)
+    assert x.shape == th.Size([4, 64000])
+    y = dense_unet.infer(inp[1])
     assert y.shape == th.Size([64000])
 
 
@@ -115,9 +147,11 @@ def test_dccrn():
                      cplx=True,
                      K="3,3;3,3;3,3;3,3;3,3;3,3;3,3",
                      S="2,1;2,1;2,1;2,1;2,1;2,1;2,1",
+                     P="1,1,1,1,1,0,0",
+                     O="0,0,0,0,0,0,1",
                      C="16,32,64,64,128,128,256",
                      num_spks=1,
-                     rnn_resize=1536,
+                     rnn_resize=512,
                      non_linear="sigmoid",
                      connection="cat")
     inp = th.rand(4, 64000)
@@ -149,4 +183,4 @@ def test_unsuper_enh():
 
 
 if __name__ == "__main__":
-    test_dprnn()
+    test_dense_unet()

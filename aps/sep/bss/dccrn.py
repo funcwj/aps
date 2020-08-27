@@ -136,6 +136,8 @@ class DCCRN(nn.Module):
                  cplx=True,
                  K="3,3;3,3;3,3;3,3;3,3;3,3;3,3",
                  S="2,1;2,1;2,1;2,1;2,1;2,1;2,1",
+                 P="1,1,1,1,1,1,1",
+                 O="0,0,0,0,0,0,0",
                  C="16,32,64,64,128,128,256",
                  num_spks=2,
                  connection="sum",
@@ -147,6 +149,13 @@ class DCCRN(nn.Module):
                  enh_transform=None,
                  non_linear="tanh",
                  training_mode="time"):
+        """
+        Args:
+            K, S, C: kernel, stride, padding, channel size for convolution in encoder/decoder
+            P: padding on frequency axis for convolution in encoder/decoder
+            O: output_padding on frequency axis for transposed_conv2d in decoder
+        NOTE: make sure that stride size on time axis is 1 (we do not do subsampling on time axis)
+        """
         super(DCCRN, self).__init__()
         if enh_transform is None:
             raise RuntimeError("Missing configuration for enh_transform")
@@ -156,16 +165,19 @@ class DCCRN(nn.Module):
         self.non_linear = supported_nonlinear[non_linear]
         self.enh_transform = enh_transform
         K = parse_2dstr(K)
-        # make sure stride size on time axis is 1
         S = parse_2dstr(S)
         C = parse_1dstr(C)
-        self.encoder = Encoder(cplx, K, S, [1] + C, causal=causal_conv)
+        P = parse_1dstr(P)
+        O = parse_1dstr(O)
+        self.encoder = Encoder(cplx, K, S, [1] + C, P, causal=causal_conv)
         if connection == "cat":
             C[-1] *= 2
         self.decoder = Decoder(cplx,
                                K[::-1],
                                S[::-1],
                                C[::-1] + [num_spks],
+                               P[::-1],
+                               O[::-1],
                                causal=causal_conv,
                                connection=connection)
         self.rnn = LSTMWrapper(rnn_resize // 2 if cplx else rnn_resize,
@@ -178,6 +190,7 @@ class DCCRN(nn.Module):
         self.mode = training_mode
 
     def sep(self, m, sr, si, mode="freq"):
+        decoder = self.enh_transform.inverse_stft
         # m: N x 2F x T
         if self.cplx:
             # N x F x T
@@ -189,16 +202,15 @@ class DCCRN(nn.Module):
                 s = m_mag
             else:
                 mr, mi = m_mag * mr / m_abs, m_mag * mi / m_abs
-                s = self.enh_transform.inverse_stft(
-                    (sr * mr - si * mi, sr * mi + si * mr), input="complex")
+                s = decoder((sr * mr - si * mi, sr * mi + si * mr),
+                            input="complex")
         else:
             m = self.non_linear(m)
             if mode == "freq":
                 # s = (si**2 + sr**2)**0.5 * m
                 s = m
             else:
-                s = self.enh_transform.inverse_stft((sr * m, si * m),
-                                                    input="complex")
+                s = decoder((sr * m, si * m), input="complex")
         return s
 
     def check_args(self, mix, training=True):

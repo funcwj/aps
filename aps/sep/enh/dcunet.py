@@ -88,20 +88,19 @@ class EncoderBlock(nn.Module):
                  out_channels,
                  kernel_size,
                  stride=1,
+                 padding=0,
                  causal=False,
-                 cplx=True,
-                 freq_padding=True):
+                 cplx=True):
         super(EncoderBlock, self).__init__()
         conv_impl = ComplexConv2d if cplx else nn.Conv2d
         # NOTE: time stride should be 1
         var_kt = kernel_size[1] - 1
         time_axis_pad = var_kt if causal else var_kt // 2
-        freq_axis_pad = (kernel_size[0] - 1) // 2 if freq_padding else 0
         self.conv = conv_impl(in_channels,
                               out_channels,
                               kernel_size,
                               stride=stride,
-                              padding=(freq_axis_pad, time_axis_pad))
+                              padding=(padding, time_axis_pad))
         if cplx:
             self.bn = ComplexBatchNorm2d(out_channels)
         else:
@@ -127,21 +126,21 @@ class DecoderBlock(nn.Module):
                  out_channels,
                  kernel_size,
                  stride=1,
+                 padding=0,
+                 output_padding=0,
                  causal=False,
                  cplx=True,
-                 freq_padding=True,
                  last_layer=False):
         super(DecoderBlock, self).__init__()
         conv_impl = ComplexConvTranspose2d if cplx else nn.ConvTranspose2d
         var_kt = kernel_size[1] - 1
         time_axis_pad = var_kt if causal else var_kt // 2
-        freq_axis_pad = (kernel_size[0] - 1) // 2 if freq_padding else 0
         self.trans_conv = conv_impl(in_channels,
                                     out_channels,
                                     kernel_size,
                                     stride=stride,
-                                    padding=(freq_axis_pad,
-                                             var_kt - time_axis_pad))
+                                    padding=(padding, var_kt - time_axis_pad),
+                                    output_padding=(output_padding, 0))
         if last_layer:
             self.bn = None
         else:
@@ -169,15 +168,15 @@ class Encoder(nn.Module):
         S: strides
         C: output channels
     """
-    def __init__(self, cplx, K, S, C, causal=False, freq_padding=True):
+    def __init__(self, cplx, K, S, C, P, causal=False):
         super(Encoder, self).__init__()
         layers = [
             EncoderBlock(C[i],
                          C[i + 1],
                          k,
                          stride=S[i],
+                         padding=P[i],
                          cplx=cplx,
-                         freq_padding=freq_padding,
                          causal=causal) for i, k in enumerate(K)
         ]
         self.layers = nn.ModuleList(layers)
@@ -200,7 +199,7 @@ class Decoder(nn.Module):
         S: strides
         C: output channels
     """
-    def __init__(self, cplx, K, S, C, causal=False, freq_padding=True, connection="sum"):
+    def __init__(self, cplx, K, S, C, P, O, causal=False, connection="sum"):
         super(Decoder, self).__init__()
         if connection not in ["cat", "sum"]:
             raise ValueError(f"Unknown connection mode: {connection}")
@@ -209,9 +208,10 @@ class Decoder(nn.Module):
                          C[i + 1],
                          k,
                          stride=S[i],
+                         padding=P[i],
+                         output_padding=O[i],
                          causal=causal,
                          cplx=cplx,
-                         freq_padding=freq_padding,
                          last_layer=(i == len(K) - 1)) for i, k in enumerate(K)
         ]
         self.layers = nn.ModuleList(layers)
@@ -242,29 +242,39 @@ class DCUNet(nn.Module):
                  K="7,5;7,5;7,5;5,3;5,3;5,3;5,3;5,3",
                  S="2,1;2,1;2,1;2,1;2,1;2,1;2,1;2,1",
                  C="32,32,64,64,64,64,64,64",
+                 P="1,1,1,1,1,1,1,1",
+                 O="0,0,0,0,0,0,0",
                  num_branch=1,
                  causal_conv=False,
                  enh_transform=None,
                  freq_padding=True,
                  connection="sum"):
         super(DCUNet, self).__init__()
+        """
+        Args:
+            K, S, C: kernel, stride, padding, channel size for convolution in encoder/decoder
+            P: padding on frequency axis for convolution in encoder/decoder
+            O: output_padding on frequency axis for transposed_conv2d in decoder
+        NOTE: make sure that stride size on time axis is 1 (we do not do subsampling on time axis)
+        """
         if enh_transform is None:
             raise RuntimeError("Missing configuration for enh_transform")
         self.cplx = cplx
         self.forward_stft = enh_transform.ctx(name="forward_stft")
         self.inverse_stft = enh_transform.ctx(name="inverse_stft")
-        # K, S, C = make_unet(num_layers, cplx=cplx)
         K = parse_2dstr(K)
-        # make sure stride size on time axis is 1
         S = parse_2dstr(S)
         C = parse_1dstr(C)
-        self.encoder = Encoder(cplx, K, S, [1] + C, causal=causal_conv, freq_padding=freq_padding)
+        P = parse_1dstr(P)
+        O = parse_1dstr(O)
+        self.encoder = Encoder(cplx, K, S, [1] + C, P, causal=causal_conv)
         self.decoder = Decoder(cplx,
                                K[::-1],
                                S[::-1],
                                C[::-1] + [num_branch],
+                               P[::-1],
+                               O[::-1],
                                causal=causal_conv,
-                               freq_padding=freq_padding,
                                connection=connection)
         self.num_branch = num_branch
 

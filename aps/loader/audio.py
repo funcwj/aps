@@ -56,9 +56,10 @@ def write_wav(fname, samps, sr=16000, norm=True):
         samps = np.transpose(samps)
         samps = np.squeeze(samps)
     # make dirs
-    fdir = os.path.dirname(fname)
-    if fdir and not os.path.exists(fdir):
-        os.makedirs(fdir)
+    if isinstance(fname, str):
+        fdir = os.path.dirname(fname)
+        if fdir and not os.path.exists(fdir):
+            os.makedirs(fdir)
     # NOTE: librosa 0.6.0 seems could not write non-float narray
     #       so use scipy.io.wavfile/soundfile instead
     # wf.write(fname, sr, samps_int16)

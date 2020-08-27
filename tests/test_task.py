@@ -39,7 +39,8 @@ def gen_egs(num_spks):
 
 def run_epochs(task, egs, iters):
     for _ in range(iters):
-        loss, _ = task(egs)
+        stats = task(egs)
+        loss = stats["loss"]
         loss.backward()
         norm = clip_grad_norm_(task.parameters(), 20)
         assert not math.isnan(loss.item())
@@ -53,24 +54,18 @@ def test_wa():
     egs = gen_egs(2)
     run_epochs(task, egs, 5)
 
+
 def test_sisnr():
     nnet = toy_rnn("time")
-    kwargs = {
-        "permute": True,
-        "num_spks": 2,
-        "non_nagetive": True
-    }
+    kwargs = {"permute": True, "num_spks": 2, "non_nagetive": True}
     task = support_task("sisnr", nnet, **kwargs)
     egs = gen_egs(2)
     run_epochs(task, egs, 5)
 
+
 def test_snr():
     nnet = toy_rnn("time")
-    kwargs = {
-        "permute": True,
-        "num_spks": 2,
-        "non_nagetive": True
-    }
+    kwargs = {"permute": True, "num_spks": 2, "non_nagetive": True}
     task = support_task("snr", nnet, **kwargs)
     egs = gen_egs(2)
     run_epochs(task, egs, 5)
@@ -89,6 +84,7 @@ def test_linear_freq_sa():
     egs = gen_egs(2)
     run_epochs(task, egs, 5)
 
+
 def test_mel_freq_sa():
     nnet = toy_rnn("freq")
     kwargs = {
@@ -101,6 +97,7 @@ def test_mel_freq_sa():
     task = support_task("mel_sa", nnet, **kwargs)
     egs = gen_egs(2)
     run_epochs(task, egs, 5)
+
 
 def test_linear_time_sa():
     nnet = toy_rnn("time")
@@ -117,6 +114,7 @@ def test_linear_time_sa():
     task = support_task("time_linear_sa", nnet, **kwargs)
     egs = gen_egs(2)
     run_epochs(task, egs, 5)
+
 
 def test_mel_time_sa():
     nnet = toy_rnn("time")
