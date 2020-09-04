@@ -109,20 +109,23 @@ class KaldiDataLoader(object):
                  adapt_token_num=150,
                  batch_size=32,
                  min_batch_size=4):
-        sampler = BatchSampler(dataset,
-                               batch_size,
-                               shuffle=shuffle,
-                               distributed=distributed,
-                               adapt_dur=adapt_frame_num,
-                               adapt_token_num=adapt_token_num,
-                               min_batch_size=min_batch_size)
+        self.sampler = BatchSampler(dataset,
+                                    batch_size,
+                                    shuffle=shuffle,
+                                    distributed=distributed,
+                                    adapt_dur=adapt_frame_num,
+                                    adapt_token_num=adapt_token_num,
+                                    min_batch_size=min_batch_size)
         self.batch_loader = dat.DataLoader(dataset,
-                                           batch_sampler=sampler,
+                                           batch_sampler=self.sampler,
                                            num_workers=num_workers,
                                            collate_fn=egs_collate)
 
     def __len__(self):
         return len(self.batch_loader)
+
+    def set_epoch(self, epoch):
+        self.sampler.set_epoch(epoch)
 
     def __iter__(self):
         for egs in self.batch_loader:

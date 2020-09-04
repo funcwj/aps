@@ -111,9 +111,11 @@ class BatchSampler(dat.Sampler):
                 indices = th.randperm(self.num_batches).tolist()
             else:
                 indices = th.arange(self.num_batches).tolist()
-        self.epoch += 1
         for i in indices:
             yield list(range(*self.batches[i]))
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
 
     def __len__(self):
         return self.num_batches

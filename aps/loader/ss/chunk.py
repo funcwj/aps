@@ -237,19 +237,21 @@ class WaveChunkDataLoader(object):
                                       train=train,
                                       hop=chunk_size // 2)
         if distributed:
-            sampler = dat.DistributedSampler(dataset,
-                                             shuffle=train,
-                                             num_replicas=dist.world_size(),
-                                             rank=dist.rank())
+            self.sampler = dat.DistributedSampler(
+                dataset,
+                shuffle=train,
+                num_replicas=dist.world_size(),
+                rank=dist.rank())
         else:
-            sampler = None
+            self.sampler = None
         # just return batch of egs, support multiple workers
         # NOTE: batch_size is not the batch_size of the audio chunk
         self.eg_loader = dat.DataLoader(self.dataset,
                                         batch_size=min(batch_size, 64),
                                         num_workers=num_workers,
-                                        sampler=sampler,
-                                        shuffle=(train and sampler is None),
+                                        sampler=self.sampler,
+                                        shuffle=(train
+                                                 and self.sampler is None),
                                         collate_fn=self._collate)
 
     def _collate(self, batch):
@@ -280,6 +282,9 @@ class WaveChunkDataLoader(object):
 
     def __len__(self):
         return 0
+
+    def set_epoch(self, epoch):
+        self.sampler.set_epoch(epoch)
 
     def __iter__(self):
         chunk_list = []

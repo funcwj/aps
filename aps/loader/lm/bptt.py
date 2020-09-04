@@ -58,6 +58,9 @@ class BpttDataLoader(object):
     def __len__(self):
         return self.num_batches
 
+    def set_epoch(self, epoch):
+        pass
+
     def __iter__(self):
         # N x S
         token_batch = self.batchify()

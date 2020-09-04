@@ -442,6 +442,7 @@ class Trainer(object):
             f"Number of batches: {len(trn_loader)}/{len(dev_loader)}")
         e = self._prep_train(dev_loader)
         while e < num_epochs:
+            trn_loader.set_epoch(e)
             e += 1
             cur_lr = self.optimizer.param_groups[0]["lr"]
             # >> train

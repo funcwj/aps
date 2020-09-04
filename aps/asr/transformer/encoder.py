@@ -14,6 +14,51 @@ from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
 
 
+class PreNormTransformerEncoderLayer(TransformerEncoderLayer):
+    """
+    Transformer encoder with pre-norm
+    """
+    def __init__(self,
+                 d_model,
+                 nhead,
+                 dim_feedforward=2048,
+                 dropout=0.1,
+                 activation="relu"):
+        super(PreNormTransformerEncoderLayer,
+              self).__init__(d_model,
+                             nhead,
+                             dim_feedforward=dim_feedforward,
+                             dropout=dropout,
+                             activation=activation)
+
+    def forward(self, src, src_mask=None, src_key_padding_mask=None):
+        """
+        Code for Post-Norm Transformer are:
+        src2 = self.self_attn(src,
+                              src,
+                              src,
+                              attn_mask=src_mask,
+                              key_padding_mask=src_key_padding_mask)[0]
+        src = src + self.dropout1(src2)
+        src = self.norm1(src)
+        src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))
+        src = src + self.dropout2(src2)
+        src = self.norm2(src)
+        return src
+        """
+        src1 = self.norm1(src)
+        src2 = self.self_attn(src1,
+                              src1,
+                              src1,
+                              attn_mask=src_mask,
+                              key_padding_mask=src_key_padding_mask)[0]
+        src = src + self.dropout1(src2)
+        src3 = self.norm2(src)
+        src4 = self.linear2(self.dropout(self.activation(self.linear1(src3))))
+        src = src + self.dropout2(src4)
+        return src
+
+
 class TorchTransformerEncoder(nn.Module):
     """
     Wrapper for pytorch's Transformer Decoder
@@ -27,6 +72,7 @@ class TorchTransformerEncoder(nn.Module):
                  feedforward_dim=2048,
                  pos_dropout=0.1,
                  att_dropout=0.1,
+                 post_norm=True,
                  num_layers=6):
         super(TorchTransformerEncoder, self).__init__()
         self.src_embed = IOEmbedding(input_embed,
@@ -34,11 +80,18 @@ class TorchTransformerEncoder(nn.Module):
                                      embed_dim=att_dim,
                                      dropout=pos_dropout,
                                      other_opts=embed_other_opts)
-        encoder_layer = TransformerEncoderLayer(
-            att_dim,
-            nhead,
-            dim_feedforward=feedforward_dim,
-            dropout=att_dropout)
+        if post_norm:
+            encoder_layer = TransformerEncoderLayer(
+                att_dim,
+                nhead,
+                dim_feedforward=feedforward_dim,
+                dropout=att_dropout)
+        else:
+            encoder_layer = PreNormTransformerEncoderLayer(
+                att_dim,
+                nhead,
+                dim_feedforward=feedforward_dim,
+                dropout=att_dropout)
         self.encoder = TransformerEncoder(encoder_layer, num_layers)
         self.input_embed = input_embed
 

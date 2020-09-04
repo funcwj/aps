@@ -131,6 +131,9 @@ class UttDataLoader(object):
     def __len__(self):
         return len(self.batch_loader)
 
+    def set_epoch(self, epoch):
+        pass
+
     def __iter__(self):
         for egs in self.batch_loader:
             yield egs
