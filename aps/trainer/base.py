@@ -11,7 +11,7 @@ import torch as th
 from torch.nn.utils import clip_grad_norm_
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.tensorboard import SummaryWriter
-from torch.optim import lr_scheduler
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from aps.trainer.ss import support_ss_scheduler
 from aps.trainer.lr import support_lr_scheduler
@@ -361,6 +361,8 @@ class Trainer(object):
         # step optimizer and update statistics
         if math.isfinite(norm):
             self.optimizer.step()
+            # schedule lr if needed
+            self.lr_scheduler_step(None, end_at="step")
 
             if self.gaussian_noise_std:
                 add_gaussian_noise(self.task, std=self.gaussian_noise_std)
@@ -368,8 +370,6 @@ class Trainer(object):
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
             self.reporter.update(stats)
-            # schedule lr if needed
-            self.lr_scheduler_step(None, end_at="step")
             return True
         else:
             self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
@@ -382,7 +382,7 @@ class Trainer(object):
         if end_at == "step" and self.lr_scheduler_period == "step":
             self.lr_scheduler.step()
         if end_at == "epoch" and self.lr_scheduler_period == "epoch":
-            if isinstance(self.lr_scheduler, lr_scheduler.ReduceLROnPlateau):
+            if isinstance(self.lr_scheduler, ReduceLROnPlateau):
                 self.lr_scheduler.step(update_value)
             else:
                 self.lr_scheduler.step()
@@ -462,7 +462,8 @@ class Trainer(object):
             if better:
                 self.save_checkpoint(e, best=True)
             else:
-                sstr += f" | no impr, best = {self.stop_criterion.best:.4f}"
+                sstr += f" | no impr{self.stop_criterion.no_impr:d}, "
+                sstr += f"best = {self.stop_criterion.best:.4f}"
 
             self.reporter.log(sstr)
             # << eval
@@ -522,8 +523,8 @@ class Trainer(object):
                     if better:
                         self.save_checkpoint(e, best=True)
                     else:
-                        sstr += f" | no impr, best = {self.stop_criterion.best:.4f}"
-
+                        sstr += f" | no impr{self.stop_criterion.no_impr:d}, "
+                        sstr += f"best = {self.stop_criterion.best:.4f}"
                     self.reporter.log(sstr)
                     # lr schedule here
                     self.lr_scheduler_step(update_value, end_at="epoch")

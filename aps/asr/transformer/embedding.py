@@ -24,7 +24,7 @@ class PositionalEncoding(nn.Module):
         pos_enc[:, 0::2] = th.sin(position[:, None] * div_term)
         pos_enc[:, 1::2] = th.cos(position[:, None] * div_term)
         # Tmax x 1 x D
-        self.register_buffer("pos_enc", pos_enc[:, None])
+        self.pos_enc = nn.Parameter(pos_enc[:, None], requires_grad=False)
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, inp, t=0):

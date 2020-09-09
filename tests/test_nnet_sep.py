@@ -98,6 +98,32 @@ def test_dense_unet():
     assert y.shape == th.Size([64000])
 
 
+def test_freq_xfmr():
+    nnet_cls = support_nnet("freq_xfmr")
+    transform = EnhTransform(feats="spectrogram-log-cmvn",
+                             frame_len=512,
+                             frame_hop=256)
+    xfmr = nnet_cls(input_size=257,
+                    enh_transform=transform,
+                    num_spks=1,
+                    num_bins=257,
+                    att_dim=256,
+                    nhead=4,
+                    feedforward_dim=512,
+                    pos_dropout=0.1,
+                    att_dropout=0.1,
+                    proj_dropout=0.1,
+                    post_norm=True,
+                    num_layers=3,
+                    non_linear="sigmoid",
+                    training_mode="time")
+    inp = th.rand(4, 64000)
+    x = xfmr(inp)
+    assert x.shape == th.Size([4, 64000])
+    y = xfmr.infer(inp[1])
+    assert y.shape == th.Size([64000])
+
+
 def test_tasnet():
     nnet_cls = support_nnet("time_tasnet")
     tasnet = nnet_cls(L=40,
@@ -183,4 +209,4 @@ def test_unsuper_enh():
 
 
 if __name__ == "__main__":
-    test_dense_unet()
+    test_freq_xfmr()
