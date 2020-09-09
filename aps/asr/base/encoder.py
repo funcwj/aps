@@ -86,7 +86,10 @@ class TorchRNNEncoder(nn.Module):
         """
         self.rnns.flatten_parameters()
         if inp_len is not None:
-            inp = pack_padded_sequence(inp, inp_len, batch_first=True)
+            inp = pack_padded_sequence(inp,
+                                       inp_len,
+                                       batch_first=True,
+                                       enforce_sorted=False)
         # extend dim when inference
         else:
             if inp.dim() not in [2, 3]:
@@ -351,6 +354,7 @@ class TimeDelayRNNEncoder(nn.Module):
             out_len (Tensor or None): N
         """
         out_pad, out_len = self.tdnn_enc(inp, inp_len)
+        # print(f"inp: {inp_len}, out: {out_len}", flush=True)
         return self.rnns_enc(out_pad, out_len)
 
 

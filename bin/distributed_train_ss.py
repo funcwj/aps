@@ -52,11 +52,16 @@ def train_worker(task, conf, args):
 
     # dump configurations
     if rank == 0:
+        print(f"Arguments in yaml:\n{pprint.pformat(conf)}", flush=True)
         conf["cmd_args"] = vars(args)
         with open(f"{args.checkpoint}/train.yaml", "w") as f:
             yaml.dump(conf, f)
 
     num_process = len(args.device_ids.split(","))
+    if num_process != distributed.world_size():
+        raise RuntimeError(
+            f"Number of process != world size: {num_process} vs {distributed.world_size()}"
+        )
     data_conf = conf["data_conf"]
     trn_loader = support_loader(train=True,
                                 fmt=data_conf["fmt"],
@@ -97,7 +102,6 @@ def load_conf(yaml_conf):
         if key not in constrained_conf_keys:
             raise ValueError(f"Invalid configuration item: {key}")
 
-    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
     return conf
 
 

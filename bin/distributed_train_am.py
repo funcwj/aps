@@ -55,11 +55,16 @@ def train_worker(task, conf, args):
 
     # dump configurations
     if rank == 0:
+        print(f"Arguments in yaml:\n{pprint.pformat(conf)}", flush=True)
         conf["cmd_args"] = vars(args)
         with open(f"{args.checkpoint}/train.yaml", "w") as f:
             yaml.dump(conf, f)
 
     num_process = len(args.device_ids.split(","))
+    if num_process != distributed.world_size():
+        raise RuntimeError(
+            f"Number of process != world size: {num_process} vs {distributed.world_size()}"
+        )
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
                                 train=True,
@@ -129,7 +134,6 @@ def run(args):
         print(f"Set random seed as {seed}")
 
     conf = load_conf(args.conf, args.dict)
-    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
 
     asr_cls = support_nnet(conf["nnet"])
     asr_transform = None

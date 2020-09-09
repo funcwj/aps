@@ -144,15 +144,26 @@ class WaveReader(BaseReader):
             if fname not in self.mngr:
                 self.mngr[fname] = open(fname, "rb")
             wav_ark = self.mngr[fname]
+            # wav_ark = open(fname, "rb")
             # seek and read
             wav_ark.seek(offset)
-            samps = read_wav(wav_ark, norm=self.norm, sr=self.sr)
+            try:
+                samps = read_wav(wav_ark, norm=self.norm, sr=self.sr)
+            except RuntimeError:
+                samps = None
+                print(f"Load {fname}:{offset} failed...", flush=True)
         else:
             if fname[-1] == "|":
                 shell, _ = run_command(fname[:-1], wait=True)
                 fname = io.BytesIO(shell)
-            samps = read_wav(fname, norm=self.norm, sr=self.sr)
+            try:
+                samps = read_wav(fname, norm=self.norm, sr=self.sr)
+            except RuntimeError:
+                samps = None
+                print(f"Load {fname} failed...", flush=True)
         # get one channel
+        if samps is None:
+            return None
         if self.ch >= 0 and samps.ndim == 2:
             samps = samps[self.ch]
         return samps

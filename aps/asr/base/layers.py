@@ -198,7 +198,10 @@ class CustomRNNLayer(nn.Module):
         """
         mainp_len = inp_pad.size(1)
         if inp_len is not None:
-            inp_pad = pack_padded_sequence(inp_pad, inp_len, batch_first=True)
+            inp_pad = pack_padded_sequence(inp_pad,
+                                           inp_len,
+                                           batch_first=True,
+                                           enforce_sorted=False)
         # extend dim when inference
         else:
             if inp_pad.dim() not in [2, 3]:
