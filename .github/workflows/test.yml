@@ -24,6 +24,7 @@ jobs:
           pip install --upgrade pip wheel
           cat requirements.txt | grep -v -E "warp_rnnt|horovod|kenlm" > requirements_cpu.txt && pip install -r requirements_cpu.txt
           pip install numba==0.48
+          pip install tensorboard
 
       - name: Run testing cases (lib)
         run: |
