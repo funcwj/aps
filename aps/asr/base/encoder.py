@@ -33,7 +33,6 @@ class TorchRNNEncoder(nn.Module):
     """
     PyTorch's RNN encoder
     """
-
     def __init__(self,
                  input_size,
                  output_size,
@@ -118,7 +117,6 @@ class CustomRNNEncoder(nn.Module):
     """
     Customized RNN layer (egs: PyramidEncoder)
     """
-
     def __init__(self,
                  input_size,
                  output_size,
@@ -215,9 +213,9 @@ class TDNNEncoder(nn.Module):
     """
     Stack of TDNNLayers
     """
-
     def __init__(self,
                  input_size,
+                 output_size,
                  dim=512,
                  norm="BN",
                  num_layers=3,
@@ -237,6 +235,8 @@ class TDNNEncoder(nn.Module):
                       dropout=dropout) for i in range(num_layers)
         ]
         self.tdnn_enc = nn.Sequential(*tdnns)
+        self.proj_out = None if output_size is None else nn.Linear(
+            dim, output_size)
         sub_sampling = 1
         for s in stride_conf:
             sub_sampling *= s
@@ -254,6 +254,8 @@ class TDNNEncoder(nn.Module):
         out = self.tdnn_enc(inp)
         if inp_len is not None:
             inp_len = inp_len // self.sub_sampling
+        if self.proj_out:
+            out = self.proj_out(out)
         return out, inp_len
 
 
@@ -261,11 +263,10 @@ class FSMNEncoder(nn.Module):
     """
     Stack of FsmnLayers, with optional residual connection
     """
-
     def __init__(self,
                  input_size,
                  output_size,
-                 project_size,
+                 project_size=512,
                  num_layers=4,
                  residual=True,
                  lctx=3,
@@ -276,7 +277,7 @@ class FSMNEncoder(nn.Module):
         super(FSMNEncoder, self).__init__()
         dilations = parse_str_int(dilation, num_layers)
         self.layers = nn.ModuleList([
-            FSMNLayer(input_size,
+            FSMNLayer(input_size if i == 0 else output_size,
                       output_size,
                       project_size,
                       lctx=lctx,
@@ -307,6 +308,7 @@ class FSMNEncoder(nn.Module):
                 inp, memory = fsmn(inp, memory=memory)
             else:
                 inp, _ = fsmn(inp, memory=memory)
+        inp = inp.transpose(1, 2)
         return inp, inp_len
 
 
@@ -314,7 +316,6 @@ class TimeDelayRNNEncoder(nn.Module):
     """
     TDNN + RNN encoder (Using TDNN for subsampling and RNN for sequence modeling )
     """
-
     def __init__(self,
                  input_size,
                  output_size,
@@ -333,6 +334,7 @@ class TimeDelayRNNEncoder(nn.Module):
                  rnn_hidden=512):
         super(TimeDelayRNNEncoder, self).__init__()
         self.tdnn_enc = TDNNEncoder(input_size,
+                                    None,
                                     dim=tdnn_dim,
                                     norm=tdnn_norm,
                                     num_layers=tdnn_layers,
@@ -367,7 +369,6 @@ class TimeDelayFSMNEncoder(nn.Module):
     """
     TDNN + FSMN encoder (Using TDNN for subsampling and FSMN for sequence modeling )
     """
-
     def __init__(self,
                  input_size,
                  output_size,
@@ -387,6 +388,7 @@ class TimeDelayFSMNEncoder(nn.Module):
                  fsmn_dropout=0.2):
         super(TimeDelayFSMNEncoder, self).__init__()
         self.tdnn_enc = TDNNEncoder(input_size,
+                                    None,
                                     dim=tdnn_dim,
                                     norm=tdnn_norm,
                                     num_layers=tdnn_layers,
@@ -395,7 +397,7 @@ class TimeDelayFSMNEncoder(nn.Module):
                                     dropout=tdnn_dropout)
         self.fsmn_enc = FSMNEncoder(tdnn_dim,
                                     output_size,
-                                    fsmn_project,
+                                    project_size=fsmn_project,
                                     lctx=fsmn_lctx,
                                     rctx=fsmn_rctx,
                                     norm=fsmn_norm,

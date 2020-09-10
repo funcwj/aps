@@ -13,20 +13,22 @@ class LSTMP(nn.Module):
     """
     LSTM with real/imag parts
     """
-
     def __init__(self,
                  in_features,
                  hidden_size,
                  num_layers=2,
+                 dropout=0,
                  bidirectional=False,
                  batch_first=True):
         super(LSTMP, self).__init__()
         self.lstm = nn.LSTM(in_features,
                             hidden_size,
+                            dropout=dropout,
                             num_layers=num_layers,
                             bidirectional=bidirectional,
                             batch_first=batch_first)
-        self.proj = nn.Linear(hidden_size * 2 if bidirectional else hidden_size,
+        self.proj = nn.Linear(hidden_size *
+                              2 if bidirectional else hidden_size,
                               in_features,
                               bias=False)
 
@@ -46,22 +48,24 @@ class ComplexLSTMP(nn.Module):
     """
     LSTMP real/imag parts
     """
-
     def __init__(self,
                  in_features,
                  hidden_size,
                  num_layers=2,
+                 dropout=0,
                  bidirectional=False,
                  batch_first=True):
         super(ComplexLSTMP, self).__init__()
         self.real = LSTMP(in_features,
                           hidden_size,
                           num_layers=num_layers,
+                          dropout=dropout,
                           bidirectional=bidirectional,
                           batch_first=batch_first)
         self.imag = LSTMP(in_features,
                           hidden_size,
                           num_layers=num_layers,
+                          dropout=dropout,
                           bidirectional=bidirectional,
                           batch_first=batch_first)
 
@@ -86,10 +90,10 @@ class LSTMWrapper(nn.Module):
     """
     R/C LSTM
     """
-
     def __init__(self,
                  in_features,
                  num_layers=2,
+                 dropout=0,
                  hidden_size=512,
                  cplx=True,
                  bidirectional=False):
@@ -97,12 +101,14 @@ class LSTMWrapper(nn.Module):
         if cplx:
             self.lstm = ComplexLSTMP(in_features,
                                      hidden_size,
+                                     dropout=dropout,
                                      num_layers=num_layers,
                                      bidirectional=bidirectional,
                                      batch_first=True)
         else:
             self.lstm = LSTMP(in_features,
                               hidden_size,
+                              dropout=dropout,
                               num_layers=num_layers,
                               bidirectional=bidirectional,
                               batch_first=True)
@@ -134,7 +140,6 @@ class DCCRN(nn.Module):
     """
     Deep Complex Convolutional-RNN networks
     """
-
     def __init__(self,
                  cplx=True,
                  K="3,3;3,3;3,3;3,3;3,3;3,3;3,3",
@@ -147,6 +152,7 @@ class DCCRN(nn.Module):
                  rnn_hidden=512,
                  rnn_layers=2,
                  rnn_resize=1536,
+                 rnn_dropout=0,
                  rnn_bidir=False,
                  causal_conv=False,
                  enh_transform=None,
@@ -184,6 +190,7 @@ class DCCRN(nn.Module):
                                causal=causal_conv,
                                connection=connection)
         self.rnn = LSTMWrapper(rnn_resize // 2 if cplx else rnn_resize,
+                               dropout=rnn_dropout,
                                num_layers=rnn_layers,
                                hidden_size=rnn_hidden,
                                bidirectional=rnn_bidir,
