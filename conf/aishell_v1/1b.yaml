@@ -10,14 +10,14 @@ nnet_conf:
     feedforward_dim: 512
     pos_dropout: 0.2
     att_dropout: 0.2
-    num_layers: 6
+    num_layers: 8
   decoder_kwargs:
     att_dim: 256
     nhead: 4
     feedforward_dim: 512
     pos_dropout: 0.2
     att_dropout: 0.2
-    num_layers: 4
+    num_layers: 6
 
 asr_transform:
   feats: "fbank-log-cmvn-aug"
@@ -42,10 +42,12 @@ trainer_conf:
   optimizer_kwargs:
     lr: 1.0e-4
     weight_decay: 1.0e-5
+  lr_scheduler: "noam_lr"
+  lr_scheduler_period: "step"
   lr_scheduler_kwargs:
-    min_lr: 1.0e-8
-    patience: 1
-    factor: 0.5
+    factor: 1
+    warmup: 20000
+    transformer_dim: 512
   no_impr: 6
   no_impr_thres: 0.2
   clip_gradient: 5
