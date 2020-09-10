@@ -19,6 +19,7 @@ class PhasenConv2d(nn.Conv2d):
     """
     Conv2d for Phasen (keeping time/frequency dimention not changed)
     """
+
     def __init__(self, in_channels, out_channels, kernel_size):
         padding_size = ((kernel_size[0] - 1) // 2, (kernel_size[1] - 1) // 2)
         super(PhasenConv2d, self).__init__(in_channels,
@@ -32,6 +33,7 @@ class PhasenBatchNorm1d(nn.BatchNorm1d):
     """
     BatchNorm1d for Phasen (following a non-linear layer)
     """
+
     def __init__(self, num_features, non_linear="relu"):
         super(PhasenBatchNorm1d, self).__init__(num_features)
         self.non_linear = batchnorm_non_linear[non_linear]
@@ -45,6 +47,7 @@ class PhasenBatchNorm2d(nn.BatchNorm2d):
     """
     BatchNorm2d for Phasen (following a non-linear layer)
     """
+
     def __init__(self, num_features, non_linear="relu"):
         super(PhasenBatchNorm2d, self).__init__(num_features)
         self.non_linear = batchnorm_non_linear[non_linear]
@@ -58,6 +61,7 @@ class PhasenGlobalNorm(nn.Module):
     """
     Global Normalization for Phasen
     """
+
     def __init__(self, dim, eps=1e-05, elementwise_affine=True):
         super(PhasenGlobalNorm, self).__init__()
         self.eps = eps
@@ -99,11 +103,8 @@ class FTBlock(nn.Module):
     """
     Frequency Transformation Block
     """
-    def __init__(self,
-                 channel_amp,
-                 num_bins=257,
-                 channel_r=5,
-                 conv1d_kernel=9):
+
+    def __init__(self, channel_amp, num_bins=257, channel_r=5, conv1d_kernel=9):
         super(FTBlock, self).__init__()
         self.conv1x1_1 = nn.Sequential(
             nn.Conv2d(channel_amp, channel_r, (1, 1)),
@@ -152,6 +153,7 @@ class TSBlock(nn.Module):
     """
     Two Stream Block
     """
+
     def __init__(self,
                  channel_amp,
                  channel_pha,
@@ -206,6 +208,7 @@ class Phasen(nn.Module):
     """
     PHASEN: A Phase-and-Harmonics-Aware Speech Enhancement Network
     """
+
     def __init__(self,
                  channel_amp,
                  channel_pha,

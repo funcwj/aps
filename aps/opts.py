@@ -5,7 +5,9 @@ class StrToBoolAction(argparse.Action):
     """
     Since argparse.store_true is not very convenient
     """
+
     def __call__(self, parser, namespace, values, option_string=None):
+
         def str2bool(value):
             if value.lower() in ["true", "y", "yes", "1"]:
                 return True

@@ -12,6 +12,7 @@ import torch_complex.functional as cF
 from aps.asr.base.attention import padding_mask
 from aps.const import EPSILON
 
+
 def trace(cplx_mat):
     """
     Return trace of a complex matrices
@@ -58,6 +59,7 @@ class MvdrBeamformer(nn.Module):
     """
     MVDR (Minimum Variance Distortionless Response) Beamformer
     """
+
     def __init__(self, num_bins, att_dim=512, mask_norm=True, eps=1e-5):
         super(MvdrBeamformer, self).__init__()
         self.ref = ChannelAttention(num_bins, att_dim)
@@ -133,6 +135,7 @@ class ChannelAttention(nn.Module):
     """
     Compute u for mvdr beamforming
     """
+
     def __init__(self, num_bins, att_dim):
         super(ChannelAttention, self).__init__()
         self.proj = nn.Linear(num_bins, att_dim)

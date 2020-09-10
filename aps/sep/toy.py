@@ -15,6 +15,7 @@ class ToyRNN(TorchRNNEncoder):
     """
     Toy RNN structure for separation & enhancement
     """
+
     def __init__(self,
                  input_size=257,
                  input_project=None,

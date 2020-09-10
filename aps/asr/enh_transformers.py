@@ -18,6 +18,7 @@ class EnhTransformerASR(nn.Module):
     """
     Transformer with enhancement front-end
     """
+
     def __init__(
             self,
             asr_input_size=80,
@@ -103,6 +104,7 @@ class BeamTransformerASR(EnhTransformerASR):
     """
     Beamformer-based front-end + LAS ASR
     """
+
     def __init__(self, mode="tv", enh_transform=None, enh_conf=None, **kwargs):
         super(BeamTransformerASR, self).__init__(**kwargs)
         conv_enh = {
@@ -132,6 +134,7 @@ class MvdrTransformerASR(EnhTransformerASR):
     """
     Mvdr beamformer + Transformer-based ASR model
     """
+
     def __init__(
             self,
             enh_input_size=257,

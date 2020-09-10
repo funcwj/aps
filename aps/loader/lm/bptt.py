@@ -34,6 +34,7 @@ class BpttDataLoader(object):
     """
     LM loader for bptt training
     """
+
     def __init__(self, dataset, shuffle=True, batch_size=64, chunk_size=20):
         utt_lens = [len(tok) for tok in dataset]
         seq_lens = sum(utt_lens) // batch_size

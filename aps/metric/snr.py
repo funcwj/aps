@@ -2,8 +2,9 @@
 
 # wujian@2020
 
-import numpy as np 
+import numpy as np
 from itertools import permutations
+
 
 def si_snr(x, s, eps=1e-8, remove_dc=True):
     """
@@ -12,6 +13,7 @@ def si_snr(x, s, eps=1e-8, remove_dc=True):
         x: vector, enhanced/separated signal
         s: vector, reference signal (ground truth)
     """
+
     def vec_l2norm(x):
         return np.linalg.norm(x, 2)
 
@@ -34,6 +36,7 @@ def permute_si_snr(xlist, slist, align=False):
         x: list[vector], enhanced/separated signal
         s: list[vector], reference signal (ground truth)
     """
+
     def si_snr_avg(xlist, slist):
         return sum([si_snr(x, s) for x, s in zip(xlist, slist)]) / len(xlist)
 

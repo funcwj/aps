@@ -33,6 +33,7 @@ class ProgressReporter(object):
     """
     A simple progress reporter
     """
+
     def __init__(self, checkpoint, period=100, tensorboard=True, rank=None):
         self.period = period
         self.rank = rank
@@ -117,6 +118,7 @@ class StopCriterion(object):
     """
     Early stop of the training
     """
+
     def __init__(self,
                  no_impr,
                  mode="min",
@@ -159,6 +161,7 @@ class Trainer(object):
     """
     A PyTorch distributed trainer
     """
+
     def __init__(self,
                  task,
                  rank=None,

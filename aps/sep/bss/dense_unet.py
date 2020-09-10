@@ -16,6 +16,7 @@ class Swish(nn.Module):
     """
     Swish activation function x * sigmoid(beta * x)
     """
+
     def __init__(self, init_beta=1):
         super(Swish, self).__init__()
         self.beta = nn.Parameter(th.Tensor(1).fill_(init_beta))
@@ -32,6 +33,7 @@ class EncoderBlock(nn.Module):
     """
     Conv2d block in encoder
     """
+
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -64,6 +66,7 @@ class DecoderBlock(nn.Module):
     """
     Deconv2d block in dncoder
     """
+
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -98,6 +101,7 @@ class DenseBlock(nn.Module):
     """
     Dense block in encoder/decoder
     """
+
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -129,6 +133,7 @@ class EncoderDenseBlock(nn.Module):
     """
     Encoder block + Dense block
     """
+
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -162,6 +167,7 @@ class DecoderDenseBlock(nn.Module):
     """
     Decoder block + Dense block
     """
+
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -204,6 +210,7 @@ class Encoder(nn.Module):
         S: strides
         C: output channels
     """
+
     def __init__(self, K, S, C, P, init_beta=1, num_dense_blocks=4):
         super(Encoder, self).__init__()
         total_layers = len(C) - 1
@@ -245,6 +252,7 @@ class Decoder(nn.Module):
         S: strides
         C: output channels
     """
+
     def __init__(self,
                  K,
                  S,
@@ -309,6 +317,7 @@ class DenseUnet(nn.Module):
     """
     Boosted Unet proposed by Wang
     """
+
     def __init__(self,
                  cplx=True,
                  K="3,3;3,3;3,3;3,3;3,3;3,3;3,3",

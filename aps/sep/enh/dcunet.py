@@ -20,6 +20,7 @@ class ComplexConv2d(nn.Module):
     """
     Complex 2D Convolution
     """
+
     def __init__(self, *args, **kwargs):
         super(ComplexConv2d, self).__init__()
         self.real = nn.Conv2d(*args, **kwargs)
@@ -43,6 +44,7 @@ class ComplexConvTranspose2d(nn.Module):
     """
     Complex Transpose 2D Convolution
     """
+
     def __init__(self, *args, **kwargs):
         super(ComplexConvTranspose2d, self).__init__()
         self.real = nn.ConvTranspose2d(*args, **kwargs)
@@ -66,6 +68,7 @@ class ComplexBatchNorm2d(nn.Module):
     """
     A easy implementation of complex 2d batchnorm
     """
+
     def __init__(self, *args, **kwargs):
         super(ComplexBatchNorm2d, self).__init__()
         self.real_bn = nn.BatchNorm2d(*args, **kwargs)
@@ -83,6 +86,7 @@ class EncoderBlock(nn.Module):
     """
     Convolutional block in encoder
     """
+
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -121,6 +125,7 @@ class DecoderBlock(nn.Module):
     """
     Convolutional block in decoder
     """
+
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -168,6 +173,7 @@ class Encoder(nn.Module):
         S: strides
         C: output channels
     """
+
     def __init__(self, cplx, K, S, C, P, causal=False):
         super(Encoder, self).__init__()
         layers = [
@@ -199,6 +205,7 @@ class Decoder(nn.Module):
         S: strides
         C: output channels
     """
+
     def __init__(self, cplx, K, S, C, P, O, causal=False, connection="sum"):
         super(Decoder, self).__init__()
         if connection not in ["cat", "sum"]:
@@ -237,6 +244,7 @@ class DCUNet(nn.Module):
     """
     Real or Complex UNet for Speech Enhancement
     """
+
     def __init__(self,
                  cplx=True,
                  K="7,5;7,5;7,5;5,3;5,3;5,3;5,3;5,3",
@@ -365,7 +373,7 @@ def make_unet(N, cplx=True):
         K = [(7, 1), (1, 7)] + [(7, 5)] * 2 + [(5, 3)] * 6
         S = [(1, 1)] * 2 + [(2, 1)] * 8
         C = [1, 32, 32] + [64] * 7 + [90] if cplx else [1, 45, 45
-                                                        ] + [90] * 7 + [180]
+                                                       ] + [90] * 7 + [180]
         # P = [(3, 0), (0, 3), (3, 2), (3, 2)] + [(2, 1)] * 6
     else:
         raise RuntimeError(f"Unsupported N = {N}")

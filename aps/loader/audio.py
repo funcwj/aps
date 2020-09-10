@@ -125,6 +125,7 @@ class WaveReader(BaseReader):
             key1 sox /home/data/key1.wav -t wav - remix 1 |
             ...
     """
+
     def __init__(self, wav_scp, sr=16000, norm=True, channel=-1):
         super(WaveReader, self).__init__(wav_scp, num_tokens=2)
         self.sr = sr

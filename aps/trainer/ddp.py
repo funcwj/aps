@@ -14,6 +14,7 @@ class DdpTrainer(Trainer):
     """
     A PyTorch distributed data parallel (DDP) Trainer
     """
+
     def __init__(self,
                  task,
                  rank=None,
@@ -83,14 +84,14 @@ class DdpTrainer(Trainer):
         if self.rank in [0, None]:
             cpt = {
                 "epoch":
-                epoch,
+                    epoch,
                 "model_state_dict":
-                self.task.module.nnet.state_dict()
-                if self.distributed else self.task.nnet.state_dict(),
+                    self.task.module.nnet.state_dict()
+                    if self.distributed else self.task.nnet.state_dict(),
                 "optim_state_dict":
-                self.optimizer.state_dict(),
+                    self.optimizer.state_dict(),
                 "lr_scheduler_dict":
-                self.lr_scheduler.state_dict()
+                    self.lr_scheduler.state_dict()
             }
             cpt_name = "{}.pt.tar".format("best" if best else "last")
             th.save(cpt, self.checkpoint / cpt_name)

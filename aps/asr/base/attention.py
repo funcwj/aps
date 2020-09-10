@@ -51,6 +51,7 @@ class Conv1D(nn.Conv1d):
     """
     Extend 1D convolution
     """
+
     def __init__(self, *args, **kwargs):
         super(Conv1D, self).__init__(*args, **kwargs)
 
@@ -72,6 +73,7 @@ class LocAttention(nn.Module):
     Location aware attention described in
         "Attention-Based Models for Speech Recognition"
     """
+
     def __init__(self,
                  enc_dim,
                  dec_dim,
@@ -154,6 +156,7 @@ class CtxAttention(nn.Module):
     Context attention described in
         "Neural Machine Translation by Jointly Learning to Align and Translate"
     """
+
     def __init__(self, enc_dim, dec_dim, att_dim=512):
         super(CtxAttention, self).__init__()
         self.enc_proj = nn.Linear(enc_dim, att_dim)
@@ -205,6 +208,7 @@ class DotAttention(nn.Module):
         "Listen, Attend and Spell: A Neural Network for Large "
         "Vocabulary Conversational Speech Recognition"
     """
+
     def __init__(self, enc_dim, dec_dim, att_dim=512):
         super(DotAttention, self).__init__()
 
@@ -254,6 +258,7 @@ class MHCtxAttention(nn.Module):
     """
     Multi-head context attention
     """
+
     def __init__(self, enc_dim, dec_dim, att_dim=512, att_head=4):
         super(MHCtxAttention, self).__init__()
         # value, key, query
@@ -338,6 +343,7 @@ class MHDotAttention(nn.Module):
     """
     Multi-head dot attention
     """
+
     def __init__(self, enc_dim, dec_dim, att_dim=512, att_head=4):
         super(MHDotAttention, self).__init__()
         # value, key, query
@@ -409,6 +415,7 @@ class MHLocAttention(nn.Module):
     """
     Multi-head location aware attention
     """
+
     def __init__(self,
                  enc_dim,
                  dec_dim,

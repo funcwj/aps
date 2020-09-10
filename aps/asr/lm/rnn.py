@@ -24,6 +24,7 @@ class TorchRNNLM(nn.Module):
     """
     A simple Torch RNN LM
     """
+
     def __init__(self,
                  embed_size=256,
                  vocab_size=40,

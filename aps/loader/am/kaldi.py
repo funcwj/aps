@@ -51,6 +51,7 @@ class Dataset(dat.Dataset):
     """
     Dataset for kaldi features
     """
+
     def __init__(self,
                  feats_scp,
                  token,
@@ -81,18 +82,19 @@ class Dataset(dat.Dataset):
 
 
 def egs_collate(egs):
+
     def pad_seq(olist, value=0):
         return pad_sequence(olist, batch_first=True, padding_value=value)
 
     return {
         "src_pad":  # N x S
-        pad_seq([th.from_numpy(eg["feats"].copy()) for eg in egs], value=0),
+            pad_seq([th.from_numpy(eg["feats"].copy()) for eg in egs], value=0),
         "tgt_pad":  # N x T
-        pad_seq([th.as_tensor(eg["token"]) for eg in egs], value=-1),
+            pad_seq([th.as_tensor(eg["token"]) for eg in egs], value=-1),
         "src_len":  # N, number of the frames
-        th.tensor([eg["dur"] for eg in egs], dtype=th.int64),
+            th.tensor([eg["dur"] for eg in egs], dtype=th.int64),
         "tgt_len":  # N, length of the tokens
-        th.tensor([eg["len"] for eg in egs], dtype=th.int64)
+            th.tensor([eg["len"] for eg in egs], dtype=th.int64)
     }
 
 
@@ -100,6 +102,7 @@ class KaldiDataLoader(object):
     """
     Acoustic dataloader for seq2seq model training
     """
+
     def __init__(self,
                  dataset,
                  shuffle=True,

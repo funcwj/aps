@@ -53,6 +53,7 @@ class Dataset(dat.Dataset):
     """
     Dataset for raw waveform
     """
+
     def __init__(self,
                  wav_scp="",
                  token="",
@@ -64,10 +65,7 @@ class Dataset(dat.Dataset):
                  min_wav_dur=0.4,
                  adapt_wav_dur=8,
                  adapt_token_num=150):
-        self.wav_reader = WaveReader(wav_scp,
-                                     sr=sr,
-                                     channel=channel,
-                                     norm=True)
+        self.wav_reader = WaveReader(wav_scp, sr=sr, channel=channel, norm=True)
         self.token_reader = process_token(token,
                                           utt2dur,
                                           max_token_num=max_token_num,
@@ -93,6 +91,7 @@ class Dataset(dat.Dataset):
 
 
 def egs_collate(egs):
+
     def pad_seq(seq, value=0):
         peek_dim = seq[0].dim()
         if peek_dim not in [1, 2]:
@@ -109,13 +108,21 @@ def egs_collate(egs):
 
     egs = {
         "src_pad":  # N x S or N x C x S
-        pad_seq([th.from_numpy(eg["wav"]) for eg in egs if eg["wav"] is not None], value=0),
+            pad_seq([
+                th.from_numpy(eg["wav"]) for eg in egs if eg["wav"] is not None
+            ],
+                    value=0),
         "tgt_pad":  # N x T
-        pad_seq([th.as_tensor(eg["tok"]) for eg in egs if eg["tok"] is not None], value=-1),
+            pad_seq([
+                th.as_tensor(eg["tok"]) for eg in egs if eg["tok"] is not None
+            ],
+                    value=-1),
         "src_len":  # N, number of the frames
-        th.tensor([eg["dur"] for eg in egs if eg["dur"] is not None], dtype=th.int64),
+            th.tensor([eg["dur"] for eg in egs if eg["dur"] is not None],
+                      dtype=th.int64),
         "tgt_len":  # N, length of the tokens
-        th.tensor([eg["len"] for eg in egs if eg["len"] is not None], dtype=th.int64)
+            th.tensor([eg["len"] for eg in egs if eg["len"] is not None],
+                      dtype=th.int64)
     }
     return egs
 
@@ -124,6 +131,7 @@ class WaveDataLoader(object):
     """
     Acoustic dataloader for seq2seq model training
     """
+
     def __init__(self,
                  dataset,
                  shuffle=True,

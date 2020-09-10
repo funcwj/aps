@@ -1,0 +1,38 @@
+name: Unit Testing
+
+on: [push, pull_request]
+
+
+jobs:
+  unit_test:
+    name: Unit Testing
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.7, 3.8]
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get install -y libsndfile-dev
+          pip install --upgrade pip wheel
+          cat requirements.txt | grep -v -E "warp_rnnt|horovod|kenlm" > requirements_cpu.txt && pip install -r requirements_cpu.txt
+          pip install numba==0.48
+          pip install tensorboard
+
+      - name: Run testing cases (lib)
+        run: |
+          cd tests && pytest
+
+      - name: Run testing cases (cmd)
+        run: |
+          for x in am lm ss; do python bin/train_$x.py -h; done
+          for x in am ss; do python bin/distributed_train_$x.py -h; done
+          for x in wer sisnr; do python bin/compute_$x.py -h; done
+          for x in eval_bss decode decode_batch; do python bin/$x.py -h; done

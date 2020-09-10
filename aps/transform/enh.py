@@ -15,10 +15,12 @@ from aps.transform.utils import STFT, iSTFT
 from aps.transform.asr import LogTransform, AbsTransform, CmvnTransform, SpecAugTransform
 from aps.const import MATH_PI, EPSILON
 
+
 class IpdTransform(nn.Module):
     """
     Compute inter-channel phase difference
     """
+
     def __init__(self, ipd_index="1,0", cos=True, sin=False):
         super(IpdTransform, self).__init__()
         split_index = lambda sstr: [
@@ -76,6 +78,7 @@ class DfTransform(nn.Module):
         2) num_doas != 1: we do not have that prior, so we sampled #num_doas DoAs 
                           and compute on each directions    
     """
+
     def __init__(self,
                  geometric="7ch_circle",
                  sr=16000,
@@ -214,6 +217,7 @@ class FixedBeamformer(nn.Module):
     """
     Fixed beamformer as a layer
     """
+
     def __init__(self,
                  num_beams,
                  num_channels,
@@ -256,8 +260,7 @@ class FixedBeamformer(nn.Module):
         """
         r, i = x.real, x.imag
         if r.dim() != i.dim() and r.dim() != 4:
-            raise RuntimeError(
-                f"FixBeamformer accept 4D tensor, got {r.dim()}")
+            raise RuntimeError(f"FixBeamformer accept 4D tensor, got {r.dim()}")
         if self.real.shape[1] != r.shape[1]:
             raise RuntimeError(f"Number of channels mismatch: "
                                f"{r.shape[1]} vs {self.real.shape[1]}")
@@ -269,10 +272,8 @@ class FixedBeamformer(nn.Module):
                 r.unsqueeze(1) * self.imag, 2)
         else:
             # output selected beam
-            br = th.sum(r * self.real[beam], 1) + th.sum(
-                i * self.imag[beam], 1)
-            bi = th.sum(i * self.real[beam], 1) - th.sum(
-                r * self.imag[beam], 1)
+            br = th.sum(r * self.real[beam], 1) + th.sum(i * self.imag[beam], 1)
+            bi = th.sum(i * self.real[beam], 1) - th.sum(r * self.imag[beam], 1)
         if squeeze:
             br = br.squeeze()
             bi = bi.squeeze()
@@ -290,6 +291,7 @@ class FeatureTransform(nn.Module):
     Feature transform for Enhancement/Separation tasks
     Spectrogram - LogTransform - CmvnTransform + IpdTransform + DfTransform
     """
+
     def __init__(self,
                  feats="spectrogram-log-cmvn",
                  frame_len=512,
@@ -375,9 +377,9 @@ class FeatureTransform(nn.Module):
         """
         ctx = nn.ModuleDict({
             "forward_stft":
-            STFT(self.frame_len, self.frame_hop, **self.stft_kwargs),
+                STFT(self.frame_len, self.frame_hop, **self.stft_kwargs),
             "inverse_stft":
-            iSTFT(self.frame_len, self.frame_hop, **self.stft_kwargs)
+                iSTFT(self.frame_len, self.frame_hop, **self.stft_kwargs)
         })
         if name not in ctx:
             raise ValueError(f"Unknown task context: {name}")

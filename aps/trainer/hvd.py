@@ -15,6 +15,7 @@ class HvdTrainer(Trainer):
     """
     A Horovod Trainer
     """
+
     def __init__(self,
                  task,
                  rank=None,
@@ -62,8 +63,7 @@ class HvdTrainer(Trainer):
         if dist.get_backend() != "horovod":
             raise ValueError(f"aps.distributed doesn't use horovod as backend")
         if not dist.hvd_available:
-            raise ValueError(
-                f"horovod is not installed in current environment")
+            raise ValueError(f"horovod is not installed in current environment")
         self.setup_distributed()
 
     def setup_distributed(self):

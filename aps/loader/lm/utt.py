@@ -36,6 +36,7 @@ class BatchSampler(dat.Sampler):
     """
     A custom batchsampler
     """
+
     def __init__(self, token_set, batch_size, shuffle=False, drop_last=False):
         num_utts = len(token_set)
         len_utts = [len(tok) for tok in token_set]
@@ -70,11 +71,11 @@ class Dataset(dat.Dataset):
     """
     Dataset for token corpus
     """
+
     def __init__(self, token_scp, min_token_num=2, eos=None):
-        token_reader = BaseReader(
-            token_scp,
-            value_processor=lambda l: [int(n) for n in l],
-            num_tokens=-1)
+        token_reader = BaseReader(token_scp,
+                                  value_processor=lambda l: [int(n) for n in l],
+                                  num_tokens=-1)
         self.token_set = []
         for _, tok in token_reader:
             if len(tok) <= min_token_num:
@@ -97,6 +98,7 @@ class UttDataLoader(object):
     """
     DataLoader for LM training
     """
+
     def __init__(self,
                  dataset,
                  sos=-1,
@@ -140,11 +142,7 @@ class UttDataLoader(object):
 
 
 def run():
-    loader = DataLoader(token="token",
-                        sos=1,
-                        eos=0,
-                        train=False,
-                        batch_size=32)
+    loader = DataLoader(token="token", sos=1, eos=0, train=False, batch_size=32)
     for egs in loader:
         print(egs["len"])
         print(egs["tgt"])

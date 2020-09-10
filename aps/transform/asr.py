@@ -22,10 +22,12 @@ from aps.transform.utils import STFT, init_melfilter, init_dct
 from aps.transform.spec_aug import tf_mask
 from aps.const import EPSILON
 
+
 class SpectrogramTransform(STFT):
     """
     Compute spectrogram as a layer
     """
+
     def __init__(self,
                  frame_len,
                  frame_hop,
@@ -63,6 +65,7 @@ class AbsTransform(nn.Module):
     """
     Absolute transform
     """
+
     def __init__(self, eps=1e-5):
         super(AbsTransform, self).__init__()
         self.eps = eps
@@ -86,6 +89,7 @@ class MelTransform(nn.Module):
     """
     Mel tranform as a layer
     """
+
     def __init__(self,
                  frame_len,
                  round_pow_of_two=True,
@@ -133,6 +137,7 @@ class LogTransform(nn.Module):
     """
     Transform linear domain to log domain
     """
+
     def __init__(self, eps=1e-5):
         super(LogTransform, self).__init__()
         self.eps = eps
@@ -158,6 +163,7 @@ class DiscreteCosineTransform(nn.Module):
     """
     DCT as a layer (for mfcc features)
     """
+
     def __init__(self, num_ceps=13, num_mels=40, lifter=0):
         super(DiscreteCosineTransform, self).__init__()
         self.lifter = lifter
@@ -196,6 +202,7 @@ class CmvnTransform(nn.Module):
     """
     Utterance-level mean-variance normalization
     """
+
     def __init__(self, norm_mean=True, norm_var=True, gcmvn="", eps=1e-5):
         super(CmvnTransform, self).__init__()
         self.gmean, self.gstd = None, None
@@ -243,6 +250,7 @@ class SpecAugTransform(nn.Module):
     """
     Spectra data augmentation
     """
+
     def __init__(self,
                  p=0.5,
                  max_bands=30,
@@ -288,6 +296,7 @@ class SpliceTransform(nn.Module):
     """
     Do splicing as well as downsampling if needed
     """
+
     def __init__(self, lctx=0, rctx=0, ds_rate=1):
         super(SpliceTransform, self).__init__()
         self.rate = ds_rate
@@ -327,6 +336,7 @@ class DeltaTransform(nn.Module):
     """
     Add delta features
     """
+
     def __init__(self, ctx=2, order=2):
         super(DeltaTransform, self).__init__()
         self.ctx = ctx
@@ -375,6 +385,7 @@ class FeatureTransform(nn.Module):
         - SpliceTransform
         - DeltaTransform
     """
+
     def __init__(self,
                  feats="fbank-log-cmvn",
                  frame_len=400,

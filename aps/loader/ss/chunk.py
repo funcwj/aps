@@ -66,6 +66,7 @@ class NumpyReader(BaseReader):
     """
     Sequential/Random Reader for numpy's ndarray(*.npy) file
     """
+
     def __init__(self, npy_scp):
         super(NumpyReader, self).__init__(npy_scp)
 
@@ -77,6 +78,7 @@ class ScriptDataset(object):
     """
     Dataset configured by scripts
     """
+
     def __init__(self,
                  mix_scp="",
                  doa_scp="",
@@ -149,6 +151,7 @@ class ChunkSplitter(object):
     """
     Split utterance into small chunks
     """
+
     def __init__(self, chunk_size, train=True, hop=16000):
         self.chunk_size = chunk_size
         self.hop = hop
@@ -223,6 +226,7 @@ class WaveChunkDataLoader(object):
     """
     Online dataloader for chunk-level PIT
     """
+
     def __init__(self,
                  dataset,
                  num_workers=4,
@@ -250,8 +254,8 @@ class WaveChunkDataLoader(object):
                                         batch_size=min(batch_size, 64),
                                         num_workers=num_workers,
                                         sampler=self.sampler,
-                                        shuffle=(train
-                                                 and self.sampler is None),
+                                        shuffle=(train and
+                                                 self.sampler is None),
                                         collate_fn=self._collate)
 
     def _collate(self, batch):

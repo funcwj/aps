@@ -18,6 +18,7 @@ class EnhAttASR(nn.Module):
     """
     AttASR with enhancement front-end
     """
+
     def __init__(
             self,
             asr_input_size=80,
@@ -111,6 +112,7 @@ class MvdrAttASR(EnhAttASR):
     """
     Mvdr beamformer + Att-based ASR model
     """
+
     def __init__(
             self,
             enh_input_size=257,
@@ -179,6 +181,7 @@ class BeamAttASR(EnhAttASR):
     """
     Beamformer-based front-end + AttASR
     """
+
     def __init__(self, mode="tv", enh_transform=None, enh_conf=None, **kwargs):
         super(BeamAttASR, self).__init__(**kwargs)
         conv_enh = {

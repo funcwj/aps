@@ -28,6 +28,7 @@ class Node(object):
     """
     Node for usage in best-first beam search
     """
+
     def __init__(self, score, stats):
         self.score = score
         self.stats = stats
@@ -55,9 +56,7 @@ def _prep_nbest(container, nbest, normalized=True, blank=0):
                              key=lambda n: n["score"] / (len(n["trans"]) - 1),
                              reverse=True)
     else:
-        nbest_hypos = sorted(beam_hypos,
-                             key=lambda n: n["score"],
-                             reverse=True)
+        nbest_hypos = sorted(beam_hypos, key=lambda n: n["score"], reverse=True)
     return nbest_hypos[:nbest]
 
 
@@ -65,6 +64,7 @@ class TorchRNNDecoder(nn.Module):
     """
     Wrapper for pytorch's RNN Decoder
     """
+
     def __init__(self,
                  vocab_size,
                  embed_size=512,
@@ -267,6 +267,7 @@ class TorchTransformerDecoder(nn.Module):
     """
     Wrapper for pytorch's Transformer Decoder
     """
+
     def __init__(self,
                  vocab_size,
                  enc_dim=None,
@@ -282,11 +283,10 @@ class TorchTransformerDecoder(nn.Module):
                                      vocab_size,
                                      embed_dim=att_dim,
                                      dropout=pos_dropout)
-        decoder_layer = TransformerEncoderLayer(
-            att_dim,
-            nhead,
-            dim_feedforward=feedforward_dim,
-            dropout=att_dropout)
+        decoder_layer = TransformerEncoderLayer(att_dim,
+                                                nhead,
+                                                dim_feedforward=feedforward_dim,
+                                                dropout=att_dropout)
         self.decoder = TransformerEncoder(decoder_layer, num_layers)
         self.enc_proj = nn.Linear(enc_dim if enc_dim else att_dim,
                                   jot_dim,
@@ -305,8 +305,7 @@ class TorchTransformerDecoder(nn.Module):
             output: N x Ti x To+1 x V
         """
         # N x Ti
-        pad_mask = None if tgt_len is None else (padding_mask(tgt_len +
-                                                              1) == 1)
+        pad_mask = None if tgt_len is None else (padding_mask(tgt_len + 1) == 1)
         # N x To+1
         tgt_pad = F.pad(tgt_pad, (1, 0), value=blank)
         # genrarte target masks (-inf/0)

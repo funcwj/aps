@@ -16,6 +16,7 @@ class ComplexConvXd(nn.Module):
     """
     Complex convolution layer
     """
+
     def __init__(self, conv_ins, *args, **kwargs):
         super(ComplexConvXd, self).__init__()
         self.real = conv_ins(*args, **kwargs)
@@ -39,6 +40,7 @@ class ComplexConv1d(ComplexConvXd):
     """
     Complex 1D convolution layer
     """
+
     def __init__(self, *args, **kwargs):
         super(ComplexConv1d, self).__init__(nn.Conv1d, *args, **kwargs)
 
@@ -47,6 +49,7 @@ class ComplexConv2d(ComplexConvXd):
     """
     Complex 2D convolution layer
     """
+
     def __init__(self, *args, **kwargs):
         super(ComplexConv2d, self).__init__(nn.Conv2d, *args, **kwargs)
 
@@ -55,6 +58,7 @@ class TimeInvariantEnh(nn.Module):
     """
     Time invariant convolutional front-end (eq beamformer)
     """
+
     def __init__(self,
                  num_bins=257,
                  weight=None,
@@ -144,6 +148,7 @@ class TimeInvariantAttEnh(nn.Module):
     """
     Time invariant convolutional front-end with attention
     """
+
     def __init__(self,
                  num_bins=257,
                  weight=None,
@@ -264,6 +269,7 @@ class TimeVariantEnh(nn.Module):
     """
     Time variant convolutional front-end
     """
+
     def __init__(self,
                  num_bins=257,
                  num_channels=4,

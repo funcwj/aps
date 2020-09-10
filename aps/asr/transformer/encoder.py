@@ -18,6 +18,7 @@ class PreNormTransformerEncoderLayer(TransformerEncoderLayer):
     """
     Transformer encoder with pre-norm
     """
+
     def __init__(self,
                  d_model,
                  nhead,
@@ -63,6 +64,7 @@ class TorchTransformerEncoder(nn.Module):
     """
     Wrapper for pytorch's Transformer Decoder
     """
+
     def __init__(self,
                  input_size,
                  input_embed="conv2d",

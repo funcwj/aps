@@ -16,6 +16,7 @@ class OneHotEmbedding(nn.Module):
     """
     Onehot encode
     """
+
     def __init__(self, vocab_size):
         super(OneHotEmbedding, self).__init__()
         self.vocab_size = vocab_size
@@ -42,6 +43,7 @@ class TorchDecoder(nn.Module):
     """
     PyTorch's RNN decoder
     """
+
     def __init__(self,
                  enc_proj,
                  vocab_size,
@@ -247,8 +249,7 @@ class TorchDecoder(nn.Module):
                     new_node["trans"].append(index.item())
                     beams.append(new_node)
             # clip beam
-            beams = sorted(beams, key=lambda n: n["score"],
-                           reverse=True)[:beam]
+            beams = sorted(beams, key=lambda n: n["score"], reverse=True)[:beam]
 
             # add finished ones
             hypos.extend([n for n in beams if n["trans"][-1] == eos])
@@ -367,13 +368,12 @@ class TorchDecoder(nn.Module):
                 att_ali = att_ali[point]
 
             # step forward
-            att_ali, att_ctx, dec_hid, proj, pred = self._step(
-                out,
-                enc_out,
-                att_ctx[point],
-                dec_hid=dec_hid,
-                att_ali=att_ali,
-                proj=proj[point])
+            att_ali, att_ctx, dec_hid, proj, pred = self._step(out,
+                                                               enc_out,
+                                                               att_ctx[point],
+                                                               dec_hid=dec_hid,
+                                                               att_ali=att_ali,
+                                                               proj=proj[point])
             # compute prob: beam x V, nagetive
             prob = F.log_softmax(pred, dim=-1)
 
@@ -540,14 +540,13 @@ class TorchDecoder(nn.Module):
                 att_ali = att_ali[point]
 
             # step forward
-            att_ali, att_ctx, dec_hid, proj, pred = self._step(
-                out,
-                enc_out,
-                att_ctx[point],
-                enc_len=enc_len,
-                dec_hid=dec_hid,
-                att_ali=att_ali,
-                proj=proj[point])
+            att_ali, att_ctx, dec_hid, proj, pred = self._step(out,
+                                                               enc_out,
+                                                               att_ctx[point],
+                                                               enc_len=enc_len,
+                                                               dec_hid=dec_hid,
+                                                               att_ali=att_ali,
+                                                               proj=proj[point])
             # compute prob: N*beam x V, nagetive
             prob = F.log_softmax(pred, dim=-1)
             # local pruning: N*beam x beam
@@ -622,8 +621,7 @@ class TorchDecoder(nn.Module):
         for utt_bypos in hypos:
             if normalized:
                 hypos = sorted(utt_bypos,
-                               key=lambda n: n["score"] /
-                               (len(n["trans"]) - 1),
+                               key=lambda n: n["score"] / (len(n["trans"]) - 1),
                                reverse=True)
             else:
                 hypos = sorted(utt_bypos,
