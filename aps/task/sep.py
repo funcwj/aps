@@ -28,6 +28,7 @@ def sisnr(x, s, eps=1e-8, zero_mean=True, non_nagetive=False):
     Return:
         sisnr (Tensor): N
     """
+
     def l2norm(mat, keepdim=False):
         return th.norm(mat, dim=-1, keepdim=keepdim)
 
@@ -56,6 +57,7 @@ def snr(x, s, eps=1e-8, non_nagetive=False):
     Return:
         snr (Tensor): N
     """
+
     def l2norm(mat, keepdim=False):
         return th.norm(mat, dim=-1, keepdim=keepdim)
 
@@ -73,12 +75,8 @@ class TimeDomainTask(Task):
     """
     Time domain task (to be implemented)
     """
-    def __init__(self,
-                 nnet,
-                 num_spks=2,
-                 permute=True,
-                 mode="max",
-                 weight=None):
+
+    def __init__(self, nnet, num_spks=2, permute=True, mode="max", weight=None):
         super(TimeDomainTask, self).__init__(nnet, weight=weight)
         self.num_spks = num_spks
         self.permute = permute  # use pit or not
@@ -94,8 +92,8 @@ class TimeDomainTask(Task):
         """
         Return tensor (P x N) for each permutation and mini-batch
         """
-        return sum([self._objf(out[s], ref[t])
-                    for s, t in enumerate(permute)]) / len(permute)
+        return sum([self._objf(out[s], ref[t]) for s, t in enumerate(permute)
+                   ]) / len(permute)
 
     def forward(self, egs, **kwargs):
         """
@@ -149,8 +147,7 @@ class TimeDomainTask(Task):
                     self.weight = [1 / num_branch] * num_branch
                 if len(self.weight) != num_branch:
                     raise RuntimeError(
-                        f"Missing weight {self.weight} for {num_branch} branch"
-                    )
+                        f"Missing weight {self.weight} for {num_branch} branch")
                 loss = [self._objf(o, r) for o, r in zip(out, ref)]
                 loss = sum([s * l for s, l in zip(self.weight, loss)])
         if self.mode == "max":
@@ -163,6 +160,7 @@ class SisnrTask(TimeDomainTask):
     """
     Time domain sisnr loss function
     """
+
     def __init__(self,
                  nnet,
                  num_spks=2,
@@ -189,6 +187,7 @@ class SnrTask(TimeDomainTask):
     """
     Time domain sisnr loss function
     """
+
     def __init__(self,
                  nnet,
                  num_spks=2,
@@ -210,6 +209,7 @@ class WaTask(TimeDomainTask):
     """
     Time domain waveform approximation loss function
     """
+
     def __init__(self, nnet, objf="L1", num_spks=2, permute=True, weight=None):
         super(WaTask, self).__init__(nnet,
                                      num_spks=num_spks,
@@ -231,6 +231,7 @@ class FreqSaTask(Task):
     """
     Frequenct SA Task (to be implemented)
     """
+
     def __init__(self,
                  nnet,
                  phase_sensitive=False,
@@ -370,8 +371,7 @@ class FreqSaTask(Task):
                     self.weight = [1 / num_branch] * num_branch
                 if len(self.weight) != num_branch:
                     raise RuntimeError(
-                        f"Missing weight {self.weight} for {num_branch} branch"
-                    )
+                        f"Missing weight {self.weight} for {num_branch} branch")
                 loss = [
                     # per-frame, per-minibatch
                     self._objf(o, r, reduction="sum") / (N * T)
@@ -386,6 +386,7 @@ class LinearFreqSaTask(FreqSaTask):
     """
     Frequency domain linear spectral approximation (MSA or tPSA) loss function
     """
+
     def __init__(self,
                  nnet,
                  phase_sensitive=False,
@@ -426,6 +427,7 @@ class MelFreqSaTask(FreqSaTask):
     """
     Spectral approximation on mel-filter domain
     """
+
     def __init__(self,
                  nnet,
                  phase_sensitive=False,
@@ -455,8 +457,7 @@ class MelFreqSaTask(FreqSaTask):
                              num_mels=num_mels,
                              fmax=fmax,
                              norm=mel_norm)
-        self.mel = nn.Parameter(mel[..., None] * mel_scale,
-                                requires_grad=False)
+        self.mel = nn.Parameter(mel[..., None] * mel_scale, requires_grad=False)
         self.log = mel_log
         self.power_mag = power_mag
 
@@ -483,6 +484,7 @@ class TimeSaTask(Task):
     """
     Time domain spectral approximation Task
     """
+
     def __init__(self,
                  nnet,
                  frame_len=512,
@@ -616,8 +618,7 @@ class TimeSaTask(Task):
                     self.weight = [1 / num_branch] * num_branch
                 if len(self.weight) != num_branch:
                     raise RuntimeError(
-                        f"Missing weight {self.weight} for {num_branch} branch"
-                    )
+                        f"Missing weight {self.weight} for {num_branch} branch")
                 loss = [
                     # per-frame, per-minibatch
                     self._objf(s, r, reduction="sum")
@@ -632,6 +633,7 @@ class LinearTimeSaTask(TimeSaTask):
     """
     Time domain linear spectral approximation loss function
     """
+
     def __init__(self,
                  nnet,
                  frame_len=512,
@@ -679,6 +681,7 @@ class MelTimeSaTask(TimeSaTask):
     """
     Time domain mel spectral approximation loss function
     """
+
     def __init__(self,
                  nnet,
                  frame_len=512,
@@ -714,8 +717,7 @@ class MelTimeSaTask(TimeSaTask):
                              num_mels=num_mels,
                              fmax=fmax,
                              norm=mel_norm)
-        self.mel = nn.Parameter(mel[..., None] * mel_scale,
-                                requires_grad=False)
+        self.mel = nn.Parameter(mel[..., None] * mel_scale, requires_grad=False)
         self.log = mel_log
         self.power_mag = power_mag
 

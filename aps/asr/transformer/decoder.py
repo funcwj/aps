@@ -41,6 +41,7 @@ class TorchTransformerDecoder(nn.Module):
     """
     Wrapper for pytorch's Transformer Decoder
     """
+
     def __init__(self,
                  vocab_size,
                  att_dim=512,
@@ -55,11 +56,10 @@ class TorchTransformerDecoder(nn.Module):
                                      vocab_size,
                                      embed_dim=att_dim,
                                      dropout=pos_dropout)
-        decoder_layer = TransformerDecoderLayer(
-            att_dim,
-            nhead,
-            dim_feedforward=feedforward_dim,
-            dropout=att_dropout)
+        decoder_layer = TransformerDecoderLayer(att_dim,
+                                                nhead,
+                                                dim_feedforward=feedforward_dim,
+                                                dropout=att_dropout)
         self.decoder = TransformerDecoder(decoder_layer, num_layers)
         if enc_dim and enc_dim != att_dim:
             self.enc_proj = nn.Linear(enc_dim, att_dim)
@@ -117,6 +117,7 @@ class TorchTransformerDecoder(nn.Module):
         args:
             enc_out = self.encoder(x_emb),  Ti x 1 x D
         """
+
         def _trace_back_hypos(point,
                               back_point,
                               hist_token,

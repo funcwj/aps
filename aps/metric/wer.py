@@ -5,6 +5,7 @@
 import editdistance as ed
 from itertools import permutations
 
+
 def permute_ed(hlist, rlist):
     """
     Compute edit distance between N pairs
@@ -14,6 +15,7 @@ def permute_ed(hlist, rlist):
     Return:
         float: WER
     """
+
     def distance(hlist, rlist):
         return sum([ed.eval(h, r) for h, r in zip(hlist, rlist)])
 

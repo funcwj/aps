@@ -21,6 +21,7 @@ def get_logger(name,
     """
     Get logger instance
     """
+
     def get_handler(handler):
         handler.setLevel(logging.INFO)
         formatter = logging.Formatter(fmt=format_str, datefmt=date_format)
@@ -58,6 +59,7 @@ def load_obj(obj, device):
     """
     Offload tensor object in obj to cuda device
     """
+
     def cuda(obj):
         return obj.to(device) if isinstance(obj, th.Tensor) else obj
 
@@ -81,7 +83,7 @@ def get_device_ids(device_ids):
         dev_cnt = th.cuda.device_count()
         device_ids = tuple(range(0, dev_cnt))
     elif isinstance(device_ids, int):
-        device_ids = (device_ids, )
+        device_ids = (device_ids,)
     elif isinstance(device_ids, str):
         device_ids = tuple(map(int, device_ids.split(",")))
     else:
@@ -109,6 +111,7 @@ class SimpleTimer(object):
     """
     A simple timer
     """
+
     def __init__(self):
         self.reset()
 

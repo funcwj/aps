@@ -17,6 +17,7 @@ class TorchTransformerLM(nn.Module):
     """
     Torch Transformer LM
     """
+
     def __init__(self,
                  embed_size=256,
                  vocab_size=40,
@@ -33,11 +34,10 @@ class TorchTransformerLM(nn.Module):
                                      vocab_size,
                                      embed_dim=att_dim,
                                      dropout=pos_dropout)
-        encoder_layer = TransformerEncoderLayer(
-            att_dim,
-            nhead,
-            dim_feedforward=feedforward_dim,
-            dropout=att_dropout)
+        encoder_layer = TransformerEncoderLayer(att_dim,
+                                                nhead,
+                                                dim_feedforward=feedforward_dim,
+                                                dropout=att_dropout)
         self.encoder = TransformerEncoder(encoder_layer, num_layers)
         # output distribution
         self.dist = nn.Linear(att_dim, vocab_size)
@@ -59,8 +59,8 @@ class TorchTransformerLM(nn.Module):
         # h == None: training or eval in time = 0
         h = x if h is None else th.cat([h, x], dim=0)
         # src_pad_mask: N x T
-        src_pad_mask = None if token_len is None else (
-            padding_mask(token_len) == 1)
+        src_pad_mask = None if token_len is None else (padding_mask(token_len)
+                                                       == 1)
         tgt_mask = prep_sub_mask(t + 1, device=x.device)
         # Ti x N x D
         enc_out = self.encoder(h,

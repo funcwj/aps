@@ -56,6 +56,7 @@ class UnsuperEnhTask(Task):
     """
     Unsupervised enhancement using ML functions
     """
+
     def __init__(self, nnet, eps=EPSILON):
         super(UnsuperEnhTask, self).__init__(nnet)
         self.eps = eps

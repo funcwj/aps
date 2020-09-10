@@ -13,6 +13,7 @@ class Normalize1d(nn.Module):
     """
     Wrapper for BatchNorm1d & LayerNorm
     """
+
     def __init__(self, name, in_features):
         super(Normalize1d, self).__init__()
         name = name.upper()
@@ -45,6 +46,7 @@ class TDNNLayer(nn.Module):
     """
     Implement a time delay neural network (TDNN) layer using conv1d operations
     """
+
     def __init__(self,
                  input_size,
                  output_size,
@@ -93,6 +95,7 @@ class FSMNLayer(nn.Module):
     """
     Implement layer of feedforward sequential memory networks (FSMN)
     """
+
     def __init__(self,
                  input_size,
                  output_size,
@@ -158,6 +161,7 @@ class CustomRNNLayer(nn.Module):
     """
     A custom rnn layer for PyramidEncoder
     """
+
     def __init__(self,
                  input_size,
                  hidden_size=512,

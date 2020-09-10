@@ -11,6 +11,7 @@ class CRNLayer(nn.Module):
     """
     Encoder/Decoder block of CRN
     """
+
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -37,8 +38,7 @@ class CRNLayer(nn.Module):
                                              stride=stride_size,
                                              padding=(var_kt - time_axis_pad,
                                                       0),
-                                             output_padding=(0,
-                                                             output_padding))
+                                             output_padding=(0, output_padding))
         self.batchnorm = nn.BatchNorm2d(out_channels)
         self.output_layer = output_layer
         self.causal_conv = causal

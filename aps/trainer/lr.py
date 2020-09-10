@@ -9,6 +9,7 @@ class CustomMultiStepLR(lr_scheduler.MultiStepLR):
     """
     Using lr_conf to set milestones & gamma, e.g., 0.1@10,20,40
     """
+
     def __init__(self, optimizer, lr_conf="0.5@10,20,30,40", last_epoch=-1):
         gamma, milestones = self._parse_args(lr_conf)
         super(CustomMultiStepLR, self).__init__(optimizer,
@@ -29,6 +30,7 @@ class NoamLR(lr_scheduler._LRScheduler):
     """
     Lr schuduler for Transformer
     """
+
     def __init__(self,
                  optimizer,
                  transformer_dim=512,

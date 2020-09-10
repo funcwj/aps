@@ -13,6 +13,7 @@ class DpB(nn.Module):
     """
     DP block
     """
+
     def __init__(self, input_size, hidden_size, bi_inter=True):
         super(DpB, self).__init__()
         self.inter_rnn = nn.LSTM(input_size,
@@ -91,6 +92,7 @@ class McB(nn.Module):
     """
     The multiply and concat (MULCAT) block
     """
+
     def __init__(self, input_size, hidden_size, bi_inter=True):
         super(McB, self).__init__()
         self.inter_rnn1 = nn.LSTM(input_size,
@@ -185,6 +187,7 @@ class DPRNN(nn.Module):
     """
     For DPRNN parts
     """
+
     def __init__(self,
                  num_spks=2,
                  chunk_len=100,
@@ -197,11 +200,7 @@ class DPRNN(nn.Module):
                  dprnn_block="dp",
                  output_non_linear="sigmoid"):
         super(DPRNN, self).__init__()
-        supported_nonlinear = {
-            "relu": tf.relu,
-            "sigmoid": th.sigmoid,
-            "": None
-        }
+        supported_nonlinear = {"relu": tf.relu, "sigmoid": th.sigmoid, "": None}
         if output_non_linear not in supported_nonlinear:
             raise RuntimeError(
                 f"Unsupported non-linear function: {output_non_linear}")
@@ -213,8 +212,7 @@ class DPRNN(nn.Module):
             BLOCK(proj_filters, dprnn_hidden, bi_inter=dprnn_bi_inter)
             for _ in range(dprnn_layers)
         ])
-        self.norm = build_norm(input_norm,
-                               conv_filters) if input_norm else None
+        self.norm = build_norm(input_norm, conv_filters) if input_norm else None
         self.proj = nn.Conv1d(conv_filters, proj_filters, 1)
         # NOTE: add prelu here
         self.mask = nn.Sequential(
@@ -272,6 +270,7 @@ class TimeDPRNN(DPRNN):
     """
     Time domain DP (dual-path) RNN
     """
+
     def __init__(self,
                  num_spks=2,
                  input_norm="cLN",
@@ -352,6 +351,7 @@ class FreqDPRNN(DPRNN):
     """
     Frequency domain DP (dual-path) RNN
     """
+
     def __init__(self,
                  enh_transform=None,
                  num_spks=2,
@@ -409,8 +409,7 @@ class FreqDPRNN(DPRNN):
             else:
                 enh_stft = [mix_stft * m for m in masks]
                 enh = [
-                    decoder((s.real, s.imag), input="complex")
-                    for s in enh_stft
+                    decoder((s.real, s.imag), input="complex") for s in enh_stft
                 ]
             return enh
 

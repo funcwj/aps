@@ -35,6 +35,7 @@ class SimuOptsDataset(object):
     """
     Dataset configured by the simulation command options
     """
+
     def __init__(self, simu_cfg="", noise=False):
         self.simu_cfg = BaseReader(simu_cfg, num_tokens=-1)
         self.noise = noise

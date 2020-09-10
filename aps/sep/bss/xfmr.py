@@ -15,6 +15,7 @@ class TorchTransformer(nn.Module):
     """
     Wrapper for pytorch's Transformer Decoder
     """
+
     def __init__(self,
                  att_dim=512,
                  nhead=8,
@@ -37,9 +38,7 @@ class TorchTransformer(nn.Module):
                 dim_feedforward=feedforward_dim,
                 dropout=att_dropout)
         self.encoder = TransformerEncoder(encoder_layer, num_layers)
-        self.pe = PositionalEncoding(att_dim,
-                                     dropout=pos_dropout,
-                                     max_len=2000)
+        self.pe = PositionalEncoding(att_dim, dropout=pos_dropout, max_len=2000)
 
     def forward(self, inp):
         """
@@ -64,6 +63,7 @@ class FreqTorchXfmr(TorchTransformer):
     """
     Frequency domain Transformer model
     """
+
     def __init__(self,
                  enh_transform=None,
                  input_size=257,
@@ -101,9 +101,8 @@ class FreqTorchXfmr(TorchTransformer):
 
     def check_args(self, mix, training=True):
         if not training and mix.dim() != 1:
-            raise RuntimeError(
-                "FreqTorchXfmr expects 1D tensor (inference), " +
-                f"got {mix.dim()} instead")
+            raise RuntimeError("FreqTorchXfmr expects 1D tensor (inference), " +
+                               f"got {mix.dim()} instead")
         if training and mix.dim() != 2:
             raise RuntimeError("FreqTorchXfmr expects 2D tensor (training), " +
                                f"got {mix.dim()} instead")
@@ -146,9 +145,7 @@ class FreqTorchXfmr(TorchTransformer):
                 mask = [mask]
             # complex tensor
             spk_stft = [stft * m for m in mask]
-            spk = [
-                decoder((s.real, s.imag), input="complex") for s in spk_stft
-            ]
+            spk = [decoder((s.real, s.imag), input="complex") for s in spk_stft]
             if self.num_spks == 1:
                 return spk[0]
             else:

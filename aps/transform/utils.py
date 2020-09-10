@@ -16,6 +16,7 @@ def init_window(wnd, frame_len):
     """
     Return window coefficient
     """
+
     def sqrthann(frame_len):
         return th.hann_window(frame_len)**0.5
 
@@ -295,6 +296,7 @@ class STFTBase(nn.Module):
     """
     Base layer for (i)STFT
     """
+
     def __init__(self,
                  frame_len,
                  frame_hop,
@@ -338,6 +340,7 @@ class STFT(STFTBase):
     """
     Short-time Fourier Transform as a Layer
     """
+
     def __init__(self, *args, **kwargs):
         super(STFT, self).__init__(*args, inverse=False, **kwargs)
 
@@ -361,6 +364,7 @@ class iSTFT(STFTBase):
     """
     Inverse Short-time Fourier Transform as a Layer
     """
+
     def __init__(self, *args, **kwargs):
         super(iSTFT, self).__init__(*args, inverse=True, **kwargs)
 

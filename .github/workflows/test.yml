@@ -1,4 +1,4 @@
-name: Testing
+name: Unit Testing
 
 on: [push, pull_request]
 
@@ -20,10 +20,18 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           sudo apt-get install -y libsndfile-dev
+          pip install --upgrade pip wheel
           cat requirements.txt | grep -v -E "warp_rnnt|horovod|kenlm" > requirements_cpu.txt && pip install -r requirements_cpu.txt
           pip install numba==0.48
-      - name: Unit Testing
+
+      - name: Run testing cases (lib)
         run: |
           cd tests && pytest
+
+      - name: Run testing cases (cmd)
+        run: |
+          for x in am lm ss; do python bin/train_$x.py -h; done
+          for x in am ss; do python bin/distributed_train_$x.py -h; done
+          for x in wer sisnr; do python bin/compute_$x.py -h; done
+          for x in eval_bss decode decode_batch; do python bin/$x.py -h; done

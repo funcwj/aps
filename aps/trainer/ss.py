@@ -24,6 +24,7 @@ class SsScheduler(object):
     """
     Basic class for schedule sampling
     """
+
     def __init__(self, ssr):
         self.ssr = ssr
 
@@ -35,6 +36,7 @@ class ConstScheduler(SsScheduler):
     """
     Use const schedule sampling rate
     """
+
     def __init__(self, ssr=0):
         super(ConstScheduler, self).__init__(ssr)
 
@@ -46,6 +48,7 @@ class TriggerScheduler(SsScheduler):
     """
     Use schedule sampling rate when metrics triggered
     """
+
     def __init__(self, ssr=0, trigger=0.6):
         super(TriggerScheduler, self).__init__(ssr)
         self.trigger = trigger
@@ -58,6 +61,7 @@ class LinearScheduler(SsScheduler):
     """
     Use linear schedule sampling rate
     """
+
     def __init__(self, ssr=0, epoch_beg=10, epoch_end=20, update_interval=1):
         super(LinearScheduler, self).__init__(ssr)
         self.beg = epoch_beg

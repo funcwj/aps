@@ -16,6 +16,7 @@ class AttASR(nn.Module):
     """
     Attention-based ASR model
     """
+
     def __init__(
             self,
             input_size=80,

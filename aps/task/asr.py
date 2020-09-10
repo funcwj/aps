@@ -92,6 +92,7 @@ class CtcXentHybridTask(Task):
     """
     CTC & Attention AM
     """
+
     def __init__(self, nnet, lsm_factor=0, ctc_weight=0, blank=0):
         super(CtcXentHybridTask, self).__init__(nnet)
         self.ctc_blank = blank
@@ -149,6 +150,7 @@ class TransducerTask(Task):
     """
     For Transducer based AM
     """
+
     def __init__(self, nnet, blank=0):
         super(TransducerTask, self).__init__(nnet)
         self.blank = blank
@@ -186,6 +188,7 @@ class LmXentTask(Task):
     """
     For LM
     """
+
     def __init__(self, nnet, repackage_hidden=False):
         super(LmXentTask, self).__init__(nnet)
         self.hidden = None

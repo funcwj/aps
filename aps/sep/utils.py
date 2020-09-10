@@ -10,6 +10,7 @@ class MaskNonLinear(nn.Module):
     """
     Non-linear function for mask activation
     """
+
     def __init__(self, non_linear, scale=1, clip=None):
         super(MaskNonLinear, self).__init__()
         supported_nonlinear = {

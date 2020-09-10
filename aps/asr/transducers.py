@@ -15,6 +15,7 @@ class TorchTransducerASR(nn.Module):
     """
     Transducer end-to-end ASR (rnn as decoder)
     """
+
     def __init__(self,
                  input_size=80,
                  vocab_size=40,
@@ -28,8 +29,7 @@ class TorchTransducerASR(nn.Module):
         if blank < 0:
             raise RuntimeError(f"Unsupported blank value: {blank}")
         if encoder_type == "transformer":
-            self.encoder = TorchTransformerEncoder(input_size,
-                                                   **encoder_kwargs)
+            self.encoder = TorchTransformerEncoder(input_size, **encoder_kwargs)
             decoder_kwargs["enc_dim"] = encoder_kwargs["att_dim"]
         else:
             if encoder_proj is None:
@@ -121,6 +121,7 @@ class TransformerTransducerASR(nn.Module):
     """
     Transducer end-to-end ASR (transformer as decoder)
     """
+
     def __init__(self,
                  input_size=80,
                  vocab_size=40,
@@ -134,8 +135,7 @@ class TransformerTransducerASR(nn.Module):
         if blank < 0:
             raise RuntimeError(f"Unsupported blank value: {blank}")
         if encoder_type == "transformer":
-            self.encoder = TorchTransformerEncoder(input_size,
-                                                   **encoder_kwargs)
+            self.encoder = TorchTransformerEncoder(input_size, **encoder_kwargs)
         else:
             if encoder_proj is None:
                 raise ValueError("For non-transformer encoder, "

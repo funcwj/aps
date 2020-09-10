@@ -5,6 +5,7 @@ class Task(nn.Module):
     """
     Warpper for nnet & loss
     """
+
     def __init__(self, nnet, ctx=None, name="unknown", weight=None):
         super(Task, self).__init__()
         self.nnet = nnet

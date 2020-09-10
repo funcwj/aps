@@ -10,6 +10,7 @@ class ChannelWiseLayerNorm(nn.LayerNorm):
     """
     Channel wise layer normalization
     """
+
     def __init__(self, *args, **kwargs):
         super(ChannelWiseLayerNorm, self).__init__(*args, **kwargs)
 
@@ -33,6 +34,7 @@ class GlobalChannelLayerNorm(nn.Module):
     """
     Global channel layer normalization
     """
+
     def __init__(self, dim, eps=1e-05, elementwise_affine=True):
         super(GlobalChannelLayerNorm, self).__init__()
         self.eps = eps
@@ -86,6 +88,7 @@ def build_blocks(N, B, **kwargs):
     """
     Build Conv1D blocks
     """
+
     def one_block(B, **kwargs):
         blocks = [Conv1DBlock(**kwargs, dilation=(2**n)) for n in range(B)]
         return nn.Sequential(*blocks)
@@ -98,6 +101,7 @@ class Conv1D(nn.Conv1d):
     """
     1D conv in ConvTasNet
     """
+
     def __init__(self, *args, **kwargs):
         super(Conv1D, self).__init__(*args, **kwargs)
 
@@ -117,6 +121,7 @@ class ConvTrans1D(nn.ConvTranspose1d):
     """
     1D conv transpose in ConvTasNet
     """
+
     def __init__(self, *args, **kwargs):
         super(ConvTrans1D, self).__init__(*args, **kwargs)
 
@@ -136,6 +141,7 @@ class DsConv1D(nn.Module):
     """
     Depth-wise separable conv1d block
     """
+
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -172,6 +178,7 @@ class Conv1DBlock(nn.Module):
     """
     1D convolutional block in TasNet
     """
+
     def __init__(self,
                  in_channels=256,
                  conv_channels=512,
@@ -206,6 +213,7 @@ class TimeConvTasNet(nn.Module):
     Masking for Speech Separation[J]. IEEE/ACM transactions on audio, speech, 
     and language processing, 2019, 27(8):1256–1266.
     """
+
     def __init__(self,
                  L=20,
                  N=256,
@@ -227,8 +235,7 @@ class TimeConvTasNet(nn.Module):
             "softmax": F.softmax
         }
         if non_linear not in supported_nonlinear:
-            raise RuntimeError(
-                f"Unsupported non-linear function: {non_linear}")
+            raise RuntimeError(f"Unsupported non-linear function: {non_linear}")
         self.non_linear_type = non_linear
         self.non_linear = supported_nonlinear[non_linear]
         # n x S => n x N x T, S = 4s*8000 = 32000
@@ -319,6 +326,7 @@ class FreqConvTasNet(nn.Module):
     """
     Frequency domain ConvTasNet
     """
+
     def __init__(self,
                  enh_transform=None,
                  in_features=257,
@@ -337,8 +345,7 @@ class FreqConvTasNet(nn.Module):
         super(FreqConvTasNet, self).__init__()
         supported_nonlinear = {"relu": F.relu, "sigmoid": th.sigmoid}
         if non_linear not in supported_nonlinear:
-            raise RuntimeError(
-                f"Unsupported non-linear function: {non_linear}")
+            raise RuntimeError(f"Unsupported non-linear function: {non_linear}")
         if enh_transform is None:
             raise RuntimeError(
                 "FreqConvTasNet: missing configuration for enh_transform")
@@ -409,8 +416,7 @@ class FreqConvTasNet(nn.Module):
             else:
                 enh_stft = [mix_stft * m for m in masks]
                 enh = [
-                    decoder((s.real, s.imag), input="complex")
-                    for s in enh_stft
+                    decoder((s.real, s.imag), input="complex") for s in enh_stft
                 ]
             return enh
 

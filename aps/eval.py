@@ -14,6 +14,7 @@ class Computer(object):
     """
     A simple wrapper for model evaluation
     """
+
     def __init__(self, cpt_dir, device_id=-1, task="asr"):
         # load nnet
         self.epoch, self.nnet, self.conf = self._load(cpt_dir, task=task)

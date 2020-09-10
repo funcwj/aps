@@ -7,6 +7,7 @@ class NbestReader(object):
     """
     Read nbest hypos
     """
+
     def __init__(self, obj):
         self.nbest = 1
         self.hypos = {}
