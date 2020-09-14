@@ -14,7 +14,6 @@ class PositionalEncoding(nn.Module):
     Positional Encoding
     Reference: https://github.com/pytorch/examples/blob/master/word_language_model/model.py
     """
-
     def __init__(self, embed_dim, dropout=0.1, max_len=5000):
         super(PositionalEncoding, self).__init__()
         pos_enc = th.zeros(max_len, embed_dim)
@@ -28,6 +27,19 @@ class PositionalEncoding(nn.Module):
         # self.pos_enc = nn.Parameter(pos_enc[:, None], requires_grad=False)
         self.register_buffer("pos_enc", pos_enc[:, None])
         self.dropout = nn.Dropout(p=dropout)
+        self.embed_scale = embed_dim**0.5
+
+    def state_dict(self, destination=None, prefix="", keep_vars=False):
+        """
+        Remove "pos_enc" from state dict
+        """
+        state = super(PositionalEncoding,
+                      self).state_dict(destination=destination,
+                                       prefix=prefix,
+                                       keep_vars=keep_vars)
+        if "pos_enc" in state:
+            state.pop("pos_enc")
+        return state
 
     def forward(self, inp, t=0):
         """
@@ -40,7 +52,7 @@ class PositionalEncoding(nn.Module):
         # T x N x D
         inp = inp.transpose(0, 1)
         # Tmax x 1 x D
-        inp = inp + self.pos_enc[t:t + T, :]
+        inp = inp * self.embed_scale + self.pos_enc[t:t + T, :]
         out = self.dropout(inp)
         return out
 
@@ -49,7 +61,6 @@ class LinearEmbedding(nn.Module):
     """
     Linear projection embedding
     """
-
     def __init__(self, input_size, embed_dim=512):
         super(LinearEmbedding, self).__init__()
         self.proj = nn.Linear(input_size, embed_dim)
@@ -71,7 +82,6 @@ class Conv1dEmbedding(nn.Module):
     """
     1d-conv embedding
     """
-
     def __init__(self, input_size, embed_dim=512, inner_channels=256):
         super(Conv1dEmbedding, self).__init__()
         self.conv1 = nn.Conv1d(input_size,
@@ -116,7 +126,6 @@ class Conv2dEmbedding(nn.Module):
     2d-conv embedding described in:
     Speech-transformer: A no-recurrence sequence-to-sequence model for speech recognition
     """
-
     def __init__(self, input_size, embed_dim=512, input_channels=1):
         super(Conv2dEmbedding, self).__init__()
         self.conv1 = nn.Conv2d(input_channels,
@@ -160,7 +169,6 @@ class IOEmbedding(nn.Module):
         3) Conv2d transform
         4) Sparse transform
     """
-
     def __init__(self,
                  embed_type,
                  feature_dim,

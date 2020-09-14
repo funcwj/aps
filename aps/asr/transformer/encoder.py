@@ -55,6 +55,7 @@ class PreNormTransformerEncoderLayer(TransformerEncoderLayer):
                               key_padding_mask=src_key_padding_mask)[0]
         src = src + self.dropout1(src2)
         src3 = self.norm2(src)
+        # PositionwiseFF
         src4 = self.linear2(self.dropout(self.activation(self.linear1(src3))))
         src = src + self.dropout2(src4)
         return src
