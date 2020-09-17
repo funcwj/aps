@@ -20,7 +20,7 @@ class Normalize1d(nn.Module):
         if name not in ["BN", "LN"]:
             raise ValueError(f"Unknown type of Normalize1d: {name}")
         if name == "BN":
-            self.norm = nn.BatchNorm1d(in_features)
+            self.norm = nn.BatchNorm1d(in_features, momentum=0)
         else:
             self.norm = nn.LayerNorm(in_features)
         self.name = name

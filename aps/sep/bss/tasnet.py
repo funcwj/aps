@@ -79,7 +79,7 @@ def build_norm(norm, dim):
     if norm == "cLN":
         return ChannelWiseLayerNorm(dim, elementwise_affine=True)
     elif norm == "BN":
-        return nn.BatchNorm1d(dim)
+        return nn.BatchNorm1d(dim, momentum=0)
     else:
         return GlobalChannelLayerNorm(dim, elementwise_affine=True)
 

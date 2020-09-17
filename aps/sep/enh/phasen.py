@@ -35,7 +35,7 @@ class PhasenBatchNorm1d(nn.BatchNorm1d):
     """
 
     def __init__(self, num_features, non_linear="relu"):
-        super(PhasenBatchNorm1d, self).__init__(num_features)
+        super(PhasenBatchNorm1d, self).__init__(num_features, momentum=0)
         self.non_linear = batchnorm_non_linear[non_linear]
 
     def forward(self, inp):
@@ -49,7 +49,7 @@ class PhasenBatchNorm2d(nn.BatchNorm2d):
     """
 
     def __init__(self, num_features, non_linear="relu"):
-        super(PhasenBatchNorm2d, self).__init__(num_features)
+        super(PhasenBatchNorm2d, self).__init__(num_features, momentum=0)
         self.non_linear = batchnorm_non_linear[non_linear]
 
     def forward(self, inp):

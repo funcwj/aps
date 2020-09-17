@@ -15,7 +15,6 @@ class HvdTrainer(Trainer):
     """
     A Horovod Trainer
     """
-
     def __init__(self,
                  task,
                  rank=None,
@@ -63,7 +62,8 @@ class HvdTrainer(Trainer):
         if dist.get_backend() != "horovod":
             raise ValueError(f"aps.distributed doesn't use horovod as backend")
         if not dist.hvd_available:
-            raise ValueError(f"horovod is not installed in current environment")
+            raise ValueError(
+                f"horovod is not installed in current environment")
         self.setup_distributed()
 
     def setup_distributed(self):
@@ -71,12 +71,14 @@ class HvdTrainer(Trainer):
         Setup environment for distributed training
         """
         import horovod.torch as hvd
-        hvd.broadcast_parameters(self.task.state_dict(), root_rank=0)
-        hvd.broadcast_optimizer_state(self.optimizer, root_rank=0)
         self.optimizer = hvd.DistributedOptimizer(
             self.optimizer, named_parameters=self.task.named_parameters())
+        hvd.broadcast_parameters(self.task.state_dict(), root_rank=0)
+        hvd.broadcast_optimizer_state(self.optimizer, root_rank=0)
         self.reporter.log(f"HVD: using horovod, rank = {self.rank}, " +
                           f"world_size={dist.world_size()}")
+        self.reporter.log("HVD: for BatchNorm layer, please set momentum=0 or "
+                          "track_running_stats=False")
 
     def train_one_step(self, egs):
         """
