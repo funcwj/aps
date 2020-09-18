@@ -35,6 +35,7 @@ class FasterDecoder(Computer):
     """
     Decoder wrapper
     """
+
     def __init__(self, cpt_dir, device_id=-1):
         super(FasterDecoder, self).__init__(cpt_dir, device_id=device_id)
         logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
