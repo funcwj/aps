@@ -15,8 +15,7 @@ except:
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
 from aps.asr.base.decoder import NEG_INF
-
-IGNORE_ID = -1
+from aps.const import IGNORE_ID
 
 
 def prep_sub_mask(T, device="cpu"):

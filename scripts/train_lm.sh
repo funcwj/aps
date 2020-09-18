@@ -22,7 +22,7 @@ echo "$0 $@"
 data=$1
 exp_id=$2
 dict=data/$data/dict
-conf=conf/$data/rnnlm/$exp_id.yaml
+conf=conf/$data/nnlm/$exp_id.yaml
 
 [ ! -f $dict ] && echo "$0: missing dictionary $dict" && exit 1
 [ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
@@ -33,7 +33,7 @@ python bin/train_lm.py \
   --seed $seed \
   --device-id $gpu \
   --tensorboard $tensorboard \
-  --checkpoint exp/$data/rnnlm/$exp_id \
+  --checkpoint exp/$data/nnlm/$exp_id \
   --batch-size $batch_size \
   --epochs $epochs \
   --eval-interval $eval_interval \
@@ -41,4 +41,4 @@ python bin/train_lm.py \
   --save-interval $save_interval \
   > $data.train_lm.$exp_id.log 2>&1
 
-cp $data.train_lm.$exp_id.log exp/$data/rnnlm/$exp_id
+cp $data.train_lm.$exp_id.log exp/$data/nnlm/$exp_id

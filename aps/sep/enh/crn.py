@@ -39,7 +39,7 @@ class CRNLayer(nn.Module):
                                              padding=(var_kt - time_axis_pad,
                                                       0),
                                              output_padding=(0, output_padding))
-        self.batchnorm = nn.BatchNorm2d(out_channels)
+        self.batchnorm = nn.BatchNorm2d(out_channels, momentum=0)
         self.output_layer = output_layer
         self.causal_conv = causal
         self.time_axis_pad = time_axis_pad

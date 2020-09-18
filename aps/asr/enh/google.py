@@ -20,7 +20,6 @@ class _FsBeamformer(nn.Module):
     """
     FS (filter and sum) beamformer
     """
-
     def __init__(self, frame_len, frame_hop):
         super(_FsBeamformer, self).__init__()
         self.unfold = nn.Unfold((frame_len, 1), stride=frame_hop)
@@ -37,7 +36,6 @@ class UnfactedFsBeamformer(_FsBeamformer):
     """
     Unfacted form of FS (filter and sum) beamformer
     """
-
     def __init__(self,
                  num_taps=400,
                  win_size=560,
@@ -90,7 +88,6 @@ class FactedFsBeamformer(_FsBeamformer):
     """
     Facted form of FS (filter and sum) beamformer
     """
-
     def __init__(self,
                  num_taps=81,
                  win_size=560,
@@ -157,7 +154,6 @@ class ComplexLinear(nn.Module):
     """
     Complex linear layer
     """
-
     def __init__(self, in_features, out_features, bias=True):
         super(ComplexLinear, self).__init__()
         self.real = nn.Linear(in_features, out_features, bias=bias)
@@ -182,7 +178,6 @@ class CLPFsBeamformer(nn.Module):
     """
     Complex Linear Projection (CLP) model on frequency-domain
     """
-
     def __init__(self,
                  num_bins=257,
                  weight=None,
@@ -242,5 +237,8 @@ class CLPFsBeamformer(nn.Module):
         # N x P x T x G
         if self.norm:
             z = self.norm(z)
-        # N x P x T x G
+        # N x P x T x G => N x T x P x G
+        z = z.transpose(1, 2).contiguous()
+        # N x T x BD
+        z = z.view(*z.shape[:2], -1)
         return z

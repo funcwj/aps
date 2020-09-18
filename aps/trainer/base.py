@@ -465,7 +465,7 @@ class Trainer(object):
             if better:
                 self.save_checkpoint(e, best=True)
             else:
-                sstr += f" | no impr{self.stop_criterion.no_impr:d}, "
+                sstr += f" | no impr: {self.stop_criterion.no_impr:d}, "
                 sstr += f"best = {self.stop_criterion.best:.4f}"
 
             self.reporter.log(sstr)

@@ -136,8 +136,10 @@ class TimeInvariantEnh(nn.Module):
         f = f.transpose(1, 2)
         if self.norm:
             f = self.norm(f)
-        # N x B x T x D
-        f = f.contiguous()
+        # N x B x T x D => N x T x B x D
+        f = f.transpose(1, 2).contiguous()
+        # N x T x BD
+        f = f.view(N, T, -1)
         return f
 
 
@@ -315,8 +317,10 @@ class TimeVariantEnh(nn.Module):
         f = f.transpose(1, 2)
         if self.norm:
             f = self.norm(f)
-        # N x B x T x D
-        f = f.contiguous()
+        # N x B x T x D => N x T x B x D
+        f = f.contiguous().transpose(1, 2)
+        # N x T x BD
+        f = f.view(N, T, -1)
         return f
 
 

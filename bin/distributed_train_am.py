@@ -75,8 +75,9 @@ def train_worker(task, conf, args):
                                 **data_conf["loader"])
     dev_loader = support_loader(**data_conf["valid"],
                                 train=False,
+                                distributed=False,
                                 fmt=data_conf["fmt"],
-                                batch_size=args.batch_size // num_process,
+                                batch_size=args.batch_size,
                                 num_workers=args.num_workers // num_process,
                                 **data_conf["loader"])
     if args.eval_interval > 0:
