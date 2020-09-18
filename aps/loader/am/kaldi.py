@@ -92,7 +92,7 @@ def egs_collate(egs):
         "tgt_pad":  # N x T
             pad_seq([th.as_tensor(eg["token"]) for eg in egs], value=-1),
         "src_len":  # N, number of the frames
-            th.tensor([eg["dur"] for eg in egs], dtype=th.int64),
+            th.tensor([int(eg["dur"]) for eg in egs], dtype=th.int64),
         "tgt_len":  # N, length of the tokens
             th.tensor([eg["len"] for eg in egs], dtype=th.int64)
     }

@@ -18,7 +18,6 @@ class EnhAttASR(nn.Module):
     """
     AttASR with enhancement front-end
     """
-
     def __init__(
             self,
             asr_input_size=80,
@@ -112,7 +111,6 @@ class MvdrAttASR(EnhAttASR):
     """
     Mvdr beamformer + Att-based ASR model
     """
-
     def __init__(
             self,
             enh_input_size=257,
@@ -181,8 +179,11 @@ class BeamAttASR(EnhAttASR):
     """
     Beamformer-based front-end + AttASR
     """
-
-    def __init__(self, mode="tv", enh_transform=None, enh_conf=None, **kwargs):
+    def __init__(self,
+                 mode="tv",
+                 enh_transform=None,
+                 enh_kwargs=None,
+                 **kwargs):
         super(BeamAttASR, self).__init__(**kwargs)
         conv_enh = {
             "ti": TimeInvariantEnh,
@@ -194,7 +195,7 @@ class BeamAttASR(EnhAttASR):
             raise RuntimeError(f"Unknown fs mode: {mode}")
         if enh_transform is None:
             raise RuntimeError("enh_transform can not be None")
-        self.enh = conv_enh[mode](**enh_conf)
+        self.enh = conv_enh[mode](**enh_kwargs)
         self.enh_transform = enh_transform
 
     def _enhance(self, x_pad, x_len):
@@ -202,6 +203,6 @@ class BeamAttASR(EnhAttASR):
         FE processing
         """
         _, x_pad, x_len = self.enh_transform(x_pad, x_len)
-        # N x B x T x ...
+        # N x T x D
         x_enh = self.enh(x_pad)
         return x_enh, x_len

@@ -97,3 +97,17 @@ def test_ss_online_loader(batch_size, chunk_size, num_workers):
         assert egs["mix"].shape == th.Size([batch_size, chunk_size])
         assert len(egs["ref"]) == 2
         assert egs["ref"][0].shape == th.Size([batch_size, chunk_size])
+
+
+@pytest.mark.parametrize("batch_size", [1, 4, 16])
+def test_lm_utt_loader(batch_size):
+    egs_dir = "data/dataloader/lm"
+    loader = support_loader(fmt="lm_utt",
+                            sos=0,
+                            eos=1,
+                            token=f"{egs_dir}/test.utt.token",
+                            batch_size=batch_size,
+                            drop_last=True)
+    for egs in loader:
+        assert egs["src"].shape == egs["tgt"].shape
+        assert egs["src"].shape[0] == batch_size

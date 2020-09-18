@@ -15,7 +15,6 @@ class TransformerASR(nn.Module):
     """
     Transformer-based end-to-end ASR
     """
-
     def __init__(self,
                  input_size=80,
                  vocab_size=40,
@@ -32,13 +31,14 @@ class TransformerASR(nn.Module):
         if eos < 0 or sos < 0:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         if encoder_type == "transformer":
-            self.encoder = TorchTransformerEncoder(input_size, **encoder_kwargs)
+            self.encoder = TorchTransformerEncoder(input_size,
+                                                   **encoder_kwargs)
         else:
             if encoder_proj is None:
                 raise ValueError("For non-transformer encoder, "
                                  "encoder_proj can not be None")
             self.encoder = encoder_instance(encoder_type, input_size,
-                                            encoder_proj, **encoder_proj)
+                                            encoder_proj, **encoder_kwargs)
         if decoder_type != "transformer":
             raise ValueError("TransformerASR: decoder must be transformer")
         self.decoder = TorchTransformerDecoder(vocab_size -
@@ -98,7 +98,8 @@ class TransformerASR(nn.Module):
             else:
                 # T x F or Beam x T x F
                 if x.dim() not in [2, 3]:
-                    raise RuntimeError(f"Expect 2/3D tensor, but got {x.dim()}")
+                    raise RuntimeError(
+                        f"Expect 2/3D tensor, but got {x.dim()}")
                 x = x[None, ...]
             # Ti x N x D
             enc_out, _ = self.encoder(x, None)

@@ -20,8 +20,7 @@ from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.transformer.decoder import prep_sub_mask
 from aps.asr.base.attention import padding_mask
 from aps.asr.base.decoder import OneHotEmbedding
-
-IGNORE_ID = -1
+from aps.const import IGNORE_ID
 
 
 class Node(object):

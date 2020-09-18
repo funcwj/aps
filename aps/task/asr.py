@@ -2,6 +2,7 @@
 
 # wujian@2020
 
+import math
 import numpy as np
 import torch as th
 import torch.nn as nn
@@ -18,8 +19,7 @@ except ImportError:
     rnnt_loss_available = False
 
 from aps.task.base import Task
-
-IGNORE_ID = -1  # in data loadern
+from aps.const import IGNORE_ID
 
 __all__ = ["CtcXentHybridTask", "TransducerTask", "LmXentTask"]
 
@@ -92,7 +92,6 @@ class CtcXentHybridTask(Task):
     """
     CTC & Attention AM
     """
-
     def __init__(self, nnet, lsm_factor=0, ctc_weight=0, blank=0):
         super(CtcXentHybridTask, self).__init__(nnet)
         self.ctc_blank = blank
@@ -150,7 +149,6 @@ class TransducerTask(Task):
     """
     For Transducer based AM
     """
-
     def __init__(self, nnet, blank=0):
         super(TransducerTask, self).__init__(nnet)
         self.blank = blank
@@ -188,7 +186,6 @@ class LmXentTask(Task):
     """
     For LM
     """
-
     def __init__(self, nnet, repackage_hidden=False):
         super(LmXentTask, self).__init__(nnet)
         self.hidden = None
@@ -203,12 +200,10 @@ class LmXentTask(Task):
         """
         # pred: N x T+1 x V
         if self.repackage_hidden:
-            pack = (egs["src"], self.hidden)
-            pred, self.hidden = self.nnet(pack)
+            pred, self.hidden = self.nnet(egs["src"], self.hidden)
         else:
-            pack = (egs["src"], None, egs["len"])
-            pred, _ = self.nnet(pack)
+            pred, _ = self.nnet(egs["src"], None, egs["len"])
         loss = ce_loss(pred, egs["tgt"])
         accu = compute_accu(pred, egs["tgt"])
-        stats = {"accu": accu, "loss": loss}
+        stats = {"accu": accu, "loss": loss, "@ppl": math.exp(loss.item())}
         return stats
