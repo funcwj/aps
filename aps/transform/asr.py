@@ -13,8 +13,6 @@ Notations:
 import math
 
 import torch as th
-import numpy as np
-
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -207,7 +205,7 @@ class CmvnTransform(nn.Module):
         super(CmvnTransform, self).__init__()
         self.gmean, self.gstd = None, None
         if gcmvn:
-            stats = np.load(gcmvn)
+            stats = th.load(gcmvn)
             mean, std = stats[0], stats[1]
             self.gmean = nn.Parameter(mean, requires_grad=False)
             self.gstd = nn.Parameter(std, requires_grad=False)
@@ -375,13 +373,13 @@ class DeltaTransform(nn.Module):
 class FeatureTransform(nn.Module):
     """
     Feature transform for ASR tasks
-        - Spectrogram 
+        - Spectrogram
         - MelTransform
         - AbsTransform
-        - LogTransform 
+        - LogTransform
         - DiscreteCosineTransform
-        - CmvnTransform 
-        - SpecAugTransform 
+        - CmvnTransform
+        - SpecAugTransform
         - SpliceTransform
         - DeltaTransform
     """

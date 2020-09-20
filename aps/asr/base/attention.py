@@ -14,7 +14,7 @@ def padding_mask(vec, device=None):
 
     In [1]: a = th.tensor([5, 3, 2, 10, 1])
     In [2]: padding_mask(a)
-    Out[2]: 
+    Out[2]:
     tensor([[0, 0, 0, 0, 0, 1, 1, 1, 1, 1],
             [0, 0, 0, 1, 1, 1, 1, 1, 1, 1],
             [0, 0, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -101,13 +101,13 @@ class LocAttention(nn.Module):
 
     def forward(self, enc_pad, enc_len, dec_prev, ali_prev):
         """
-        args
+        Args
             enc_pad: N x Ti x D_enc
             enc_len: N or None
             dec_prev: N x D_dec
             ali_prev: N x Ti
-        return
-            ali: N x Ti            
+        Return
+            ali: N x Ti
             ctx: N x D_enc
         """
         N, T, _ = enc_pad.shape
@@ -171,12 +171,12 @@ class CtxAttention(nn.Module):
 
     def forward(self, enc_pad, enc_len, dec_prev, ali_prev):
         """
-        args
+        Args
             enc_pad: N x Ti x D_enc
             enc_len: N
             dec_prev: N x D_dec
             ali_prev: N x Ti (do not use here)
-        return
+        Return
             ali: N x Ti
             ctx: N x D_enc
         """
@@ -223,12 +223,12 @@ class DotAttention(nn.Module):
 
     def forward(self, enc_pad, enc_len, dec_prev, ali_prev):
         """
-        args
+        Args
             enc_pad: N x Ti x D_enc
             enc_len: N
             dec_prev: N x D_dec
             ali_prev: N x Ti (do not use here)
-        return
+        Return
             ali: N x Ti
             ctx: N x D_enc
         """
@@ -285,12 +285,12 @@ class MHCtxAttention(nn.Module):
 
     def forward(self, enc_pad, enc_len, dec_prev, ali_prev):
         """
-        args
+        Args
             enc_pad: N x Ti x D_enc
             enc_len: N
             dec_prev: N x D_dec
             ali_prev: N x Ti (do not use here)
-        return
+        Return
             ali: N x H x Ti
             ctx: N x D_enc
         """
@@ -363,12 +363,12 @@ class MHDotAttention(nn.Module):
 
     def forward(self, enc_pad, enc_len, dec_prev, ali_prev):
         """
-        args
+        Args
             enc_pad: N x Ti x D_enc
             enc_len: N
             dec_prev: N x D_dec
             ali_prev: N x Ti (do not use here)
-        return
+        Return
             ali: N x H x Ti
             ctx: N x D_enc
         """
@@ -459,12 +459,12 @@ class MHLocAttention(nn.Module):
 
     def forward(self, enc_pad, enc_len, dec_prev, ali_prev):
         """
-        args
+        Args
             enc_pad: N x Ti x D_enc
             enc_len: N or None
             dec_prev: N x D_dec
             ali_prev: N x H x Ti
-        return
+        Return
             ali: N x H x Ti
             ctx: N x D_enc
         """

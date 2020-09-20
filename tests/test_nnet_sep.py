@@ -209,4 +209,4 @@ def test_unsuper_enh():
 
 
 if __name__ == "__main__":
-    test_freq_xfmr()
+    test_dcunet()

@@ -67,11 +67,11 @@ class TorchRNNLM(nn.Module):
 
     def forward(self, token, h=None, token_len=None):
         """
-        args:
+        Args:
             token: input token sequence, N x T
             h: hidden state from previous time step
             token_len: length of x, N or None
-        return:
+        Return:
             output: N x T x V
             h: hidden state from current time step
         """

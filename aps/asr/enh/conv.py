@@ -106,9 +106,9 @@ class TimeInvariantEnh(nn.Module):
 
     def forward(self, x, eps=1e-5):
         """
-        args:
+        Args:
             x: N x C x F x T, complex tensor
-        return:
+        Return:
             y: N x B x T x ..., enhanced features
         """
         N, C, F, T = x.shape
@@ -214,9 +214,9 @@ class TimeInvariantAttEnh(nn.Module):
 
     def forward(self, x, eps=1e-5):
         """
-        args:
+        Args:
             x: N x C x F x T, complex tensor
-        return:
+        Return:
             y: N x T x ..., enhanced features
         """
         N, C, F, T = x.shape
@@ -293,9 +293,9 @@ class TimeVariantEnh(nn.Module):
 
     def forward(self, x, eps=1e-5):
         """
-        args:
+        Args:
             x: N x C x F x T, complex tensor
-        return:
+        Return:
             y: N x T x ..., enhanced features
         """
         N, C, F, T = x.shape

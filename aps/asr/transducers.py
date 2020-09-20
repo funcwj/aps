@@ -45,12 +45,12 @@ class TorchTransducerASR(nn.Module):
 
     def forward(self, x_pad, x_len, y_pad, y_len):
         """
-        args:
+        Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
             y_pad: N x To
             y_len: N or None (not used here)
-        return:
+        Return:
             dec_out: N x Ti x To+1 x V
         """
         # feature transform
@@ -150,12 +150,12 @@ class TransformerTransducerASR(nn.Module):
 
     def forward(self, x_pad, x_len, y_pad, y_len):
         """
-        args:
+        Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
             y_pad: N x To
             y_len: N or None
-        return:
+        Return:
             dec_out: N x Ti x To+1 x V
         """
         # feature transform

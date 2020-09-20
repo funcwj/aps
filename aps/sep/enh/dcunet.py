@@ -113,6 +113,10 @@ class EncoderBlock(nn.Module):
         self.time_axis_pad = time_axis_pad
 
     def forward(self, x):
+        """
+        Args:
+            x (Tensor): N x 2C x F x T
+        """
         x = self.conv(x)
         if self.causal:
             x = x[..., :-self.time_axis_pad]
@@ -157,6 +161,10 @@ class DecoderBlock(nn.Module):
         self.time_axis_pad = time_axis_pad
 
     def forward(self, x):
+        """
+        Args:
+            x (Tensor): N x 2C x F x T
+        """
         x = self.trans_conv(x)
         if self.causal:
             x = x[..., :-self.time_axis_pad]
@@ -227,13 +235,14 @@ class Decoder(nn.Module):
     def forward(self, x, enc_h):
         # N = len(self.layers)
         for index, layer in enumerate(self.layers):
-            # print(layer)
             if index == 0:
                 x = layer(x)
             else:
+                # N x C x F x T
                 if self.connection == "sum":
                     inp = x + enc_h[index - 1]
                 else:
+                    # N x 2C x F x T
                     inp = th.cat([x, enc_h[index - 1]], 1)
                 x = layer(inp)
             # print(f"decoder-{N - 1 - index}: {x.shape}")
@@ -247,10 +256,10 @@ class DCUNet(nn.Module):
 
     def __init__(self,
                  cplx=True,
-                 K="7,5;7,5;7,5;5,3;5,3;5,3;5,3;5,3",
-                 S="2,1;2,1;2,1;2,1;2,1;2,1;2,1;2,1",
-                 C="32,32,64,64,64,64,64,64",
-                 P="1,1,1,1,1,1,1,1",
+                 K="7,5;7,5;7,5;5,3;5,3;5,3;5,3",
+                 S="2,1;2,1;2,1;2,1;2,1;2,1;2,1",
+                 C="32,32,64,64,64,64,64",
+                 P="1,1,1,1,1,1,1",
                  O="0,0,0,0,0,0,0",
                  num_branch=1,
                  causal_conv=False,
@@ -342,7 +351,6 @@ class DCUNet(nn.Module):
             s = (sr**2 + si**2)**0.5
         # encoder
         enc_h, h = self.encoder(s[:, None])
-        # print(h.shape)
         # reverse
         enc_h = enc_h[::-1]
         # decoder

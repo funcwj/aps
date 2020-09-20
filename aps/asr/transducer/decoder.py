@@ -96,10 +96,10 @@ class TorchRNNDecoder(nn.Module):
 
     def forward(self, enc_out, tgt_pad, blank=0):
         """
-        args:
+        Args:
             enc_out: N x Ti x D
             tgt_pad: N x To
-        return:
+        Return:
             output: N x Ti x To+1 x V
         """
         # N x To+1 x E
@@ -112,10 +112,10 @@ class TorchRNNDecoder(nn.Module):
     def _pred_joint(self, enc_out, dec_out):
         """
         Joint network prediction
-        args:
+        Args:
             enc_out: N x Ti x D or N x D
             dec_out: N x To+1 x D or N x D
-        return:
+        Return:
             output: N x Ti x To+1 x V or N x 1 x V
         """
         # N x Ti x J or N x J
@@ -138,7 +138,7 @@ class TorchRNNDecoder(nn.Module):
     def greedy_search(self, enc_out, blank=0):
         """
         Greedy search algorithm for RNN-T
-        args:
+        Args:
             enc_out: N x Ti x D
         """
         blk = th.tensor([[blank]], dtype=th.int64, device=enc_out.device)
@@ -169,7 +169,7 @@ class TorchRNNDecoder(nn.Module):
                     normalized=True):
         """
         Beam search (best first) algorithm for RNN-T
-        args:
+        Args:
             enc_out: N(=1) x Ti x D
         """
         nbest = min(beam, nbest)
@@ -256,7 +256,7 @@ class TorchRNNDecoder(nn.Module):
                                   normalized=True):
         """
         Beam search (breadth first) algorithm for RNN-T
-        args:
+        Args:
             enc_out: Ti x N(=1) x D
         """
         return None
@@ -296,11 +296,11 @@ class TorchTransformerDecoder(nn.Module):
 
     def forward(self, enc_out, tgt_pad, tgt_len, blank=0):
         """
-        args:
+        Args:
             enc_out: Ti x N x D
             tgt_pad: N x To
             tgt_len: N or None
-        return:
+        Return:
             output: N x Ti x To+1 x V
         """
         # N x Ti
@@ -320,10 +320,10 @@ class TorchTransformerDecoder(nn.Module):
     def _pred_joint(self, enc_out, dec_out):
         """
         Joint network prediction
-        args:
+        Args:
             enc_out: Ti x N x D or 1 x D
             dec_out: To+1 x N x D or 1 x D
-        return:
+        Return:
             output: N x Ti x To+1 x V or N x 1 x V
         """
         enc_out = self.enc_proj(enc_out)
@@ -342,10 +342,10 @@ class TorchTransformerDecoder(nn.Module):
     def _step_decoder(self, pred_prev, prev_embed=None):
         """
         Make one step for decoder
-        args:
+        Args:
             pred_prev: 1 x 1
             prev_embed: None or T x 1 x E
-        return:
+        Return:
             dec_out: 1 x D
         """
         t = 0 if prev_embed is None else prev_embed.shape[0]
@@ -360,7 +360,7 @@ class TorchTransformerDecoder(nn.Module):
     def greedy_search(self, enc_out, blank=0):
         """
         Greedy search algorithm for RNN-T
-        args:
+        Args:
             enc_out: Ti x N(=1) x D
         """
         blk = th.tensor([[blank]], dtype=th.int64, device=enc_out.device)
@@ -391,7 +391,7 @@ class TorchTransformerDecoder(nn.Module):
                     normalized=True):
         """
         Beam search (best first) algorithm for RNN-T
-        args:
+        Args:
             enc_out: Ti x N(=1) x D
         """
         nbest = min(beam, nbest)

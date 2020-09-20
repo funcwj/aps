@@ -63,12 +63,12 @@ class EnhTransformerASR(nn.Module):
 
     def forward(self, x_pad, x_len, y_pad, ssr=0):
         """
-        args:
+        Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
             y_pad: N x To
             ssr: schedule sampling rate
-        return:
+        Return:
             outs: N x (To+1) x V
             ...
         """
@@ -85,7 +85,7 @@ class EnhTransformerASR(nn.Module):
                     vectorized=False,
                     normalized=True):
         """
-        args
+        Args
             x: C x S
         """
         with th.no_grad():
@@ -161,7 +161,7 @@ class MvdrTransformerASR(EnhTransformerASR):
     def _enhance(self, x_pad, x_len):
         """
         Mvdr beamforming and asr feature transform
-        args:
+        Args:
             x_pad: Tensor, N x C x S
             x_len: Tensor, N or None
         """
@@ -174,7 +174,7 @@ class MvdrTransformerASR(EnhTransformerASR):
     def mvdr_beam(self, x_pad, x_len):
         """
         Mvdr beamforming and asr feature transform
-        args:
+        Args:
             x_pad: Tensor, N x C x S
             x_len: Tensor, N or None
         """
@@ -187,7 +187,7 @@ class MvdrTransformerASR(EnhTransformerASR):
     def pred_mask(self, x_pad, x_len):
         """
         Output TF masks
-        args:
+        Args:
             x_pad: Tensor, N x C x S
             x_len: Tensor, N or None
         """

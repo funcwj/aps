@@ -79,7 +79,7 @@ class TorchDecoder(nn.Module):
 
     def _step_decoder(self, emb_pre, att_ctx, dec_hid=None):
         """
-        args
+        Args
             emb_pre: N x D_emb
             att_ctx: N x D_enc
         """
@@ -116,14 +116,14 @@ class TorchDecoder(nn.Module):
 
     def forward(self, enc_pad, enc_len, tgt_pad, sos=-1, schedule_sampling=0):
         """
-        args
+        Args
             enc_pad: N x Ti x D_enc
             enc_len: N or None
             tgt_pad: N x To
             schedule_sampling:
                 1: using prediction
                 0: using ground truth
-        return
+        Return
             outs: N x To x V
             alis: N x To x T
         """
@@ -178,7 +178,7 @@ class TorchDecoder(nn.Module):
                     normalized=True):
         """
         Beam search algothrim (intuitive but not efficient)
-        args
+        Args
             enc_out: 1 x T x F
         """
         # reset flags
@@ -292,7 +292,7 @@ class TorchDecoder(nn.Module):
                                normalized=True):
         """
         Vectorized beam search algothrim
-        args
+        Args
             enc_out: 1 x T x F
         """
         # reset flags
@@ -378,6 +378,13 @@ class TorchDecoder(nn.Module):
             prob = F.log_softmax(pred, dim=-1)
 
             if lm:
+                if lm_state is not None:
+                    if isinstance(lm_state, tuple):
+                        # shape: num_layers * num_directions, batch, hidden_size
+                        h, c = lm_state
+                        lm_state = (h[:, point], c[:, point])
+                    else:
+                        lm_state = lm_state[:, point]
                 lm_prob, lm_state = lm(out[point][..., None], lm_state)
                 # beam x V
                 prob += F.log_softmax(lm_prob[:, 0], dim=-1) * lm_weight
@@ -459,7 +466,7 @@ class TorchDecoder(nn.Module):
                           normalized=True):
         """
         Batch level vectorized beam search algothrim
-        args
+        Args
             enc_out: N x T x F
             enc_len: N
         """

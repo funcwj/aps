@@ -104,9 +104,9 @@ transformer_encoder_kwargs = {
 
 
 def gen_egs(vocab_size, batch_size, num_channels=1):
-    u = th.randint(10, 20, (1, )).item()
-    x_len = th.randint(16000, 16000 * 5,
-                       (batch_size, )).sort(-1, descending=True)[0]
+    u = th.randint(10, 20, (1,)).item()
+    x_len = th.randint(16000, 16000 * 5, (batch_size,)).sort(-1,
+                                                             descending=True)[0]
     S = x_len.max().item()
     if num_channels == 1:
         x = th.rand(batch_size, S)
@@ -325,19 +325,19 @@ def test_transformer_encoder(enc_type, enc_kwargs):
                                  frame_len=400,
                                  frame_hop=160,
                                  window="hamm")
-    att_asr = nnet_cls(input_size=80,
-                       vocab_size=vocab_size,
-                       sos=0,
-                       eos=1,
-                       ctc=True,
-                       asr_transform=asr_transform,
-                       encoder_type=enc_type,
-                       encoder_proj=512 if enc_type != "transformer" else None,
-                       encoder_kwargs=enc_kwargs,
-                       decoder_type="transformer",
-                       decoder_kwargs=default_xfmr_decoder_kwargs)
+    xfmr_asr = nnet_cls(input_size=80,
+                        vocab_size=vocab_size,
+                        sos=0,
+                        eos=1,
+                        ctc=True,
+                        asr_transform=asr_transform,
+                        encoder_type=enc_type,
+                        encoder_proj=512 if enc_type != "transformer" else None,
+                        encoder_kwargs=enc_kwargs,
+                        decoder_type="transformer",
+                        decoder_kwargs=default_xfmr_decoder_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size)
-    z, _, _, _ = att_asr(x, x_len, y)
+    z, _, _, _ = xfmr_asr(x, x_len, y)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -375,7 +375,7 @@ def test_common_transducer(enc_type, enc_kwargs):
                     encoder_kwargs=enc_kwargs,
                     decoder_kwargs=decoder_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size)
-    y_len = th.randint(u // 2, u, (batch_size, ))
+    y_len = th.randint(u // 2, u, (batch_size,))
     z, _ = rnnt(x, x_len, y, y_len)
     assert z.shape[2:] == th.Size([u + 1, vocab_size])
 
@@ -405,16 +405,16 @@ def test_transformer_transducer(enc_type, enc_kwargs):
                                  frame_len=400,
                                  frame_hop=160,
                                  window="hamm")
-    rnnt = nnet_cls(input_size=80,
-                    vocab_size=vocab_size,
-                    blank=vocab_size - 1,
-                    asr_transform=asr_transform,
-                    encoder_type=enc_type,
-                    encoder_proj=512,
-                    encoder_kwargs=enc_kwargs,
-                    decoder_kwargs=decoder_kwargs)
+    xfmr_rnnt = nnet_cls(input_size=80,
+                         vocab_size=vocab_size,
+                         blank=vocab_size - 1,
+                         asr_transform=asr_transform,
+                         encoder_type=enc_type,
+                         encoder_proj=512,
+                         encoder_kwargs=enc_kwargs,
+                         decoder_kwargs=decoder_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size)
-    y_len = th.randint(u // 2, u, (batch_size, ))
+    y_len = th.randint(u // 2, u, (batch_size,))
     y_len[0] = u
-    z, _ = rnnt(x, x_len, y, y_len)
+    z, _ = xfmr_rnnt(x, x_len, y, y_len)
     assert z.shape[2:] == th.Size([u + 1, vocab_size])

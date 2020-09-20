@@ -18,6 +18,7 @@ class EnhAttASR(nn.Module):
     """
     AttASR with enhancement front-end
     """
+
     def __init__(
             self,
             asr_input_size=80,
@@ -69,12 +70,12 @@ class EnhAttASR(nn.Module):
 
     def forward(self, x_pad, x_len, y_pad, ssr=0):
         """
-        args:
+        Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
             y_pad: N x To
             ssr: schedule sampling rate
-        return:
+        Return:
             outs: N x (To+1) x V
             alis: N x (To+1) x T
             ...
@@ -92,7 +93,7 @@ class EnhAttASR(nn.Module):
                     vectorized=False,
                     normalized=True):
         """
-        args
+        Args
             x: C x S
         """
         with th.no_grad():
@@ -111,6 +112,7 @@ class MvdrAttASR(EnhAttASR):
     """
     Mvdr beamformer + Att-based ASR model
     """
+
     def __init__(
             self,
             enh_input_size=257,
@@ -147,7 +149,7 @@ class MvdrAttASR(EnhAttASR):
     def mvdr_beam(self, x_pad, x_len):
         """
         Mvdr beamforming and asr feature transform
-        args:
+        Args:
             x_pad: Tensor, N x C x S
             x_len: Tensor, N or None
         """
@@ -160,7 +162,7 @@ class MvdrAttASR(EnhAttASR):
     def pred_mask(self, x_pad, x_len):
         """
         Output TF masks
-        args:
+        Args:
             x_pad: Tensor, N x C x S
             x_len: Tensor, N or None
         """
@@ -179,6 +181,7 @@ class BeamAttASR(EnhAttASR):
     """
     Beamformer-based front-end + AttASR
     """
+
     def __init__(self,
                  mode="tv",
                  enh_transform=None,

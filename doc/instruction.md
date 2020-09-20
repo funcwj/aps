@@ -1,6 +1,6 @@
 # Instruction
 
-Instruction on data format & configuration rules.
+The instruction on data format & configuration rules.
 
 ## Data Preparation
 
@@ -19,7 +19,7 @@ Instruction on data format & configuration rules.
     ```
     `utt2num_frames` is used to sort utterances to form the mini-batch that minimized the padding size.
 
-2. [Wave]([Kaldi](../aps/loader/am/wav.py)) dataloader requires `wav.scp`, `utt2dur`, `token`. 
+2. [Wave]([Kaldi](../aps/loader/am/wav.py)) dataloader requires `wav.scp`, `utt2dur`, `token`.
 
     `wav.scp` follows the definition in [Kaldi](https://github.com/kaldi-asr/kaldi) and `utt2dur` prescribes the duration of each utterance, e.g.,:
     ```
@@ -34,7 +34,7 @@ Instruction on data format & configuration rules.
 
 ### Enhancement/Separation Model
 
-1. [Chunk](../aps/loader/ss/chunk.py) dataloader only requires several wave script, e.g., `mix.scp,spk{1,2}.scp` for separation tasks. Each one follows [Kaldi](https://github.com/kaldi-asr/kaldi)'s format. 
+1. [Chunk](../aps/loader/ss/chunk.py) dataloader only requires several wave script, e.g., `mix.scp,spk{1,2}.scp` for separation tasks. Each one follows [Kaldi](https://github.com/kaldi-asr/kaldi)'s format.
 
 2. [Online](../aps/loader/ss/online.py) dataloader simulates and splits the audio on-the-fly and it only requires one configuration script for data simulation. The format of each line follows the pattern `<key> <command-options>`. See [wav_simulate.py](https://github.com/funcwj/setk/blob/master/scripts/sptk/wav_simulate.py) for details of the `<command-options>`:
 ```
@@ -114,7 +114,7 @@ Almost all the hyper-parameters are in the yaml configuration files and the foll
           ssr: 0.2
           epoch_beg: 10
           epoch_end: 26
-          update_interval: 4 
+          update_interval: 4
       no_impr: 6
       no_impr_thres: 0.2
       clip_gradient: 5

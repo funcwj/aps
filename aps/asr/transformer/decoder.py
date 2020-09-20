@@ -69,11 +69,11 @@ class TorchTransformerDecoder(nn.Module):
 
     def forward(self, enc_out, enc_len, tgt_pad, sos=-1):
         """
-        args:
+        Args:
             enc_out: Ti x N x D
             enc_len: N or None
             tgt_pad: N x To
-        return:
+        Return:
             dec_out: To+1 x N x D
         """
         if sos < 0:
@@ -113,7 +113,7 @@ class TorchTransformerDecoder(nn.Module):
                     normalized=True):
         """
         Beam search for Transformer
-        args:
+        Args:
             enc_out = self.encoder(x_emb),  Ti x 1 x D
         """
 
@@ -189,9 +189,16 @@ class TorchTransformerDecoder(nn.Module):
 
                 # add LM score
                 if lm:
+                    if lm_state is not None:
+                        if isinstance(lm_state, tuple):
+                            # shape: num_layers * num_directions, batch, hidden_size
+                            h, c = lm_state
+                            lm_state = (h[:, point], c[:, point])
+                        else:
+                            lm_state = lm_state[:, point]
                     lm_prob, lm_state = lm(pre_out, lm_state)
                     # beam x V
-                    prob += F.log_softmax(lm_prob[:, -1], dim=-1) * lm_weight
+                    prob += F.log_softmax(lm_prob[:, 0], dim=-1) * lm_weight
 
                 # local pruning: beam x beam
                 topk_score, topk_token = th.topk(prob, beam, dim=-1)

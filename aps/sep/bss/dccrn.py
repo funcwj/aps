@@ -13,6 +13,7 @@ class LSTMP(nn.Module):
     """
     LSTM with real/imag parts
     """
+
     def __init__(self,
                  in_features,
                  hidden_size,
@@ -27,27 +28,29 @@ class LSTMP(nn.Module):
                             num_layers=num_layers,
                             bidirectional=bidirectional,
                             batch_first=batch_first)
-        self.proj = nn.Linear(hidden_size *
-                              2 if bidirectional else hidden_size,
+        self.proj = nn.Linear(hidden_size * 2 if bidirectional else hidden_size,
                               in_features,
                               bias=False)
 
     def forward(self, inp):
         """
         Args:
-            inp (Tensor): N x T x F
+            inp (Tensor): N x T x C x F
         Return:
-            out (Tensor): N x T x F
+            out (Tensor): N x T x C x F
         """
-        self.lstm.flatten_parameters()
+        N, T, C, _ = inp.shape
+        inp = inp.view(N, T, -1)
         out, _ = self.lstm(inp)
-        return self.proj(out)
+        out = self.proj(out)
+        return out.view(N, T, C, -1)
 
 
 class ComplexLSTMP(nn.Module):
     """
     LSTMP real/imag parts
     """
+
     def __init__(self,
                  in_features,
                  hidden_size,
@@ -72,16 +75,16 @@ class ComplexLSTMP(nn.Module):
     def forward(self, inp):
         """
         Args:
-            inp (Tensor): N x T x F2
+            inp (Tensor): N x T x C x 2F
         Return:
-            out (Tensor): N x T x F2
+            out (Tensor): N x T x C x 2F
         """
-        # N x T x F
+        # N x T x C x F
         inp_r, inp_i = th.chunk(inp, 2, -1)
         # (a + bi) (c + di) = (ac - bd) + (bc + ad)i
         out_r = self.real(inp_r) - self.imag(inp_i)
         out_i = self.real(inp_i) + self.imag(inp_r)
-        # N x T x 2F
+        # N x T x C x 2F
         out = th.cat([out_r, out_i], -1)
         return out
 
@@ -90,6 +93,7 @@ class LSTMWrapper(nn.Module):
     """
     R/C LSTM
     """
+
     def __init__(self,
                  in_features,
                  num_layers=2,
@@ -116,21 +120,16 @@ class LSTMWrapper(nn.Module):
     def forward(self, inp):
         """
         Args:
-            inp (Tensor): N x C x F(2) x T
+            inp (Tensor): N x C x (2)F x T
         Return:
-            out (Tensor): N x C x F(2) x T
+            out (Tensor): N x C x (2)F x T
         """
-        N, C, _, T = inp.shape
-        # N x CF2 x T
-        inp = inp.view(N, -1, T)
-        # N x T x CF2
-        inp = inp.transpose(1, -1)
-        # N x T x CF2
+        # N x T x C x (2)F
+        inp = th.einsum("ncft->ntcf", inp)
+        # N x T x C x (2)F
         out = self.lstm(inp)
-        # N x CF2 x T
-        out = out.transpose(1, -1)
-        # N x C x F2 x T
-        return out.view(N, C, -1, T)
+        # N x C x (2)F x T
+        return th.einsum("ntcf->ncft", out)
 
 
 supported_nonlinear = {"relu": tf.relu, "sigmoid": th.sigmoid, "tanh": th.tanh}
@@ -140,6 +139,7 @@ class DCCRN(nn.Module):
     """
     Deep Complex Convolutional-RNN networks
     """
+
     def __init__(self,
                  cplx=True,
                  K="3,3;3,3;3,3;3,3;3,3;3,3;3,3",
@@ -155,6 +155,7 @@ class DCCRN(nn.Module):
                  rnn_dropout=0,
                  rnn_bidir=False,
                  causal_conv=False,
+                 share_decoder=True,
                  enh_transform=None,
                  non_linear="tanh",
                  training_mode="time"):
@@ -181,14 +182,26 @@ class DCCRN(nn.Module):
         self.encoder = Encoder(cplx, K, S, [1] + C, P, causal=causal_conv)
         if connection == "cat":
             C[-1] *= 2
-        self.decoder = Decoder(cplx,
-                               K[::-1],
-                               S[::-1],
-                               C[::-1] + [num_spks],
-                               P[::-1],
-                               O[::-1],
-                               causal=causal_conv,
-                               connection=connection)
+        if share_decoder:
+            self.decoder = Decoder(cplx,
+                                   K[::-1],
+                                   S[::-1],
+                                   C[::-1] + [num_spks],
+                                   P[::-1],
+                                   O[::-1],
+                                   causal=causal_conv,
+                                   connection=connection)
+        else:
+            self.decoder = nn.ModuleList([
+                Decoder(cplx,
+                        K[::-1],
+                        S[::-1],
+                        C[::-1] + [1],
+                        P[::-1],
+                        O[::-1],
+                        causal=causal_conv,
+                        connection=connection) for _ in range(num_spks)
+            ])
         self.rnn = LSTMWrapper(rnn_resize // 2 if cplx else rnn_resize,
                                dropout=rnn_dropout,
                                num_layers=rnn_layers,
@@ -262,6 +275,7 @@ class DCCRN(nn.Module):
             sr, si = stft.real, stft.imag
         # encoder
         enc_h, h = self.encoder(s[:, None])
+        # h: N x C x (2F) x T
         out_h = self.rnn(h)
         if self.connection == "sum":
             h = h + out_h
@@ -271,7 +285,10 @@ class DCCRN(nn.Module):
         enc_h = enc_h[::-1]
         # decoder
         # N x C x 2F x T
-        spk_m = self.decoder(h, enc_h)
+        if self.share_decoder:
+            spk_m = self.decoder(h, enc_h)
+        else:
+            spk_m = th.cat([decoder(h, enc_h) for decoder in self.decoder], 1)
         if self.num_spks == 1:
             return self.sep(spk_m[:, 0], sr, si, mode=mode)
         else:

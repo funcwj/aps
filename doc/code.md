@@ -1,6 +1,6 @@
 # Code Document
 
-Provide a simple description of the code structure here.
+Providing a simple description of the code structure here.
 
 ## `aps.transform`
 
@@ -32,7 +32,7 @@ The learning rate and schedule sampling scheduler is defined in `aps.trainer.lr`
 
 ## `aps.task`
 
-Supported task in aps. `Task` class is responsible for computation of an user-specific objective function, which is defined in the `forward` function. The supported task are shown below:
+Supported task in aps. The `Task` class is responsible for the computation of an user-specific objective function, which is defined in the `forward` function. The supported task are shown below:
 
 * `LmXentTask`: for LM training
 * `CtcXentHybridTask`: for CTC & Attention based AM training
@@ -50,13 +50,13 @@ Supported task in aps. `Task` class is responsible for computation of an user-sp
 
 Supported data loader in aps. For acoustic model training, we have
 
-* `am_wav`: Raw waveform data loader which do not need us to prepare features (recommended).
-* `am_kaldi`: Data loader that supports feature format in Kaldi
+* `am_wav`: Raw waveform data loader which do not need us to prepare acoustic features beforehead (recommended).
+* `am_kaldi`: Data loader that supports feature format in Kaldi toolkit.
 
 For enhancement/separation model, we have
 
-* `ss_chunk`: Raw waveform data loader and also no need to prepare features
-* `ss_online`: Online data loader which generate training audio (noisy, single/multi-speaker, close-talk/far-field) on-the-fly
+* `ss_chunk`: Raw waveform data loader and also no need to prepare features.
+* `ss_online`: Online data loader which generate training audio (noisy, single/multi-speaker, close-talk/far-field) on-the-fly.
 
 ## `aps.distributed`
 
@@ -92,11 +92,11 @@ and attention type:
 Speech enhancement/separation model. The implemented model are shown below:
 
 * `TimeConvTasNet`: Time domain Conv-TasNet
-* `FreqConvTasNet`: Frequency domain TCN
-* `DCUNet`: Deep complexed Unet
-* `DCCRN`: Deep complexed convolutional recurrent network
-* `Phasen`: Phasen
-* `CRNet`: Convolutional recurrent network for enhancement
+* `FreqConvTasNet`: Frequency domain TCN (Temporal Convolutional Network)
+* `DCUNet`: Deep Complexed Unet
+* `DCCRN`: Deep Complexed Convolutional Recurrent Network
+* `Phasen`: Phasen network
+* `CRNet`: Convolutional Recurrent Network for speech enhancement
 * `TimeDPRNN`: Time domain DPRNN
 * `FreqDPRNN`: Frequency domain DPRNN
 * `ToyRNN`: Basic RNN model

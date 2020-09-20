@@ -1,8 +1,8 @@
 # Usage overview
 
-My suggested working directory looks like:
+The suggested working directory looks like:
 ```bash
-bin conf data exp scripts utils 
+bin conf data exp scripts utils
 ```
 and it can be initialzied using `scripts/init_workspace.sh`. For example:
 ```bash

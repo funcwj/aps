@@ -52,12 +52,12 @@ class AttASR(nn.Module):
 
     def forward(self, x_pad, x_len, y_pad, ssr=0):
         """
-        args:
+        Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
             y_pad: N x To
             ssr: schedule sampling rate
-        return:
+        Return:
             outs: N x (To+1) x V
             alis: N x (To+1) x T
         """
@@ -85,7 +85,7 @@ class AttASR(nn.Module):
                     vectorized=False,
                     normalized=True):
         """
-        args
+        Args
             x: audio samples or acoustic features, S or Ti x F
         """
         with th.no_grad():

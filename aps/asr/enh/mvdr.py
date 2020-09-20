@@ -25,10 +25,10 @@ def trace(cplx_mat):
 def beamform(weight, spectrogram):
     """
     Do beamforming
-    args:
+    Args:
         weight: complex, N x C x F
         spectrogram: complex, N x C x F x T (output by STFT)
-    return:
+    Return:
         beam: complex, N x F x T
     """
     return (weight[..., None].conj() * spectrogram).sum(dim=1)
@@ -37,10 +37,10 @@ def beamform(weight, spectrogram):
 def estimate_covar(mask, spectrogram):
     """
     Covariance matrices (PSD) estimation
-    args:
+    Args:
         mask: TF-masks (real), N x F x T
         spectrogram: complex, N x C x F x T
-    return:
+    Return:
         covar: complex, N x F x C x C
     """
     # N x F x C x T
@@ -69,10 +69,10 @@ class MvdrBeamformer(nn.Module):
     def _derive_weight(self, Rs, Rn, u, eps=1e-5):
         """
         Compute mvdr beam weights
-        args:
+        Args:
             Rs, Rn: speech & noise covariance matrices, N x F x C x C
             u: reference selection vector, N x C
-        return:
+        Return:
             weight: N x F x C
         """
         C = Rn.shape[-1]
@@ -107,11 +107,11 @@ class MvdrBeamformer(nn.Module):
 
     def forward(self, mask_s, x, mask_n=None, xlen=None):
         """
-        args:
+        Args:
             mask_s: real TF-masks (speech), N x T x F
             x: noisy complex spectrogram, N x C x F x T
             mask_n: real TF-masks (noise), N x T x F
-        return:
+        Return:
             y: enhanced complex spectrogram N x T x F
         """
         # N x F x T
@@ -143,9 +143,9 @@ class ChannelAttention(nn.Module):
 
     def forward(self, Rs):
         """
-        args:
+        Args:
             Rs: complex, N x F x C x C
-        return:
+        Return:
             u: real, N x C
         """
         C = Rs.shape[-1]

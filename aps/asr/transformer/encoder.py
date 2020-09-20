@@ -100,10 +100,10 @@ class TorchTransformerEncoder(nn.Module):
 
     def forward(self, x_pad, x_len):
         """
-        args:
+        Args:
             x_pad: N x Ti x F
             x_len: N or None
-        return:
+        Return:
             enc_out: Ti x N x D
         """
         if self.input_embed[:4] == "conv" and x_len is not None:
