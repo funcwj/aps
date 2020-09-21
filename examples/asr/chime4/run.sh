@@ -21,7 +21,7 @@ nbest=8
 
 if [ $stage -le 1 ]; then
 	./local/clean_wsj0_data_prep.sh $chime4_data_dir/CHiME3/data/WSJ0 $wsj0_wav_dir
-	./local/simu_noisy_chime4_data_prep.sh $chime4_data_dir 
+	./local/simu_noisy_chime4_data_prep.sh $chime4_data_dir
 	./local/real_noisy_chime4_data_prep.sh $chime4_data_dir
 	./local/chime4_format_dir.sh
 fi

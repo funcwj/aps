@@ -2,7 +2,7 @@
 
 # wujian@2019
 
-set -eu 
+set -eu
 
 stage=1
 chime4_data=/scratch/jwu/CHiME4

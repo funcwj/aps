@@ -186,7 +186,9 @@ class TorchDecoder(nn.Module):
 
         if sos < 0 or eos < 0:
             raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
-        N, T, D_enc = enc_out.shape
+        if max_len <= 0:
+            raise RuntimeError(f"Invalid max_len: {max_len:d}")
+        N, _, D_enc = enc_out.shape
         if N != 1:
             raise RuntimeError(
                 f"Got batch size {N:d}, now only support one utterance")
@@ -206,10 +208,6 @@ class TorchDecoder(nn.Module):
 
         alive = [init_node()]
         hypos = []
-        if max_len <= 0:
-            max_len = T
-        else:
-            max_len = max(T, max_len)
         nbest = min(beam, nbest)
         if beam > self.vocab_size:
             raise RuntimeError(f"Beam size({beam}) > vocabulary size")
@@ -300,7 +298,9 @@ class TorchDecoder(nn.Module):
 
         if sos < 0 or eos < 0:
             raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
-        N, T, D_enc = enc_out.shape
+        if max_len <= 0:
+            raise RuntimeError(f"Invalid max_len: {max_len:d}")
+        N, _, D_enc = enc_out.shape
         if N != 1:
             raise RuntimeError(
                 f"Got batch size {N:d}, now only support one utterance")
@@ -320,13 +320,6 @@ class TorchDecoder(nn.Module):
                 trans.append(tok[point].item())
                 point = ptr[point]
             return {"score": score, "trans": [sos] + trans[::-1] + [eos]}
-
-        if max_len <= 0:
-            max_len = T
-        else:
-            # if inputs are down-sampled, and small output
-            # unit (like graphme) may longer than length of the inputs
-            max_len = max(T, max_len)
 
         nbest = min(beam, nbest)
         if beam > self.vocab_size:

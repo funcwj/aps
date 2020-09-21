@@ -135,12 +135,8 @@ class TorchTransformerDecoder(nn.Module):
 
         if sos < 0 or eos < 0:
             raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
-
-        T, _, _ = enc_out.shape
         if max_len <= 0:
-            max_len = T
-        else:
-            max_len = max(T, max_len)
+            raise RuntimeError(f"Invalid max_len: {max_len:d}")
 
         nbest = min(beam, nbest)
         if beam > self.vocab_size:

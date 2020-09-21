@@ -7,22 +7,22 @@
 
 My workspace for speech related tasks, including single/multi-channel speech enhancement & separation & recognition. The goal is to make it easy, flexible and efficient to conduct experiments, verify ideas, implement and evaluate novel neural networks. The design and usage of the package are based on my experience in the last few years.
 
-## Introduction
-
-* [Overivew](doc/overview.md)
-* [Structure](doc/code.md)
-* [Instruction](doc/instruction.md)
-* [Examples](egs)
-
 ## Setup
 
 ```shell
 git clone https://github.com/funcwj/aps
 # set up the python environments
-pip install -r requirements.txt
+cd aps && pip install -r requirements.txt
 # set up the git hook scripts
 pre-commit install
 ```
+
+## Introduction
+
+* [Overivew](doc/overview.md)
+* [Structure](doc/code.md)
+* [Instruction](doc/instruction.md)
+* [Examples](examples)
 
 ## Acknowledge
 

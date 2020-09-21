@@ -211,6 +211,7 @@ class DCCRN(nn.Module):
         self.num_spks = num_spks
         self.connection = connection
         self.mode = training_mode
+        self.share_decoder = share_decoder
 
     def sep(self, m, sr, si, mode="freq"):
         decoder = self.enh_transform.inverse_stft
