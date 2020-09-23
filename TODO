@@ -1,6 +1,4 @@
-1. RNN LM shallow fusion
+1. RNN LM shallow fusion (figure out why doesn't work)
 2. Beam search in batch mode
-3. Test cases
-4. Instructions
-5. More distributed feature support
-6. ...
+3. Python type hints
+4. ...

@@ -197,7 +197,6 @@ class TorchRNNDecoder(nn.Module):
                 # pop one (queue_t is updated)
                 cur_node = queue_t.get_nowait()
                 trans = cur_node.stats["trans"]
-
                 # make a step
                 # cur_inp = th.tensor([[trans[-1]]], dtype=th.int64, device=dev)
                 dec_out, hidden = self._step_decoder(
@@ -222,11 +221,11 @@ class TorchRNNDecoder(nn.Module):
                     # 1 x 1 x V (without blank)
                     lm_prob, lm_state = lm(trans[-1],
                                            cur_node.stats["lm_state"])
-                    if blank != 0:
-                        raise RuntimeError("Hard code for blank = 0 here")
-                    prob[1:] += F.log_softmax(
-                        lm_prob[:, -1, 1:self.vocab_size].squeeze(),
-                        dim=-1) * lm_weight
+                    if blank != self.vocab_size - 1:
+                        raise RuntimeError(
+                            "Hard code for blank = self.vocab_size - 1 here")
+                    prob[:-1] += F.log_softmax(lm_prob[:, -1].squeeze(),
+                                               dim=-1) * lm_weight
 
                 # extend other nodes
                 topk_score, topk_index = th.topk(prob, beam + 1)
@@ -444,11 +443,11 @@ class TorchTransformerDecoder(nn.Module):
                     # 1 x 1 x V (without blank)
                     lm_prob, lm_state = lm(trans[-1],
                                            cur_node.stats["lm_state"])
-                    if blank != 0:
-                        raise RuntimeError("Hard code for blank = 0 here")
-                    prob[1:] += F.log_softmax(
-                        lm_prob[:, -1, 1:self.vocab_size].squeeze(),
-                        dim=-1) * lm_weight
+                    if blank != self.vocab_size - 1:
+                        raise RuntimeError(
+                            "Hard code for blank = self.vocab_size - 1 here")
+                    prob[:-1] += F.log_softmax(lm_prob[:, -1].squeeze(),
+                                               dim=-1) * lm_weight
 
                 # extend other nodes
                 topk_score, topk_index = th.topk(prob, beam + 1)

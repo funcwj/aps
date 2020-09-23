@@ -45,7 +45,7 @@ if [ $stage -le 3 ]; then
         --gpu $gpu \
         --beam-size $beam_size \
         --nbest $nbest \
-        --max-len 25 \
+        --max-len 75 \
         --dict data/timit/dict \
         "timit" $exp \
         data/timit/test/wav.scp \

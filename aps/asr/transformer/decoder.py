@@ -14,8 +14,7 @@ except:
 
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
-from aps.asr.base.decoder import NEG_INF
-from aps.const import IGNORE_ID
+from aps.const import IGNORE_ID, NEG_INF
 
 
 def prep_sub_mask(T, device="cpu"):
@@ -185,16 +184,9 @@ class TorchTransformerDecoder(nn.Module):
 
                 # add LM score
                 if lm:
-                    if lm_state is not None:
-                        if isinstance(lm_state, tuple):
-                            # shape: num_layers * num_directions, batch, hidden_size
-                            h, c = lm_state
-                            lm_state = (h[:, point], c[:, point])
-                        else:
-                            lm_state = lm_state[:, point]
                     lm_prob, lm_state = lm(pre_out, lm_state)
                     # beam x V
-                    prob += F.log_softmax(lm_prob[:, 0], dim=-1) * lm_weight
+                    prob += F.log_softmax(lm_prob[:, -1], dim=-1) * lm_weight
 
                 # local pruning: beam x beam
                 topk_score, topk_token = th.topk(prob, beam, dim=-1)

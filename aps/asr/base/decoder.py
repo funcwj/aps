@@ -9,7 +9,7 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
-NEG_INF = th.finfo(th.float32).min
+from aps.const import NEG_INF
 
 
 class OneHotEmbedding(nn.Module):
@@ -378,7 +378,7 @@ class TorchDecoder(nn.Module):
                         lm_state = (h[:, point], c[:, point])
                     else:
                         lm_state = lm_state[:, point]
-                lm_prob, lm_state = lm(out[point][..., None], lm_state)
+                lm_prob, lm_state = lm(out[..., None], lm_state)
                 # beam x V
                 prob += F.log_softmax(lm_prob[:, 0], dim=-1) * lm_weight
 
@@ -468,7 +468,9 @@ class TorchDecoder(nn.Module):
 
         if sos < 0 or eos < 0:
             raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
-        N, T, D_enc = enc_out.shape
+        if max_len <= 0:
+            raise RuntimeError(f"Invalid max_len: {max_len:d}")
+        N, _, D_enc = enc_out.shape
 
         def _trace_back_hypos(uttid,
                               point,
@@ -486,13 +488,6 @@ class TorchDecoder(nn.Module):
                 trans.append(tok[uttid, point].item())
                 point = ptr[uttid, point]
             return {"score": score, "trans": [sos] + trans[::-1] + [eos]}
-
-        if max_len <= 0:
-            max_len = T
-        else:
-            # if inputs are down-sampled, and small output
-            # unit (like graphme) may longer than length of the inputs
-            max_len = max(T, max_len)
 
         nbest = min(beam, nbest)
         if beam > self.vocab_size:
