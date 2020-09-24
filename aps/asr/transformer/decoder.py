@@ -14,6 +14,8 @@ except:
 
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
+from aps.asr.base.decoder import trace_back_hypos
+
 from aps.const import IGNORE_ID, NEG_INF
 
 
@@ -115,23 +117,6 @@ class TorchTransformerDecoder(nn.Module):
         Args:
             enc_out = self.encoder(x_emb),  Ti x 1 x D
         """
-
-        def _trace_back_hypos(point,
-                              back_point,
-                              hist_token,
-                              score,
-                              sos=1,
-                              eos=2):
-            """
-            Trace back from current time point
-            """
-            trans = []
-            score = score.item()
-            for ptr, tok in zip(back_point[::-1], hist_token[::-1]):
-                trans.append(tok[point].item())
-                point = ptr[point]
-            return {"score": score, "trans": [sos] + trans[::-1] + [eos]}
-
         if sos < 0 or eos < 0:
             raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
         if max_len <= 0:
@@ -152,29 +137,27 @@ class TorchTransformerDecoder(nn.Module):
             accu_score = th.zeros(beam, device=dev)
             hist_token = []
             back_point = []
-            pre_emb = None
             lm_state = None
 
             hypos = []
+            dec_seq = []
+            point = th.arange(0, beam, dtype=th.int64, device=dev)
+
             # step by step
             for t in range(max_len):
                 # target mask
                 tgt_mask = prep_sub_mask(t + 1, device=dev)
                 # beam
                 if t:
-                    point = back_point[-1]
-                    # pre_out: beam x 1
-                    pre_out = hist_token[-1][point][..., None]
-                    cur_emb = self.tgt_embed(pre_out, t=t)
-                    pre_emb = th.cat([pre_emb, cur_emb], dim=0)
+                    # pre_out: beam x T
+                    pre_out = th.tensor(dec_seq, dtype=th.int64, device=dev)
                 else:
-                    point = th.arange(0, beam, dtype=th.int64, device=dev)
                     # pre_out: beam x 1
                     pre_out = th.tensor([[sos]] * beam,
                                         dtype=th.int64,
                                         device=dev)
-                    # 1 x beam x E
-                    pre_emb = self.tgt_embed(pre_out)
+                # beam x T x E
+                pre_emb = self.tgt_embed(pre_out)
                 # Tcur - 1 x beam x D
                 dec_out = self.decoder(pre_emb, enc_out, tgt_mask=tgt_mask)[-1]
                 # beam x V
@@ -184,7 +167,14 @@ class TorchTransformerDecoder(nn.Module):
 
                 # add LM score
                 if lm:
-                    lm_prob, lm_state = lm(pre_out, lm_state)
+                    if lm_state is not None:
+                        if isinstance(lm_state, tuple):
+                            # shape: num_layers * num_directions, batch, hidden_size
+                            h, c = lm_state
+                            lm_state = (h[:, point], c[:, point])
+                        else:
+                            lm_state = lm_state[:, point]
+                    lm_prob, lm_state = lm(pre_out[:, -1:], lm_state)
                     # beam x V
                     prob += F.log_softmax(lm_prob[:, -1], dim=-1) * lm_weight
 
@@ -195,6 +185,7 @@ class TorchTransformerDecoder(nn.Module):
                     # beam
                     accu_score += topk_score[0]
                     token = topk_token[0]
+                    dec_seq = token.tolist()
                 else:
                     # beam x beam = beam x 1 + beam x beam
                     accu_score = accu_score[..., None] + topk_score
@@ -204,29 +195,31 @@ class TorchTransformerDecoder(nn.Module):
                                                      dim=-1)
                     # point to father's node
                     point = topk_index // beam
-
                     # beam*beam
                     topk_token = topk_token.view(-1)
                     token = topk_token[topk_index]
 
                 # continue flags
-                not_end = (token != eos).tolist()
+                end_eos = (token == eos).tolist()
 
+                dec_seq = [None for _ in range(beam)]
                 # process eos nodes
-                for i, go_on in enumerate(not_end):
-                    if not go_on:
-                        hyp = _trace_back_hypos(point[i],
+                if sum(end_eos):
+                    idx = [
+                        i for i, end_with_eos in enumerate(end_eos)
+                        if end_with_eos
+                    ]
+                    idx = th.tensor(idx, dtype=th.int64, device=dev)
+                    hyp_full = trace_back_hypos(point[idx],
                                                 back_point,
                                                 hist_token,
-                                                accu_score[i],
+                                                accu_score[idx],
                                                 sos=sos,
                                                 eos=eos)
-                        accu_score[i] = NEG_INF
-                        hypos.append(hyp)
-
-                # all True
-                if sum(not_end) == 0:
-                    break
+                    accu_score[idx] = NEG_INF
+                    hypos += hyp_full
+                    for i, h in enumerate(hyp_full):
+                        dec_seq[idx[i]] = h["trans"]
 
                 if len(hypos) >= beam:
                     break
@@ -235,17 +228,24 @@ class TorchTransformerDecoder(nn.Module):
                 hist_token.append(token)
                 back_point.append(point)
 
-                # process non-eos nodes at the final step
-                if t == max_len - 1:
-                    for i, go_on in enumerate(not_end):
-                        if go_on:
-                            hyp = _trace_back_hypos(i,
-                                                    back_point,
-                                                    hist_token,
-                                                    accu_score[i],
-                                                    sos=sos,
-                                                    eos=eos)
-                            hypos.append(hyp)
+                # process non-eos nodes
+                end_wo_eos = (token != eos).tolist()
+                if sum(end_wo_eos):
+                    idx = [i for i, go_on in enumerate(end_wo_eos) if go_on]
+                    idx = th.tensor(idx, dtype=th.int64, device=dev)
+                    hyp_partial = trace_back_hypos(idx,
+                                                   back_point,
+                                                   hist_token,
+                                                   accu_score[idx],
+                                                   sos=sos,
+                                                   eos=eos)
+                    # remove fake eos
+                    for i, h in enumerate(hyp_partial):
+                        dec_seq[idx[i]] = h["trans"][:-1]
+                    # process non-eos nodes at the final step
+                    if t == max_len - 1:
+                        hypos += hyp_partial
+
             if normalized:
                 nbest_hypos = sorted(hypos,
                                      key=lambda n: n["score"] /

@@ -12,6 +12,28 @@ import torch.nn.functional as F
 from aps.const import NEG_INF
 
 
+def trace_back_hypos(point, back_point, hist_token, score, sos=1, eos=2):
+    """
+    Trace back the decoding transcription sequence from the current time point
+    Args:
+        point (Tensor): starting point
+        back_point (list[Tensor]): father point at each step
+        hist_token (list[Tensor]): beam token at each step
+        score (Tensor): decoding score
+    """
+    trans = []
+    score = score.tolist()
+    for ptr, tok in zip(back_point[::-1], hist_token[::-1]):
+        trans.append(tok[point].tolist())
+        point = ptr[point]
+    hypos = []
+    trans = trans[::-1]
+    for i, s in enumerate(score):
+        token = [t[i] for t in trans]
+        hypos.append({"score": s, "trans": [sos] + token + [eos]})
+    return hypos
+
+
 class OneHotEmbedding(nn.Module):
     """
     Onehot encode
@@ -305,22 +327,6 @@ class TorchDecoder(nn.Module):
             raise RuntimeError(
                 f"Got batch size {N:d}, now only support one utterance")
 
-        def _trace_back_hypos(point,
-                              back_point,
-                              hist_token,
-                              score,
-                              sos=1,
-                              eos=2):
-            """
-            Trace back from current time point
-            """
-            trans = []
-            score = score.item()
-            for ptr, tok in zip(back_point[::-1], hist_token[::-1]):
-                trans.append(tok[point].item())
-                point = ptr[point]
-            return {"score": score, "trans": [sos] + trans[::-1] + [eos]}
-
         nbest = min(beam, nbest)
         if beam > self.vocab_size:
             raise RuntimeError(f"Beam size({beam}) > vocabulary size")
@@ -403,23 +409,22 @@ class TorchDecoder(nn.Module):
                 token = topk_token[topk_index]
 
             # continue flags
-            not_end = (token != eos).tolist()
+            end_eos = (token == eos).tolist()
 
             # process eos nodes
-            for i, go_on in enumerate(not_end):
-                if not go_on:
-                    hyp = _trace_back_hypos(point[i],
+            if sum(end_eos):
+                idx = [
+                    i for i, end_with_eos in enumerate(end_eos) if end_with_eos
+                ]
+                idx = th.tensor(idx, dtype=th.int64, device=dev)
+                hyp_full = trace_back_hypos(point[idx],
                                             back_point,
                                             hist_token,
-                                            accu_score[i],
+                                            accu_score[idx],
                                             sos=sos,
                                             eos=eos)
-                    accu_score[i] = NEG_INF
-                    hypos.append(hyp)
-
-            # all True
-            if sum(not_end) == 0:
-                break
+                accu_score[idx] = NEG_INF
+                hypos += hyp_full
 
             if len(hypos) >= beam:
                 break
@@ -430,15 +435,18 @@ class TorchDecoder(nn.Module):
 
             # process non-eos nodes at the final step
             if t == max_len - 1:
-                for i, go_on in enumerate(not_end):
-                    if go_on:
-                        hyp = _trace_back_hypos(i,
-                                                back_point,
-                                                hist_token,
-                                                accu_score[i],
-                                                sos=sos,
-                                                eos=eos)
-                        hypos.append(hyp)
+                end_wo_eos = (token != eos).tolist()
+                if sum(end_wo_eos):
+                    idx = [i for i, go_on in enumerate(end_wo_eos) if go_on]
+                    idx = th.tensor(idx, dtype=th.int64, device=dev)
+                    hyp_partial = trace_back_hypos(idx,
+                                                   back_point,
+                                                   hist_token,
+                                                   accu_score[idx],
+                                                   sos=sos,
+                                                   eos=eos)
+                    hypos += hyp_partial
+
         if normalized:
             nbest_hypos = sorted(hypos,
                                  key=lambda n: n["score"] /
@@ -458,7 +466,7 @@ class TorchDecoder(nn.Module):
                           eos=-1,
                           normalized=True):
         """
-        Batch level vectorized beam search algothrim
+        Batch level vectorized beam search algothrim (NOTE: not stable!)
         Args
             enc_out: N x T x F
             enc_len: N

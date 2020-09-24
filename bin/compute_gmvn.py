@@ -50,9 +50,8 @@ def run(args):
     if th.sum(th.isnan(gmvn)):
         raise RuntimeError(f"Got NAN in gmvn, please check")
     print(f"Global mean/variance:\n{gmvn}")
-    print(
-        f"Save global mean/variance to {args.out_mvn} over {num_utts} utterances"
-    )
+    print("Save global mean/variance to " +
+          f"{args.out_mvn} over {num_utts} utterances")
     th.save(gmvn, args.out_mvn)
 
 
