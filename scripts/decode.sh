@@ -15,6 +15,7 @@ batch_size=1
 normalized=true
 lm=""
 lm_weight=0
+log_suffix=""
 
 echo "$0 $@"
 
@@ -34,6 +35,8 @@ exp_dir=exp/$mdl_id/$exp_id
 [ ! -d $exp_dir ] && echo "$0: missing experiment directory: $exp_dir" && exit 0
 
 mkdir -p $dec_dir
+[ ! -z $log_suffix ] && log_suffix=${log_suffix}.
+
 if [ $batch_size -eq 1 ]; then
   bin/decode.py \
     $tst_scp \
@@ -51,7 +54,7 @@ if [ $batch_size -eq 1 ]; then
     --max-len $max_len \
     --normalized $normalized \
     --vectorized true \
-    > $mdl_id.decode.$exp_id.log 2>&1
+    > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
 else
   bin/decode_batch.py \
     $tst_scp \
@@ -67,7 +70,7 @@ else
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
     --max-len $max_len \
     --normalized $normalized \
-    > $mdl_id.decode.$exp_id.log 2>&1
+    > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
 fi
 
 echo "$0 $@: Done"

@@ -1,0 +1,34 @@
+nnet: "rnn_lm"
+
+nnet_conf:
+  embed_size: 512
+  tie_weights: true
+  rnn: lstm
+  rnn_layers: 2
+  rnn_hidden: 512
+  rnn_dropout: 0.2
+
+task: "lm"
+
+trainer_conf:
+  optimizer: "adam"
+  optimizer_kwargs:
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+  lr_scheduler_kwargs:
+    min_lr: 1.0e-8
+    patience: 1
+    factor: 0.5
+  no_impr: 4
+  no_impr_thres: 0.05
+  clip_gradient: 0.25
+  stop_criterion: "loss"
+
+data_conf:
+  fmt: "lm_utt"
+  loader:
+    min_token_num: 6
+  train:
+    text: "data/librispeech/lm/train.wp6k"
+  valid:
+    text: "data/librispeech/lm/dev.wp6k"

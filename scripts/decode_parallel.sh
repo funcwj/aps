@@ -41,26 +41,26 @@ for n in $(seq $nj); do wav_sp_scp="$wav_sp_scp $log_dir/wav.$n.scp"; done
 
 python=$(which python)
 $cmd JOB=1:$nj $log_dir/decode.JOB.log \
-    $python bin/decode.py \
-    $log_dir/wav.JOB.scp \
-    $log_dir/beam${beam_size}.JOB.decode \
-    --beam-size $beam_size \
-    --checkpoint $exp_dir \
-    --device-id -1 \
-    --channel $channel \
-    --dict "$dict" \
-    --lm "$lm" \
-    --lm-weight $lm_weight \
-    --space "$space" \
-    --nbest $nbest \
-    --dump-nbest $log_dir/beam${beam_size}.JOB.${nbest}best \
-    --max-len $max_len \
-    --normalized $normalized \
-    --vectorized true
+  $python bin/decode.py \
+  $log_dir/wav.JOB.scp \
+  $log_dir/beam${beam_size}.JOB.decode \
+  --beam-size $beam_size \
+  --checkpoint $exp_dir \
+  --device-id -1 \
+  --channel $channel \
+  --dict "$dict" \
+  --lm "$lm" \
+  --lm-weight $lm_weight \
+  --space "$space" \
+  --nbest $nbest \
+  --dump-nbest $log_dir/beam${beam_size}.JOB.${nbest}best \
+  --max-len $max_len \
+  --normalized $normalized \
+  --vectorized true
 
 cat $log_dir/beam${beam_size}.*.decode | \
-    sort -k1 > $dec_dir/beam${beam_size}.decode
+  sort -k1 > $dec_dir/beam${beam_size}.decode
 cat $log_dir/beam${beam_size}.*.${nbest}best | \
-    sort -k1 > $dec_dir/beam${beam_size}.${nbest}best
+  sort -k1 > $dec_dir/beam${beam_size}.${nbest}best
 
 echo "$0 $@: Done"

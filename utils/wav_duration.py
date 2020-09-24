@@ -2,10 +2,14 @@
 
 # wujian@2020
 
+import io
 import sys
 import wave
 import argparse
 import warnings
+import subprocess
+
+import soundfile as sf
 
 
 def ext_open(fd, mode):
@@ -20,27 +24,48 @@ def ext_open(fd, mode):
 def run(args):
     prog_interval = 100
     done, total = 0, 0
-    with ext_open(args.utt2dur, "w") as utt2dur:
-        with ext_open(args.wav_scp, "r") as wav_scp:
-            for raw_line in wav_scp:
-                total += 1
-                line = raw_line.strip()
-                toks = line.split()
-                if len(toks) != 2:
-                    warnings.warn(f"Line format error: {line}")
-                    continue
-                done += 1
-                key, path = toks
-                with wave.open(path, "r") as wav:
-                    dur = wav.getnframes()
-                    if args.output == "time":
-                        dur = float(dur) / wav.getframerate()
+    utt2dur = ext_open(args.utt2dur, "w")
+    wav_scp = ext_open(args.wav_scp, "r")
+    for raw_line in wav_scp:
+        total += 1
+        line = raw_line.strip()
+        toks = line.split()
+        if line[-1] == "|":
+            key, cmd = toks[0], " ".join(toks[1:-1])
+            p = subprocess.Popen(cmd,
+                                 shell=True,
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
+            [stdout, stderr] = p.communicate()
+            if p.returncode != 0:
+                stderr = bytes.decode(stderr)
+                raise RuntimeError(
+                    f"Running command: \"{cmd}\" failed: {stderr}")
+            wav_io = io.BytesIO(stdout)
+            data, sr = sf.read(wav_io, dtype="int16")
+            dur = data.shape[0]
+            if args.output == "time":
+                dur = float(dur) / sr
+        else:
+            if len(toks) != 2:
+                warnings.warn(f"Line format error: {line}")
+                continue
+            key, path = toks
+            with wave.open(path, "r") as wav:
+                dur = wav.getnframes()
                 if args.output == "time":
-                    utt2dur.write(f"{key}\t{dur:.4f}\n")
-                else:
-                    utt2dur.write(f"{key}\t{dur:d}\n")
-                if done % prog_interval == 0:
-                    print(f"Processed {done} utterances...", flush=True)
+                    dur = float(dur) / wav.getframerate()
+        done += 1
+        if args.output == "time":
+            utt2dur.write(f"{key}\t{dur:.4f}\n")
+        else:
+            utt2dur.write(f"{key}\t{dur:d}\n")
+        if done % prog_interval == 0:
+            print(f"Processed {done} utterances...", flush=True)
+    if args.utt2dur != "-":
+        utt2dur.close()
+    if args.wav_scp != "-":
+        wav_scp.close()
     print(f"Processed {done} utterances done, total {total}")
 
 

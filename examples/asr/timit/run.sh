@@ -28,32 +28,32 @@ nbest=8
 . ./utils/parse_options.sh || exit 1
 
 if [ $stage -le 1 ]; then
-    ./local/timit_data_prep.sh --dataset $dataset $timit_data
+  ./local/timit_data_prep.sh --dataset $dataset $timit_data
 fi
 
 if [ $stage -le 2 ]; then
-    ./scripts/train_am.sh \
-        --seed $seed \
-        --gpu $gpu \
-        --epochs $epochs \
-        --num-workers $num_workers \
-        --batch-size $batch_size \
-        --tensorboard $tensorboard \
-        --prog-interval $prog_interval \
-        "timit" $exp
+  ./scripts/train_am.sh \
+    --seed $seed \
+    --gpu $gpu \
+    --epochs $epochs \
+    --num-workers $num_workers \
+    --batch-size $batch_size \
+    --tensorboard $tensorboard \
+    --prog-interval $prog_interval \
+    "timit" $exp
 fi
 
 if [ $stage -le 3 ]; then
-    # decoding
-    ./scripts/decode.sh \
-        --gpu $gpu \
-        --beam-size $beam_size \
-        --nbest $nbest \
-        --max-len 75 \
-        --dict data/timit/dict \
-        "timit" $exp \
-        data/timit/test/wav.scp \
-        exp/timit/$exp/dec
-    # wer
-    ./bin/compute_wer.py exp/timit/$exp/dec/beam24.decode data/timit/test/text
+  # decoding
+  ./scripts/decode.sh \
+    --gpu $gpu \
+    --beam-size $beam_size \
+    --nbest $nbest \
+    --max-len 75 \
+    --dict data/timit/dict \
+    "timit" $exp \
+    data/timit/test/wav.scp \
+    exp/timit/$exp/dec
+  # wer
+  ./bin/compute_wer.py exp/timit/$exp/dec/beam24.decode data/timit/test/text
 fi

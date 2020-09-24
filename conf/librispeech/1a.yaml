@@ -1,0 +1,72 @@
+nnet: transformer
+
+nnet_conf:
+  ctc: true
+  decoder_kwargs:
+    att_dim: 512
+    att_dropout: 0.2
+    feedforward_dim: 2048
+    nhead: 8
+    num_layers: 6
+    pos_dropout: 0.2
+  encoder_kwargs:
+    att_dim: 512
+    att_dropout: 0.2
+    feedforward_dim: 2048
+    input_embed: conv2d
+    nhead: 8
+    num_layers: 10
+    pos_dropout: 0.2
+    post_norm: false
+  encoder_type: transformer
+  input_size: 80
+
+asr_transform:
+  feats: fbank-log-cmvn-aug
+  frame_hop: 160
+  frame_len: 400
+  norm_mean: true
+  norm_var: true
+  num_mels: 80
+  round_pow_of_two: true
+  sr: 16000
+  window: hamm
+  aug_prob: 0.3
+
+task: ctc_xent
+task_conf:
+  ctc_weight: 0.2
+  lsm_factor: 0.1
+
+trainer_conf:
+  clip_gradient: 5
+  lr_scheduler: noam_lr
+  lr_scheduler_kwargs:
+    factor: 1
+    transformer_dim: 512
+    warmup: 20000
+  lr_scheduler_period: step
+  no_impr: 6
+  no_impr_thres: 0.2
+  optimizer: adam
+  optimizer_kwargs:
+    lr: 0.0001
+    weight_decay: 1.0e-05
+  stop_criterion: accu
+
+data_conf:
+  fmt: am_wav
+  loader:
+    adapt_dur: 10
+    adapt_token_num: 150
+    max_dur: 30
+    max_token_num: 400
+    min_dur: 0.4
+  train:
+    text: data/librispeech/train/wp6k
+    utt2dur: data/librispeech/train/utt2dur
+    wav_scp: data/librispeech/train/wav.scp
+  valid:
+    text: data/librispeech/dev/wp6k
+    utt2dur: data/librispeech/dev/utt2dur
+    wav_scp: data/librispeech/dev/wav.scp

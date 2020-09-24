@@ -30,7 +30,7 @@ for n in $split_id; do split_wav_scp="$split_wav_scp $data_dir/split$nj/wav.$n.s
 
 exp=$(basename $data_dir)
 $cmd JOB=1:$nj exp/archive_wav/$exp/archive_wav.JOB.log \
-   utils/archive_wav.py --scp $ark_dir/wav.JOB.scp \
-   $data_dir/split$nj/wav.JOB.scp $ark_dir/wav.JOB.ark
+  utils/archive_wav.py --scp $ark_dir/wav.JOB.scp \
+  $data_dir/split$nj/wav.JOB.scp $ark_dir/wav.JOB.ark
 
 echo "$0: Archive wav.scp from $data_dir to $ark_dir done"
