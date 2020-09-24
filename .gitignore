@@ -3,18 +3,18 @@
 __pycache__/
 .py[cod]
 
-asset/
-bin/debug*
-exp/
-checkpoint/
-cache/
-local/
+/asset/
+/bin/debug*
+/local/
 *.log
 
-# egs
-egs/*/*/log
-egs/*/*/exp
-egs/*/*/data
+exp/
+log/
+checkpoint/
+cache/
+
+# examples
+/example/*/*/data
 
 # pytest
 .pytest_cache/

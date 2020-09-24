@@ -14,25 +14,17 @@
 # See the Apache 2 License for the specific language governing permissions and
 # limitations under the License.
 
-# converts an utt2spk file to a spk2utt file.
-# Takes input from the stdin or from a file argument;
-# output goes to the standard out.
 
-if ( @ARGV > 1 ) {
-    die "Usage: utt2spk_to_spk2utt.pl [ utt2spk ] > spk2utt";
-}
+# takes in a file list with lines like
+# /mnt/matylda2/data/WSJ1/13-16.1/wsj1/si_dt_20/4k0/4k0c030a.wv1
+# and outputs an scp in kaldi format with lines like
+# 4k0c030a /mnt/matylda2/data/WSJ1/13-16.1/wsj1/si_dt_20/4k0/4k0c030a.wv1
+# (the first thing is the utterance-id, which is the same as the basename of the file.
+
 
 while(<>){
-    @A = split(" ", $_);
-    @A == 2 || die "Invalid line in utt2spk file: $_";
-    ($u,$s) = @A;
-    if(!$seen_spk{$s}) {
-        $seen_spk{$s} = 1;
-        push @spklist, $s;
-    }
-    push (@{$spk_hash{$s}}, "$u");
-}
-foreach $s (@spklist) {
-    $l = join(' ',@{$spk_hash{$s}});
-    print "$s $l\n";
+    m:^\S+/(\w+)\.[wW][vV]1$: || die "Bad line $_";
+    $id = $1;
+    $id =~ tr/A-Z/a-z/;  # Necessary because of weirdness on disk 13-16.1 (uppercase filenames)
+    print "$id $_";
 }

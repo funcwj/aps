@@ -43,7 +43,7 @@ fi
 
 if [ $stage -eq 2 ]; then
   echo "$0: Encode input text using the model" >&2
-  awk '{print $1}' $text > $exp_dir/enc.key 
+  awk '{print $1}' $text > $exp_dir/enc.key
   cat $text | cut -d" " -f 2- | spm_encode --model="$exp_dir/$mode.model" --output_format=$encode > $exp_dir/enc.val
   paste -d " " $exp_dir/enc.key $exp_dir/enc.val
 fi
@@ -51,7 +51,7 @@ fi
 
 if [ $stage -eq 3 ]; then
   echo "$0: Decode input text using the model" >&2
-  awk '{print $1}' $text > $exp_dir/dec.key 
+  awk '{print $1}' $text > $exp_dir/dec.key
   cat $text | cut -d" " -f 2- | spm_decode --model="$exp_dir/$mode.model" --input_format=$decode > $exp_dir/dec.val
   paste -d " " $exp_dir/dec.key $exp_dir/dec.val
 fi

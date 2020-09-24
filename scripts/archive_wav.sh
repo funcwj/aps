@@ -16,7 +16,7 @@ cmd="utils/run.pl"
 data_dir=$(cd $1; pwd)
 ark_dir=$2
 
-[ ! -f $data_dir/wav.scp ] && echo "$0: Missing wav.scp in $data_dir" && exit 
+[ ! -f $data_dir/wav.scp ] && echo "$0: Missing wav.scp in $data_dir" && exit
 
 mkdir -p $ark_dir && ark_dir=$(cd $ark_dir; pwd)
 
@@ -31,6 +31,6 @@ for n in $split_id; do split_wav_scp="$split_wav_scp $data_dir/split$nj/wav.$n.s
 exp=$(basename $data_dir)
 $cmd JOB=1:$nj exp/archive_wav/$exp/archive_wav.JOB.log \
    utils/archive_wav.py --scp $ark_dir/wav.JOB.scp \
-   $data_dir/split$nj/wav.JOB.scp $ark_dir/wav.JOB.ark 
+   $data_dir/split$nj/wav.JOB.scp $ark_dir/wav.JOB.ark
 
 echo "$0: Archive wav.scp from $data_dir to $ark_dir done"
