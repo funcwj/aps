@@ -5,7 +5,7 @@
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 
 
-My workspace for speech related tasks, including single/multi-channel speech enhancement & separation & recognition. The goal is to make it easy, flexible and efficient to conduct experiments, verify ideas, implement and evaluate novel neural networks. The design and usage of the package are based on my experience in the last few years.
+My workspace for speech related tasks, including single/multi-channel speech enhancement & separation & recognition. The goal is to make it easy, flexible and efficient to conduct experiments, verify ideas, implement and evaluate novel neural networks.
 
 ## Setup
 
@@ -26,4 +26,4 @@ pre-commit install
 
 ## Acknowledge
 
-The author started the project (2019.03) when he was a master student in the Audio, Speech and Language Processing Group (ASLP) in Northwestern Polytechnical University (NWPU), Xi'an, China.
+The author started the project (2019.03) when he was a master student of the Audio, Speech and Language Processing Group (ASLP) in Northwestern Polytechnical University (NWPU), Xi'an, China.

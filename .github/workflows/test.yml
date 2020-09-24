@@ -29,7 +29,6 @@ jobs:
           pip install --upgrade pip wheel
           cat requirements.txt | grep -v -E "warp_rnnt|horovod|kenlm" > requirements_cpu.txt && pip install -r requirements_cpu.txt
           pip install numba==0.48
-          pip install tensorboard
 
       - name: Run testing cases (lib)
         run: |
@@ -37,7 +36,4 @@ jobs:
 
       - name: Run testing cases (cmd)
         run: |
-          for x in am lm ss; do python bin/train_$x.py -h; done
-          for x in am ss; do python bin/distributed_train_$x.py -h; done
-          for x in wer sisnr; do python bin/compute_$x.py -h; done
-          for x in eval_bss decode decode_batch; do python bin/$x.py -h; done
+          bash .ci/check_bin.sh
