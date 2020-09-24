@@ -39,8 +39,8 @@ if [ $stage -le 1 ]; then
 fi
 
 if [ $stage -le 2 ]; then
-    ./scripts/train_am.sh \
-        --seed $seed \
+	./scripts/train_am.sh \
+		--seed $seed \
 		--gpu $gpu \
 		--epochs $epochs \
 		--num-workers $num_workers \

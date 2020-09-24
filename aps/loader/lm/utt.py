@@ -74,16 +74,26 @@ class Dataset(dat.Dataset):
     """
 
     def __init__(self, text, vocab_dict, min_token_num=2, eos=None):
-        text_reader = BaseReader(text, num_tokens=-1, restrict=False)
+        if vocab_dict:
+            text_reader = BaseReader(text, num_tokens=-1, restrict=False)
+        else:
+            text_reader = BaseReader(
+                text,
+                value_processor=lambda tok: list(map(int, tok)),
+                num_tokens=-1,
+                restrict=False)
         self.token_set = []
         for key, tokens in text_reader:
             if len(tokens) <= min_token_num:
                 warnings.warn(f"Pass short utterances: {key}")
             else:
-                toks = []
-                for t in tokens:
-                    toks.append(vocab_dict[t] if t in
-                                vocab_dict else vocab_dict["<unk>"])
+                if vocab_dict:
+                    toks = []
+                    for t in tokens:
+                        toks.append(vocab_dict[t] if t in
+                                    vocab_dict else vocab_dict["<unk>"])
+                else:
+                    toks = tokens
                 if eos is None:
                     self.token_set.append(toks)
                 else:

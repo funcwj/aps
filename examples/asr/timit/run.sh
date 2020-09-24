@@ -2,6 +2,10 @@
 
 # wujian@2020
 
+# 1a.yaml
+#   WER(%) Report:
+#   Total WER: 26.13%, 192 utterances
+
 set -eu
 
 timit_data=/scratch/jwu/TIMIT-LDC93S1/TIMIT
@@ -18,7 +22,7 @@ num_workers=2
 prog_interval=100
 
 # decoding
-beam_size=24
+beam_size=32
 nbest=8
 
 . ./utils/parse_options.sh || exit 1

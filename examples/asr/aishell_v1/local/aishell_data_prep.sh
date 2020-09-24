@@ -55,14 +55,10 @@ echo "$0: Prepare dictionary..."
 echo -e "<sos> 0\n<eos> 1\n<unk> 2" > $aishell_data_dir/dict
 cat $aishell_data_dir/train/text | cut -d" " -f 2- | tr ' ' '\n' | sort | \
     uniq | awk '{print $1" "NR + 2}' >> $aishell_data_dir/dict
-for dir in train dev; do
-    ./utils/token2idx.pl $aishell_data_dir/dict \
-        < $aishell_data_dir/$dir/text > $aishell_data_dir/$dir/token
-done
 
 echo "$0: Prepare utt2dur..."
 for dir in train dev; do
-    utils/get_wav_dur.sh --nj 10 --output "time" $aishell_data_dir/$dir exp/utt2dur/$dir
+    scripts/get_wav_dur.sh --nj 10 --output "time" $aishell_data_dir/$dir exp/utt2dur/$dir
 done
 
 echo "$0: AISHELL data preparation succeeded"

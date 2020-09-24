@@ -63,8 +63,8 @@ data_conf:
   train:
     wav_scp: "data/aishell_v1/train/wav.scp"
     utt2dur: "data/aishell_v1/train/utt2dur"
-    token: "data/aishell_v1/train/token"
+    text: "data/aishell_v1/train/text"
   valid:
     wav_scp: "data/aishell_v1/dev/wav.scp"
     utt2dur: "data/aishell_v1/dev/utt2dur"
-    token: "data/aishell_v1/dev/token"
+    text: "data/aishell_v1/dev/text"

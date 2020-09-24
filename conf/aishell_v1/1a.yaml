@@ -6,7 +6,7 @@ nnet_conf:
   input_size: 80
   encoder_type: "tdnn_rnn"
   encoder_proj: 512
-  encoder_kwargs: 
+  encoder_kwargs:
     tdnn_dim: 512
     tdnn_layers: 3
     tdnn_stride: "2,2,2"
@@ -60,7 +60,7 @@ trainer_conf:
     ssr: 0.2
     epoch_beg: 10
     epoch_end: 26
-    update_interval: 4 
+    update_interval: 4
   no_impr: 6
   no_impr_thres: 0.2
   clip_gradient: 5
@@ -77,8 +77,8 @@ data_conf:
   train:
     wav_scp: "data/aishell_v1/train/wav.scp"
     utt2dur: "data/aishell_v1/train/utt2dur"
-    token: "data/aishell_v1/train/token"
+    text: "data/aishell_v1/train/text"
   valid:
     wav_scp: "data/aishell_v1/dev/wav.scp"
     utt2dur: "data/aishell_v1/dev/utt2dur"
-    token: "data/aishell_v1/dev/token"
+    text: "data/aishell_v1/dev/text"

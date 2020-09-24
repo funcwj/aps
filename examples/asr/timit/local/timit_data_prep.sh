@@ -110,8 +110,7 @@ echo -e "<sos> 0\n<eos> 1" > $data_dir/dict
 cat $data_dir/train/text | cut -d" " -f 2- | tr ' ' '\n' | sort | \
   uniq | awk '{print $1" "NR + 1}' >> $data_dir/dict
 for dir in train dev; do
-  ./utils/token2idx.pl $data_dir/dict < $data_dir/$dir/text > $data_dir/$dir/token
-  utils/get_wav_dur.sh --nj 10 --output "time" $data_dir/$dir exp/utt2dur/$dir
+  scripts/get_wav_dur.sh --nj 10 --output "time" $data_dir/$dir exp/utt2dur/$dir
 done
 
 echo "Data preparation succeeded"

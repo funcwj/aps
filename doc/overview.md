@@ -49,12 +49,10 @@ will load .yaml configuration from `conf/asr1/1a.yaml` and create checkpoint dir
 │   ├── asr1
 │   │   ├── dev
 │   │   │   ├── text
-│   │   │   ├── token
 │   │   │   ├── utt2dur
 │   │   │   └── wav.scp
 │   │   ├── train
 │   │   │   ├── text
-│   │   │   ├── token
 │   │   │   ├── utt2dur
 │   │   │   └── wav.scp
 │   │   └── tst

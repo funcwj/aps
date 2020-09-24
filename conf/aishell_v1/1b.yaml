@@ -5,16 +5,16 @@ nnet_conf:
   encoder_type: "transformer"
   encoder_kwargs:
     input_embed: "conv2d"
-    att_dim: 256
-    nhead: 4
-    feedforward_dim: 512
+    att_dim: 512
+    nhead: 8
+    feedforward_dim: 1024
     pos_dropout: 0.2
     att_dropout: 0.2
     num_layers: 8
   decoder_kwargs:
-    att_dim: 256
-    nhead: 4
-    feedforward_dim: 512
+    att_dim: 512
+    nhead: 8
+    feedforward_dim: 1024
     pos_dropout: 0.2
     att_dropout: 0.2
     num_layers: 6
@@ -64,8 +64,8 @@ data_conf:
   train:
     wav_scp: "data/aishell_v1/train/wav.scp"
     utt2dur: "data/aishell_v1/train/utt2dur"
-    token: "data/aishell_v1/train/token"
+    text: "data/aishell_v1/train/text"
   valid:
     wav_scp: "data/aishell_v1/dev/wav.scp"
     utt2dur: "data/aishell_v1/dev/utt2dur"
-    token: "data/aishell_v1/dev/token"
+    text: "data/aishell_v1/dev/text"

@@ -31,8 +31,8 @@ cat $chime4_dir/train/text | utils/tokenizer.pl --space "<space>" - | \
   uniq | awk '{print $1" "NR + 2}' >> $chime4_dir/dict || exit 1
 
 for name in train dev; do
-  cat $chime4_dir/$name/text | utils/tokenizer.pl --space "<space>" - | \
-    ./utils/token2idx.pl $chime4_dir/dict > $chime4_dir/$name/token || exit 1
+  cat $chime4_dir/$name/text | utils/tokenizer.pl --space "<space>" - \
+    > $chime4_dir/$name/char || exit 1
 done
 
 mkdir -p $wsj0_chime4_dir/{train,dev}

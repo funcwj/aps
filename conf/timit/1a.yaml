@@ -68,8 +68,8 @@ data_conf:
   train:
     wav_scp: "data/timit/train/wav.scp"
     utt2dur: "data/timit/train/utt2dur"
-    token: "data/timit/train/token"
+    text: "data/timit/train/text"
   valid:
     wav_scp: "data/timit/dev/wav.scp"
     utt2dur: "data/timit/dev/utt2dur"
-    token: "data/timit/dev/token"
+    text: "data/timit/dev/text"

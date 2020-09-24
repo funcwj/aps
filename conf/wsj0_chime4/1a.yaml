@@ -76,8 +76,8 @@ data_conf:
   train:
     wav_scp: "data/wsj0_chime4/train/wav.scp"
     utt2dur: "data/wsj0_chime4/train/utt2dur"
-    token: "data/wsj0_chime4/train/token"
+    text: "data/wsj0_chime4/train/char"
   valid:
     wav_scp: "data/wsj0_chime4/dev/wav.scp"
     utt2dur: "data/wsj0_chime4/dev/utt2dur"
-    token: "data/wsj0_chime4/dev/token"
+    text: "data/wsj0_chime4/dev/char"
