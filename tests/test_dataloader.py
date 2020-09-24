@@ -2,10 +2,20 @@
 
 # wujian@2020
 
+import codecs
 import pytest
 import torch as th
 
 from aps.loader import support_loader
+
+
+def vocab_dict(dict_path):
+    with codecs.open(dict_path, encoding="utf-8") as f:
+        vocab = {}
+        for line in f:
+            unit, idx = line.split()
+            vocab[unit] = int(idx)
+    return vocab
 
 
 @pytest.mark.parametrize("batch_size", [1, 2, 4])
@@ -14,8 +24,9 @@ def test_am_wav_loader(batch_size, num_workers):
     egs_dir = "data/dataloader/am"
     loader = support_loader(fmt="am_wav",
                             wav_scp=f"{egs_dir}/egs.wav.scp",
-                            token=f"{egs_dir}/egs.token",
+                            text=f"{egs_dir}/egs.fake.text",
                             utt2dur=f"{egs_dir}/egs.utt2dur",
+                            vocab_dict=vocab_dict(f"{egs_dir}/dict"),
                             train=False,
                             sr=16000,
                             adapt_dur=10,
@@ -37,7 +48,8 @@ def test_am_kaldi_loader(batch_size, num_workers):
     egs_dir = "data/dataloader/am"
     loader = support_loader(fmt="am_kaldi",
                             feats_scp=f"{egs_dir}/egs.fbank.scp",
-                            token=f"{egs_dir}/egs.token",
+                            text=f"{egs_dir}/egs.fake.text",
+                            vocab_dict=vocab_dict(f"{egs_dir}/dict"),
                             utt2dur=f"{egs_dir}/egs.fbank.num_frames",
                             train=False,
                             adapt_dur=900,
@@ -105,7 +117,8 @@ def test_lm_utt_loader(batch_size):
     loader = support_loader(fmt="lm_utt",
                             sos=0,
                             eos=1,
-                            token=f"{egs_dir}/test.utt.token",
+                            text=f"{egs_dir}/test.utt.text",
+                            vocab_dict=vocab_dict(f"{egs_dir}/dict"),
                             batch_size=batch_size,
                             drop_last=True)
     for egs in loader:

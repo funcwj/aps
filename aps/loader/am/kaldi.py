@@ -21,8 +21,9 @@ from aps.loader.am.utils import process_token, BatchSampler
 def DataLoader(train=True,
                distributed=False,
                feats_scp="",
-               token="",
+               text="",
                utt2dur="",
+               vocab_dict="",
                max_token_num=400,
                max_dur=3000,
                min_dur=40,
@@ -32,8 +33,9 @@ def DataLoader(train=True,
                num_workers=0,
                min_batch_size=4):
     dataset = Dataset(feats_scp,
-                      token,
+                      text,
                       utt2dur,
+                      vocab_dict,
                       max_token_num=max_token_num,
                       max_frame_num=max_dur,
                       min_frame_num=min_dur)
@@ -54,15 +56,17 @@ class Dataset(dat.Dataset):
 
     def __init__(self,
                  feats_scp,
-                 token,
+                 text,
                  utt2num_frames,
+                 vocab_dict,
                  max_token_num=400,
                  max_frame_num=3000,
                  min_frame_num=40):
         self.feats_reader = ScriptReader(feats_scp)
         # sorted
-        self.token_reader = process_token(token,
+        self.token_reader = process_token(text,
                                           utt2num_frames,
+                                          vocab_dict,
                                           max_token_num=max_token_num,
                                           max_dur=max_frame_num,
                                           min_dur=min_frame_num)

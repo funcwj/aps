@@ -30,7 +30,7 @@ constrained_conf_keys = [
 ]
 
 
-def train_worker(task, conf, args):
+def train_worker(task, conf, vocab_dict, args):
     """
     Initalize training workers
     """
@@ -70,6 +70,7 @@ def train_worker(task, conf, args):
                                 train=True,
                                 distributed=True,
                                 fmt=data_conf["fmt"],
+                                vocab_dict=vocab_dict,
                                 batch_size=args.batch_size // num_process,
                                 num_workers=args.num_workers // num_process,
                                 **data_conf["loader"])
@@ -77,6 +78,7 @@ def train_worker(task, conf, args):
                                 train=False,
                                 distributed=False,
                                 fmt=data_conf["fmt"],
+                                vocab_dict=vocab_dict,
                                 batch_size=args.batch_size,
                                 num_workers=args.num_workers // num_process,
                                 **data_conf["loader"])
@@ -125,7 +127,7 @@ def load_conf(yaml_conf, dict_path):
             nnet_conf["blank"] = len(vocab)
         else:
             nnet_conf["ctc"] = use_ctc
-    return conf
+    return conf, vocab
 
 
 def run(args):
@@ -134,7 +136,7 @@ def run(args):
     if seed is not None:
         print(f"Set random seed as {seed}")
 
-    conf = load_conf(args.conf, args.dict)
+    conf, vocab_dict = load_conf(args.conf, args.dict)
 
     asr_cls = support_nnet(conf["nnet"])
     asr_transform = None
@@ -154,7 +156,7 @@ def run(args):
         nnet = asr_cls(**conf["nnet_conf"])
 
     task = support_task(conf["task"], nnet, **conf["task_conf"])
-    train_worker(task, conf, args)
+    train_worker(task, conf, vocab_dict, args)
 
 
 if __name__ == "__main__":

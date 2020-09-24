@@ -68,7 +68,7 @@ def load_conf(yaml_conf, dict_path):
             nnet_conf["blank"] = len(vocab)
         else:
             nnet_conf["ctc"] = use_ctc
-    return conf
+    return conf, vocab
 
 
 def run(args):
@@ -77,19 +77,21 @@ def run(args):
     if seed is not None:
         print(f"Set random seed as {seed}")
 
-    conf = load_conf(args.conf, args.dict)
+    conf, vocab_dict = load_conf(args.conf, args.dict)
     print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
                                 train=True,
                                 fmt=data_conf["fmt"],
                                 batch_size=args.batch_size,
+                                vocab_dict=vocab_dict,
                                 num_workers=args.num_workers,
                                 **data_conf["loader"])
     dev_loader = support_loader(**data_conf["valid"],
                                 train=False,
                                 fmt=data_conf["fmt"],
                                 batch_size=args.batch_size,
+                                vocab_dict=vocab_dict,
                                 num_workers=args.num_workers,
                                 **data_conf["loader"])
 

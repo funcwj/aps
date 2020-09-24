@@ -14,7 +14,8 @@ from torch.nn.utils.rnn import pad_sequence
 from kaldi_python_io import Reader as BaseReader
 
 
-def DataLoader(token="",
+def DataLoader(text="",
+               vocab_dict="",
                train=True,
                sos=-1,
                eos=-1,
@@ -22,7 +23,7 @@ def DataLoader(token="",
                batch_size=64,
                num_workers=0,
                drop_last=False):
-    dataset = Dataset(token, min_token_num=min_token_num)
+    dataset = Dataset(text, vocab_dict, min_token_num=min_token_num)
     return UttDataLoader(dataset,
                          sos=sos,
                          eos=eos,
@@ -72,20 +73,21 @@ class Dataset(dat.Dataset):
     Dataset for token corpus
     """
 
-    def __init__(self, token_scp, min_token_num=2, eos=None):
-        token_reader = BaseReader(token_scp,
-                                  value_processor=lambda l: [int(n) for n in l],
-                                  num_tokens=-1)
+    def __init__(self, text, vocab_dict, min_token_num=2, eos=None):
+        text_reader = BaseReader(text, num_tokens=-1, restrict=False)
         self.token_set = []
-        for _, tok in token_reader:
-            if len(tok) <= min_token_num:
-                # warnings.warn(f"Pass short utterances: {key}")
-                pass
+        for key, tokens in text_reader:
+            if len(tokens) <= min_token_num:
+                warnings.warn(f"Pass short utterances: {key}")
             else:
+                toks = []
+                for t in tokens:
+                    toks.append(vocab_dict[t] if t in
+                                vocab_dict else vocab_dict["<unk>"])
                 if eos is None:
-                    self.token_set.append(tok)
+                    self.token_set.append(toks)
                 else:
-                    self.token_set.append(tok + [eos])
+                    self.token_set.append(toks + [eos])
 
     def __getitem__(self, index):
         return self.token_set[index]

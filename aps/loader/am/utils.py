@@ -2,7 +2,6 @@
 
 # wujian@2019
 
-import subprocess
 import torch as th
 
 import torch.utils.data as dat
@@ -12,20 +11,18 @@ import aps.distributed as dist
 from kaldi_python_io import Reader as BaseReader
 
 
-def process_token(token,
+def process_token(text,
                   utt2dur,
+                  vocab_dict,
                   max_token_num=400,
                   min_token_num=2,
                   max_dur=3000,
                   min_dur=40):
     utt2dur = BaseReader(utt2dur, value_processor=float)
-    token_reader = BaseReader(token,
-                              value_processor=lambda toks: list(map(int, toks)),
-                              num_tokens=-1,
-                              restrict=False)
+    text_reader = BaseReader(text, num_tokens=-1, restrict=False)
     token_set = []
-    for key, token in token_reader:
-        L = len(token)
+    for key, tokens in text_reader:
+        L = len(tokens)
         if L > max_token_num or L <= min_token_num:
             continue
         if key not in utt2dur:
@@ -33,12 +30,11 @@ def process_token(token,
         num_frames = utt2dur[key]
         if num_frames < min_dur or num_frames > max_dur:
             continue
-        token_set.append({
-            "key": key,
-            "dur": num_frames,
-            "tok": token,
-            "len": L
-        })
+        tok = []
+        for t in tokens:
+            tok.append(vocab_dict[t] if t in
+                       vocab_dict else vocab_dict["<unk>"])
+        token_set.append({"key": key, "dur": num_frames, "tok": tok, "len": L})
     # long -> short
     token_set = sorted(token_set, key=lambda d: d["dur"], reverse=True)
     N = len(token_set)

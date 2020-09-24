@@ -15,7 +15,8 @@ from aps.loader.lm.utt import Dataset
 from kaldi_python_io import Reader as BaseReader
 
 
-def DataLoader(token,
+def DataLoader(text="",
+               vocab_dict="",
                train=True,
                sos=-1,
                eos=-1,
@@ -23,7 +24,7 @@ def DataLoader(token,
                chunk_size=20,
                num_workers=0,
                min_token_num=5):
-    dataset = Dataset(token, eos=eos, min_token_num=min_token_num)
+    dataset = Dataset(text, vocab_dict, eos=eos, min_token_num=min_token_num)
     return BpttDataLoader(dataset,
                           shuffle=train,
                           batch_size=batch_size,
