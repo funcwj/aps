@@ -10,8 +10,7 @@ install:
   - pip install numba==0.48 && pip freeze
 
 script:
-  - cd tests && pytest
-  - bash .ci/check_bin.sh
+  - cd tests && pytest && bash ./check_cmds.sh
 
 notifications:
   email: false

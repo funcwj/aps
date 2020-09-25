@@ -99,9 +99,8 @@ cd -
 
 echo "$0: Prepare $data_dir..."
 for x in train dev test; do
-  mkdir -p $data_dir/$x $*/$x
-  awk -v dir=$*/$x '{printf("%s %s/%s.wav\n", $1, dir, $1)}' $dir/${x}_sph.scp > $data_dir/$x/wav.scp
-  awk -v dir=$*/$x '{printf("sox %s -t wav %s/%s.wav\n", $2, dir, $1);}' $dir/${x}_sph.scp | bash
+  mkdir -p $data_dir/$x
+  awk '{printf("%s sox %s -t wav - |\n", $1, $2)}' $dir/${x}_sph.scp > $data_dir/$x/wav.scp
   cp $dir/$x.text $data_dir/$x/text
 done
 

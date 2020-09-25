@@ -20,17 +20,23 @@ def DataLoader(text="",
                sos=-1,
                eos=-1,
                min_token_num=2,
+               max_token_num=2000,
+               adapt_token_num=400,
+               min_batch_size=8,
                batch_size=64,
-               num_workers=0,
-               drop_last=False):
-    dataset = Dataset(text, vocab_dict, min_token_num=min_token_num)
+               num_workers=0):
+    dataset = Dataset(text,
+                      vocab_dict,
+                      min_token_num=min_token_num,
+                      max_token_num=max_token_num)
     return UttDataLoader(dataset,
                          sos=sos,
                          eos=eos,
                          shuffle=train,
-                         drop_last=drop_last,
                          batch_size=batch_size,
-                         num_workers=num_workers)
+                         num_workers=num_workers,
+                         min_batch_size=min_batch_size,
+                         adapt_token_num=adapt_token_num)
 
 
 class BatchSampler(dat.Sampler):
@@ -38,34 +44,44 @@ class BatchSampler(dat.Sampler):
     A custom batchsampler
     """
 
-    def __init__(self, token_set, batch_size, shuffle=False, drop_last=False):
-        num_utts = len(token_set)
-        len_utts = [len(tok) for tok in token_set]
-        order_idx = th.argsort(th.tensor(len_utts, dtype=th.int32)).tolist()
-        # reverse order
-        order_idx = order_idx[::-1]
+    def __init__(self,
+                 token_set,
+                 batch_size,
+                 min_batch_size=8,
+                 adapt_token_num=400,
+                 shuffle=False):
+        self.min_batch_size = min_batch_size
+        self.adapt_token_num = adapt_token_num
+        self.genfunc = th.randperm if shuffle else th.arange
+        self.batches = []
+        chunk_size = 10000 * batch_size
+        for i in range(0, len(token_set), chunk_size):
+            indices = self._sort_indices(token_set[i:i + chunk_size],
+                                         batch_size)
+            self.batches += indices
+
+    def _sort_indices(self, subset, batch_size):
+        utts_len = [len(seq) for seq in subset]
+        # short -> long
+        desc_idx = th.argsort(th.tensor(utts_len, dtype=th.int32),
+                              descending=False).tolist()
         batches = []
-        for i in range(0, num_utts, batch_size):
-            if i + batch_size > num_utts:
-                batches.append(order_idx[i:])
-            else:
-                batches.append(order_idx[i:i + batch_size])
-        if drop_last:
-            batches = batches[:-1]
-        self.shuffle = shuffle
-        self.batches = batches
-        self.num_batches = len(batches)
+        beg, cur_bz = 0, batch_size
+        while beg + self.min_batch_size <= len(desc_idx):
+            cur_len = utts_len[desc_idx[beg]]
+            factor = cur_len // self.adapt_token_num
+            cur_bz = int(max(self.min_batch_size, batch_size // (1 + factor)))
+            batches.append(desc_idx[beg:beg + cur_bz])
+            beg += cur_bz
+        return batches
 
     def __iter__(self):
-        if self.shuffle:
-            indices = th.randperm(self.num_batches).tolist()
-        else:
-            indices = th.arange(self.num_batches).tolist()
+        indices = self.genfunc(len(self.batches)).tolist()
         for i in indices:
             yield self.batches[i]
 
     def __len__(self):
-        return self.num_batches
+        return len(self.batches)
 
 
 class Dataset(dat.Dataset):
@@ -73,7 +89,12 @@ class Dataset(dat.Dataset):
     Dataset for token corpus
     """
 
-    def __init__(self, text, vocab_dict, min_token_num=2, eos=None):
+    def __init__(self,
+                 text,
+                 vocab_dict,
+                 min_token_num=2,
+                 max_token_num=2000,
+                 eos=None):
         if vocab_dict:
             text_reader = BaseReader(text, num_tokens=-1, restrict=False)
         else:
@@ -84,8 +105,10 @@ class Dataset(dat.Dataset):
                 restrict=False)
         self.token_set = []
         for key, tokens in text_reader:
-            if len(tokens) <= min_token_num:
-                warnings.warn(f"Pass short utterances: {key}")
+            if len(tokens) < min_token_num:
+                warnings.warn(f"Pass utterance that is too short: {key}")
+            elif len(tokens) > max_token_num:
+                warnings.warn(f"Pass utterance that is too long: {key}")
             else:
                 if vocab_dict:
                     toks = []
@@ -118,7 +141,8 @@ class UttDataLoader(object):
                  shuffle=True,
                  batch_size=64,
                  num_workers=0,
-                 drop_last=False):
+                 adapt_token_num=400,
+                 min_batch_size=8):
         if sos < 0 or eos < 0:
             raise ValueError(f"Invalid sos/eos value: {sos}/{eos}")
         self.eos = eos
@@ -126,7 +150,8 @@ class UttDataLoader(object):
         sampler = BatchSampler(dataset.token_set,
                                batch_size,
                                shuffle=shuffle,
-                               drop_last=drop_last)
+                               min_batch_size=min_batch_size,
+                               adapt_token_num=adapt_token_num)
         self.batch_loader = dat.DataLoader(dataset,
                                            batch_sampler=sampler,
                                            num_workers=num_workers,
@@ -151,14 +176,3 @@ class UttDataLoader(object):
     def __iter__(self):
         for egs in self.batch_loader:
             yield egs
-
-
-def run():
-    loader = DataLoader(token="token", sos=1, eos=0, train=False, batch_size=32)
-    for egs in loader:
-        print(egs["len"])
-        print(egs["tgt"])
-
-
-if __name__ == "__main__":
-    run()

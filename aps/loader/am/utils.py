@@ -96,7 +96,7 @@ class BatchSampler(dat.Sampler):
         tot = len(dataset)
         cur_bz = batch_size
         idx_bz = []
-        while beg + cur_bz <= tot:
+        while beg + min_batch_size <= tot:
             cur = dataset.token_reader[beg]
             cur_ilen = cur["dur"]
             cur_olen = cur["len"]

@@ -36,4 +36,4 @@ jobs:
 
       - name: Run testing cases (cmd)
         run: |
-          bash .ci/check_bin.sh
+          cd tests && bash ./check_cmds.sh

@@ -120,7 +120,7 @@ def test_lm_utt_loader(batch_size):
                             text=f"{egs_dir}/test.utt.text",
                             vocab_dict=vocab_dict(f"{egs_dir}/dict"),
                             batch_size=batch_size,
-                            drop_last=True)
+                            min_batch_size=batch_size)
     for egs in loader:
         assert egs["src"].shape == egs["tgt"].shape
         assert egs["src"].shape[0] == batch_size

@@ -28,6 +28,8 @@ data_conf:
   fmt: "lm_utt"
   loader:
     min_token_num: 6
+    min_batch_size: 8
+    adapt_token_num: 300
   train:
     text: "data/librispeech/lm/train.wp6k"
   valid:
