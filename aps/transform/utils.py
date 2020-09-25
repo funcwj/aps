@@ -17,8 +17,8 @@ def init_window(wnd, frame_len):
     Return window coefficient
     """
 
-    def sqrthann(frame_len):
-        return th.hann_window(frame_len)**0.5
+    def sqrthann(frame_len, periodic=True):
+        return th.hann_window(frame_len, periodic=periodic)**0.5
 
     if wnd not in ["bartlett", "hann", "hamm", "blackman", "rect", "sqrthann"]:
         raise RuntimeError(f"Unknown window type: {wnd}")
@@ -31,7 +31,11 @@ def init_window(wnd, frame_len):
         "bartlett": th.bartlett_window,
         "rect": th.ones
     }
-    c = wnd_tpl[wnd](frame_len)
+    if wnd != "rect":
+        # match with librosa
+        c = wnd_tpl[wnd](frame_len, periodic=True)
+    else:
+        c = wnd_tpl[wnd](frame_len)
     return c
 
 
@@ -46,6 +50,10 @@ def init_kernel(frame_len,
     """
     # FFT points
     B = 2**math.ceil(math.log2(frame_len)) if round_pow_of_two else frame_len
+    # center padding window if needed (match with librosa)
+    if B != frame_len:
+        lpad = (B - frame_len) // 2
+        window = tf.pad(window, (lpad, B - frame_len - lpad))
     if normalized:
         # make K^H * K = I
         S = B**0.5
@@ -53,14 +61,14 @@ def init_kernel(frame_len,
         S = 1
     I = th.stack([th.eye(B), th.zeros(B, B)], dim=-1)
     # W x B x 2
-    K = th.fft(I / S, 1)[:frame_len]
+    K = th.fft(I / S, 1)
     if inverse and not normalized:
         # to make K^H * K = I
         K = K / B
     # 2 x B x W
     K = th.transpose(K, 0, 2) * window
     # 2B x 1 x W
-    K = th.reshape(K, (B * 2, 1, frame_len))
+    K = th.reshape(K, (B * 2, 1, B))
     return K
 
 
@@ -137,8 +145,9 @@ def _forward_stft(wav,
     wav = wav.view(-1, 1, S)
     # NC x 1 x S+2P
     if center:
-        ps = (frame_hop, frame_hop, 0, 0, 0, 0)
-        wav = tf.pad(wav, ps, mode="constant", value=0)
+        pad = kernel.shape[-1] // 2
+        # NOTE: match with librosa
+        wav = tf.pad(wav, (pad, pad), mode="reflect")
     # STFT
     packed = tf.conv1d(wav, kernel, stride=frame_hop, padding=0)
     # NC x 2B x T => N x C x 2B x T
@@ -171,7 +180,7 @@ def _inverse_stft(transform,
     """
     iSTFT inner function
     Args:
-        transform (Tensor or [Tensor, Tensor]), STFT transform results        
+        transform (Tensor or [Tensor, Tensor]), STFT transform results
         kernel (Tensor), STFT transform kernels, from init_kernel(...)
         input (str), input format:
             polar: return (magnitude, phase) pair
@@ -225,8 +234,9 @@ def _inverse_stft(transform,
     # 1 x 1 x T
     norm = tf.conv_transpose1d(win**2, I, stride=frame_hop, padding=0)
     if center:
-        s = s[..., frame_hop:-frame_hop]
-        norm = norm[..., frame_hop:-frame_hop]
+        pad = kernel.shape[-1] // 2
+        s = s[..., pad:-pad]
+        norm = norm[..., pad:-pad]
     s = s / (norm + EPSILON)
     # N x S
     s = s.squeeze(1)
@@ -327,10 +337,16 @@ class STFTBase(nn.Module):
             f"kernel_size={self.num_bins}x{self.K.shape[2]}")
 
     def num_frames(self, num_samples):
+        """
+        Compute number of the frames
+        """
         if th.sum(num_samples <= self.frame_len):
-            raise RuntimeError(f"Audio samples {num_samples.cpu()} less " +
-                               f"than frame_len ({self.frame_len})")
-        return (num_samples - self.frame_len) // self.frame_hop + 1
+            raise RuntimeError(
+                f"Audio samples less than frame_len ({self.frame_len})")
+        num_ffts = self.K.shape[-1]
+        if self.center:
+            num_samples += num_ffts
+        return (num_samples - num_ffts) // self.frame_hop + 1
 
     def extra_repr(self):
         return self.expr

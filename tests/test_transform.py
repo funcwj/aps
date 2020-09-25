@@ -2,7 +2,9 @@
 
 # wujian@2020
 
+import math
 import pytest
+import librosa
 
 import torch as th
 import numpy as np
@@ -17,7 +19,7 @@ from aps.transform import AsrTransform, EnhTransform, FixedBeamformer, DfTransfo
 @pytest.mark.parametrize("wav", [read_wav("data/transform/egs1.wav", sr=16000)])
 @pytest.mark.parametrize("frame_len, frame_hop", [(512, 256), (1024, 256),
                                                   (256, 128)])
-@pytest.mark.parametrize("window", ["hann", "hamm", "sqrthann"])
+@pytest.mark.parametrize("window", ["hamm", "sqrthann"])
 @pytest.mark.parametrize("center", [True, False])
 def test_forward_inverse_stft(wav, frame_len, frame_hop, window, center):
     wav = th.from_numpy(wav)
@@ -27,16 +29,40 @@ def test_forward_inverse_stft(wav, frame_len, frame_hop, window, center):
                        window=window,
                        center=center)
     out = inverse_stft(mid, frame_len, frame_hop, window=window, center=center)
-    assert th.sum((out - wav)**2).item() < 1e-5
+    th.testing.assert_allclose(out, wav)
 
 
 @pytest.mark.parametrize("wav", [read_wav("data/transform/egs1.wav", sr=16000)])
-@pytest.mark.parametrize("feats,shape", [("spectrogram-log", [1, 808, 257]),
-                                         ("fbank-log-cmvn", [1, 808, 80]),
-                                         ("mfcc", [1, 808, 13]),
-                                         ("mfcc-aug", [1, 808, 13]),
-                                         ("mfcc-splice", [1, 808, 39]),
-                                         ("mfcc-aug-delta", [1, 808, 39])])
+@pytest.mark.parametrize("frame_len, frame_hop", [(512, 256), (1024, 256),
+                                                  (400, 160)])
+@pytest.mark.parametrize("window", ["hann", "hamm"])
+@pytest.mark.parametrize("center", [False, True])
+def test_with_librosa(wav, frame_len, frame_hop, window, center):
+    real, imag = forward_stft(th.from_numpy(wav)[None, ...],
+                              frame_len,
+                              frame_hop,
+                              window=window,
+                              center=center,
+                              output="complex")
+    torch_mag = (real**2 + imag**2)**0.5
+    librosa_mag = np.abs(
+        librosa.stft(wav,
+                     n_fft=2**math.ceil(math.log2(frame_len)),
+                     hop_length=frame_hop,
+                     win_length=frame_len,
+                     window=window,
+                     center=center)).astype("float32")
+    librosa_mag = th.from_numpy(librosa_mag)
+    th.testing.assert_allclose(torch_mag[0], librosa_mag)
+
+
+@pytest.mark.parametrize("wav", [read_wav("data/transform/egs1.wav", sr=16000)])
+@pytest.mark.parametrize("feats,shape", [("spectrogram-log", [1, 807, 257]),
+                                         ("fbank-log-cmvn", [1, 807, 80]),
+                                         ("mfcc", [1, 807, 13]),
+                                         ("mfcc-aug", [1, 807, 13]),
+                                         ("mfcc-splice", [1, 807, 39]),
+                                         ("mfcc-aug-delta", [1, 807, 39])])
 def test_asr_transform(wav, feats, shape):
     transform = AsrTransform(feats=feats,
                              frame_len=400,
@@ -73,7 +99,7 @@ def test_enh_transform(wav, feats, shape):
 @pytest.mark.parametrize("num_directions", [8, 16])
 def test_fixed_beamformer(batch_size, num_channels, num_bins, num_directions):
     beamformer = FixedBeamformer(num_directions, num_channels, num_bins)
-    num_frames = th.randint(50, 100, (1, )).item()
+    num_frames = th.randint(50, 100, (1,)).item()
     inp_r = th.rand(batch_size, num_channels, num_bins, num_frames)
     inp_i = th.rand(batch_size, num_channels, num_bins, num_frames)
     inp_c = ComplexTensor(inp_r, inp_i)
@@ -92,12 +118,11 @@ def test_df_transform(num_bins, num_doas):
     transform = DfTransform(num_bins=num_bins,
                             num_doas=num_doas,
                             af_index="1,0;2,0;3,0;4,0;5,0;6,0")
-    num_frames = th.randint(50, 100, (1, )).item()
+    num_frames = th.randint(50, 100, (1,)).item()
     phase = th.rand(batch_size, num_channels, num_bins, num_frames)
     doa = th.rand(batch_size)
     df = transform(phase, doa)
     if num_doas == 1:
         assert df.shape == th.Size([batch_size, num_bins, num_frames])
     else:
-        assert df.shape == th.Size(
-            [batch_size, num_doas, num_bins, num_frames])
+        assert df.shape == th.Size([batch_size, num_doas, num_bins, num_frames])
