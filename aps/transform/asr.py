@@ -29,17 +29,21 @@ class SpectrogramTransform(STFT):
     def __init__(self,
                  frame_len,
                  frame_hop,
+                 center=False,
                  window="hamm",
                  round_pow_of_two=True,
                  normalized=False,
-                 onesided=True):
+                 onesided=True,
+                 mode="librosa"):
         super(SpectrogramTransform,
               self).__init__(frame_len,
                              frame_hop,
+                             center=center,
                              window=window,
                              round_pow_of_two=round_pow_of_two,
                              normalized=normalized,
-                             onesided=onesided)
+                             onesided=onesided,
+                             mode=mode)
 
     def dim(self):
         return self.num_bins
@@ -389,8 +393,10 @@ class FeatureTransform(nn.Module):
                  frame_len=400,
                  frame_hop=160,
                  window="hamm",
+                 center=False,
                  round_pow_of_two=True,
                  stft_normalized=False,
+                 stft_mode="librosa",
                  sr=16000,
                  num_mels=80,
                  num_ceps=13,
@@ -415,22 +421,21 @@ class FeatureTransform(nn.Module):
         transform = []
         feats_dim = 0
         downsample_rate = 1
+        stft_kwargs = {
+            "mode": stft_mode,
+            "window": window,
+            "center": center,
+            "normalized": stft_normalized,
+            "round_pow_of_two": round_pow_of_two
+        }
         for tok in trans_tokens:
             if tok == "spectrogram":
                 transform.append(
-                    SpectrogramTransform(frame_len,
-                                         frame_hop,
-                                         window=window,
-                                         round_pow_of_two=round_pow_of_two,
-                                         normalized=stft_normalized))
+                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs))
                 feats_dim = transform[-1].dim()
             elif tok == "fbank":
                 fbank = [
-                    SpectrogramTransform(frame_len,
-                                         frame_hop,
-                                         window=window,
-                                         round_pow_of_two=round_pow_of_two,
-                                         normalized=stft_normalized),
+                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
                     MelTransform(frame_len,
                                  round_pow_of_two=round_pow_of_two,
                                  sr=sr,
@@ -441,10 +446,7 @@ class FeatureTransform(nn.Module):
                 feats_dim = transform[-1].dim()
             elif tok == "mfcc":
                 log_fbank = [
-                    SpectrogramTransform(frame_len,
-                                         frame_hop,
-                                         window=window,
-                                         round_pow_of_two=round_pow_of_two),
+                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
                     MelTransform(frame_len,
                                  round_pow_of_two=round_pow_of_two,
                                  sr=sr,

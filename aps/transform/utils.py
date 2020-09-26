@@ -32,7 +32,6 @@ def init_window(wnd, frame_len):
         "rect": th.ones
     }
     if wnd != "rect":
-        # match with librosa
         c = wnd_tpl[wnd](frame_len, periodic=True)
     else:
         c = wnd_tpl[wnd](frame_len)
@@ -44,14 +43,17 @@ def init_kernel(frame_len,
                 window,
                 round_pow_of_two=True,
                 normalized=False,
-                inverse=False):
+                inverse=False,
+                mode="librosa"):
     """
     Return STFT kernels
     """
+    if mode not in ["librosa", "kaldi"]:
+        raise ValueError(f"Unsupported mode: {mode}")
     # FFT points
     B = 2**math.ceil(math.log2(frame_len)) if round_pow_of_two else frame_len
-    # center padding window if needed (match with librosa)
-    if B != frame_len:
+    # center padding window if needed
+    if mode == "librosa" and B != frame_len:
         lpad = (B - frame_len) // 2
         window = tf.pad(window, (lpad, B - frame_len - lpad))
     if normalized:
@@ -62,13 +64,15 @@ def init_kernel(frame_len,
     I = th.stack([th.eye(B), th.zeros(B, B)], dim=-1)
     # W x B x 2
     K = th.fft(I / S, 1)
+    if mode == "kaldi":
+        K = K[:frame_len]
     if inverse and not normalized:
         # to make K^H * K = I
         K = K / B
     # 2 x B x W
     K = th.transpose(K, 0, 2) * window
     # 2B x 1 x W
-    K = th.reshape(K, (B * 2, 1, B))
+    K = th.reshape(K, (B * 2, 1, K.shape[-1]))
     return K
 
 
@@ -78,8 +82,7 @@ def init_melfilter(frame_len,
                    sr=16000,
                    num_mels=80,
                    fmin=0.0,
-                   fmax=None,
-                   norm=False):
+                   fmax=None):
     """
     Return mel-filters
     """
@@ -93,13 +96,6 @@ def init_melfilter(frame_len,
     fmax = sr // 2 if fmax is None else min(fmax, sr // 2)
     # mel-matrix
     mel = filters.mel(sr, N, n_mels=num_mels, fmax=fmax, fmin=fmin, htk=True)
-    # normalize filters
-    if norm:
-        # num_bins
-        csum = np.sum(mel, 0)
-        csum[csum == 0] = -1
-        # num_mels x num_bins
-        mel = mel @ np.diag(1 / csum)
     # num_mels x (N // 2 + 1)
     return th.tensor(mel, dtype=th.float32)
 
@@ -251,7 +247,8 @@ def forward_stft(wav,
                  round_pow_of_two=True,
                  normalized=False,
                  onesided=True,
-                 center=False):
+                 center=False,
+                 mode="librosa"):
     """
     STFT function implementation, equals to STFT layer
     """
@@ -261,7 +258,8 @@ def forward_stft(wav,
                     w,
                     round_pow_of_two=round_pow_of_two,
                     normalized=normalized,
-                    inverse=False)
+                    inverse=False,
+                    mode=mode)
     return _forward_stft(wav,
                          K.to(wav.device),
                          output=output,
@@ -278,7 +276,8 @@ def inverse_stft(transform,
                  round_pow_of_two=True,
                  normalized=False,
                  onesided=True,
-                 center=False):
+                 center=False,
+                 mode="librosa"):
     """
     iSTFT function implementation, equals to iSTFT layer
     """
@@ -292,7 +291,8 @@ def inverse_stft(transform,
                     w,
                     round_pow_of_two=round_pow_of_two,
                     normalized=normalized,
-                    inverse=True)
+                    inverse=True,
+                    mode=mode)
     return _inverse_stft(transform,
                          K.to(device),
                          w.to(device),
@@ -315,6 +315,7 @@ class STFTBase(nn.Module):
                  normalized=False,
                  onesided=True,
                  inverse=False,
+                 mode="librosa",
                  center=False):
         super(STFTBase, self).__init__()
         w = init_window(window, frame_len)
@@ -323,7 +324,8 @@ class STFTBase(nn.Module):
                         w,
                         round_pow_of_two=round_pow_of_two,
                         normalized=normalized,
-                        inverse=inverse)
+                        inverse=inverse,
+                        mode=mode)
         self.K = nn.Parameter(K, requires_grad=False)
         self.w = nn.Parameter(w, requires_grad=False)
         self.frame_len = frame_len

@@ -75,8 +75,8 @@ class DfTransform(nn.Module):
     """
     Compute angle/directional feature
         1) num_doas == 1: we known the DoA of the target speaker
-        2) num_doas != 1: we do not have that prior, so we sampled #num_doas DoAs 
-                          and compute on each directions    
+        2) num_doas != 1: we do not have that prior, so we sampled #num_doas DoAs
+                          and compute on each directions
     """
 
     def __init__(self,
@@ -158,7 +158,7 @@ class DfTransform(nn.Module):
         Compute angle feature
         Args
             ipd (Tensor): N x C x F x T
-            doa (Tensor): DoA of the target speaker (if we known that), N 
+            doa (Tensor): DoA of the target speaker (if we known that), N
                  or N x D (we do not known that, sampling D DoAs instead)
         Return
             af (Tensor): N x (D) x F x T
@@ -299,6 +299,7 @@ class FeatureTransform(nn.Module):
                  window="sqrthann",
                  round_pow_of_two=True,
                  stft_normalized=False,
+                 stft_mode="librosa",
                  center=False,
                  sr=16000,
                  gcmvn="",
@@ -317,6 +318,7 @@ class FeatureTransform(nn.Module):
         self.frame_len = frame_len
         self.frame_hop = frame_hop
         self.stft_kwargs = {
+            "mode": stft_mode,
             "window": window,
             "center": center,
             "normalized": stft_normalized,
