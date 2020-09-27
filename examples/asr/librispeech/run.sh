@@ -105,7 +105,7 @@ if [ $stage -le 5 ]; then
     gunzip librispeech-lm-norm.txt.gz && cd -
   mkdir -p data/librispeech/lm
   cat data/librispeech/{train,dev}/wp6k | sort -k1 > data/librispeech/lm/dev.wp6k
-  awk 'printf("utt-%d %s\n", NR, $0)' $data/lm/librispeech-lm-norm.txt > data/librispeech/lm/train.text
+  awk '{printf("utt-%d %s\n", NR, $0)}' $data/lm/librispeech-lm-norm.txt > data/librispeech/lm/train.text
   ./utils/subword.sh --op "encode" --encode "piece" \
     data/librispeech/lm/train.text exp/librispeech/$wp_name \
     > data/librispeech/lm/train.wp6k

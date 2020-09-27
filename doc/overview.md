@@ -7,22 +7,19 @@ bin conf data exp scripts utils
 and it can be initialzied using `scripts/init_workspace.sh`. For example:
 ```bash
 export APS_ROOT=/path/to/aps
-$APS_ROOT/scripts/init_workspace.sh asr1
-$APS_ROOT/scripts/init_workspace.sh sep1
-$APS_ROOT/scripts/init_workspace.sh enh1
+$APS_ROOT/scripts/init_workspace.sh wsj0_2mix
+$APS_ROOT/scripts/init_workspace.sh aishell_v1
 ```
 will make directory current `workspace` like (`APS_ROOT=../aps`):
 ```
 .
 ├── bin -> ../aps/bin
 ├── conf
-│   ├── asr1
-│   ├── enh1
-│   └── sep1
+│   ├── wsj0_2mix
+│   └── aishell_v1
 ├── data
-│   ├── asr1
-│   ├── enh1
-│   └── sep1
+│   ├── wsj0_2mix
+│   └── aishell_v1
 ├── scripts -> ../aps/scripts
 └── utils -> ../aps/utils
 ```
@@ -34,19 +31,18 @@ Assuming that we've prepared training & test data and experiment configurations 
 
 E.g., running
 ```bash
-./scripts/train_am.sh --batch-size 32 --gpu 0 asr1 1a
+./scripts/train_am.sh --batch-size 32 --gpu 0 aishell_v1 1a
 ```
-will load .yaml configuration from `conf/asr1/1a.yaml` and create checkpoint directory in `exp/asr1/1a`. After one epoch is done, the directory looks like:
+will load .yaml configuration from `conf/aishell_v1/1a.yaml` and create checkpoint directory in `exp/aishell_v1/1a`. After one epoch is done, the directory looks like:
 ```
 .
 ├── bin -> ../aps/bin
 ├── conf
-│   ├── asr1
+│   ├── aishell_v1
 │   │   └── 1a.yaml
-│   ├── enh1
-│   └── sep1
+│   └── wsj0_2mix
 ├── data
-│   ├── asr1
+│   ├── aishell_v1
 │   │   ├── dev
 │   │   │   ├── text
 │   │   │   ├── utt2dur
@@ -58,10 +54,9 @@ will load .yaml configuration from `conf/asr1/1a.yaml` and create checkpoint dir
 │   │   └── tst
 │   │       ├── text
 │   │       └── wav.scp
-│   ├── enh1
-│   └── sep1
+│   └── wsj0_2mix
 ├── exp
-│   └── asr1
+│   └── aishell_v1
 │       └── 1a
 │           ├── best.pt.tar
 │           ├── last.pt.tar

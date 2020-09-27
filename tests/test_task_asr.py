@@ -51,12 +51,12 @@ def test_ctc_xent():
                         lsm_factor=0.1,
                         ctc_weight=0.2,
                         blank=vocab_size - 1)
-    x_len = th.randint(16000, 16000 * 5,
-                       (batch_size, )).sort(-1, descending=True)[0]
+    x_len = th.randint(16000, 16000 * 5, (batch_size,)).sort(-1,
+                                                             descending=True)[0]
     x = th.rand(4, x_len.max().item())
-    U = th.randint(10, 20, (1, )).item()
+    U = th.randint(10, 20, (1,)).item()
     y = th.randint(0, vocab_size - 1, (batch_size, U))
-    y_len = th.randint(U // 2, U, (batch_size, )).sort(-1, descending=True)[0]
+    y_len = th.randint(U // 2, U, (batch_size,)).sort(-1, descending=True)[0]
     for n in range(batch_size):
         y[n, y_len[n].item():] = -1
     egs = {"src_len": x_len, "src_pad": x, "tgt_len": y_len, "tgt_pad": y}
@@ -81,7 +81,7 @@ def test_lm_xent():
                      rnn_dropout=0.2,
                      tie_weights=False)
     task = support_task("lm", rnnlm)
-    U = th.randint(10, 20, (1, )).item()
+    U = th.randint(10, 20, (1,)).item()
     x = th.randint(0, vocab_size - 1, (batch_size, U + 1))
     egs = {"src": x[:-1], "tgt": x[1:], "len": None}
     stats = task(egs)

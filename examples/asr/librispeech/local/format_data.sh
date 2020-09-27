@@ -19,6 +19,7 @@ for f in wav.scp utt2spk spk2utt text spk2gender; do
 done
 
 for data in train dev; do
+  echo "$0: prepare utt2dur for $data_dir/$data ..."
   scripts/get_wav_dur.sh --nj $nj --output "time" $data_dir/$data exp/utt2dur/$data
 done
 

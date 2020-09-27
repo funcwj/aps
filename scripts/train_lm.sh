@@ -9,6 +9,7 @@ seed=777
 epochs=100
 tensorboard=false
 batch_size=128
+num_workers=4
 eval_interval=-1
 save_interval=-1
 prog_interval=100
@@ -36,6 +37,7 @@ python bin/train_lm.py \
   --checkpoint exp/$data/nnlm/$exp_id \
   --batch-size $batch_size \
   --epochs $epochs \
+  --num-workers $num_workers \
   --eval-interval $eval_interval \
   --prog-interval $prog_interval \
   --save-interval $save_interval \
