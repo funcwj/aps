@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .transformer.decoder import TorchTransformerDecoder
-from .transformer.encoder import TorchTransformerEncoder
+from .transformer.encoder import support_xfmr_encoder
 from .base.encoder import encoder_instance
 
 
@@ -31,8 +31,9 @@ class TransformerASR(nn.Module):
         super(TransformerASR, self).__init__()
         if eos < 0 or sos < 0:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
-        if encoder_type == "transformer":
-            self.encoder = TorchTransformerEncoder(input_size, **encoder_kwargs)
+        xfmr_encoder_cls = support_xfmr_encoder(encoder_type)
+        if xfmr_encoder_cls:
+            self.encoder = xfmr_encoder_cls(input_size, **encoder_kwargs)
         else:
             if encoder_proj is None:
                 raise ValueError("For non-transformer encoder, "

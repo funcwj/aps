@@ -13,6 +13,22 @@ except:
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
 
+from aps.asr.transformer.xl import XlTransformerEncoder, PreNormXlTransformerEncoderLayer, XlTransformerEncoderLayer
+
+
+def support_xfmr_encoder(encoder_name):
+    """
+    Return transformer decoder
+    """
+    supported_encoder = {
+        "transformer": TorchTransformerEncoder,
+        "transformer_rel": RelTransformerEncoder
+    }
+    if encoder_name in supported_encoder:
+        return supported_encoder[encoder_name]
+    else:
+        return None
+
 
 class PreNormTransformerEncoderLayer(TransformerEncoderLayer):
     """
@@ -82,6 +98,7 @@ class TorchTransformerEncoder(nn.Module):
                                      input_size,
                                      embed_dim=att_dim,
                                      dropout=pos_dropout,
+                                     rel_enc=False,
                                      other_opts=embed_other_opts)
         if post_norm:
             encoder_layer = TransformerEncoderLayer(
@@ -114,6 +131,79 @@ class TorchTransformerEncoder(nn.Module):
         src_pad_mask = None if x_len is None else (padding_mask(x_len) == 1)
         # Ti x N x D
         enc_out = self.encoder(x_emb,
+                               mask=None,
+                               src_key_padding_mask=src_pad_mask)
+        return enc_out, x_len
+
+
+class RelTransformerEncoder(nn.Module):
+    """
+    Using relative position encoding in Transformer-XL
+    """
+
+    def __init__(self,
+                 input_size,
+                 input_embed="conv2d",
+                 embed_other_opts=-1,
+                 att_dim=512,
+                 nhead=8,
+                 feedforward_dim=2048,
+                 pos_dropout=0.1,
+                 att_dropout=0.1,
+                 post_norm=True,
+                 untie_rel=True,
+                 num_layers=6):
+        super(RelTransformerEncoder, self).__init__()
+        self.src_embed = IOEmbedding(input_embed,
+                                     input_size,
+                                     embed_dim=att_dim,
+                                     dropout=pos_dropout,
+                                     rel_enc=True,
+                                     other_opts=embed_other_opts)
+        if not untie_rel:
+            rel_u = nn.Parameter(th.Tensor(self.num_heads, self.head_dim))
+            rel_v = nn.Parameter(th.Tensor(self.num_heads, self.head_dim))
+            nn.init.xavier_uniform_(rel_u)
+            nn.init.xavier_uniform_(rel_v)
+        else:
+            rel_u, rel_v = None, None
+        if post_norm:
+            encoder_layer = XlTransformerEncoderLayer(
+                att_dim,
+                nhead,
+                dim_feedforward=feedforward_dim,
+                dropout=att_dropout,
+                rel_u=rel_u,
+                rel_v=rel_v)
+        else:
+            encoder_layer = PreNormXlTransformerEncoderLayer(
+                att_dim,
+                nhead,
+                dim_feedforward=feedforward_dim,
+                dropout=att_dropout,
+                rel_u=rel_u,
+                rel_v=rel_v)
+        self.encoder = XlTransformerEncoder(encoder_layer, num_layers)
+        self.input_embed = input_embed
+
+    def forward(self, x_pad, x_len):
+        """
+        Args:
+            x_pad: N x Ti x F
+            x_len: N or None
+        Return:
+            enc_out: Ti x N x D
+        """
+        if self.input_embed[:4] == "conv" and x_len is not None:
+            x_len = x_len // 4
+        # x_emb: N x Ti x D => Ti x N x D
+        # p_enc: Ti x D, sin encodings
+        p_enc, x_emb = self.src_embed(x_pad)
+        # src_pad_mask: N x Ti
+        src_pad_mask = None if x_len is None else (padding_mask(x_len) == 1)
+        # Ti x N x D
+        enc_out = self.encoder(x_emb,
+                               p_enc,
                                mask=None,
                                src_key_padding_mask=src_pad_mask)
         return enc_out, x_len

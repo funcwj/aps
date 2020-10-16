@@ -83,7 +83,7 @@ class BatchSampler(dat.Sampler):
         else:
             self.num_batches = len(batches)
         self.batches = batches
-        self.shuffle = shuffle
+        self.genfunc = th.randperm if shuffle else th.arange
         self.epoch = 0
 
     def _work_batch_index(self,
@@ -96,7 +96,7 @@ class BatchSampler(dat.Sampler):
         tot = len(dataset)
         cur_bz = batch_size
         idx_bz = []
-        while beg + min_batch_size <= tot:
+        while beg + cur_bz <= tot:
             cur = dataset.token_reader[beg]
             cur_ilen = cur["dur"]
             cur_olen = cur["len"]
@@ -115,10 +115,7 @@ class BatchSampler(dat.Sampler):
             indices = th.randperm(N, generator=g).tolist()
             indices = indices[self.rank:N:self.world_size]
         else:
-            if self.shuffle:
-                indices = th.randperm(self.num_batches).tolist()
-            else:
-                indices = th.arange(self.num_batches).tolist()
+            indices = self.genfunc(self.num_batches).tolist()
         for i in indices:
             yield list(range(*self.batches[i]))
 

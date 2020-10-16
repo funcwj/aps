@@ -6,7 +6,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from aps.asr.transformer.encoder import TorchTransformerEncoder
+from aps.asr.transformer.encoder import support_xfmr_encoder
 from aps.asr.transducer.decoder import TorchTransformerDecoder, TorchRNNDecoder
 from aps.asr.base.encoder import encoder_instance
 
@@ -28,10 +28,13 @@ class TorchTransducerASR(nn.Module):
         super(TorchTransducerASR, self).__init__()
         if blank < 0:
             raise RuntimeError(f"Unsupported blank value: {blank}")
-        if encoder_type == "transformer":
-            self.encoder = TorchTransformerEncoder(input_size, **encoder_kwargs)
+        xfmr_encoder_cls = support_xfmr_encoder(encoder_type)
+        if xfmr_encoder_cls:
+            self.is_xfmr_encoder = True
+            self.encoder = xfmr_encoder_cls(input_size, **encoder_kwargs)
             decoder_kwargs["enc_dim"] = encoder_kwargs["att_dim"]
         else:
+            self.is_xfmr_encoder = False
             if encoder_proj is None:
                 raise ValueError("For non-transformer encoder, "
                                  "encoder_proj can not be None")
@@ -41,7 +44,6 @@ class TorchTransducerASR(nn.Module):
         self.decoder = TorchRNNDecoder(vocab_size, **decoder_kwargs)
         self.blank = blank
         self.asr_transform = asr_transform
-        self.encoder_type = encoder_type
 
     def forward(self, x_pad, x_len, y_pad, y_len):
         """
@@ -59,7 +61,7 @@ class TorchTransducerASR(nn.Module):
         # Ti x N x D or N x Ti x D
         enc_out, enc_len = self.encoder(x_pad, x_len)
         # Ti x N x D => N x Ti x D
-        if self.encoder_type == "transformer":
+        if self.is_xfmr_encoder:
             enc_out = enc_out.transpose(0, 1)
         # N x Ti x To+1 x V
         dec_out = self.decoder(enc_out, y_pad, blank=self.blank)
@@ -82,7 +84,7 @@ class TorchTransducerASR(nn.Module):
         # Ti x N x D
         enc_out, _ = self.encoder(x, None)
         # Ti x N x D => N x Ti x D
-        if self.encoder_type == "transformer":
+        if self.is_xfmr_encoder:
             enc_out = enc_out.transpose(0, 1)
         return enc_out
 
@@ -134,9 +136,12 @@ class TransformerTransducerASR(nn.Module):
         super(TransformerTransducerASR, self).__init__()
         if blank < 0:
             raise RuntimeError(f"Unsupported blank value: {blank}")
-        if encoder_type == "transformer":
-            self.encoder = TorchTransformerEncoder(input_size, **encoder_kwargs)
+        xfmr_encoder_cls = support_xfmr_encoder(encoder_type)
+        if xfmr_encoder_cls:
+            self.is_xfmr_encoder = True
+            self.encoder = xfmr_encoder_cls(input_size, **encoder_kwargs)
         else:
+            self.is_xfmr_encoder = False
             if encoder_proj is None:
                 raise ValueError("For non-transformer encoder, "
                                  "encoder_proj can not be None")
@@ -146,7 +151,6 @@ class TransformerTransducerASR(nn.Module):
         self.decoder = TorchTransformerDecoder(vocab_size, **decoder_kwargs)
         self.blank = blank
         self.asr_transform = asr_transform
-        self.encoder_type = encoder_type
 
     def forward(self, x_pad, x_len, y_pad, y_len):
         """
@@ -164,7 +168,7 @@ class TransformerTransducerASR(nn.Module):
         # Ti x N x D or N x Ti x D
         enc_out, enc_len = self.encoder(x_pad, x_len)
         # N x Ti x D => Ti x N x D
-        if self.encoder_type != "transformer":
+        if not self.is_xfmr_encoder:
             enc_out = enc_out.transpose(0, 1)
         # N x Ti x To+1 x V
         dec_out = self.decoder(enc_out, y_pad, y_len, blank=self.blank)
@@ -186,7 +190,7 @@ class TransformerTransducerASR(nn.Module):
         # Ti x N x D
         enc_out, _ = self.encoder(x, None)
         # N x Ti x D => Ti x N x D
-        if self.encoder_type != "transformer":
+        if not self.is_xfmr_encoder:
             enc_out = enc_out.transpose(0, 1)
         return enc_out
 

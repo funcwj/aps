@@ -67,7 +67,7 @@ class BatchSampler(dat.Sampler):
                               descending=False).tolist()
         batches = []
         beg, cur_bz = 0, batch_size
-        while beg + self.min_batch_size <= len(desc_idx):
+        while beg + cur_bz <= len(desc_idx):
             cur_len = utts_len[desc_idx[beg]]
             factor = cur_len // self.adapt_token_num
             cur_bz = int(max(self.min_batch_size, batch_size // (1 + factor)))

@@ -14,7 +14,8 @@ class PositionalEncoding(nn.Module):
     Positional Encoding
     Reference: https://github.com/pytorch/examples/blob/master/word_language_model/model.py
     """
-    def __init__(self, embed_dim, dropout=0.1, max_len=5000):
+
+    def __init__(self, embed_dim, dropout=0.1, max_len=5000, rel_enc=False):
         super(PositionalEncoding, self).__init__()
         pos_enc = th.zeros(max_len, embed_dim)
         position = th.arange(0, max_len, dtype=th.float32)
@@ -24,10 +25,10 @@ class PositionalEncoding(nn.Module):
         pos_enc[:, 0::2] = th.sin(position[:, None] * div_term)
         pos_enc[:, 1::2] = th.cos(position[:, None] * div_term)
         # Tmax x 1 x D
-        # self.pos_enc = nn.Parameter(pos_enc[:, None], requires_grad=False)
         self.register_buffer("pos_enc", pos_enc[:, None])
         self.dropout = nn.Dropout(p=dropout)
         self.embed_scale = embed_dim**0.5
+        self.rel_enc = rel_enc
 
     def state_dict(self, destination=None, prefix="", keep_vars=False):
         """
@@ -41,26 +42,35 @@ class PositionalEncoding(nn.Module):
             state.pop("pos_enc")
         return state
 
+    def extra_repr(self):
+        return f"rel_enc={self.rel_enc}, dropout={self.dropout:.2f}"
+
     def forward(self, inp, t=0):
         """
         Args:
-            inp: N x T x D 
+            inp: N x T x D
         Return:
             out: T x N x D (keep same as transformer definition)
         """
-        _, T, _ = inp.shape
         # T x N x D
         inp = inp.transpose(0, 1)
-        # Tmax x 1 x D
-        inp = inp * self.embed_scale + self.pos_enc[t:t + T, :]
-        out = self.dropout(inp)
-        return out
+        T, N, _ = inp.shape
+        if self.rel_enc:
+            # T x D
+            abs_enc = self.pos_enc[t:t + T, :]
+            return abs_enc, inp
+        else:
+            inp = inp * self.embed_scale + self.pos_enc[t:t + T, :]
+            # add dropout
+            out = self.dropout(inp)
+            return out
 
 
 class LinearEmbedding(nn.Module):
     """
     Linear projection embedding
     """
+
     def __init__(self, input_size, embed_dim=512):
         super(LinearEmbedding, self).__init__()
         self.proj = nn.Linear(input_size, embed_dim)
@@ -82,6 +92,7 @@ class Conv1dEmbedding(nn.Module):
     """
     1d-conv embedding
     """
+
     def __init__(self, input_size, embed_dim=512, inner_channels=256):
         super(Conv1dEmbedding, self).__init__()
         self.conv1 = nn.Conv1d(input_size,
@@ -126,6 +137,7 @@ class Conv2dEmbedding(nn.Module):
     2d-conv embedding described in:
     Speech-transformer: A no-recurrence sequence-to-sequence model for speech recognition
     """
+
     def __init__(self, input_size, embed_dim=512, input_channels=1):
         super(Conv2dEmbedding, self).__init__()
         self.conv1 = nn.Conv2d(input_channels,
@@ -169,12 +181,14 @@ class IOEmbedding(nn.Module):
         3) Conv2d transform
         4) Sparse transform
     """
+
     def __init__(self,
                  embed_type,
                  feature_dim,
                  embed_dim=512,
                  dropout=0.1,
-                 other_opts=-1):
+                 other_opts=-1,
+                 rel_enc=False):
         super(IOEmbedding, self).__init__()
         if embed_type == "linear":
             self.embed = LinearEmbedding(feature_dim, embed_dim=embed_dim)
@@ -192,7 +206,10 @@ class IOEmbedding(nn.Module):
             self.embed = nn.Embedding(feature_dim, embed_dim)
         else:
             raise RuntimeError(f"Unsupported embedding type: {embed_type}")
-        self.posencode = PositionalEncoding(embed_dim, dropout=dropout)
+        self.posencode = PositionalEncoding(embed_dim,
+                                            dropout=dropout,
+                                            rel_enc=rel_enc,
+                                            max_len=6000)
 
     def forward(self, inp, t=0):
         """
@@ -202,5 +219,4 @@ class IOEmbedding(nn.Module):
             out: T' x N x F (to feed transformer)
         """
         out = self.embed(inp)
-        out = self.posencode(out, t=t)
-        return out
+        return self.posencode(out, t=t)

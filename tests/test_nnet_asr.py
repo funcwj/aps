@@ -102,6 +102,18 @@ transformer_encoder_kwargs = {
     "num_layers": 2
 }
 
+transformer_rel_encoder_kwargs = {
+    "input_embed": "conv2d",
+    "embed_other_opts": -1,
+    "att_dim": 512,
+    "nhead": 8,
+    "feedforward_dim": 2048,
+    "pos_dropout": 0.1,
+    "att_dropout": 0.1,
+    "post_norm": True,
+    "num_layers": 2
+}
+
 
 def gen_egs(vocab_size, batch_size, num_channels=1):
     u = th.randint(10, 20, (1,)).item()
@@ -315,7 +327,8 @@ def test_common_encoder(enc_type, enc_kwargs):
     pytest.param("fsmn", fsmn_encoder_kwargs),
     pytest.param("tdnn_rnn", tdnn_rnn_encoder_kwargs),
     pytest.param("tdnn_fsmn", tdnn_fsmn_encoder_kwargs),
-    pytest.param("transformer", transformer_encoder_kwargs)
+    pytest.param("transformer", transformer_encoder_kwargs),
+    pytest.param("transformer_rel", transformer_rel_encoder_kwargs)
 ])
 def test_transformer_encoder(enc_type, enc_kwargs):
     nnet_cls = support_nnet("transformer")
@@ -325,17 +338,18 @@ def test_transformer_encoder(enc_type, enc_kwargs):
                                  frame_len=400,
                                  frame_hop=160,
                                  window="hamm")
-    xfmr_asr = nnet_cls(input_size=80,
-                        vocab_size=vocab_size,
-                        sos=0,
-                        eos=1,
-                        ctc=True,
-                        asr_transform=asr_transform,
-                        encoder_type=enc_type,
-                        encoder_proj=512 if enc_type != "transformer" else None,
-                        encoder_kwargs=enc_kwargs,
-                        decoder_type="transformer",
-                        decoder_kwargs=default_xfmr_decoder_kwargs)
+    xfmr_asr = nnet_cls(
+        input_size=80,
+        vocab_size=vocab_size,
+        sos=0,
+        eos=1,
+        ctc=True,
+        asr_transform=asr_transform,
+        encoder_type=enc_type,
+        encoder_proj=512 if "transformer" not in enc_type else None,
+        encoder_kwargs=enc_kwargs,
+        decoder_type="transformer",
+        decoder_kwargs=default_xfmr_decoder_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size)
     z, _, _, _ = xfmr_asr(x, x_len, y)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
@@ -347,7 +361,8 @@ def test_transformer_encoder(enc_type, enc_kwargs):
     pytest.param("fsmn", fsmn_encoder_kwargs),
     pytest.param("tdnn_rnn", tdnn_rnn_encoder_kwargs),
     pytest.param("tdnn_fsmn", tdnn_fsmn_encoder_kwargs),
-    pytest.param("transformer", transformer_encoder_kwargs)
+    pytest.param("transformer", transformer_encoder_kwargs),
+    pytest.param("transformer_rel", transformer_rel_encoder_kwargs)
 ])
 def test_common_transducer(enc_type, enc_kwargs):
     nnet_cls = support_nnet("common_transducer")
@@ -371,7 +386,7 @@ def test_common_transducer(enc_type, enc_kwargs):
                     blank=vocab_size - 1,
                     asr_transform=asr_transform,
                     encoder_type=enc_type,
-                    encoder_proj=512 if enc_type != "transformer" else None,
+                    encoder_proj=None if "transformer" in enc_type else 512,
                     encoder_kwargs=enc_kwargs,
                     decoder_kwargs=decoder_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size)
@@ -386,7 +401,8 @@ def test_common_transducer(enc_type, enc_kwargs):
     pytest.param("fsmn", fsmn_encoder_kwargs),
     pytest.param("tdnn_rnn", tdnn_rnn_encoder_kwargs),
     pytest.param("tdnn_fsmn", tdnn_fsmn_encoder_kwargs),
-    pytest.param("transformer", transformer_encoder_kwargs)
+    pytest.param("transformer", transformer_encoder_kwargs),
+    pytest.param("transformer_rel", transformer_rel_encoder_kwargs)
 ])
 def test_transformer_transducer(enc_type, enc_kwargs):
     nnet_cls = support_nnet("transformer_transducer")
