@@ -6,12 +6,12 @@ import editdistance as ed
 from itertools import permutations
 
 
-def permute_ed(hlist, rlist):
+def permute_wer(hlist, rlist):
     """
     Compute edit distance between N pairs
     Args:
         hlist: list[vector], hypothesis
-        rlist: list[vector], reference 
+        rlist: list[vector], reference
     Return:
         float: WER
     """

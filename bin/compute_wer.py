@@ -4,10 +4,9 @@
 
 import argparse
 
-from collections import defaultdict
-
 from aps.opts import StrToBoolAction
-from aps.metric.wer import permute_ed
+from aps.metric.reporter import WerReporter
+from aps.metric.asr import permute_wer
 
 from kaldi_python_io import Reader as BaseReader
 
@@ -16,6 +15,7 @@ class TransReader(object):
     """
     Class to handle single/multi-speaker transcriptions
     """
+
     def __init__(self, text_descriptor, cer=False):
         self.readers = [
             BaseReader(t, num_tokens=-1, restrict=False)
@@ -52,43 +52,16 @@ class TransReader(object):
                 yield key, self[key]
 
 
-class Report(object):
-    def __init__(self, spk2class=None):
-        self.s2c = BaseReader(spk2class) if spk2class else None
-        self.err = defaultdict(float)
-        self.tot = defaultdict(float)
-        self.cnt = 0
-
-    def add(self, key, err, tot):
-        cls_str = "NG"
-        if self.s2c:
-            cls_str = self.s2c[key]
-        self.err[cls_str] += err
-        self.tot[cls_str] += tot
-        self.cnt += 1
-
-    def report(self):
-        print("WER(%) Report: ")
-        sum_err = sum([self.err[cls_str] for cls_str in self.err])
-        sum_len = sum([self.tot[cls_str] for cls_str in self.tot])
-        print(f"Total WER: {sum_err * 100 / sum_len:.2f}%, " +
-              f"{self.cnt} utterances")
-        if len(self.err) != 1:
-            for cls_str in self.err:
-                cls_err = self.err[cls_str]
-                cls_tot = self.tot[cls_str]
-                print(f"  {cls_str}: {cls_err * 100 / cls_tot:.2f}%")
-
-
 def run(args):
     hyp_reader = TransReader(args.hyp, cer=args.cer)
     ref_reader = TransReader(args.ref, cer=args.cer)
     if len(hyp_reader) != len(ref_reader):
-        raise RuntimeError(
-            "Looks number of speakers do not match in hyp & ref")
+        raise RuntimeError("Looks number of speakers do not match in hyp & ref")
     each_utt = open(args.per_utt, "w") if args.per_utt else None
 
-    reporter = Report(args.utt2class)
+    reporter = WerReporter(args.utt2class,
+                           name="CER" if args.cer else "WER",
+                           unit="%")
     for key, hyp in hyp_reader:
         ref = ref_reader[key]
         err = permute_ed(hyp, ref)

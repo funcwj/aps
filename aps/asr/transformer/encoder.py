@@ -89,6 +89,7 @@ class TorchTransformerEncoder(nn.Module):
                  att_dim=512,
                  nhead=8,
                  feedforward_dim=2048,
+                 scale_embed=False,
                  pos_dropout=0.1,
                  att_dropout=0.1,
                  post_norm=True,
@@ -98,6 +99,7 @@ class TorchTransformerEncoder(nn.Module):
                                      input_size,
                                      embed_dim=att_dim,
                                      dropout=pos_dropout,
+                                     scale_embed=scale_embed,
                                      rel_enc=False,
                                      other_opts=embed_other_opts)
         if post_norm:
@@ -106,13 +108,17 @@ class TorchTransformerEncoder(nn.Module):
                 nhead,
                 dim_feedforward=feedforward_dim,
                 dropout=att_dropout)
+            final_norm = None
         else:
             encoder_layer = PreNormTransformerEncoderLayer(
                 att_dim,
                 nhead,
                 dim_feedforward=feedforward_dim,
                 dropout=att_dropout)
-        self.encoder = TransformerEncoder(encoder_layer, num_layers)
+            final_norm = nn.LayerNorm(att_dim)
+        self.encoder = TransformerEncoder(encoder_layer,
+                                          num_layers,
+                                          norm=final_norm)
         self.input_embed = input_embed
 
     def forward(self, x_pad, x_len):
@@ -163,8 +169,8 @@ class RelTransformerEncoder(nn.Module):
         if not untie_rel:
             rel_u = nn.Parameter(th.Tensor(self.num_heads, self.head_dim))
             rel_v = nn.Parameter(th.Tensor(self.num_heads, self.head_dim))
-            nn.init.xavier_uniform_(rel_u)
-            nn.init.xavier_uniform_(rel_v)
+            nn.init.normal_(rel_u, std=0.02)
+            nn.init.normal_(rel_v, std=0.02)
         else:
             rel_u, rel_v = None, None
         if post_norm:
@@ -175,6 +181,7 @@ class RelTransformerEncoder(nn.Module):
                 dropout=att_dropout,
                 rel_u=rel_u,
                 rel_v=rel_v)
+            final_norm = None
         else:
             encoder_layer = PreNormXlTransformerEncoderLayer(
                 att_dim,
@@ -183,7 +190,10 @@ class RelTransformerEncoder(nn.Module):
                 dropout=att_dropout,
                 rel_u=rel_u,
                 rel_v=rel_v)
-        self.encoder = XlTransformerEncoder(encoder_layer, num_layers)
+            final_norm = nn.LayerNorm(att_dim)
+        self.encoder = XlTransformerEncoder(encoder_layer,
+                                            num_layers,
+                                            norm=final_norm)
         self.input_embed = input_embed
 
     def forward(self, x_pad, x_len):

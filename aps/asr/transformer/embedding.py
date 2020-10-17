@@ -15,7 +15,12 @@ class PositionalEncoding(nn.Module):
     Reference: https://github.com/pytorch/examples/blob/master/word_language_model/model.py
     """
 
-    def __init__(self, embed_dim, dropout=0.1, max_len=5000, rel_enc=False):
+    def __init__(self,
+                 embed_dim,
+                 dropout=0.1,
+                 max_len=5000,
+                 rel_enc=False,
+                 scale_embed=False):
         super(PositionalEncoding, self).__init__()
         pos_enc = th.zeros(max_len, embed_dim)
         if rel_enc:
@@ -31,7 +36,7 @@ class PositionalEncoding(nn.Module):
         # Tmax x D
         self.register_buffer("pos_enc", pos_enc)
         self.dropout = nn.Dropout(p=dropout)
-        self.embed_scale = embed_dim**0.5
+        self.embed_scale = embed_dim**0.5 if scale_embed else 1
         self.rel_enc = rel_enc
 
     def state_dict(self, destination=None, prefix="", keep_vars=False):
@@ -191,6 +196,7 @@ class IOEmbedding(nn.Module):
                  embed_dim=512,
                  dropout=0.1,
                  other_opts=-1,
+                 scale_embed=False,
                  rel_enc=False):
         super(IOEmbedding, self).__init__()
         if embed_type == "linear":
@@ -212,6 +218,7 @@ class IOEmbedding(nn.Module):
         self.posencode = PositionalEncoding(embed_dim,
                                             dropout=dropout,
                                             rel_enc=rel_enc,
+                                            scale_embed=scale_embed,
                                             max_len=6000)
 
     def forward(self, inp, t=0):

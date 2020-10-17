@@ -273,6 +273,7 @@ class TorchTransformerDecoder(nn.Module):
                  att_dim=512,
                  nhead=8,
                  feedforward_dim=2048,
+                 scale_embed=False,
                  pos_dropout=0.1,
                  att_dropout=0.1,
                  num_layers=6):
@@ -280,7 +281,8 @@ class TorchTransformerDecoder(nn.Module):
         self.tgt_embed = IOEmbedding("sparse",
                                      vocab_size,
                                      embed_dim=att_dim,
-                                     dropout=pos_dropout)
+                                     dropout=pos_dropout,
+                                     scale_embed=scale_embed)
         decoder_layer = TransformerEncoderLayer(att_dim,
                                                 nhead,
                                                 dim_feedforward=feedforward_dim,

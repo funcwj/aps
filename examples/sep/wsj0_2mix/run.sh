@@ -71,6 +71,7 @@ if [ $stage -le 3 ]; then
   # compute si-snr
   prepare_scp wav exp/$dataset/$exp/bss/spk1 > exp/$dataset/$exp/bss/spk1.scp
   prepare_scp wav exp/$dataset/$exp/bss/spk2 > exp/$dataset/$exp/bss/spk2.scp
-  ./bin/compute_sisnr.py data/$dataset/tt/spk1.scp,data/$dataset/tt/spk2.scp \
+  ./bin/compute_ss_metric.py --sr 8000 --metric sisnr \
+    data/$dataset/tt/spk1.scp,data/$dataset/tt/spk2.scp \
     exp/$dataset/$exp/bss/spk1.scp,exp/$dataset/$exp/bss/spk2.scp
 fi

@@ -149,8 +149,8 @@ class XlMultiheadAttention(MultiheadAttention):
         if None in [rel_v, rel_u]:
             self.rel_u = nn.Parameter(th.Tensor(self.num_heads, self.head_dim))
             self.rel_v = nn.Parameter(th.Tensor(self.num_heads, self.head_dim))
-            nn.init.xavier_uniform_(self.rel_u)
-            nn.init.xavier_uniform_(self.rel_v)
+            nn.init.normal_(self.rel_u, std=0.02)
+            nn.init.normal_(self.rel_v, std=0.02)
         else:
             self.rel_u = rel_u
             self.rel_v = rel_v
