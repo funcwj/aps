@@ -20,11 +20,16 @@ def DataLoader(text="",
                train=True,
                sos=-1,
                eos=-1,
+               faster=False,
                batch_size=64,
                chunk_size=20,
                num_workers=0,
                min_token_num=5):
-    dataset = Dataset(text, vocab_dict, eos=eos, min_token_num=min_token_num)
+    dataset = Dataset(text,
+                      vocab_dict,
+                      faster=faster,
+                      eos=eos,
+                      min_token_num=min_token_num)
     return BpttDataLoader(dataset,
                           shuffle=train,
                           batch_size=batch_size,

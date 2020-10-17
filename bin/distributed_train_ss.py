@@ -72,7 +72,8 @@ def train_worker(task, conf, args):
                                 **data_conf["train"])
     dev_loader = support_loader(train=False,
                                 fmt=data_conf["fmt"],
-                                batch_size=args.batch_size,
+                                batch_size=args.batch_size //
+                                args.dev_batch_factor,
                                 num_workers=args.num_workers // num_process,
                                 distributed=False,
                                 **data_conf["loader"],
@@ -142,6 +143,11 @@ if __name__ == "__main__":
                         default="torch",
                         choices=["torch", "horovod"],
                         help="Which distributed backend to use")
+    parser.add_argument("--dev-batch-factor",
+                        type=int,
+                        default=2,
+                        help="Use batch_size/dev_batch_factor "
+                        "for validation batch size")
     args = parser.parse_args()
     print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
           flush=True)

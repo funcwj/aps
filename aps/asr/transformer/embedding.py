@@ -18,14 +18,18 @@ class PositionalEncoding(nn.Module):
     def __init__(self, embed_dim, dropout=0.1, max_len=5000, rel_enc=False):
         super(PositionalEncoding, self).__init__()
         pos_enc = th.zeros(max_len, embed_dim)
-        position = th.arange(0, max_len, dtype=th.float32)
+        if rel_enc:
+            position = th.arange(max_len - 1, -1, -1, dtype=th.float32)
+        else:
+            position = th.arange(0, max_len, dtype=th.float32)
+        # 1 / (10000 ** (torch.arange(0.0, embed_dim, 2.0) / embed_dim))
         div_term = th.exp(
             th.arange(0, embed_dim, 2, dtype=th.float32) *
             (-math.log(10000.0) / embed_dim))
         pos_enc[:, 0::2] = th.sin(position[:, None] * div_term)
         pos_enc[:, 1::2] = th.cos(position[:, None] * div_term)
-        # Tmax x 1 x D
-        self.register_buffer("pos_enc", pos_enc[:, None])
+        # Tmax x D
+        self.register_buffer("pos_enc", pos_enc)
         self.dropout = nn.Dropout(p=dropout)
         self.embed_scale = embed_dim**0.5
         self.rel_enc = rel_enc
@@ -42,9 +46,6 @@ class PositionalEncoding(nn.Module):
             state.pop("pos_enc")
         return state
 
-    def extra_repr(self):
-        return f"rel_enc={self.rel_enc}, dropout={self.dropout:.2f}"
-
     def forward(self, inp, t=0):
         """
         Args:
@@ -52,18 +53,20 @@ class PositionalEncoding(nn.Module):
         Return:
             out: T x N x D (keep same as transformer definition)
         """
-        # T x N x D
-        inp = inp.transpose(0, 1)
-        T, N, _ = inp.shape
+        _, T, _ = inp.shape
+        # T x D
+        abs_enc = self.pos_enc[t:t + T]
+        # N x T x D
+        inp_scale = inp * self.embed_scale
+        # add dropout
         if self.rel_enc:
-            # T x D
-            abs_enc = self.pos_enc[t:t + T, :]
-            return abs_enc, inp
+            out = self.dropout(inp_scale)
+            abs_enc = self.dropout(abs_enc)
         else:
-            inp = inp * self.embed_scale + self.pos_enc[t:t + T, :]
-            # add dropout
-            out = self.dropout(inp)
-            return out
+            out = self.dropout(inp_scale + abs_enc)
+        # T x N x D
+        out = out.transpose(0, 1)
+        return (abs_enc, out) if self.rel_enc else out
 
 
 class LinearEmbedding(nn.Module):

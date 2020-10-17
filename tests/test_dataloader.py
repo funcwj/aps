@@ -112,12 +112,14 @@ def test_ss_online_loader(batch_size, chunk_size, num_workers):
 
 
 @pytest.mark.parametrize("batch_size", [1, 4, 16])
-def test_lm_utt_loader(batch_size):
+@pytest.mark.parametrize("faster", [True, False])
+def test_lm_utt_loader(batch_size, faster):
     egs_dir = "data/dataloader/lm"
     loader = support_loader(fmt="lm_utt",
                             sos=0,
                             eos=1,
                             text=f"{egs_dir}/test.utt.text",
+                            faster=faster,
                             vocab_dict=vocab_dict(f"{egs_dir}/dict"),
                             batch_size=batch_size,
                             min_batch_size=batch_size)

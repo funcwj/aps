@@ -233,7 +233,7 @@ class XlMultiheadAttention(MultiheadAttention):
 
 class XlTransformerEncoderLayer(nn.Module):
     """
-    TransformerEncoderLayer using relative position embeddings
+    TransformerEncoderLayer using relative position encodings
     """
 
     def __init__(self,

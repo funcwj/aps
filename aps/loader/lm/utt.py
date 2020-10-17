@@ -19,6 +19,7 @@ def DataLoader(text="",
                train=True,
                sos=-1,
                eos=-1,
+               faster=False,
                min_token_num=2,
                max_token_num=2000,
                adapt_token_num=400,
@@ -27,6 +28,7 @@ def DataLoader(text="",
                num_workers=0):
     dataset = Dataset(text,
                       vocab_dict,
+                      faster=faster,
                       min_token_num=min_token_num,
                       max_token_num=max_token_num)
     return UttDataLoader(dataset,
@@ -84,6 +86,63 @@ class BatchSampler(dat.Sampler):
         return len(self.batches)
 
 
+def parse_faster(scp_path,
+                 value_processor=lambda x: x,
+                 num_tokens=2,
+                 restrict=True):
+    scp_dict = dict()
+    with open(scp_path, "r") as f:
+        raw_lines = f.readlines()
+        for idx, raw_line in enumerate(raw_lines):
+            scp_tokens = raw_line.strip().split()
+            if scp_tokens[-1] == "|":
+                key, value = scp_tokens[0], " ".join(scp_tokens[1:])
+            else:
+                token_len = len(scp_tokens)
+                if num_tokens >= 2 and token_len != num_tokens or restrict and token_len < 2:
+                    raise RuntimeError(f"For {scp_path}, format error " +
+                                       f"in line[{idx:d}]: {raw_line}")
+                if num_tokens == 2:
+                    key, value = scp_tokens
+                else:
+                    key, value = scp_tokens[0], scp_tokens[1:]
+            if key in scp_dict:
+                raise ValueError(
+                    f"Duplicate key \'{key}\' exists in {scp_path}")
+            scp_dict[key] = value_processor(value)
+    return scp_dict
+
+
+class FasterTextReader(object):
+    """
+    To make it faster to load large text files
+    """
+
+    def __init__(self,
+                 scp_path,
+                 value_processor=lambda x: x,
+                 num_tokens=2,
+                 restrict=True):
+        self.index_dict = parse_faster(scp_path,
+                                       value_processor=value_processor,
+                                       num_tokens=num_tokens,
+                                       restrict=restrict)
+        self.index_keys = list(self.index_dict.keys())
+
+    def _load(self, key):
+        return self.index_dict[key]
+
+    def __len__(self):
+        return len(self.index_dict)
+
+    def __contains__(self, key):
+        return key in self.index_dict
+
+    def __iter__(self):
+        for key in self.index_keys:
+            yield key, self._load(key)
+
+
 class Dataset(dat.Dataset):
     """
     Dataset for token corpus
@@ -92,13 +151,15 @@ class Dataset(dat.Dataset):
     def __init__(self,
                  text,
                  vocab_dict,
+                 faster=False,
                  min_token_num=2,
                  max_token_num=2000,
                  eos=None):
+        reader_cls = FasterTextReader if faster else BaseReader
         if vocab_dict:
-            text_reader = BaseReader(text, num_tokens=-1, restrict=False)
+            text_reader = reader_cls(text, num_tokens=-1, restrict=False)
         else:
-            text_reader = BaseReader(
+            text_reader = reader_cls(
                 text,
                 value_processor=lambda tok: list(map(int, tok)),
                 num_tokens=-1,
