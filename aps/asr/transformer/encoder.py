@@ -13,7 +13,7 @@ except:
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
 
-from aps.asr.transformer.xl import XlTransformerEncoder, PreNormXlTransformerEncoderLayer, XlTransformerEncoderLayer
+from aps.asr.transformer.xl import TransformerXLEncoder, TransformerXLEncoderLayer
 
 
 def support_xfmr_encoder(encoder_name):
@@ -30,7 +30,7 @@ def support_xfmr_encoder(encoder_name):
         return None
 
 
-class PreNormTransformerEncoderLayer(TransformerEncoderLayer):
+class ApsTransformerEncoderLayer(TransformerEncoderLayer):
     """
     Transformer encoder with pre-norm
     """
@@ -39,41 +39,42 @@ class PreNormTransformerEncoderLayer(TransformerEncoderLayer):
                  d_model,
                  nhead,
                  dim_feedforward=2048,
+                 pre_norm=False,
                  dropout=0.1,
                  activation="relu"):
-        super(PreNormTransformerEncoderLayer,
+        super(ApsTransformerEncoderLayer,
               self).__init__(d_model,
                              nhead,
                              dim_feedforward=dim_feedforward,
                              dropout=dropout,
                              activation=activation)
+        self.pre_norm = pre_norm
+
+    def ffn(self, src):
+        """
+        Get output of the feedforward network
+        """
+        return self.dropout2(
+            self.linear2(self.dropout(self.activation(self.linear1(src)))))
 
     def forward(self, src, src_mask=None, src_key_padding_mask=None):
         """
-        Code for Post-Norm Transformer are:
-        src2 = self.self_attn(src,
-                              src,
-                              src,
-                              attn_mask=src_mask,
-                              key_padding_mask=src_key_padding_mask)[0]
-        src = src + self.dropout1(src2)
-        src = self.norm1(src)
-        src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))
-        src = src + self.dropout2(src2)
-        src = self.norm2(src)
-        return src
+        Support for both pre-norm & post-norm
         """
-        src1 = self.norm1(src)
-        src2 = self.self_attn(src1,
-                              src1,
-                              src1,
-                              attn_mask=src_mask,
-                              key_padding_mask=src_key_padding_mask)[0]
-        src = src + self.dropout1(src2)
-        src3 = self.norm2(src)
-        # PositionwiseFF
-        src4 = self.linear2(self.dropout(self.activation(self.linear1(src3))))
-        src = src + self.dropout2(src4)
+        inp = src
+        if self.pre_norm:
+            src = self.norm1(src)
+        att = self.self_attn(src,
+                             src,
+                             src,
+                             attn_mask=src_mask,
+                             key_padding_mask=src_key_padding_mask)[0]
+        src = inp + self.dropout1(att)
+        if self.pre_norm:
+            src = src + self.dropout2(self.ffn(self.norm2(src)))
+        else:
+            src = self.norm1(src)
+            src = self.norm2(src + self.ffn(src))
         return src
 
 
@@ -102,20 +103,13 @@ class TorchTransformerEncoder(nn.Module):
                                      scale_embed=scale_embed,
                                      rel_enc=False,
                                      other_opts=embed_other_opts)
-        if post_norm:
-            encoder_layer = TransformerEncoderLayer(
-                att_dim,
-                nhead,
-                dim_feedforward=feedforward_dim,
-                dropout=att_dropout)
-            final_norm = None
-        else:
-            encoder_layer = PreNormTransformerEncoderLayer(
-                att_dim,
-                nhead,
-                dim_feedforward=feedforward_dim,
-                dropout=att_dropout)
-            final_norm = nn.LayerNorm(att_dim)
+        encoder_layer = ApsTransformerEncoderLayer(
+            att_dim,
+            nhead,
+            dim_feedforward=feedforward_dim,
+            dropout=att_dropout,
+            pre_norm=not post_norm)
+        final_norm = None if post_norm else nn.LayerNorm(att_dim)
         self.encoder = TransformerEncoder(encoder_layer,
                                           num_layers,
                                           norm=final_norm)
@@ -154,6 +148,7 @@ class RelTransformerEncoder(nn.Module):
                  att_dim=512,
                  nhead=8,
                  feedforward_dim=2048,
+                 scale_embed=False,
                  pos_dropout=0.1,
                  att_dropout=0.1,
                  post_norm=True,
@@ -164,34 +159,26 @@ class RelTransformerEncoder(nn.Module):
                                      input_size,
                                      embed_dim=att_dim,
                                      dropout=pos_dropout,
+                                     scale_embed=scale_embed,
                                      rel_enc=True,
                                      other_opts=embed_other_opts)
         if not untie_rel:
-            rel_u = nn.Parameter(th.Tensor(self.num_heads, self.head_dim))
-            rel_v = nn.Parameter(th.Tensor(self.num_heads, self.head_dim))
+            rel_u = nn.Parameter(th.Tensor(nhead, att_dim // nhead))
+            rel_v = nn.Parameter(th.Tensor(nhead, att_dim // nhead))
             nn.init.normal_(rel_u, std=0.02)
             nn.init.normal_(rel_v, std=0.02)
         else:
             rel_u, rel_v = None, None
-        if post_norm:
-            encoder_layer = XlTransformerEncoderLayer(
-                att_dim,
-                nhead,
-                dim_feedforward=feedforward_dim,
-                dropout=att_dropout,
-                rel_u=rel_u,
-                rel_v=rel_v)
-            final_norm = None
-        else:
-            encoder_layer = PreNormXlTransformerEncoderLayer(
-                att_dim,
-                nhead,
-                dim_feedforward=feedforward_dim,
-                dropout=att_dropout,
-                rel_u=rel_u,
-                rel_v=rel_v)
-            final_norm = nn.LayerNorm(att_dim)
-        self.encoder = XlTransformerEncoder(encoder_layer,
+        encoder_layer = TransformerXLEncoderLayer(
+            att_dim,
+            nhead,
+            dim_feedforward=feedforward_dim,
+            dropout=att_dropout,
+            pre_norm=not post_norm,
+            rel_u=rel_u,
+            rel_v=rel_v)
+        final_norm = None if post_norm else nn.LayerNorm(att_dim)
+        self.encoder = TransformerXLEncoder(encoder_layer,
                                             num_layers,
                                             norm=final_norm)
         self.input_embed = input_embed

@@ -146,7 +146,7 @@ class XlMultiheadAttention(MultiheadAttention):
                                                    num_heads,
                                                    dropout=dropout,
                                                    bias=bias)
-        if None in [rel_v, rel_u]:
+        if rel_u is None or rel_v is None:
             self.rel_u = nn.Parameter(th.Tensor(self.num_heads, self.head_dim))
             self.rel_v = nn.Parameter(th.Tensor(self.num_heads, self.head_dim))
             nn.init.normal_(self.rel_u, std=0.02)
@@ -231,7 +231,7 @@ class XlMultiheadAttention(MultiheadAttention):
         return output, att_weights
 
 
-class XlTransformerEncoderLayer(nn.Module):
+class TransformerXLEncoderLayer(nn.Module):
     """
     TransformerEncoderLayer using relative position encodings
     """
@@ -242,9 +242,10 @@ class XlTransformerEncoderLayer(nn.Module):
                  dim_feedforward=2048,
                  dropout=0.1,
                  activation="relu",
+                 pre_norm=False,
                  rel_u=None,
                  rel_v=None):
-        super(XlTransformerEncoderLayer, self).__init__()
+        super(TransformerXLEncoderLayer, self).__init__()
         self.self_attn = XlMultiheadAttention(d_model,
                                               nhead,
                                               dropout=dropout,
@@ -260,70 +261,40 @@ class XlTransformerEncoderLayer(nn.Module):
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
         self.activation = _get_activation_fn(activation)
+        self.pre_norm = pre_norm
 
     def __setstate__(self, state):
         if "activation" not in state:
             state["activation"] = tf.relu
-        super(XlTransformerEncoderLayer, self).__setstate__(state)
+        super(TransformerXLEncoderLayer, self).__setstate__(state)
 
     def forward(self, src, sin_pos_enc, src_mask, src_key_padding_mask):
-        src2 = self.self_attn(src,
-                              src,
-                              src,
-                              sin_pos_enc,
-                              attn_mask=src_mask,
-                              key_padding_mask=src_key_padding_mask)[0]
-        src = src + self.dropout(src2)
-        src = self.norm1(src)
-        src2 = self.feedforward(src)
-        src = self.norm2(src + src2)
+        inp = src
+        if self.pre_norm:
+            src = self.norm1(src)
+        att = self.self_attn(src,
+                             src,
+                             src,
+                             sin_pos_enc,
+                             attn_mask=src_mask,
+                             key_padding_mask=src_key_padding_mask)[0]
+        src = inp + self.dropout(att)
+        if self.pre_norm:
+            src = src + self.feedforward(self.norm2(src))
+        else:
+            src = self.norm1(src)
+            src = self.norm2(src + self.feedforward(src))
         return src
 
 
-class PreNormXlTransformerEncoderLayer(XlTransformerEncoderLayer):
+class TransformerXLEncoder(nn.Module):
     """
-    XlTransformerEncoderLayer with pre-norm
-    """
-
-    def __init__(self,
-                 d_model,
-                 nhead,
-                 dim_feedforward=2048,
-                 dropout=0.1,
-                 activation="relu",
-                 rel_u=None,
-                 rel_v=None):
-        super(PreNormXlTransformerEncoderLayer,
-              self).__init__(d_model,
-                             nhead,
-                             dim_feedforward=dim_feedforward,
-                             dropout=dropout,
-                             activation=activation,
-                             rel_u=rel_u,
-                             rel_v=rel_v)
-
-    def forward(self, src, sin_pos_enc, src_mask, src_key_padding_mask):
-        src1 = self.norm1(src)
-        src2 = self.self_attn(src1,
-                              src1,
-                              src1,
-                              sin_pos_enc,
-                              attn_mask=src_mask,
-                              key_padding_mask=src_key_padding_mask)[0]
-        src = src + self.dropout(src2)
-        src3 = self.norm2(src)
-        src4 = self.feedforward(src3)
-        return src + src4
-
-
-class XlTransformerEncoder(nn.Module):
-    """
-    XlTransformerEncoder is a stack of N XlTransformerEncoderLayer layers
+    TransformerXLEncoder is a stack of N TransformerXLEncoderLayer layers
     """
     __constants__ = ['norm']
 
     def __init__(self, encoder_layer, num_layers, norm=None):
-        super(XlTransformerEncoder, self).__init__()
+        super(TransformerXLEncoder, self).__init__()
         self.layers = nn.ModuleList(
             [copy.deepcopy(encoder_layer) for i in range(num_layers)])
         self.num_layers = num_layers

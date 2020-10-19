@@ -64,7 +64,7 @@ def run(args):
                            unit="%")
     for key, hyp in hyp_reader:
         ref = ref_reader[key]
-        err = permute_ed(hyp, ref)
+        err = permute_wer(hyp, ref)
         ref_len = sum([len(r) for r in ref])
         if each_utt:
             if ref_len != 0:

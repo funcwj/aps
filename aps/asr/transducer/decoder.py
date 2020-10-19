@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 try:
-    from torch.nn import TransformerEncoder, TransformerEncoderLayer
+    from torch.nn import TransformerEncoder
 except:
     raise ImportError("import Transformer module failed")
 
@@ -18,6 +18,8 @@ from queue import PriorityQueue
 
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.transformer.decoder import prep_sub_mask
+from aps.asr.transformer.encoder import ApsTransformerEncoderLayer
+
 from aps.asr.base.attention import padding_mask
 from aps.asr.base.decoder import OneHotEmbedding
 from aps.const import IGNORE_ID
@@ -276,17 +278,20 @@ class TorchTransformerDecoder(nn.Module):
                  scale_embed=False,
                  pos_dropout=0.1,
                  att_dropout=0.1,
-                 num_layers=6):
+                 num_layers=6,
+                 post_norm=True):
         super(TorchTransformerDecoder, self).__init__()
         self.tgt_embed = IOEmbedding("sparse",
                                      vocab_size,
                                      embed_dim=att_dim,
                                      dropout=pos_dropout,
                                      scale_embed=scale_embed)
-        decoder_layer = TransformerEncoderLayer(att_dim,
-                                                nhead,
-                                                dim_feedforward=feedforward_dim,
-                                                dropout=att_dropout)
+        decoder_layer = ApsTransformerEncoderLayer(
+            att_dim,
+            nhead,
+            dim_feedforward=feedforward_dim,
+            dropout=att_dropout,
+            pre_norm=not post_norm)
         self.decoder = TransformerEncoder(decoder_layer, num_layers)
         self.enc_proj = nn.Linear(enc_dim if enc_dim else att_dim,
                                   jot_dim,
