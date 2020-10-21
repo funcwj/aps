@@ -30,6 +30,7 @@ def DataLoader(train=True,
                adapt_dur=800,
                adapt_token_num=150,
                batch_size=32,
+               batch_mode="adaptive",
                num_workers=0,
                min_batch_size=4):
     dataset = Dataset(feats_scp,
@@ -46,6 +47,7 @@ def DataLoader(train=True,
                            adapt_frame_num=adapt_dur,
                            adapt_token_num=adapt_token_num,
                            batch_size=batch_size,
+                           batch_mode=batch_mode,
                            min_batch_size=min_batch_size)
 
 
@@ -115,10 +117,12 @@ class KaldiDataLoader(object):
                  adapt_frame_num=800,
                  adapt_token_num=150,
                  batch_size=32,
+                 batch_mode="adaptive",
                  min_batch_size=4):
         self.sampler = BatchSampler(dataset,
                                     batch_size,
                                     shuffle=shuffle,
+                                    batch_mode=batch_mode,
                                     distributed=distributed,
                                     adapt_dur=adapt_frame_num,
                                     adapt_token_num=adapt_token_num,

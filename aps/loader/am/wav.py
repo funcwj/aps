@@ -30,6 +30,7 @@ def DataLoader(train=True,
                adapt_dur=8,
                adapt_token_num=150,
                batch_size=32,
+               batch_mode="adaptive",
                num_workers=0,
                min_batch_size=4):
     dataset = Dataset(wav_scp,
@@ -48,6 +49,7 @@ def DataLoader(train=True,
                           adapt_wav_dur=adapt_dur,
                           adapt_token_num=adapt_token_num,
                           batch_size=batch_size,
+                          batch_mode=batch_mode,
                           min_batch_size=min_batch_size)
 
 
@@ -144,11 +146,13 @@ class WaveDataLoader(object):
                  adapt_wav_dur=8,
                  adapt_token_num=150,
                  batch_size=32,
+                 batch_mode="adaptive",
                  min_batch_size=4):
         self.sampler = BatchSampler(dataset,
                                     batch_size,
                                     shuffle=shuffle,
                                     distributed=distributed,
+                                    batch_mode=batch_mode,
                                     adapt_dur=adapt_wav_dur,
                                     adapt_token_num=adapt_token_num,
                                     min_batch_size=min_batch_size)

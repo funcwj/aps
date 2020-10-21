@@ -80,6 +80,8 @@ class EnhTransformerASR(nn.Module):
     def beam_search(self,
                     x,
                     beam=8,
+                    lm=None,
+                    lm_weight=0,
                     nbest=1,
                     max_len=-1,
                     vectorized=False,
@@ -94,6 +96,8 @@ class EnhTransformerASR(nn.Module):
             x_enh, _ = self._enhance(x[None, ...], None)
             return self.transformer_asr.beam_search(x_enh[0],
                                                     beam=beam,
+                                                    lm=lm,
+                                                    lm_weight=lm_weight,
                                                     nbest=nbest,
                                                     max_len=max_len,
                                                     vectorized=vectorized,

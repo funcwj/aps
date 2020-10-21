@@ -65,19 +65,26 @@ class BatchSampler(dat.Sampler):
                  dataset,
                  batch_size,
                  shuffle=False,
+                 batch_mode="adaptive",
                  adapt_dur=800,
                  adapt_token_num=150,
                  min_batch_size=4,
                  distributed=False):
+        if batch_mode not in ["adaptive", "constraint"]:
+            raise ValueError(f"Unsupported batch mode: {batch_mode}")
         self.distributed = distributed
         if distributed:
             self.world_size = dist.world_size()
             self.rank = dist.rank()
-        batches = self._work_batch_index(dataset,
-                                         adapt_dur,
-                                         adapt_token_num,
-                                         batch_size,
-                                         min_batch_size=min_batch_size)
+        if batch_mode == "adaptive":
+            batches = self._work_adapt_batch_index(
+                dataset,
+                adapt_dur,
+                adapt_token_num,
+                batch_size,
+                min_batch_size=min_batch_size)
+        else:
+            batches = self._work_const_batch_index(dataset, batch_size)
         if distributed:
             self.num_batches = len(batches) // self.world_size
         else:
@@ -86,12 +93,35 @@ class BatchSampler(dat.Sampler):
         self.genfunc = th.randperm if shuffle else th.arange
         self.epoch = 0
 
-    def _work_batch_index(self,
-                          dataset,
-                          adapt_dur,
-                          adapt_token_num,
-                          batch_size,
-                          min_batch_size=4):
+    def _work_const_batch_index(self, dataset, batch_size):
+        beg = 0
+        tot = len(dataset)
+        cur_dur = 0
+        idx_bz = []
+        # long -> short
+        for idx in range(tot):
+            cur = dataset.token_reader[idx]
+            if idx == 0:
+                if cur["dur"] > batch_size:
+                    raise ValueError("batch_size is smaller than maximum "
+                                     "length of the utterances")
+            utt_dur = cur["dur"]
+            if cur_dur < batch_size:
+                cur_dur += utt_dur
+            else:
+                idx_bz.append((beg, idx))
+                cur_dur = utt_dur
+                beg = idx
+        if tot - beg > 1:
+            idx_bz.append((beg, tot))
+        return idx_bz
+
+    def _work_adapt_batch_index(self,
+                                dataset,
+                                adapt_dur,
+                                adapt_token_num,
+                                batch_size,
+                                min_batch_size=4):
         beg = 0
         tot = len(dataset)
         cur_bz = batch_size

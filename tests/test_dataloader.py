@@ -42,6 +42,26 @@ def test_am_wav_loader(batch_size, num_workers):
             [batch_size, egs["tgt_len"].max().item()])
 
 
+@pytest.mark.parametrize("batch_size", [10, 15])
+@pytest.mark.parametrize("num_workers", [2, 4])
+def test_am_wav_loader_const(batch_size, num_workers):
+    egs_dir = "data/dataloader/am"
+    loader = support_loader(fmt="am_wav",
+                            wav_scp=f"{egs_dir}/egs.wav.scp",
+                            text=f"{egs_dir}/egs.fake.text",
+                            utt2dur=f"{egs_dir}/egs.utt2dur",
+                            vocab_dict=vocab_dict(f"{egs_dir}/dict"),
+                            train=False,
+                            sr=16000,
+                            batch_size=batch_size,
+                            batch_mode="constraint",
+                            num_workers=num_workers)
+    for egs in loader:
+        for key in ["src_pad", "tgt_pad", "tgt_len", "src_len"]:
+            assert key in egs
+        assert egs["tgt_pad"].shape[-1] == egs["tgt_len"].max().item()
+
+
 @pytest.mark.parametrize("batch_size", [1, 2, 4])
 @pytest.mark.parametrize("num_workers", [0, 2, 4])
 def test_am_kaldi_loader(batch_size, num_workers):

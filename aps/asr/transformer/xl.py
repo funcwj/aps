@@ -16,14 +16,14 @@ def _get_activation_fn(activation):
     raise RuntimeError(f"activation should be relu/gelu, not {activation}")
 
 
-class MultiheadAttention(nn.Module):
+class ApsMultiheadAttention(nn.Module):
     """
     NOTE:
     My own MultiheadAttention (just want to make sure it's same as torch.nn.MultiheadAttention)
     """
 
     def __init__(self, embed_dim, num_heads, dropout=0, bias=True):
-        super(MultiheadAttention, self).__init__()
+        super(ApsMultiheadAttention, self).__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
@@ -127,7 +127,7 @@ class MultiheadAttention(nn.Module):
         return output, att_weights
 
 
-class XlMultiheadAttention(MultiheadAttention):
+class XlMultiheadAttention(ApsMultiheadAttention):
     """
     MultiheadAttention with relative position embedding described in:
         Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context

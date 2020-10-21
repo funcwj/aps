@@ -6,8 +6,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from aps.asr.transformer.encoder import TransformerEncoder, TransformerEncoderLayer
-from aps.asr.transformer.encoder import PreNormTransformerEncoderLayer
+from aps.asr.transformer.encoder import TransformerEncoder, ApsTransformerEncoderLayer
 from aps.asr.transformer.embedding import PositionalEncoding
 
 
@@ -25,18 +24,12 @@ class TorchTransformer(nn.Module):
                  post_norm=True,
                  num_layers=6):
         super(TorchTransformer, self).__init__()
-        if post_norm:
-            encoder_layer = TransformerEncoderLayer(
-                att_dim,
-                nhead,
-                dim_feedforward=feedforward_dim,
-                dropout=att_dropout)
-        else:
-            encoder_layer = PreNormTransformerEncoderLayer(
-                att_dim,
-                nhead,
-                dim_feedforward=feedforward_dim,
-                dropout=att_dropout)
+        encoder_layer = ApsTransformerEncoderLayer(
+            att_dim,
+            nhead,
+            dim_feedforward=feedforward_dim,
+            dropout=att_dropout,
+            pre_norm=not post_norm)
         self.encoder = TransformerEncoder(encoder_layer, num_layers)
         self.pe = PositionalEncoding(att_dim, dropout=pos_dropout, max_len=2000)
 
