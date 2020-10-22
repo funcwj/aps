@@ -19,6 +19,7 @@ class Separator(Computer):
     """
     Decoder wrapper
     """
+
     def __init__(self, cpt_dir, device_id=-1):
         super(Separator, self).__init__(cpt_dir,
                                         device_id=device_id,

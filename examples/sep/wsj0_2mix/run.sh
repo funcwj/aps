@@ -56,7 +56,7 @@ fi
 
 if [ $stage -le 3 ]; then
   # generate separation audio under exp/$dataset/$exp/bss
-  ./bin/eval_bss \
+  ./bin/separate_blind.py \
     --checkpoint exp/$dataset/$exp \
     --sr 8000 \
     --device-id $gpu \

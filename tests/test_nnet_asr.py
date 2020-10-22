@@ -107,6 +107,20 @@ transformer_rel_encoder_kwargs = {
     "embed_other_opts": -1,
     "att_dim": 512,
     "nhead": 8,
+    "k_dim": 128,
+    "feedforward_dim": 2048,
+    "pos_dropout": 0.1,
+    "att_dropout": 0.1,
+    "post_norm": True,
+    "num_layers": 2,
+    "add_value_rel": True
+}
+
+transformer_rel_xl_encoder_kwargs = {
+    "input_embed": "conv2d",
+    "embed_other_opts": -1,
+    "att_dim": 512,
+    "nhead": 8,
     "feedforward_dim": 2048,
     "pos_dropout": 0.1,
     "att_dropout": 0.1,
@@ -328,7 +342,8 @@ def test_common_encoder(enc_type, enc_kwargs):
     pytest.param("tdnn_rnn", tdnn_rnn_encoder_kwargs),
     pytest.param("tdnn_fsmn", tdnn_fsmn_encoder_kwargs),
     pytest.param("transformer", transformer_encoder_kwargs),
-    pytest.param("transformer_rel", transformer_rel_encoder_kwargs)
+    pytest.param("transformer_rel", transformer_rel_encoder_kwargs),
+    pytest.param("transformer_rel_xl", transformer_rel_xl_encoder_kwargs)
 ])
 def test_transformer_encoder(enc_type, enc_kwargs):
     nnet_cls = support_nnet("transformer")
@@ -362,7 +377,8 @@ def test_transformer_encoder(enc_type, enc_kwargs):
     pytest.param("tdnn_rnn", tdnn_rnn_encoder_kwargs),
     pytest.param("tdnn_fsmn", tdnn_fsmn_encoder_kwargs),
     pytest.param("transformer", transformer_encoder_kwargs),
-    pytest.param("transformer_rel", transformer_rel_encoder_kwargs)
+    pytest.param("transformer_rel", transformer_rel_encoder_kwargs),
+    pytest.param("transformer_rel_xl", transformer_rel_xl_encoder_kwargs)
 ])
 def test_common_transducer(enc_type, enc_kwargs):
     nnet_cls = support_nnet("common_transducer")
@@ -402,7 +418,8 @@ def test_common_transducer(enc_type, enc_kwargs):
     pytest.param("tdnn_rnn", tdnn_rnn_encoder_kwargs),
     pytest.param("tdnn_fsmn", tdnn_fsmn_encoder_kwargs),
     pytest.param("transformer", transformer_encoder_kwargs),
-    pytest.param("transformer_rel", transformer_rel_encoder_kwargs)
+    pytest.param("transformer_rel", transformer_rel_encoder_kwargs),
+    pytest.param("transformer_rel_xl", transformer_rel_xl_encoder_kwargs)
 ])
 def test_transformer_transducer(enc_type, enc_kwargs):
     nnet_cls = support_nnet("transformer_transducer")

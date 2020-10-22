@@ -1,5 +1,5 @@
-1. RNN LM shallow fusion (figure out why doesn't work)
+1. RNN LM shallow fusion (issues with Transformer)
 2. Beam search in batch mode
 3. Python type hints
-4. On-the-fly tokenization
+4. More example recipes
 5. ...

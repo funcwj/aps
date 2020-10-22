@@ -15,7 +15,7 @@ from aps.const import EPSILON
 
 __all__ = [
     "SisnrTask", "SnrTask", "WaTask", "LinearFreqSaTask", "LinearTimeSaTask",
-    "MelFreqSaTask", "MelTimeSaTask"
+    "MelFreqSaTask", "MelTimeSaTask", "ComplexMappingTask"
 ]
 
 
@@ -23,7 +23,7 @@ def sisnr(x, s, eps=1e-8, zero_mean=True, non_nagetive=False):
     """
     Computer SiSNR
     Args:
-        x (Tensor): separated signal, N x S 
+        x (Tensor): separated signal, N x S
         s (Tensor): reference signal, N x S
     Return:
         sisnr (Tensor): N
@@ -52,7 +52,7 @@ def snr(x, s, eps=1e-8, non_nagetive=False):
     """
     Computer SNR
     Args:
-        x (Tensor): separated signal, N x S 
+        x (Tensor): separated signal, N x S
         s (Tensor): reference signal, N x S
     Return:
         snr (Tensor): N
@@ -738,3 +738,126 @@ class MelTimeSaTask(TimeSaTask):
         Computer MSE
         """
         return tf.mse_loss(out, ref, reduction=reduction)
+
+
+class ComplexMappingTask(Task):
+    """
+    Complex Spectral Mapping
+    """
+
+    def __init__(self, nnet, num_spks=2, weight=None, permute=True, objf="L1"):
+        # STFT context
+        sa_ctx = nnet.enh_transform.ctx("forward_stft")
+        super(ComplexMappingTask, self).__init__(nnet,
+                                                 ctx=sa_ctx,
+                                                 weight=weight)
+        self.permute = permute
+        self.num_spks = num_spks
+        self.objf_func = tf.l1_loss if objf == "L1" else tf.mse_loss
+
+    def _build_ref(self, wav):
+        """
+        Return real/imag part of the STFT
+        """
+        return self.ctx(wav, output="complex")
+
+    def _permu_objf(self, permute, out, ref):
+        """
+        Loss computation in permutation mode
+        """
+        permu_loss = []
+        # for one permutation
+        for s, t in enumerate(permute):
+            # N x F x T
+            loss_mat = self._objf(out[s], ref[t], reduction="none")
+            loss_utt = th.sum(loss_mat.mean(-1), -1)  # x N, per-frame
+            permu_loss.append(loss_utt)
+        # per-speaker
+        return sum(permu_loss) / len(permute)
+
+    def _objf(self, out, ref, reduction="none"):
+        """
+        Return loss for each mini-batch
+        """
+        out_mag = th.sqrt(out[0]**2 + out[1]**2)
+        ref_mag = th.sqrt(ref[0]**2 + ref[1]**2)
+        real_loss = self.objf_func(out[0], ref[0], reduction=reduction)
+        imag_loss = self.objf_func(out[1], ref[1], reduction=reduction)
+        mag_loss = self.objf_func(out_mag, ref_mag, reduction=reduction)
+        return real_loss + imag_loss + mag_loss
+
+    def forward(self, egs, **kwargs):
+        """
+        Return chunk-level loss
+        egs contains:
+            mix (Tensor): N x (C) x S
+            ref (Tensor or [Tensor, ...]): N x S
+        """
+        mix = egs["mix"]
+        N = mix.shape[0]
+        # do separation or enhancement
+        # out (real & imag parts): [Tensor, ...]
+        out = self.nnet(mix)
+
+        if isinstance(out, th.Tensor):
+            # F x T
+            ref = self._build_ref(egs["ref"])
+            # loss
+            loss = self._objf(out, ref, reduction="sum")
+            # per-frame, per-minibatch
+            loss = loss / (N * ref.shape[-1])
+        else:
+            num_branch = len(out)
+            if num_branch != len(egs["ref"]):
+                raise RuntimeError(
+                    f"Got {len(egs['ref'])} references but with {num_branch} outputs"
+                )
+            # for each reference
+            ref = [self._build_ref(r) for r in egs["ref"]]
+            T = ref[0][0].shape[-1]
+
+            if self.permute:
+                # P x N
+                permu_loss = th.stack([
+                    self._permu_objf(p, out, ref)
+                    for p in permutations(range(self.num_spks))
+                ])
+                # N, per-frame per-speaker
+                min_val, _ = th.min(permu_loss, dim=0)
+                # per-minibatch
+                loss = th.mean(min_val)
+
+                # add residual loss
+                if num_branch > self.num_spks:
+                    warnings.warn(
+                        f"#Branch: {num_branch} > #Speaker: {self.num_spks}")
+                    num_weight = num_branch - (self.num_spks - 1)
+                    if self.weight is None:
+                        self.weight = [1 / num_weight] * num_weight
+                    if len(self.weight) != num_weight:
+                        raise RuntimeError(
+                            f"Missing weight ({self.weight}) for {num_branch} branch"
+                        )
+                    res_loss = [
+                        # scale, per-frame, per-minibatch
+                        self._objf(o, r, reduction="sum") / (N * T) for o, r in
+                        zip(out[self.num_spks:], ref[self.num_spks:])
+                    ]
+                    res_loss = sum(
+                        [s * l for s, l in zip(self.weight[1:], res_loss)])
+                    # per-frame, per-minibatch, weight and sum
+                    loss = self.weight[0] * loss + res_loss
+            else:
+                if self.weight is None:
+                    self.weight = [1 / num_branch] * num_branch
+                if len(self.weight) != num_branch:
+                    raise RuntimeError(
+                        f"Missing weight {self.weight} for {num_branch} branch")
+                loss = [
+                    # per-frame, per-minibatch
+                    self._objf(o, r, reduction="sum") / (N * T)
+                    for o, r in zip(out, ref)
+                ]
+                # weight and sum
+                loss = sum([s * l for s, l in zip(self.weight, loss)])
+        return loss

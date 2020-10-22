@@ -19,3 +19,4 @@ yapf==0.30.0
 museval==0.3.1
 pystoi==0.3.3
 pypesq==1.2.4
+stempeg==0.1.8

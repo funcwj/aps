@@ -16,6 +16,14 @@ def _get_activation_fn(activation):
     raise RuntimeError(f"activation should be relu/gelu, not {activation}")
 
 
+def _get_transformer_encoder(encoder_layer, num_layers, norm=None):
+    if isinstance(encoder_layer, TransformerRelEncoderLayer):
+        return TransformerRelEncoder(encoder_layer, num_layers, norm=norm)
+    elif isinstance(encoder_layer, TransformerXLEncoderLayer):
+        return TransformerXLEncoder(encoder_layer, num_layers, norm=norm)
+    raise RuntimeError(f"Unknown transformer encoder layer")
+
+
 class ApsMultiheadAttention(nn.Module):
     """
     NOTE:
@@ -117,6 +125,76 @@ class ApsMultiheadAttention(nn.Module):
         att_weights = self.dropout(th.softmax(att_weights, dim=-1))
         # L x N x H x D
         output = th.einsum("lnhs,snhd->lnhd", att_weights, value)
+        # L x N x HD
+        output = output.contiguous()
+        output = output.view(output.size(0), -1, self.embed_dim)
+        # L x N x E
+        output = self.out_proj(output)
+        # L x N x S => N x L x S
+        att_weights = att_weights.mean(-2).transpose(0, 1)
+        return output, att_weights
+
+
+class RelMultiheadAttention(ApsMultiheadAttention):
+    """
+    MultiheadAttention with relative position embedding described in:
+        Self-Attention with Relative Position Representations
+    """
+
+    def __init__(self, embed_dim, num_heads, dropout=0, bias=True):
+        super(RelMultiheadAttention, self).__init__(embed_dim,
+                                                    num_heads,
+                                                    dropout=dropout,
+                                                    bias=bias)
+
+    def forward(self,
+                query,
+                key,
+                value,
+                key_pos,
+                value_pos,
+                key_padding_mask=None,
+                attn_mask=None):
+        """
+        Args:
+            query (Tensor): L x N x E
+            key (Tensor): S x N x E
+            value (Tensor): S x N x E
+            key_pos (Tensor): L x S x D
+            value_pos (Tensor): L x S x D
+            key_padding_mask (Tensor): N x S
+            attn_mask (Tensor): L x S, additional mask
+        Return:
+            output (Tensor): L x N x E
+            att_weights (Tensor): N x L x S
+        """
+        # L x N x H x D
+        query = self._src_proj(query, 0)
+        # S x N x H x D
+        key = self._src_proj(key, 1)
+        value = self._src_proj(value, 2)
+        # L x N x H x S
+        term_a = th.einsum("lnhd,snhd->lnhs", query, key)
+        L, N, H, D = query.shape
+        query = query.view(L, N * H, D)
+        term_b = th.einsum("...hd,...sd->...hs", query, key_pos)
+        term_b = term_b.view(L, N, H, -1)
+        att_weights = (term_a + term_b) / (self.head_dim)**0.5
+
+        if key_padding_mask is not None:
+            att_weights = att_weights.masked_fill(
+                key_padding_mask[None, :, None, :], float("-inf"))
+        if attn_mask is not None:
+            att_weights += attn_mask[:, None, None, :]
+        # L x N x H x S
+        att_weights = self.dropout(th.softmax(att_weights, dim=-1))
+        # L x N x H x D
+        output = th.einsum("lnhs,snhd->lnhd", att_weights, value)
+        if value_pos is not None:
+            weights = att_weights.view(L, N * H, -1)
+            output_add = th.einsum("...hs,...sd->...hd", weights, value_pos)
+            output_add = output_add.view(L, N, H, -1)
+            output += output_add
         # L x N x HD
         output = output.contiguous()
         output = output.view(output.size(0), -1, self.embed_dim)
@@ -231,26 +309,20 @@ class XlMultiheadAttention(ApsMultiheadAttention):
         return output, att_weights
 
 
-class TransformerXLEncoderLayer(nn.Module):
+class ApsTransformerEncoderLayer(nn.Module):
     """
-    TransformerEncoderLayer using relative position encodings
+    A base class for TransformerEncoderLayer
     """
 
     def __init__(self,
                  d_model,
-                 nhead,
+                 self_attn,
                  dim_feedforward=2048,
                  dropout=0.1,
                  activation="relu",
-                 pre_norm=False,
-                 rel_u=None,
-                 rel_v=None):
-        super(TransformerXLEncoderLayer, self).__init__()
-        self.self_attn = XlMultiheadAttention(d_model,
-                                              nhead,
-                                              dropout=dropout,
-                                              rel_u=rel_u,
-                                              rel_v=rel_v)
+                 pre_norm=False):
+        super(ApsTransformerEncoderLayer, self).__init__()
+        self.self_attn = self_attn
         # Implementation of Feedforward model
         self.feedforward = nn.Sequential(nn.Linear(d_model, dim_feedforward),
                                          _get_activation_fn(activation),
@@ -266,9 +338,87 @@ class TransformerXLEncoderLayer(nn.Module):
     def __setstate__(self, state):
         if "activation" not in state:
             state["activation"] = tf.relu
-        super(TransformerXLEncoderLayer, self).__setstate__(state)
+        super(ApsTransformerEncoderLayer, self).__setstate__(state)
 
-    def forward(self, src, sin_pos_enc, src_mask, src_key_padding_mask):
+
+class TransformerRelEncoderLayer(ApsTransformerEncoderLayer):
+    """
+    TransformerEncoderLayer using relative position encodings
+    """
+
+    def __init__(self,
+                 d_model,
+                 nhead,
+                 dim_feedforward=2048,
+                 dropout=0.1,
+                 activation="relu",
+                 pre_norm=False):
+        self_attn = RelMultiheadAttention(d_model, nhead, dropout=dropout)
+        super(TransformerRelEncoderLayer,
+              self).__init__(d_model,
+                             self_attn,
+                             dim_feedforward=dim_feedforward,
+                             dropout=dropout,
+                             activation=activation,
+                             pre_norm=pre_norm)
+
+    def forward(self,
+                src,
+                key_pos,
+                value_pos=None,
+                src_mask=None,
+                src_key_padding_mask=None):
+        inp = src
+        if self.pre_norm:
+            src = self.norm1(src)
+        att = self.self_attn(src,
+                             src,
+                             src,
+                             key_pos,
+                             value_pos,
+                             attn_mask=src_mask,
+                             key_padding_mask=src_key_padding_mask)[0]
+        src = inp + self.dropout(att)
+        if self.pre_norm:
+            src = src + self.feedforward(self.norm2(src))
+        else:
+            src = self.norm1(src)
+            src = self.norm2(src + self.feedforward(src))
+        return src
+
+
+class TransformerXLEncoderLayer(ApsTransformerEncoderLayer):
+    """
+    TransformerEncoderLayer using relative position encodings
+    """
+
+    def __init__(self,
+                 d_model,
+                 nhead,
+                 dim_feedforward=2048,
+                 dropout=0.1,
+                 activation="relu",
+                 pre_norm=False,
+                 rel_u=None,
+                 rel_v=None):
+        self_attn = XlMultiheadAttention(d_model,
+                                         nhead,
+                                         dropout=dropout,
+                                         rel_u=rel_u,
+                                         rel_v=rel_v)
+        super(TransformerXLEncoderLayer,
+              self).__init__(d_model,
+                             self_attn,
+                             dim_feedforward=dim_feedforward,
+                             dropout=dropout,
+                             activation=activation,
+                             pre_norm=pre_norm)
+
+    def forward(self,
+                src,
+                sin_pos_enc,
+                src_mask=None,
+                src_key_padding_mask=None):
         inp = src
         if self.pre_norm:
             src = self.norm1(src)
@@ -287,18 +437,60 @@ class TransformerXLEncoderLayer(nn.Module):
         return src
 
 
-class TransformerXLEncoder(nn.Module):
+class ApsTransformerEncoder(nn.Module):
     """
-    TransformerXLEncoder is a stack of N TransformerXLEncoderLayer layers
+    Wrapper for a stack of N Transformer encoder layers
     """
     __constants__ = ['norm']
 
     def __init__(self, encoder_layer, num_layers, norm=None):
-        super(TransformerXLEncoder, self).__init__()
+        super(ApsTransformerEncoder, self).__init__()
         self.layers = nn.ModuleList(
             [copy.deepcopy(encoder_layer) for i in range(num_layers)])
         self.num_layers = num_layers
         self.norm = norm
+
+
+class TransformerRelEncoder(ApsTransformerEncoder):
+    """
+    A stack of N TransformerRelEncoderLayer layers
+    """
+
+    def __init__(self, encoder_layer, num_layers, norm=None):
+        super(TransformerRelEncoder, self).__init__(encoder_layer,
+                                                    num_layers,
+                                                    norm=norm)
+
+    def forward(self,
+                src,
+                key_pos,
+                value_pos=None,
+                mask=None,
+                src_key_padding_mask=None):
+        output = src
+
+        for mod in self.layers:
+            output = mod(output,
+                         key_pos,
+                         value_pos=value_pos,
+                         src_mask=mask,
+                         src_key_padding_mask=src_key_padding_mask)
+
+        if self.norm is not None:
+            output = self.norm(output)
+
+        return output
+
+
+class TransformerXLEncoder(ApsTransformerEncoder):
+    """
+    A stack of N TransformerXLEncoderLayer layers
+    """
+
+    def __init__(self, encoder_layer, num_layers, norm=None):
+        super(TransformerXLEncoder, self).__init__(encoder_layer,
+                                                   num_layers,
+                                                   norm=norm)
 
     def forward(self, src, sin_pos_enc, mask=None, src_key_padding_mask=None):
         output = src
@@ -331,7 +523,7 @@ def prep_sub_mask(T, device="cpu"):
 
 def check_self_attn():
     S, L, N, E = 100, 100, 8, 256
-    self_attn = MultiheadAttention(E, 4, dropout=0)
+    self_attn = ApsMultiheadAttention(E, 4, dropout=0)
     self_attn.train()
     key = th.rand(S, N, E)
     value = th.rand(S, N, E)

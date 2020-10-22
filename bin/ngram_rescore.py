@@ -8,7 +8,7 @@ import argparse
 
 from aps.asr.lm.utils import NbestReader
 from aps.utils import get_logger, io_wrapper
-from aps.utils import StrToBoolAction
+from aps.opts import StrToBoolAction
 
 logger = get_logger(__name__)
 

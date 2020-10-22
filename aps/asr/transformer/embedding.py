@@ -197,6 +197,7 @@ class IOEmbedding(nn.Module):
                  dropout=0.1,
                  other_opts=-1,
                  scale_embed=False,
+                 pos_enc=True,
                  rel_enc=False):
         super(IOEmbedding, self).__init__()
         if embed_type == "linear":
@@ -215,11 +216,14 @@ class IOEmbedding(nn.Module):
             self.embed = nn.Embedding(feature_dim, embed_dim)
         else:
             raise RuntimeError(f"Unsupported embedding type: {embed_type}")
-        self.posencode = PositionalEncoding(embed_dim,
-                                            dropout=dropout,
-                                            rel_enc=rel_enc,
-                                            scale_embed=scale_embed,
-                                            max_len=6000)
+        if pos_enc:
+            self.posencode = PositionalEncoding(embed_dim,
+                                                dropout=dropout,
+                                                rel_enc=rel_enc,
+                                                scale_embed=scale_embed,
+                                                max_len=6000)
+        else:
+            self.posencode = None
 
     def forward(self, inp, t=0):
         """
@@ -229,4 +233,8 @@ class IOEmbedding(nn.Module):
             out: T' x N x F (to feed transformer)
         """
         out = self.embed(inp)
-        return self.posencode(out, t=t)
+        if self.posencode:
+            out = self.posencode(out, t=t)
+        else:
+            out = out.transpose(0, 1)
+        return out
