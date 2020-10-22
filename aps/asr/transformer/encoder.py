@@ -187,11 +187,11 @@ class RelTransformerEncoder(nn.Module):
         self.input_embed = input_embed
         self.k_dim = k_dim
 
-    def _get_relative_embed(self, nframe):
+    def _get_relative_embed(self, inp):
         """
         Return relative embeddings
         """
-        seq_vec = th.arange(nframe)
+        seq_vec = th.arange(inp.shape[0], device=inp.device)
         # T x T
         seq_mat = th.clamp(seq_vec[:, None] - seq_vec[None, :],
                            max=self.k_dim,
@@ -220,7 +220,7 @@ class RelTransformerEncoder(nn.Module):
         # src_pad_mask: N x Ti
         src_pad_mask = None if x_len is None else (padding_mask(x_len) == 1)
         # rel embeddings
-        key_pos, value_pos = self._get_relative_embed(x_emb.shape[0])
+        key_pos, value_pos = self._get_relative_embed(x_emb)
         # Ti x N x D
         enc_out = self.encoder(x_emb,
                                key_pos,
