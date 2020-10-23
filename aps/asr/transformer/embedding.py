@@ -148,15 +148,20 @@ class Conv2dEmbedding(nn.Module):
 
     def __init__(self, input_size, embed_dim=512, input_channels=1):
         super(Conv2dEmbedding, self).__init__()
+        inner_channels = embed_dim // 2
         self.conv1 = nn.Conv2d(input_channels,
-                               embed_dim,
+                               inner_channels,
                                3,
                                stride=2,
                                padding=1)
         input_size = (input_size - 1) // 2 + 1
-        self.conv2 = nn.Conv2d(embed_dim, embed_dim, 3, stride=2, padding=1)
+        self.conv2 = nn.Conv2d(inner_channels,
+                               inner_channels,
+                               3,
+                               stride=2,
+                               padding=1)
         input_size = (input_size - 1) // 2 + 1
-        self.proj = nn.Linear(input_size * embed_dim, embed_dim)
+        self.proj = nn.Linear(input_size * inner_channels, embed_dim)
 
     def forward(self, inp):
         """

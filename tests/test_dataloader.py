@@ -20,9 +20,9 @@ def vocab_dict(dict_path):
 
 @pytest.mark.parametrize("batch_size", [1, 2, 4])
 @pytest.mark.parametrize("num_workers", [0, 2, 4])
-def test_am_wav_loader(batch_size, num_workers):
+def test_am_raw_loader(batch_size, num_workers):
     egs_dir = "data/dataloader/am"
-    loader = support_loader(fmt="am_wav",
+    loader = support_loader(fmt="am_raw",
                             wav_scp=f"{egs_dir}/egs.wav.scp",
                             text=f"{egs_dir}/egs.fake.text",
                             utt2dur=f"{egs_dir}/egs.utt2dur",
@@ -44,9 +44,9 @@ def test_am_wav_loader(batch_size, num_workers):
 
 @pytest.mark.parametrize("batch_size", [10, 15])
 @pytest.mark.parametrize("num_workers", [2, 4])
-def test_am_wav_loader_const(batch_size, num_workers):
+def test_am_raw_loader_const(batch_size, num_workers):
     egs_dir = "data/dataloader/am"
-    loader = support_loader(fmt="am_wav",
+    loader = support_loader(fmt="am_raw",
                             wav_scp=f"{egs_dir}/egs.wav.scp",
                             text=f"{egs_dir}/egs.fake.text",
                             utt2dur=f"{egs_dir}/egs.utt2dur",

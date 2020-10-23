@@ -15,9 +15,9 @@ from kaldi_python_io import Reader as BaseReader
 from aps.const import MAX_INT16, EPSILON
 
 
-def read_wav(fname, beg=0, end=None, norm=True, sr=16000):
+def read_audio(fname, beg=0, end=None, norm=True, sr=16000):
     """
-    Read wave files using soundfile (support multi-channel & chunk)
+    Read audio files using soundfile (support multi-channel & chunk)
     args:
         fname: file name or object
         beg, end: begin and end index for chunk-level reading
@@ -45,9 +45,9 @@ def read_wav(fname, beg=0, end=None, norm=True, sr=16000):
     return samps
 
 
-def write_wav(fname, samps, sr=16000, norm=True):
+def write_audio(fname, samps, sr=16000, norm=True):
     """
-    Write wav files, support single/multi-channel
+    Write audio files, support single/multi-channel
     """
     samps = samps.astype("float32" if norm else "int16")
     # scipy.io.wavfile/soundfile could write single/multi-channel files
@@ -95,8 +95,8 @@ def add_room_response(spk, rir, early_energy=False, sr=16000):
 
 
 def run_command(command, wait=True):
-    """ 
-    Runs shell commands. These are usually a sequence of 
+    """
+    Runs shell commands. These are usually a sequence of
     commands connected by pipes, so we use shell=True
     """
     p = subprocess.Popen(command,
@@ -115,7 +115,7 @@ def run_command(command, wait=True):
         return p
 
 
-class WaveReader(BaseReader):
+class AudioReader(BaseReader):
     """
         Sequential/Random Reader for single/multiple channel wave
         Format of wav.scp follows Kaldi's definition:
@@ -127,7 +127,7 @@ class WaveReader(BaseReader):
     """
 
     def __init__(self, wav_scp, sr=16000, norm=True, channel=-1):
-        super(WaveReader, self).__init__(wav_scp, num_tokens=2)
+        super(AudioReader, self).__init__(wav_scp, num_tokens=2)
         self.sr = sr
         self.ch = channel
         self.norm = norm
@@ -149,7 +149,7 @@ class WaveReader(BaseReader):
             # seek and read
             wav_ark.seek(offset)
             try:
-                samps = read_wav(wav_ark, norm=self.norm, sr=self.sr)
+                samps = read_audio(wav_ark, norm=self.norm, sr=self.sr)
             except RuntimeError:
                 samps = None
                 print(f"Load {fname}:{offset} failed...", flush=True)
@@ -158,7 +158,7 @@ class WaveReader(BaseReader):
                 shell, _ = run_command(fname[:-1], wait=True)
                 fname = io.BytesIO(shell)
             try:
-                samps = read_wav(fname, norm=self.norm, sr=self.sr)
+                samps = read_audio(fname, norm=self.norm, sr=self.sr)
             except RuntimeError:
                 samps = None
                 print(f"Load {fname} failed...", flush=True)

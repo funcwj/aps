@@ -66,7 +66,7 @@ trainer_conf:
   stop_criterion: "accu"
 
 data_conf:
-  fmt: "am_wav"
+  fmt: "am_raw"
   loader:
     max_token_num: 400
     adapt_token_num: 150

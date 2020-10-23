@@ -13,7 +13,7 @@ import aps.distributed as dist
 from torch.utils.data.dataloader import default_collate
 from kaldi_python_io import Reader as BaseReader
 
-from aps.loader.audio import WaveReader
+from aps.loader.audio import AudioReader
 
 type_seq = (list, tuple)
 
@@ -85,12 +85,12 @@ class ScriptDataset(object):
                  emb_scp="",
                  ref_scp=None,
                  sr=16000):
-        self.mix = WaveReader(mix_scp, sr=sr)
+        self.mix = AudioReader(mix_scp, sr=sr)
         if isinstance(ref_scp, type_seq):
-            self.ref = [WaveReader(ref, sr=sr) for ref in ref_scp]
+            self.ref = [AudioReader(ref, sr=sr) for ref in ref_scp]
             self.num_ref = len(ref_scp)
         elif ref_scp:
-            self.ref = WaveReader(ref_scp, sr=sr)
+            self.ref = AudioReader(ref_scp, sr=sr)
             self.num_ref = 1
         else:
             self.ref = None

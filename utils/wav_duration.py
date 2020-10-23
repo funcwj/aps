@@ -4,7 +4,6 @@
 
 import io
 import sys
-import wave
 import argparse
 import warnings
 import subprocess
@@ -51,10 +50,11 @@ def run(args):
                 warnings.warn(f"Line format error: {line}")
                 continue
             key, path = toks
-            with wave.open(path, "r") as wav:
-                dur = wav.getnframes()
-                if args.output == "time":
-                    dur = float(dur) / wav.getframerate()
+            info = sf.info(path)
+            if args.output == "time":
+                dur = info.duration
+            else:
+                dur = info.frames
         done += 1
         if args.output == "time":
             utt2dur.write(f"{key}\t{dur:.4f}\n")

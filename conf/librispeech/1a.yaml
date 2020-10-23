@@ -55,7 +55,7 @@ trainer_conf:
   stop_criterion: accu
 
 data_conf:
-  fmt: am_wav
+  fmt: am_raw
   loader:
     adapt_dur: 10
     adapt_token_num: 150

@@ -8,7 +8,7 @@ import argparse
 import torch as th
 
 from aps.transform import support_transform
-from aps.loader import WaveReader
+from aps.loader import AudioReader
 
 
 def run(args):
@@ -17,7 +17,7 @@ def run(args):
     trans_key = f"{args.transform}_transform"
     if trans_key not in conf:
         print(f"No {trans_key} in {args.conf}, exist ...")
-    wav_reader = WaveReader(args.wav_scp, sr=args.sr, channel=args.channel)
+    wav_reader = AudioReader(args.wav_scp, sr=args.sr, channel=args.channel)
 
     feats_conf_list = conf[trans_key]["feats"].split("-")
     for remove_key in ["cmvn", "splice", "aug", "delta"]:

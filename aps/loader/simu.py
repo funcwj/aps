@@ -5,7 +5,7 @@
 import argparse
 import numpy as np
 
-from aps.loader.audio import read_wav, add_room_response
+from aps.loader.audio import read_audio, add_room_response
 from aps.opts import StrToBoolAction
 from aps.const import EPSILON
 
@@ -124,7 +124,7 @@ def load_audio(src_args, beg=None, end=None, sr=16000):
         if end:
             end_int = [int(v) for v in end.split(",")]
         return [
-            read_wav(s, sr=sr, beg=b, end=e)
+            read_audio(s, sr=sr, beg=b, end=e)
             for s, b, e in zip(src_path, beg_int, end_int)
         ]
     else:

@@ -53,7 +53,7 @@ trainer_conf:
   stop_criterion: "loss"
 
 data_conf:
-  fmt: "am_wav"
+  fmt: "am_raw"
   loader:
     max_token_num: 400
     adapt_token_num: 150

@@ -8,7 +8,7 @@ import torch as th
 
 from torch.nn.utils.rnn import pad_sequence
 
-from aps.loader import WaveReader
+from aps.loader import AudioReader
 from aps.utils import get_logger, io_wrapper
 from aps.opts import StrToBoolAction
 from aps.eval import Computer
@@ -49,7 +49,7 @@ def run(args):
         vocab = None
     decoder = BatchDecoder(args.checkpoint, device_id=args.device_id)
     if decoder.accept_raw:
-        src_reader = WaveReader(args.feats_or_wav_scp, sr=16000)
+        src_reader = AudioReader(args.feats_or_wav_scp, sr=16000)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
 

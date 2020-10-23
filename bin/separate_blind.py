@@ -8,7 +8,7 @@ import argparse
 import torch as th
 import numpy as np
 
-from aps.loader import WaveReader, write_wav
+from aps.loader import AudioReader, write_audio
 from aps.utils import get_logger, SimpleTimer
 from aps.eval import Computer
 
@@ -69,7 +69,7 @@ def run(args):
     sep_dir = pathlib.Path(args.sep_dir)
     sep_dir.mkdir(parents=True, exist_ok=True)
     separator = Separator(args.checkpoint, device_id=args.device_id)
-    mix_reader = WaveReader(args.wav_scp, sr=args.sr, channel=args.channel)
+    mix_reader = AudioReader(args.wav_scp, sr=args.sr, channel=args.channel)
 
     for key, mix in mix_reader:
         norm = np.max(np.abs(mix))
@@ -85,7 +85,7 @@ def run(args):
         if args.mode == "time":
             sep = sep * norm / np.max(np.abs(sep))
             # save audio
-            write_wav(sep_dir / f"{key}.wav", sep, sr=args.sr)
+            write_audio(sep_dir / f"{key}.wav", sep, sr=args.sr)
         else:
             # save TF-mask
             np.save(sep_dir / f"{key}", sep)

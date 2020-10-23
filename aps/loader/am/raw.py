@@ -13,7 +13,7 @@ import torch.utils.data as dat
 from torch.nn.utils.rnn import pad_sequence
 
 from aps.loader.am.utils import process_token, BatchSampler
-from aps.loader.audio import WaveReader
+from aps.loader.audio import AudioReader
 
 
 def DataLoader(train=True,
@@ -42,15 +42,15 @@ def DataLoader(train=True,
                       max_token_num=max_token_num,
                       max_wav_dur=max_dur,
                       min_wav_dur=min_dur)
-    return WaveDataLoader(dataset,
-                          shuffle=train,
-                          distributed=distributed,
-                          num_workers=num_workers,
-                          adapt_wav_dur=adapt_dur,
-                          adapt_token_num=adapt_token_num,
-                          batch_size=batch_size,
-                          batch_mode=batch_mode,
-                          min_batch_size=min_batch_size)
+    return AudioDataLoader(dataset,
+                           shuffle=train,
+                           distributed=distributed,
+                           num_workers=num_workers,
+                           adapt_wav_dur=adapt_dur,
+                           adapt_token_num=adapt_token_num,
+                           batch_size=batch_size,
+                           batch_mode=batch_mode,
+                           min_batch_size=min_batch_size)
 
 
 class Dataset(dat.Dataset):
@@ -70,7 +70,10 @@ class Dataset(dat.Dataset):
                  min_wav_dur=0.4,
                  adapt_wav_dur=8,
                  adapt_token_num=150):
-        self.wav_reader = WaveReader(wav_scp, sr=sr, channel=channel, norm=True)
+        self.audio_reader = AudioReader(wav_scp,
+                                        sr=sr,
+                                        channel=channel,
+                                        norm=True)
         self.token_reader = process_token(text,
                                           utt2dur,
                                           vocab_dict,
@@ -81,7 +84,7 @@ class Dataset(dat.Dataset):
     def __getitem__(self, idx):
         tok = self.token_reader[idx]
         key = tok["key"]
-        wav = self.wav_reader[key]
+        wav = self.audio_reader[key]
         if wav is None:
             return {"dur": None, "len": None, "wav": wav, "tok": None}
         else:
@@ -133,7 +136,7 @@ def egs_collate(egs):
     return egs
 
 
-class WaveDataLoader(object):
+class AudioDataLoader(object):
     """
     Acoustic dataloader for seq2seq model training
     """

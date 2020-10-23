@@ -1,9 +1,9 @@
 from . import am, lm, ss
 
-from .audio import read_wav, write_wav, WaveReader
+from .audio import read_audio, write_audio, AudioReader
 
 loader_cls = {
-    "am_wav": am.wav.DataLoader,
+    "am_raw": am.raw.DataLoader,
     "am_kaldi": am.kaldi.DataLoader,
     "ss_chunk": ss.chunk.DataLoader,
     "ss_online": ss.online.DataLoader,
@@ -12,7 +12,7 @@ loader_cls = {
 }
 
 
-def support_loader(fmt="am_wav", **kwargs):
+def support_loader(fmt="am_raw", **kwargs):
     if fmt not in loader_cls:
         raise RuntimeError(f"Unsupported DataLoader type: {fmt}")
     return loader_cls[fmt](**kwargs)

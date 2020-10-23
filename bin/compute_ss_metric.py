@@ -6,7 +6,7 @@ import tqdm
 import argparse
 import numpy as np
 
-from aps.loader import WaveReader
+from aps.loader import AudioReader
 from aps.metric.reporter import AverageReporter
 from aps.metric.sep import permute_metric
 
@@ -25,8 +25,8 @@ def run(args):
     utt_ali = open(args.utt_ali, "w") if args.utt_ali else None
 
     if single_speaker:
-        est_reader = WaveReader(args.est_scp, sr=args.sr)
-        ref_reader = WaveReader(args.ref_scp, sr=args.sr)
+        est_reader = AudioReader(args.est_scp, sr=args.sr)
+        ref_reader = AudioReader(args.ref_scp, sr=args.sr)
         for key, sep in tqdm.tqdm(est_reader):
             ref = ref_reader[key]
             end = min(sep.size, ref.size)
@@ -39,8 +39,8 @@ def run(args):
             if utt_val:
                 utt_val.write(f"{key}\t{metric:.2f}\n")
     else:
-        est_reader = [WaveReader(scp, sr=args.sr) for scp in splited_est_scps]
-        ref_reader = [WaveReader(scp, sr=args.sr) for scp in splited_ref_scps]
+        est_reader = [AudioReader(scp, sr=args.sr) for scp in splited_est_scps]
+        ref_reader = [AudioReader(scp, sr=args.sr) for scp in splited_ref_scps]
         main_reader = est_reader[0]
 
         for key in tqdm.tqdm(main_reader.index_keys):

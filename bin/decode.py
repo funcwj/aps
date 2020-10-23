@@ -11,7 +11,7 @@ import torch as th
 from aps.eval import Computer
 from aps.opts import StrToBoolAction
 from aps.utils import get_logger, io_wrapper
-from aps.loader import WaveReader
+from aps.loader import AudioReader
 
 from kaldi_python_io import ScriptReader
 
@@ -57,9 +57,9 @@ def run(args):
         vocab = None
     decoder = FasterDecoder(args.checkpoint, device_id=args.device_id)
     if decoder.accept_raw:
-        src_reader = WaveReader(args.feats_or_wav_scp,
-                                sr=16000,
-                                channel=args.channel)
+        src_reader = AudioReader(args.feats_or_wav_scp,
+                                 sr=16000,
+                                 channel=args.channel)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
