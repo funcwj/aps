@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-# wujian@2020
+# Copyright 2020 Jian Wu
+# License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import pathlib
 import argparse
@@ -8,7 +9,7 @@ import argparse
 import torch as th
 import numpy as np
 
-from aps.loader import WaveReader, write_wav
+from aps.loader import AudioReader
 from aps.utils import get_logger, SimpleTimer
 from aps.eval import Computer
 from aps.sep.unsupervised_enh import permu_aligner
@@ -42,7 +43,7 @@ def run(args):
     sep_dir = pathlib.Path(args.sep_dir)
     sep_dir.mkdir(parents=True, exist_ok=True)
     separator = Separator(args.checkpoint, device_id=args.device_id)
-    mix_reader = WaveReader(args.wav_scp, sr=args.sr)
+    mix_reader = AudioReader(args.wav_scp, sr=args.sr)
 
     for key, mix in mix_reader:
         timer = SimpleTimer()

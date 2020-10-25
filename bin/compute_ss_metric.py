@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-# wujian@2018
+# Copyright 2018 Jian Wu
+# License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import tqdm
 import argparse

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-# wujian@2019
+# Copyright 2019 Jian Wu
+# License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import torch as th
 import torch.nn as nn
@@ -33,6 +34,7 @@ class TorchRNNEncoder(nn.Module):
     """
     PyTorch's RNN encoder
     """
+
     def __init__(self,
                  input_size,
                  output_size,
@@ -117,6 +119,7 @@ class CustomRNNEncoder(nn.Module):
     """
     Customized RNN layer (egs: PyramidEncoder)
     """
+
     def __init__(self,
                  input_size,
                  output_size,
@@ -213,6 +216,7 @@ class TDNNEncoder(nn.Module):
     """
     Stack of TDNNLayers
     """
+
     def __init__(self,
                  input_size,
                  output_size,
@@ -263,6 +267,7 @@ class FSMNEncoder(nn.Module):
     """
     Stack of FsmnLayers, with optional residual connection
     """
+
     def __init__(self,
                  input_size,
                  output_size,
@@ -316,6 +321,7 @@ class TimeDelayRNNEncoder(nn.Module):
     """
     TDNN + RNN encoder (Using TDNN for subsampling and RNN for sequence modeling )
     """
+
     def __init__(self,
                  input_size,
                  output_size,
@@ -369,6 +375,7 @@ class TimeDelayFSMNEncoder(nn.Module):
     """
     TDNN + FSMN encoder (Using TDNN for subsampling and FSMN for sequence modeling )
     """
+
     def __init__(self,
                  input_size,
                  output_size,

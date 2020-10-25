@@ -1,3 +1,6 @@
+# Copyright 2019 Jian Wu
+# License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
+
 import torch as th
 import torch_complex.functional as cf
 

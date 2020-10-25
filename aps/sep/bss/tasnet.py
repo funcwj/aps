@@ -1,4 +1,5 @@
-# wujian@2019
+# Copyright 2018 Jian Wu
+# License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import torch as th
 import torch.nn as nn
@@ -209,8 +210,8 @@ class Conv1DBlock(nn.Module):
 
 class TimeConvTasNet(nn.Module):
     """
-    Y. Luo, N. Mesgarani. Conv-tasnet: Surpassing Ideal Time–frequency Magnitude 
-    Masking for Speech Separation[J]. IEEE/ACM transactions on audio, speech, 
+    Y. Luo, N. Mesgarani. Conv-tasnet: Surpassing Ideal Time–frequency Magnitude
+    Masking for Speech Separation[J]. IEEE/ACM transactions on audio, speech,
     and language processing, 2019, 27(8):1256–1266.
     """
 

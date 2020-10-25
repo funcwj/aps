@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-# wujian@2020
+# Copyright 2020 Jian Wu
+# License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import torch as th
 import torch.nn as nn
@@ -62,7 +63,7 @@ class CRNLayer(nn.Module):
 class CRNet(nn.Module):
     """
     Reference:
-        Tan K. and Wang D.L. (2018): A convolutional recurrent neural network for 
+        Tan K. and Wang D.L. (2018): A convolutional recurrent neural network for
         real-time speech enhancement. Proceedings of INTERSPEECH-18, pp. 3229-3233.
     """
     supported_nonlinear = {

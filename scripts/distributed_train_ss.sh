@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# wujian@2020
+# Copyright 2020 Jian Wu
+# License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 set -eu
 
@@ -31,7 +32,7 @@ conf=conf/$data/$exp_id.yaml
 
 export OMP_NUM_THREADS=4
 
-case $distributed in 
+case $distributed in
   "torch" )
     python -m torch.distributed.launch \
       --nnodes 1 \

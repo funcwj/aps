@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-# wujian@2019
+# Copyright 2019 Jian Wu
+# License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
 for RNNLM (paragraph corpus)
 ref: https://github.com/pytorch/examples/tree/master/word_language_model

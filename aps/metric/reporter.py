@@ -1,3 +1,6 @@
+# Copyright 2018 Jian Wu
+# License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
+
 from collections import defaultdict
 from kaldi_python_io import Reader as BaseReader
 

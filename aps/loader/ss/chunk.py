@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-# wujian@2020
+# Copyright 2018 Jian Wu
+# License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
 Dataloader of the raw waveform in enhancement/separation tasks
 """
