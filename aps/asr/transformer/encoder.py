@@ -96,6 +96,7 @@ class TorchTransformerEncoder(nn.Module):
                  pos_dropout=0.1,
                  att_dropout=0.1,
                  post_norm=True,
+                 pos_enc=True,
                  num_layers=6):
         super(TorchTransformerEncoder, self).__init__()
         self.src_embed = IOEmbedding(input_embed,
@@ -104,6 +105,7 @@ class TorchTransformerEncoder(nn.Module):
                                      dropout=pos_dropout,
                                      scale_embed=scale_embed,
                                      rel_enc=False,
+                                     pos_enc=pos_enc,
                                      other_opts=embed_other_opts)
         encoder_layer = ApsTransformerEncoderLayer(
             att_dim,

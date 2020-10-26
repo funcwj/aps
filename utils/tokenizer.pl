@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 
-# wujian@2018
+# Copyright 2018 Jian Wu
+# License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 # egs
 # 1)  add <space> between each word for English dataset
@@ -33,7 +34,7 @@ do {
 } while ($ended);
 
 if (@ARGV < 1 || @ARGV > 2) {
-  die "Usage: tokenizer.pl [--space <space-token>] text > char\n"; 
+  die "Usage: tokenizer.pl [--space <space-token>] text > char\n";
 }
 
 while (<>) {

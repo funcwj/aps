@@ -12,7 +12,7 @@ from kaldi_python_io import Reader as BaseReader
 def run(args):
     scp_out = open(args.scp, "w") if args.scp else None
     with open(args.wav_ark, "wb") as wav_ark:
-        reader = BaseReader(args.wav_scp, num_tokens=1, restrict=True)
+        reader = BaseReader(args.wav_scp, num_tokens=2, restrict=True)
         done = 0
         for key, value in reader:
             wav_ark.write(str.encode(key + " "))

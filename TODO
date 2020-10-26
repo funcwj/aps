@@ -1,5 +1,4 @@
-1. RNN LM shallow fusion (issues with Transformer)
-2. Beam search in batch mode
-3. Python type hints
-4. More example recipes
-5. ...
+1. Beam search in batch mode (also optimization)
+2. Python type hints
+3. More example recipes
+4. ...

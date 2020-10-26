@@ -118,13 +118,13 @@ def run_command(command, wait=True):
 
 class AudioReader(BaseReader):
     """
-        Sequential/Random Reader for single/multiple channel wave
-        Format of wav.scp follows Kaldi's definition:
-            key1 /path/to/key1.wav
-            ...
-        or
-            key1 sox /home/data/key1.wav -t wav - remix 1 |
-            ...
+    Sequential/Random Reader for single/multiple channel audio using soundfile as the backend
+    The format of wav.scp follows Kaldi's definition:
+        key1 /path/to/key1.wav
+        ...
+    or
+        key1 sox /home/data/key1.wav -t wav - remix 1 |
+        ...
     """
 
     def __init__(self, wav_scp, sr=16000, norm=True, channel=-1):

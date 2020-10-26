@@ -52,12 +52,14 @@ class TorchTransformerDecoder(nn.Module):
                  scale_embed=False,
                  pos_dropout=0,
                  att_dropout=0.1,
+                 pos_enc=True,
                  num_layers=6):
         super(TorchTransformerDecoder, self).__init__()
         self.tgt_embed = IOEmbedding("sparse",
                                      vocab_size,
                                      embed_dim=att_dim,
                                      dropout=pos_dropout,
+                                     pos_enc=pos_enc,
                                      scale_embed=scale_embed)
         decoder_layer = TransformerDecoderLayer(att_dim,
                                                 nhead,
