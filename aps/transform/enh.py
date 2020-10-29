@@ -3,7 +3,7 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
-Feature transform for Enhancement/Separation
+Spatial feature transform (for Speech Separation & Enhancement), using enh.py for abbreviation
 """
 import math
 

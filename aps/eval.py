@@ -7,7 +7,7 @@ import pathlib
 import torch as th
 
 from aps.asr import support_nnet as support_asr_nnet
-from aps.sep import support_nnet as support_sep_nnet
+from aps.sse import support_nnet as support_sse_nnet
 from aps.transform import support_transform
 
 
@@ -39,7 +39,7 @@ class Computer(object):
             if task == "asr":
                 net_cls = support_asr_nnet(conf["nnet"])
             else:
-                net_cls = support_sep_nnet(conf["nnet"])
+                net_cls = support_sse_nnet(conf["nnet"])
         asr_transform = None
         enh_transform = None
         self.accept_raw = False

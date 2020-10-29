@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from aps.sep.enh.dcunet import Encoder, Decoder, parse_1dstr, parse_2dstr
+from aps.sse.enh.dcunet import Encoder, Decoder, parse_1dstr, parse_2dstr
 
 
 class LSTMP(nn.Module):

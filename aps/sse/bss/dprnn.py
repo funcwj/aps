@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from .tasnet import build_norm
+from aps.sse.bss.tasnet import build_norm
 
 
 class DpB(nn.Module):

@@ -2,7 +2,9 @@
 
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
-
+"""
+For Speech Separation and Enhancement task, using sse.py for abbreviation
+"""
 import warnings
 import torch as th
 import torch.nn as nn
@@ -78,6 +80,9 @@ def hybrid_objf(out, ref, objf, weight=None, permute=True, permu_num_spks=2):
     Return hybrid loss (pair-wise, permutated or pair-wise + permutated)
     """
     num_branch = len(out)
+    if num_branch != len(ref):
+        raise RuntimeError(
+            f"Got {len(ref)} references but with {num_branch} outputs")
     if permute:
         # N
         loss = permu_invarint_objf(out[:permu_num_spks], ref[:permu_num_spks],
@@ -147,9 +152,6 @@ class TimeDomainTask(SepTask):
         if isinstance(out, th.Tensor):
             loss = self.objf(out, ref)
         else:
-            if len(out) != len(ref):
-                raise RuntimeError(
-                    f"Got {len(ref)} references but with {len(out)} outputs")
             loss = hybrid_objf(out,
                                ref,
                                self.objf,
@@ -296,10 +298,6 @@ class FreqSaTask(SepTask):
             # loss
             loss = self.objf(out, ref)
         else:
-            if len(mask) != len(egs["ref"]):
-                raise RuntimeError(
-                    f"Got {len(egs['ref'])} references but with {len(mask)} outputs"
-                )
             # for each reference
             ref = [self._ref_mag(mix_mag, mix_pha, r) for r in egs["ref"]]
             if self.masking:
@@ -474,10 +472,6 @@ class TimeSaTask(SepTask):
             # loss (N)
             loss = self.objf(self.transform(spk_mag), self.transform(ref_mag))
         else:
-            if len(spk) != len(egs["ref"]):
-                raise RuntimeError(
-                    f"Got {len(egs['ref'])} reference but with {len(spk)} outputs"
-                )
             spk_mag = [self._stft_mag(s) for s in spk]
             # for each reference
             ref_mag = [self._stft_mag(r) for r in egs["ref"]]
@@ -655,10 +649,6 @@ class ComplexMappingTask(SepTask):
             # loss
             loss = self.objf(out, ref)
         else:
-            if len(out) != len(egs["ref"]):
-                raise RuntimeError(
-                    f"Got {len(egs['ref'])} references but with {len(out)} outputs"
-                )
             # for each reference
             ref = [self._build_ref(r) for r in egs["ref"]]
             loss = hybrid_objf(out,

@@ -9,7 +9,7 @@ import numpy as np
 
 from aps.loader import AudioReader
 from aps.metric.reporter import AverageReporter
-from aps.metric.sep import permute_metric
+from aps.metric.sse import permute_metric
 
 from kaldi_python_io import Reader as BaseReader
 

@@ -10,7 +10,7 @@ import torch as th
 from torch.nn.utils import clip_grad_norm_
 
 from aps.task import support_task
-from aps.sep import support_nnet as support_sep_nnet
+from aps.sse import support_nnet as support_sse_nnet
 from aps.transform import EnhTransform
 
 
@@ -18,7 +18,7 @@ def toy_rnn(mode, num_spks):
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
                              frame_hop=256)
-    return support_sep_nnet("base_rnn")(enh_transform=transform,
+    return support_sse_nnet("base_rnn")(enh_transform=transform,
                                         num_bins=257,
                                         input_size=257,
                                         rnn_layers=2,

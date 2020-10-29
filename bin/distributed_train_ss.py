@@ -22,7 +22,7 @@ from aps.trainer import HvdTrainer, DdpTrainer
 from aps.loader import support_loader
 from aps.transform import support_transform
 from aps.task import support_task
-from aps.sep import support_nnet
+from aps.sse import support_nnet
 from aps import distributed
 
 constrained_conf_keys = [

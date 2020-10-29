@@ -10,9 +10,9 @@ import torch.nn.functional as F
 
 from aps.asr.transformers import TransformerASR
 from aps.asr.base.encoder import TorchRNNEncoder
-from aps.asr.enh.conv import TimeInvariantEnh, TimeVariantEnh, TimeInvariantAttEnh
-from aps.asr.enh.mvdr import MvdrBeamformer
-from aps.asr.enh.google import CLPFsBeamformer  # same as TimeInvariantEnh
+from aps.asr.filter.conv import TimeInvariantFilter, TimeVariantFilter, TimeInvariantAttFilter
+from aps.asr.filter.mvdr import MvdrBeamformer
+from aps.asr.filter.google import CLPFsBeamformer  # same as TimeInvariantEnh
 
 
 class EnhTransformerASR(nn.Module):
@@ -113,9 +113,9 @@ class BeamTransformerASR(EnhTransformerASR):
     def __init__(self, mode="tv", enh_transform=None, enh_conf=None, **kwargs):
         super(BeamTransformerASR, self).__init__(**kwargs)
         conv_enh = {
-            "ti": TimeInvariantEnh,
-            "tv": TimeVariantEnh,
-            "ti_att": TimeInvariantAttEnh,
+            "ti": TimeInvariantFilter,
+            "tv": TimeVariantFilter,
+            "ti_att": TimeInvariantAttFilter,
             "clp": CLPFsBeamformer
         }
         if mode not in conv_enh:

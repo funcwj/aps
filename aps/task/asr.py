@@ -2,7 +2,9 @@
 
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
-
+"""
+For ASR task
+"""
 import math
 import numpy as np
 import torch as th

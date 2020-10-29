@@ -5,7 +5,7 @@
 
 import torch as th
 
-from aps.sep import support_nnet
+from aps.sse import support_nnet
 from aps.transform import EnhTransform
 
 

@@ -55,7 +55,7 @@ class ComplexConv2d(ComplexConvXd):
         super(ComplexConv2d, self).__init__(nn.Conv2d, *args, **kwargs)
 
 
-class TimeInvariantEnh(nn.Module):
+class TimeInvariantFilter(nn.Module):
     """
     Time invariant convolutional front-end (eq beamformer)
     """
@@ -69,7 +69,7 @@ class TimeInvariantEnh(nn.Module):
                  spectra_init="random",
                  batchnorm=True,
                  apply_log=True):
-        super(TimeInvariantEnh, self).__init__()
+        super(TimeInvariantFilter, self).__init__()
         if spectra_init not in ["mel", "random"]:
             raise ValueError(f"Unsupported init method: {spectra_init}")
         # conv.weight: spatial_filters*num_bins x num_channels
@@ -147,7 +147,7 @@ class TimeInvariantEnh(nn.Module):
 from aps.asr.base.encoder import TorchRNNEncoder
 
 
-class TimeInvariantAttEnh(nn.Module):
+class TimeInvariantAttFilter(nn.Module):
     """
     Time invariant convolutional front-end with attention
     """
@@ -162,7 +162,7 @@ class TimeInvariantAttEnh(nn.Module):
                  query_type="rnn",
                  batchnorm=True,
                  apply_log=True):
-        super(TimeInvariantAttEnh, self).__init__()
+        super(TimeInvariantAttFilter, self).__init__()
         if spectra_init not in ["mel", "random"]:
             raise ValueError(f"Unsupported init method: {spectra_init}")
         if query_type not in ["rnn", "conv"]:
@@ -268,7 +268,7 @@ class TimeInvariantAttEnh(nn.Module):
         return f
 
 
-class TimeVariantEnh(nn.Module):
+class TimeVariantFilter(nn.Module):
     """
     Time variant convolutional front-end
     """
@@ -280,7 +280,7 @@ class TimeVariantEnh(nn.Module):
                  spatial_filters=8,
                  spectra_filters=80,
                  batchnorm=True):
-        super(TimeVariantEnh, self).__init__()
+        super(TimeVariantFilter, self).__init__()
         self.conv = ComplexConv2d(num_bins,
                                   num_bins * spatial_filters,
                                   (time_reception, num_channels),
