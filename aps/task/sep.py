@@ -11,6 +11,7 @@ import torch.nn.functional as tf
 from itertools import permutations
 
 from aps.task.base import Task
+from aps.task.utils import permu_invarint_objf, multiple_objf
 from aps.transform.utils import STFT, init_melfilter
 from aps.const import EPSILON
 
@@ -72,29 +73,65 @@ def snr(x, s, eps=1e-8, non_nagetive=False):
         return 20 * th.log10(eps + snr_linear)
 
 
-class TimeDomainTask(Task):
+def hybrid_objf(out, ref, objf, weight=None, permute=True, permu_num_spks=2):
     """
-    Time domain task (to be implemented)
+    Return hybrid loss (pair-wise, permutated or pair-wise + permutated)
+    """
+    num_branch = len(out)
+    if permute:
+        # N
+        loss = permu_invarint_objf(out[:permu_num_spks], ref[:permu_num_spks],
+                                   objf)
+        # add residual loss
+        if num_branch > permu_num_spks:
+            # warnings.warn(f"#Branch: {num_branch} > #Speaker: {permu_num_spks}")
+            num_weight = num_branch - (permu_num_spks - 1)
+            if weight is None:
+                weight = [1 / num_weight] * num_weight
+            other_loss = multiple_objf(out[permu_num_spks:],
+                                       ref[permu_num_spks:],
+                                       objf,
+                                       weight=weight[1:])
+            loss = weight[0] * loss + other_loss
+    else:
+        loss = multiple_objf(out, ref, objf, weight=weight)
+    return loss
+
+
+class SepTask(Task):
+    """
+    Base class for separation & enhancement task
     """
 
-    def __init__(self, nnet, num_spks=2, permute=True, mode="max", weight=None):
-        super(TimeDomainTask, self).__init__(nnet, weight=weight)
-        self.num_spks = num_spks
-        self.permute = permute  # use pit or not
-        self.mode = mode
+    def __init__(self, nnet, ctx=None, name="unknown", weight=None):
+        super(SepTask, self).__init__(nnet, ctx=ctx, name=name)
+        if weight is not None:
+            self.weight = list(map(float, weight.split(",")))
+        else:
+            self.weight = None
 
-    def _objf(self, out, ref):
+    def objf(self, out, ref):
         """
         Return tensor (N) for each mini-batch
         """
         raise NotImplementedError
 
-    def _perm_objf(self, permute, out, ref):
+    def transform(self, tensor):
         """
-        Return tensor (P x N) for each permutation and mini-batch
+        Transformation on out & ref before calling objf
         """
-        return sum([self._objf(out[s], ref[t]) for s, t in enumerate(permute)
-                   ]) / len(permute)
+        raise NotImplementedError
+
+
+class TimeDomainTask(SepTask):
+    """
+    Time domain task (to be implemented)
+    """
+
+    def __init__(self, nnet, num_spks=2, permute=True, weight=None):
+        super(TimeDomainTask, self).__init__(nnet, weight=weight)
+        self.num_spks = num_spks
+        self.permute = permute  # use pit or not
 
     def forward(self, egs, **kwargs):
         """
@@ -108,53 +145,18 @@ class TimeDomainTask(Task):
         out = self.nnet(egs["mix"])
 
         if isinstance(out, th.Tensor):
-            loss = self._objf(out, ref)
+            loss = self.objf(out, ref)
         else:
-            num_branch = len(out)
-            if num_branch != len(ref):
+            if len(out) != len(ref):
                 raise RuntimeError(
-                    f"Got {len(ref)} references but with {num_branch} outputs")
-            if self.permute:
-                # P x N
-                loss_mat = th.stack([
-                    self._perm_objf(p, out, ref)
-                    for p in permutations(range(self.num_spks))
-                ])
-                # NOTE: max or min
-                if self.mode == "max":
-                    loss, _ = th.max(loss_mat, dim=0)
-                else:
-                    loss, _ = th.min(loss_mat, dim=0)
-                # add residual loss
-                if num_branch > self.num_spks:
-                    warnings.warn(
-                        f"#Branch: {num_branch} > #Speaker: {self.num_spks}")
-                    num_weight = num_branch - (self.num_spks - 1)
-                    if self.weight is None:
-                        self.weight = [1 / num_weight] * num_weight
-                    if len(self.weight) != num_weight:
-                        raise RuntimeError(
-                            f"Missing weight ({self.weight}) for {num_branch} branch"
-                        )
-                    res_loss = [
-                        self._objf(o, r) for o, r in zip(
-                            out[self.num_spks:], ref[self.num_spks:])
-                    ]
-                    res_loss = sum(
-                        [s * l for s, l in zip(self.weight[1:], res_loss)])
-                    loss = self.weight[0] * loss + res_loss
-            else:
-                if self.weight is None:
-                    self.weight = [1 / num_branch] * num_branch
-                if len(self.weight) != num_branch:
-                    raise RuntimeError(
-                        f"Missing weight {self.weight} for {num_branch} branch")
-                loss = [self._objf(o, r) for o, r in zip(out, ref)]
-                loss = sum([s * l for s, l in zip(self.weight, loss)])
-        if self.mode == "max":
-            return {"loss": -th.mean(loss)}
-        else:
-            return {"loss": th.mean(loss)}
+                    f"Got {len(ref)} references but with {len(out)} outputs")
+            loss = hybrid_objf(out,
+                               ref,
+                               self.objf,
+                               weight=self.weight,
+                               permute=self.permute,
+                               permu_num_spks=self.num_spks)
+        return {"loss": th.mean(loss)}
 
 
 class SisnrTask(TimeDomainTask):
@@ -172,16 +174,16 @@ class SisnrTask(TimeDomainTask):
         super(SisnrTask, self).__init__(nnet,
                                         num_spks=num_spks,
                                         permute=permute,
-                                        mode="max",
                                         weight=weight)
         self.zero_mean = zero_mean
         self.non_nagetive = non_nagetive
 
-    def _objf(self, out, ref):
-        return sisnr(out,
-                     ref,
-                     zero_mean=self.zero_mean,
-                     non_nagetive=self.non_nagetive)
+    def objf(self, out, ref):
+        """
+        Return negative SiSNR
+        """
+        return -sisnr(
+            out, ref, zero_mean=self.zero_mean, non_nagetive=self.non_nagetive)
 
 
 class SnrTask(TimeDomainTask):
@@ -198,12 +200,14 @@ class SnrTask(TimeDomainTask):
         super(SnrTask, self).__init__(nnet,
                                       num_spks=num_spks,
                                       permute=permute,
-                                      mode="max",
                                       weight=weight)
         self.non_nagetive = non_nagetive
 
-    def _objf(self, out, ref):
-        return snr(out, ref, non_nagetive=self.non_nagetive)
+    def objf(self, out, ref):
+        """
+        Return negative SNR
+        """
+        return -snr(out, ref, non_nagetive=self.non_nagetive)
 
 
 class WaTask(TimeDomainTask):
@@ -215,20 +219,19 @@ class WaTask(TimeDomainTask):
         super(WaTask, self).__init__(nnet,
                                      num_spks=num_spks,
                                      permute=permute,
-                                     mode="min",
                                      weight=weight)
         # L2 or L1 loss
-        self.objf = objf
+        self.objf_ptr = tf.l1_loss if objf == "L1" else tf.mse_loss
 
-    def _objf(self, out, ref):
-        if self.objf == "L1":
-            loss = tf.l1_loss(out, ref, reduction="none")
-        else:
-            loss = tf.mse_loss(out, ref, reduction="none")
+    def objf(self, out, ref):
+        """
+        L1 or L2
+        """
+        loss = self.objf_ptr(out, ref, reduction="none")
         return loss.sum(-1)
 
 
-class FreqSaTask(Task):
+class FreqSaTask(SepTask):
     """
     Frequenct SA Task (to be implemented)
     """
@@ -253,18 +256,6 @@ class FreqSaTask(Task):
         self.masking = masking
         self.num_spks = num_spks
 
-    def _objf(self, out, ref, reduction="none"):
-        """
-        Return loss for each mini-batch
-        """
-        raise NotImplementedError
-
-    def _post(self, tensor):
-        """
-        Post processing on out/ref before calling _objf
-        """
-        raise NotImplementedError
-
     def _ref_mag(self, mix_mag, mix_pha, ref):
         """
         Compute reference magnitude for SA
@@ -280,20 +271,6 @@ class FreqSaTask(Task):
             ref_mag = th.min(ref_mag, self.truncated * mix_mag)
         return ref_mag
 
-    def _permu_objf(self, permute, out, ref):
-        """
-        SA computation in permutation mode
-        """
-        permu_loss = []
-        # for one permutation
-        for s, t in enumerate(permute):
-            # N x F x T
-            loss_mat = self._objf(out[s], ref[t], reduction="none")
-            loss_utt = th.sum(loss_mat.mean(-1), -1)  # x N, per-frame
-            permu_loss.append(loss_utt)
-        # per-speaker
-        return sum(permu_loss) / len(permute)
-
     def forward(self, egs, **kwargs):
         """
         Return chunk-level loss
@@ -302,7 +279,6 @@ class FreqSaTask(Task):
             ref (Tensor or [Tensor, ...]): N x S
         """
         mix = egs["mix"]
-        N = mix.shape[0]
         # do separation or enhancement
         # out: Tensor or [Tensor, ...]
         mask = self.nnet(mix)
@@ -310,23 +286,19 @@ class FreqSaTask(Task):
         # if multi-channel, use ch0 as reference
         mix_mag, mix_pha = self.ctx(mix[:, 0] if mix.dim() == 3 else mix,
                                     output="polar")
-        _, _, T = mix_mag.shape
 
         if isinstance(mask, th.Tensor):
             # F x T
             ref = self._ref_mag(mix_mag, mix_pha, egs["ref"])
             # post processing
-            out = self._post(mask * mix_mag if self.masking else mask)
-            ref = self._post(ref)
+            out = self.transform(mask * mix_mag if self.masking else mask)
+            ref = self.transform(ref)
             # loss
-            loss = self._objf(out, ref, reduction="sum")
-            # per-frame, per-minibatch
-            loss = loss / (N * T)
+            loss = self.objf(out, ref)
         else:
-            num_branch = len(mask)
-            if num_branch != len(egs["ref"]):
+            if len(mask) != len(egs["ref"]):
                 raise RuntimeError(
-                    f"Got {len(egs['ref'])} references but with {num_branch} outputs"
+                    f"Got {len(egs['ref'])} references but with {len(mask)} outputs"
                 )
             # for each reference
             ref = [self._ref_mag(mix_mag, mix_pha, r) for r in egs["ref"]]
@@ -334,53 +306,15 @@ class FreqSaTask(Task):
                 out = [m * mix_mag for m in mask]
             else:
                 out = mask
-            ref = [self._post(r) for r in ref]
-            out = [self._post(o) for o in out]
-            if self.permute:
-                # P x N
-                permu_loss = th.stack([
-                    self._permu_objf(p, out, ref)
-                    for p in permutations(range(self.num_spks))
-                ])
-                # N, per-frame per-speaker
-                min_val, _ = th.min(permu_loss, dim=0)
-                # per-minibatch
-                loss = th.mean(min_val)
-
-                # add residual loss
-                if num_branch > self.num_spks:
-                    warnings.warn(
-                        f"#Branch: {num_branch} > #Speaker: {self.num_spks}")
-                    num_weight = num_branch - (self.num_spks - 1)
-                    if self.weight is None:
-                        self.weight = [1 / num_weight] * num_weight
-                    if len(self.weight) != num_weight:
-                        raise RuntimeError(
-                            f"Missing weight ({self.weight}) for {num_branch} branch"
-                        )
-                    res_loss = [
-                        # scale, per-frame, per-minibatch
-                        self._objf(o, r, reduction="sum") / (N * T) for o, r in
-                        zip(out[self.num_spks:], ref[self.num_spks:])
-                    ]
-                    res_loss = sum(
-                        [s * l for s, l in zip(self.weight[1:], res_loss)])
-                    # per-frame, per-minibatch, weight and sum
-                    loss = self.weight[0] * loss + res_loss
-            else:
-                if self.weight is None:
-                    self.weight = [1 / num_branch] * num_branch
-                if len(self.weight) != num_branch:
-                    raise RuntimeError(
-                        f"Missing weight {self.weight} for {num_branch} branch")
-                loss = [
-                    # per-frame, per-minibatch
-                    self._objf(o, r, reduction="sum") / (N * T)
-                    for o, r in zip(out, ref)
-                ]
-                # weight and sum
-                loss = sum([s * l for s, l in zip(self.weight, loss)])
-        return {"loss": loss}
+            ref = [self.transform(r) for r in ref]
+            out = [self.transform(o) for o in out]
+            loss = hybrid_objf(out,
+                               ref,
+                               self.objf,
+                               weight=self.weight,
+                               permute=self.permute,
+                               permu_num_spks=self.num_spks)
+        return {"loss": th.mean(loss)}
 
 
 class LinearFreqSaTask(FreqSaTask):
@@ -405,19 +339,18 @@ class LinearFreqSaTask(FreqSaTask):
                                                weight=weight,
                                                num_spks=num_spks)
         # L2 or L1 loss
-        self.objf = objf
+        self.objf_ptr = tf.l1_loss if objf == "L1" else tf.mse_loss
 
-    def _objf(self, out, ref, reduction="none"):
+    def objf(self, out, ref):
         """
         Return loss for each mini-batch
         """
-        if self.objf == "L1":
-            loss = tf.l1_loss(out, ref, reduction=reduction)
-        else:
-            loss = tf.mse_loss(out, ref, reduction=reduction)
+        # out, ref: N x F x T
+        loss = self.objf_ptr(out, ref, reduction="none")
+        loss = th.sum(loss.mean(-1), -1)
         return loss
 
-    def _post(self, tensor):
+    def transform(self, tensor):
         """
         Just return itself
         """
@@ -462,7 +395,7 @@ class MelFreqSaTask(FreqSaTask):
         self.log = mel_log
         self.power_mag = power_mag
 
-    def _post(self, tensor):
+    def transform(self, tensor):
         """
         Return mel spectrogram
         """
@@ -474,14 +407,16 @@ class MelFreqSaTask(FreqSaTask):
             mel = th.log(1 + mel)
         return mel
 
-    def _objf(self, out, ref, reduction="none"):
+    def objf(self, out, ref):
         """
         Computer MSE after mel-transform
         """
-        return tf.mse_loss(out, ref, reduction=reduction)
+        loss = tf.mse_loss(out, ref, reduction="none")
+        loss = th.sum(loss.mean(-1), -1)
+        return loss
 
 
-class TimeSaTask(Task):
+class TimeSaTask(SepTask):
     """
     Time domain spectral approximation Task
     """
@@ -510,18 +445,6 @@ class TimeSaTask(Task):
         self.num_spks = num_spks
         self.pre_emphasis = pre_emphasis
 
-    def _objf(self, out, ref, reduction="none"):
-        """
-        Return loss for each mini-batch
-        """
-        raise NotImplementedError
-
-    def _post(self, tensor):
-        """
-        Post processing on tensor
-        """
-        raise NotImplementedError
-
     def _stft_mag(self, wav):
         """
         Compute STFT magnitude for SA loss
@@ -532,19 +455,6 @@ class TimeSaTask(Task):
         mag, _ = self.ctx(wav, output="polar")
         return mag
 
-    def _permu_sa(self, permute, out, ref):
-        """
-        SA computation in permutation mode
-        """
-        permu_loss = []
-        # for one permutation
-        for s, t in enumerate(permute):
-            # N x F x T
-            loss_mat = self._objf(out[s], ref[t], reduction="none")
-            loss_utt = th.sum(loss_mat.mean(-1), -1)  # x N, per-frame
-            permu_loss.append(loss_utt)
-        return sum(permu_loss) / len(permute)
-
     def forward(self, egs, **kwargs):
         """
         Return chunk-level loss
@@ -553,7 +463,6 @@ class TimeSaTask(Task):
             ref (Tensor or [Tensor, ...]): N x S
         """
         mix = egs["mix"]
-        N = mix.shape[0]
         # do separation or enhancement
         # spk: Tensor or [Tensor, ...]
         spk = self.nnet(mix)
@@ -562,72 +471,26 @@ class TimeSaTask(Task):
             # F x T
             spk_mag = self._stft_mag(spk)
             ref_mag = self._stft_mag(egs["ref"])
-            # post process
-            spk_mag = self._post(spk_mag)
-            ref_mag = self._post(ref_mag)
-            # loss
-            loss = self._objf(spk_mag, ref_mag, reduction="sum")
-            # per-frame loss
-            loss = loss / (N * ref_mag.shape[-1])
+            # loss (N)
+            loss = self.objf(self.transform(spk_mag), self.transform(ref_mag))
         else:
-            num_branch = len(spk)
-            if num_branch != len(egs["ref"]):
+            if len(spk) != len(egs["ref"]):
                 raise RuntimeError(
-                    f"Got {len(egs['ref'])} reference but with {num_branch} outputs"
+                    f"Got {len(egs['ref'])} reference but with {len(spk)} outputs"
                 )
             spk_mag = [self._stft_mag(s) for s in spk]
             # for each reference
             ref_mag = [self._stft_mag(r) for r in egs["ref"]]
             # post
-            spk_mag = [self._post(s) for s in spk_mag]
-            ref_mag = [self._post(r) for r in ref_mag]
-
-            _, _, T = spk_mag[0].shape
-
-            if self.permute:
-                # P x N
-                permu_loss = th.stack([
-                    self._permu_sa(p, spk_mag, ref_mag)
-                    for p in permutations(range(self.num_spks))
-                ])
-                # N
-                min_val, _ = th.min(permu_loss, dim=0)
-                loss = th.mean(min_val)
-
-                # add residual loss
-                if num_branch > self.num_spks:
-                    warnings.warn(
-                        f"#Branch: {num_branch} > #Speaker: {self.num_spks}")
-                    num_weight = num_branch - (self.num_spks - 1)
-                    if self.weight is None:
-                        self.weight = [1 / num_weight] * num_weight
-                    if len(self.weight) != num_weight:
-                        raise RuntimeError(
-                            f"Missing weight ({self.weight}) for {num_branch} branch"
-                        )
-                    res_loss = [
-                        # scale, per-frame, per-minibatch
-                        self._objf(s, r, reduction="sum") / (N * T) for s, r in
-                        zip(spk_mag[self.num_spks:], ref_mag[self.num_spks:])
-                    ]
-                    res_loss = sum(
-                        [s * l for s, l in zip(self.weight[1:], res_loss)])
-                    # per-frame, per-minibatch, weight and sum
-                    loss = self.weight[0] * loss + res_loss
-            else:
-                if self.weight is None:
-                    self.weight = [1 / num_branch] * num_branch
-                if len(self.weight) != num_branch:
-                    raise RuntimeError(
-                        f"Missing weight {self.weight} for {num_branch} branch")
-                loss = [
-                    # per-frame, per-minibatch
-                    self._objf(s, r, reduction="sum")
-                    for s, r in zip(spk_mag, ref_mag)
-                ]
-                # weight and sum
-                loss = sum([s * l for s, l in zip(self.weight, loss)])
-        return {"loss": loss}
+            out = [self.transform(s) for s in spk_mag]
+            ref = [self.transform(r) for r in ref_mag]
+            loss = hybrid_objf(out,
+                               ref,
+                               self.objf,
+                               weight=self.weight,
+                               permute=self.permute,
+                               permu_num_spks=self.num_spks)
+        return {"loss": th.mean(loss)}
 
 
 class LinearTimeSaTask(TimeSaTask):
@@ -659,19 +522,17 @@ class LinearTimeSaTask(TimeSaTask):
                              num_spks=num_spks,
                              weight=weight)
         # L2 or L1 loss
-        self.objf = objf
+        self.objf_ptr = tf.l1_loss if objf == "L1" else tf.mse_loss
 
-    def _objf(self, out, ref, reduction="none"):
+    def objf(self, out, ref):
         """
         Return loss for each mini-batch
         """
-        if self.objf == "L1":
-            loss = tf.l1_loss(out, ref, reduction=reduction)
-        else:
-            loss = tf.mse_loss(out, ref, reduction=reduction)
+        loss = self.objf_ptr(out, ref, reduction="none")
+        loss = th.sum(loss.mean(-1), -1)
         return loss
 
-    def _post(self, tensor):
+    def transform(self, tensor):
         """
         Just return itself
         """
@@ -722,7 +583,7 @@ class MelTimeSaTask(TimeSaTask):
         self.log = mel_log
         self.power_mag = power_mag
 
-    def _post(self, tensor):
+    def transform(self, tensor):
         """
         Return mel spectrogram
         """
@@ -734,14 +595,16 @@ class MelTimeSaTask(TimeSaTask):
             mel = th.log(1 + mel)
         return mel
 
-    def _objf(self, out, ref, reduction="none"):
+    def objf(self, out, ref):
         """
         Computer MSE
         """
-        return tf.mse_loss(out, ref, reduction=reduction)
+        loss = tf.mse_loss(out, ref, reduction="none")
+        loss = th.sum(loss.mean(-1), -1)
+        return loss
 
 
-class ComplexMappingTask(Task):
+class ComplexMappingTask(SepTask):
     """
     Complex Spectral Mapping
     """
@@ -754,7 +617,7 @@ class ComplexMappingTask(Task):
                                                  weight=weight)
         self.permute = permute
         self.num_spks = num_spks
-        self.objf_func = tf.l1_loss if objf == "L1" else tf.mse_loss
+        self.objf_ptr = tf.l1_loss if objf == "L1" else tf.mse_loss
 
     def _build_ref(self, wav):
         """
@@ -762,30 +625,17 @@ class ComplexMappingTask(Task):
         """
         return self.ctx(wav, output="complex")
 
-    def _permu_objf(self, permute, out, ref):
-        """
-        Loss computation in permutation mode
-        """
-        permu_loss = []
-        # for one permutation
-        for s, t in enumerate(permute):
-            # N x F x T
-            loss_mat = self._objf(out[s], ref[t], reduction="none")
-            loss_utt = th.sum(loss_mat.mean(-1), -1)  # x N, per-frame
-            permu_loss.append(loss_utt)
-        # per-speaker
-        return sum(permu_loss) / len(permute)
-
-    def _objf(self, out, ref, reduction="none"):
+    def objf(self, out, ref):
         """
         Return loss for each mini-batch
         """
         out_mag = th.sqrt(out[0]**2 + out[1]**2)
         ref_mag = th.sqrt(ref[0]**2 + ref[1]**2)
-        real_loss = self.objf_func(out[0], ref[0], reduction=reduction)
-        imag_loss = self.objf_func(out[1], ref[1], reduction=reduction)
-        mag_loss = self.objf_func(out_mag, ref_mag, reduction=reduction)
-        return real_loss + imag_loss + mag_loss
+        loss = self.objf_ptr(out[0], ref[0], reduction="none") + self.objf_ptr(
+            out[1], ref[1], reduction="none") + self.objf_ptr(
+                out_mag, ref_mag, reduction="none")
+        loss = th.sum(loss.mean(-1), -1)
+        return loss
 
     def forward(self, egs, **kwargs):
         """
@@ -795,70 +645,26 @@ class ComplexMappingTask(Task):
             ref (Tensor or [Tensor, ...]): N x S
         """
         mix = egs["mix"]
-        N = mix.shape[0]
         # do separation or enhancement
         # out (real & imag parts): [Tensor, ...]
         out = self.nnet(mix)
 
-        if isinstance(out, th.Tensor):
+        if isinstance(out, tuple):
             # F x T
             ref = self._build_ref(egs["ref"])
             # loss
-            loss = self._objf(out, ref, reduction="sum")
-            # per-frame, per-minibatch
-            loss = loss / (N * ref.shape[-1])
+            loss = self.objf(out, ref)
         else:
-            num_branch = len(out)
-            if num_branch != len(egs["ref"]):
+            if len(out) != len(egs["ref"]):
                 raise RuntimeError(
-                    f"Got {len(egs['ref'])} references but with {num_branch} outputs"
+                    f"Got {len(egs['ref'])} references but with {len(out)} outputs"
                 )
             # for each reference
             ref = [self._build_ref(r) for r in egs["ref"]]
-            T = ref[0][0].shape[-1]
-
-            if self.permute:
-                # P x N
-                permu_loss = th.stack([
-                    self._permu_objf(p, out, ref)
-                    for p in permutations(range(self.num_spks))
-                ])
-                # N, per-frame per-speaker
-                min_val, _ = th.min(permu_loss, dim=0)
-                # per-minibatch
-                loss = th.mean(min_val)
-
-                # add residual loss
-                if num_branch > self.num_spks:
-                    warnings.warn(
-                        f"#Branch: {num_branch} > #Speaker: {self.num_spks}")
-                    num_weight = num_branch - (self.num_spks - 1)
-                    if self.weight is None:
-                        self.weight = [1 / num_weight] * num_weight
-                    if len(self.weight) != num_weight:
-                        raise RuntimeError(
-                            f"Missing weight ({self.weight}) for {num_branch} branch"
-                        )
-                    res_loss = [
-                        # scale, per-frame, per-minibatch
-                        self._objf(o, r, reduction="sum") / (N * T) for o, r in
-                        zip(out[self.num_spks:], ref[self.num_spks:])
-                    ]
-                    res_loss = sum(
-                        [s * l for s, l in zip(self.weight[1:], res_loss)])
-                    # per-frame, per-minibatch, weight and sum
-                    loss = self.weight[0] * loss + res_loss
-            else:
-                if self.weight is None:
-                    self.weight = [1 / num_branch] * num_branch
-                if len(self.weight) != num_branch:
-                    raise RuntimeError(
-                        f"Missing weight {self.weight} for {num_branch} branch")
-                loss = [
-                    # per-frame, per-minibatch
-                    self._objf(o, r, reduction="sum") / (N * T)
-                    for o, r in zip(out, ref)
-                ]
-                # weight and sum
-                loss = sum([s * l for s, l in zip(self.weight, loss)])
-        return loss
+            loss = hybrid_objf(out,
+                               ref,
+                               self.objf,
+                               weight=self.weight,
+                               permute=self.permute,
+                               permu_num_spks=self.num_spks)
+        return {"loss": th.mean(loss)}

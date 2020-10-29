@@ -169,11 +169,15 @@ class RelTransformerEncoder(nn.Module):
                                      other_opts=embed_other_opts)
         embed_size = 2 * k_dim + 1
         embed_dim = att_dim // nhead
-        self.key_pos = IOEmbedding("sparse", embed_size, embed_dim=embed_dim)
+        self.key_pos = IOEmbedding("sparse",
+                                   embed_size,
+                                   embed_dim=embed_dim,
+                                   pos_enc=False)
         if add_value_rel:
             self.val_pos = IOEmbedding("sparse",
                                        embed_size,
-                                       embed_dim=embed_dim)
+                                       embed_dim=embed_dim,
+                                       pos_enc=False)
         else:
             self.val_pos = None
 

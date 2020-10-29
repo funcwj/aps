@@ -145,12 +145,12 @@ if [ $stage -le 7 ]; then
     ./utils/subword.sh \
       --op "decode" \
       --decode piece \
-      exp/librispeech/$am_exp/$dec_name/beam16.decode \
+      exp/librispeech/$am_exp/${name}_${dec_name}/beam16.decode \
       exp/librispeech/$wp_name \
-      > exp/librispeech/$am_exp/$dec_name/beam16.decode.final
+      > exp/librispeech/$am_exp/${name}_${dec_name}/beam16.decode.final
     # WER
     ./bin/compute_wer.py \
-      exp/librispeech/$am_exp/$dec_name/beam16.decode.final \
+      exp/librispeech/$am_exp/${name}_${dec_name}/beam16.decode.final \
       data/librispeech/$name/text
   done
 fi

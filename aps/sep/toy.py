@@ -99,6 +99,7 @@ class ToyRNN(TorchRNNEncoder):
             if self.num_spks == 1:
                 return spk[0]
             else:
+                print(len(spk))
                 return spk
 
     def infer(self, mix, mode="time"):
