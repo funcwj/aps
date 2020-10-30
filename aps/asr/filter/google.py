@@ -15,6 +15,7 @@ from aps.transform.utils import init_melfilter
 from aps.transform.enh import FixedBeamformer
 
 from torch_complex.tensor import ComplexTensor
+from typing import Optional
 
 
 class _FsBeamformer(nn.Module):
@@ -22,12 +23,12 @@ class _FsBeamformer(nn.Module):
     FS (filter and sum) beamformer
     """
 
-    def __init__(self, frame_len, frame_hop):
+    def __init__(self, frame_len: int, frame_hop: int) -> None:
         super(_FsBeamformer, self).__init__()
         self.unfold = nn.Unfold((frame_len, 1), stride=frame_hop)
         self.frame_len, self.frame_hop = frame_len, frame_hop
 
-    def num_frames(self, s):
+    def num_frames(self, s: th.Tensor) -> th.Tensor:
         """
         Work out number of frames
         """
@@ -40,11 +41,11 @@ class UnfactedFsBeamformer(_FsBeamformer):
     """
 
     def __init__(self,
-                 num_taps=400,
-                 win_size=560,
-                 num_channels=4,
-                 num_filters=256,
-                 log_compress=True):
+                 num_taps: int = 400,
+                 win_size: int = 560,
+                 num_channels: int = 4,
+                 num_filters: int = 256,
+                 log_compress: bool = True) -> None:
         super(UnfactedFsBeamformer, self).__init__(win_size,
                                                    win_size - num_taps)
         self.num_channels = num_channels
@@ -56,7 +57,7 @@ class UnfactedFsBeamformer(_FsBeamformer):
                                 groups=num_channels,
                                 bias=False)
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         Args:
             x: multi-channel audio utterances, N x C x S
@@ -93,13 +94,13 @@ class FactedFsBeamformer(_FsBeamformer):
     """
 
     def __init__(self,
-                 num_taps=81,
-                 win_size=560,
-                 num_channels=4,
-                 spatial_filters=10,
-                 spectra_filters=128,
-                 spectra_kernels=400,
-                 log_compress=True):
+                 num_taps: int = 81,
+                 win_size: int = 560,
+                 num_channels: int = 4,
+                 spatial_filters: int = 10,
+                 spectra_filters: int = 128,
+                 spectra_kernels: int = 400,
+                 log_compress: bool = True) -> None:
         super(FactedFsBeamformer, self).__init__(win_size,
                                                  win_size - spectra_kernels)
         self.num_channels = num_channels
@@ -117,7 +118,7 @@ class FactedFsBeamformer(_FsBeamformer):
                                  stride=(1, 1),
                                  bias=False)
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         Args:
             x: multi-channel audio utterances, N x C x S
@@ -159,12 +160,15 @@ class ComplexLinear(nn.Module):
     Complex linear layer
     """
 
-    def __init__(self, in_features, out_features, bias=True):
+    def __init__(self,
+                 in_features: int,
+                 out_features: int,
+                 bias: bool = True) -> None:
         super(ComplexLinear, self).__init__()
         self.real = nn.Linear(in_features, out_features, bias=bias)
         self.imag = nn.Linear(in_features, out_features, bias=bias)
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         args:
             x: complex tensor
@@ -185,15 +189,15 @@ class CLPFsBeamformer(nn.Module):
     """
 
     def __init__(self,
-                 num_bins=257,
-                 weight=None,
-                 batchnorm=True,
-                 num_channels=4,
-                 spatial_filters=5,
-                 spectra_filters=128,
-                 spectra_init="random",
-                 spectra_complex=True,
-                 spatial_maxpool=False):
+                 num_bins: int = 257,
+                 weight: Optional[str] = None,
+                 batchnorm: bool = True,
+                 num_channels: int = 4,
+                 spatial_filters: int = 5,
+                 spectra_filters: int = 128,
+                 spectra_init: str = "random",
+                 spectra_complex: bool = True,
+                 spatial_maxpool: bool = False) -> None:
         super(CLPFsBeamformer, self).__init__()
         if spectra_init not in ["mel", "random"]:
             raise ValueError(f"Unsupported init method: {spectra_init}")
@@ -213,7 +217,7 @@ class CLPFsBeamformer(nn.Module):
         self.spectra_complex = spectra_complex
         # self.spatial_maxpool = spatial_maxpool
 
-    def forward(self, x, eps=1e-5):
+    def forward(self, x: th.Tensor, eps: float = 1e-5) -> th.Tensor:
         """
         Args:
             x: complex tensor, N x C x F x T

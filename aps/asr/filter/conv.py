@@ -8,6 +8,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from typing import Optional
 from torch_complex.tensor import ComplexTensor
 
 from aps.transform.utils import init_melfilter
@@ -61,14 +62,14 @@ class TimeInvariantFilter(nn.Module):
     """
 
     def __init__(self,
-                 num_bins=257,
-                 weight=None,
-                 num_channels=4,
-                 spatial_filters=8,
-                 spectra_filters=80,
-                 spectra_init="random",
-                 batchnorm=True,
-                 apply_log=True):
+                 num_bins: int = 257,
+                 weight: Optional[str] = None,
+                 num_channels: int = 4,
+                 spatial_filters: int = 8,
+                 spectra_filters: int = 80,
+                 spectra_init: str = "random",
+                 batchnorm: bool = True,
+                 apply_log: bool = True) -> None:
         super(TimeInvariantFilter, self).__init__()
         if spectra_init not in ["mel", "random"]:
             raise ValueError(f"Unsupported init method: {spectra_init}")
@@ -105,7 +106,7 @@ class TimeInvariantFilter(nn.Module):
         self.C = num_channels
         self.apply_log = apply_log
 
-    def forward(self, x, eps=1e-5):
+    def forward(self, x: th.Tensor, eps: float = 1e-5) -> th.Tensor:
         """
         Args:
             x: N x C x F x T, complex tensor
@@ -153,15 +154,15 @@ class TimeInvariantAttFilter(nn.Module):
     """
 
     def __init__(self,
-                 num_bins=257,
-                 weight=None,
-                 num_channels=4,
-                 spatial_filters=8,
-                 spectra_filters=80,
-                 spectra_init="random",
-                 query_type="rnn",
-                 batchnorm=True,
-                 apply_log=True):
+                 num_bins: int = 257,
+                 weight: Optional[str] = None,
+                 num_channels: int = 4,
+                 spatial_filters: int = 8,
+                 spectra_filters: int = 80,
+                 spectra_init: str = "random",
+                 query_type: str = "rnn",
+                 batchnorm: bool = True,
+                 apply_log: bool = True) -> None:
         super(TimeInvariantAttFilter, self).__init__()
         if spectra_init not in ["mel", "random"]:
             raise ValueError(f"Unsupported init method: {spectra_init}")
@@ -213,7 +214,7 @@ class TimeInvariantAttFilter(nn.Module):
         self.C = num_channels
         self.apply_log = apply_log
 
-    def forward(self, x, eps=1e-5):
+    def forward(self, x: th.Tensor, eps: float = 1e-5) -> th.Tensor:
         """
         Args:
             x: N x C x F x T, complex tensor
@@ -274,12 +275,12 @@ class TimeVariantFilter(nn.Module):
     """
 
     def __init__(self,
-                 num_bins=257,
-                 num_channels=4,
-                 time_reception=11,
-                 spatial_filters=8,
-                 spectra_filters=80,
-                 batchnorm=True):
+                 num_bins: int = 257,
+                 num_channels: int = 4,
+                 time_reception: int = 11,
+                 spatial_filters: int = 8,
+                 spectra_filters: int = 80,
+                 batchnorm: bool = True) -> None:
         super(TimeVariantFilter, self).__init__()
         self.conv = ComplexConv2d(num_bins,
                                   num_bins * spatial_filters,
@@ -292,7 +293,7 @@ class TimeVariantFilter(nn.Module):
         self.B = spatial_filters
         self.C = num_channels
 
-    def forward(self, x, eps=1e-5):
+    def forward(self, x: th.Tensor, eps: float = 1e-5) -> th.Tensor:
         """
         Args:
             x: N x C x F x T, complex tensor
@@ -323,17 +324,3 @@ class TimeVariantFilter(nn.Module):
         # N x T x BD
         f = f.view(N, T, -1)
         return f
-
-
-def foo():
-    nnet = TimeInvariantEnh(num_bins=257)
-    N, C, F, T = 10, 4, 257, 100
-    r = th.rand(N, C, F, T)
-    i = th.rand(N, C, F, T)
-    c = ComplexTensor(r, i)
-    d = nnet(c)
-    print(d.shape)
-
-
-if __name__ == "__main__":
-    foo()

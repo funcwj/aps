@@ -6,6 +6,7 @@
 import torch as th
 import torch.nn as nn
 
+from typing import Optional, Tuple
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
 from aps.asr.transformer.impl import TransformerTorchEncoderLayer, TransformerRelEncoderLayer, TransformerXLEncoderLayer
@@ -33,18 +34,18 @@ class TorchTransformerEncoder(nn.Module):
     """
 
     def __init__(self,
-                 input_size,
-                 input_embed="conv2d",
-                 embed_other_opts=-1,
-                 att_dim=512,
-                 nhead=8,
-                 feedforward_dim=2048,
-                 scale_embed=False,
-                 pos_dropout=0.1,
-                 att_dropout=0.1,
-                 post_norm=True,
-                 pos_enc=True,
-                 num_layers=6):
+                 input_size: int,
+                 input_embed: str = "conv2d",
+                 embed_other_opts: int = -1,
+                 att_dim: int = 512,
+                 nhead: int = 8,
+                 feedforward_dim: int = 2048,
+                 scale_embed: bool = False,
+                 pos_dropout: float = 0.1,
+                 att_dropout: float = 0.1,
+                 post_norm: bool = True,
+                 pos_enc: bool = True,
+                 num_layers: int = 6) -> None:
         super(TorchTransformerEncoder, self).__init__()
         self.src_embed = IOEmbedding(input_embed,
                                      input_size,
@@ -66,7 +67,9 @@ class TorchTransformerEncoder(nn.Module):
                                              norm=final_norm)
         self.input_embed = input_embed
 
-    def forward(self, x_pad, x_len):
+    def forward(
+            self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x F
@@ -95,17 +98,17 @@ class RelTransformerEncoder(nn.Module):
     def __init__(self,
                  input_size,
                  input_embed="conv2d",
-                 embed_other_opts=-1,
-                 att_dim=512,
-                 k_dim=128,
-                 nhead=8,
-                 feedforward_dim=2048,
-                 scale_embed=False,
-                 pos_dropout=0.1,
-                 att_dropout=0.1,
-                 post_norm=True,
-                 add_value_rel=False,
-                 num_layers=6):
+                 embed_other_opts: int = -1,
+                 att_dim: int = 512,
+                 k_dim: int = 128,
+                 nhead: int = 8,
+                 feedforward_dim: int = 2048,
+                 scale_embed: bool = False,
+                 pos_dropout: float = 0.1,
+                 att_dropout: float = 0.1,
+                 post_norm: bool = True,
+                 add_value_rel: bool = False,
+                 num_layers: int = 6) -> None:
         super(RelTransformerEncoder, self).__init__()
         self.src_embed = IOEmbedding(input_embed,
                                      input_size,
@@ -141,7 +144,8 @@ class RelTransformerEncoder(nn.Module):
         self.input_embed = input_embed
         self.k_dim = k_dim
 
-    def _get_relative_embed(self, inp):
+    def _get_relative_embed(
+            self, inp: th.Tensor) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Return relative embeddings
         """
@@ -159,7 +163,9 @@ class RelTransformerEncoder(nn.Module):
             val_pos = None
         return key_pos, val_pos
 
-    def forward(self, x_pad, x_len):
+    def forward(
+            self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x F
@@ -190,18 +196,18 @@ class RelXLTransformerEncoder(nn.Module):
     """
 
     def __init__(self,
-                 input_size,
-                 input_embed="conv2d",
-                 embed_other_opts=-1,
-                 att_dim=512,
-                 nhead=8,
-                 feedforward_dim=2048,
-                 scale_embed=False,
-                 pos_dropout=0.1,
-                 att_dropout=0.1,
-                 post_norm=True,
-                 untie_rel=True,
-                 num_layers=6):
+                 input_size: int,
+                 input_embed: str = "conv2d",
+                 embed_other_opts: int = -1,
+                 att_dim: int = 512,
+                 nhead: int = 8,
+                 feedforward_dim: int = 2048,
+                 scale_embed: bool = False,
+                 pos_dropout: float = 0.1,
+                 att_dropout: float = 0.1,
+                 post_norm: bool = True,
+                 untie_rel: bool = True,
+                 num_layers: int = 6) -> None:
         super(RelXLTransformerEncoder, self).__init__()
         self.src_embed = IOEmbedding(input_embed,
                                      input_size,
@@ -231,7 +237,9 @@ class RelXLTransformerEncoder(nn.Module):
                                              norm=final_norm)
         self.input_embed = input_embed
 
-    def forward(self, x_pad, x_len):
+    def forward(
+            self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x F

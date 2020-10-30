@@ -13,8 +13,10 @@ try:
 except:
     raise ImportError("import PyTorch's Transformer module failed")
 
+from typing import Optional, Tuple
 
-def _get_activation_fn(activation):
+
+def _get_activation_fn(activation: str) -> nn.Module:
     if activation == "relu":
         return nn.ReLU()
     elif activation == "gelu":
@@ -28,7 +30,11 @@ class ApsMultiheadAttention(nn.Module):
     My own MultiheadAttention (just want to make sure it's same as torch.nn.MultiheadAttention)
     """
 
-    def __init__(self, embed_dim, num_heads, dropout=0, bias=True):
+    def __init__(self,
+                 embed_dim: int,
+                 num_heads: int,
+                 dropout: float = 0,
+                 bias: bool = True) -> None:
         super(ApsMultiheadAttention, self).__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
@@ -45,7 +51,7 @@ class ApsMultiheadAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=True)
         self.dropout = nn.Dropout(p=dropout)
 
-    def _src_proj(self, tensor, base):
+    def _src_proj(self, tensor: th.Tensor, base: int) -> th.Tensor:
         """
         Args:
             tensor (Tensor): T x N x E
@@ -58,12 +64,14 @@ class ApsMultiheadAttention(nn.Module):
         tensor = tensor.view(tensor.size(0), -1, self.num_heads, self.head_dim)
         return tensor
 
-    def torch_forward(self,
-                      query,
-                      key,
-                      value,
-                      key_padding_mask=None,
-                      attn_mask=None):
+    def torch_forward(
+            self,
+            query: th.Tensor,
+            key: th.Tensor,
+            value: th.Tensor,
+            key_padding_mask: Optional[th.Tensor] = None,
+            attn_mask: Optional[th.Tensor] = None
+    ) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args:
             query (Tensor): L x N x E
@@ -94,7 +102,14 @@ class ApsMultiheadAttention(nn.Module):
             need_weights=True,
             attn_mask=attn_mask)
 
-    def forward(self, query, key, value, key_padding_mask=None, attn_mask=None):
+    def forward(
+            self,
+            query: th.Tensor,
+            key: th.Tensor,
+            value: th.Tensor,
+            key_padding_mask: Optional[th.Tensor] = None,
+            attn_mask: Optional[th.Tensor] = None
+    ) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args:
             query (Tensor): L x N x E
@@ -139,20 +154,26 @@ class RelMultiheadAttention(ApsMultiheadAttention):
         Self-Attention with Relative Position Representations
     """
 
-    def __init__(self, embed_dim, num_heads, dropout=0, bias=True):
+    def __init__(self,
+                 embed_dim: int,
+                 num_heads: int,
+                 dropout: float = 0,
+                 bias: bool = True) -> None:
         super(RelMultiheadAttention, self).__init__(embed_dim,
                                                     num_heads,
                                                     dropout=dropout,
                                                     bias=bias)
 
-    def forward(self,
-                query,
-                key,
-                value,
-                key_pos,
-                value_pos,
-                key_padding_mask=None,
-                attn_mask=None):
+    def forward(
+            self,
+            query: th.Tensor,
+            key: th.Tensor,
+            value: th.Tensor,
+            key_pos: th.Tensor,
+            value_pos: Optional[th.Tensor],
+            key_padding_mask: Optional[th.Tensor] = None,
+            attn_mask: Optional[th.Tensor] = None
+    ) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args:
             query (Tensor): L x N x E
@@ -212,12 +233,12 @@ class XlMultiheadAttention(ApsMultiheadAttention):
     """
 
     def __init__(self,
-                 embed_dim,
-                 num_heads,
-                 dropout=0,
-                 bias=True,
-                 rel_u=None,
-                 rel_v=None):
+                 embed_dim: int,
+                 num_heads: int,
+                 dropout: float = 0,
+                 bias: bool = True,
+                 rel_u: Optional[nn.Parameter] = None,
+                 rel_v: Optional[nn.Parameter] = None) -> None:
         super(XlMultiheadAttention, self).__init__(embed_dim,
                                                    num_heads,
                                                    dropout=dropout,
@@ -232,7 +253,7 @@ class XlMultiheadAttention(ApsMultiheadAttention):
             self.rel_v = rel_v
         self.rel_proj = nn.Linear(embed_dim, embed_dim, bias=False)
 
-    def _rel_shift(self, rel_pos):
+    def _rel_shift(self, rel_pos: th.Tensor) -> th.Tensor:
         """
         Args:
             rel_pos (Tensor): L x N x H x S
@@ -253,13 +274,15 @@ class XlMultiheadAttention(ApsMultiheadAttention):
         rel_pos_pad = th.einsum("slnh->lnhs", rel_pos_pad).contiguous()
         return rel_pos_pad
 
-    def forward(self,
-                query,
-                key,
-                value,
-                sin_pos_enc,
-                key_padding_mask=None,
-                attn_mask=None):
+    def forward(
+            self,
+            query: th.Tensor,
+            key: th.Tensor,
+            value: th.Tensor,
+            sin_pos_enc: th.Tensor,
+            key_padding_mask: Optional[th.Tensor] = None,
+            attn_mask: Optional[th.Tensor] = None
+    ) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args:
             query (Tensor): L x N x E
@@ -313,12 +336,12 @@ class TransformerTorchEncoderLayer(TransformerEncoderLayer):
     """
 
     def __init__(self,
-                 d_model,
-                 nhead,
-                 dim_feedforward=2048,
-                 pre_norm=False,
-                 dropout=0.1,
-                 activation="relu"):
+                 d_model: int,
+                 nhead: int,
+                 dim_feedforward: int = 2048,
+                 pre_norm: bool = False,
+                 dropout: bool = 0.1,
+                 activation: str = "relu") -> None:
         super(TransformerTorchEncoderLayer,
               self).__init__(d_model,
                              nhead,
@@ -327,14 +350,17 @@ class TransformerTorchEncoderLayer(TransformerEncoderLayer):
                              activation=activation)
         self.pre_norm = pre_norm
 
-    def ffn(self, src):
+    def ffn(self, src: th.Tensor) -> th.Tensor:
         """
         Get output of the feedforward network
         """
         return self.dropout2(
             self.linear2(self.dropout(self.activation(self.linear1(src)))))
 
-    def forward(self, src, src_mask=None, src_key_padding_mask=None):
+    def forward(self,
+                src: th.Tensor,
+                src_mask: Optional[th.Tensor] = None,
+                src_key_padding_mask: Optional[th.Tensor] = None) -> th.Tensor:
         """
         Support for both pre-norm & post-norm
         """
@@ -361,12 +387,12 @@ class ApsTransformerEncoderLayer(nn.Module):
     """
 
     def __init__(self,
-                 d_model,
-                 self_attn,
-                 dim_feedforward=2048,
-                 dropout=0.1,
-                 activation="relu",
-                 pre_norm=False):
+                 d_model: int,
+                 self_attn: nn.Module,
+                 dim_feedforward: int = 2048,
+                 dropout: float = 0.1,
+                 activation: str = "relu",
+                 pre_norm: bool = False) -> None:
         super(ApsTransformerEncoderLayer, self).__init__()
         self.self_attn = self_attn
         # Implementation of Feedforward model
@@ -381,7 +407,7 @@ class ApsTransformerEncoderLayer(nn.Module):
         self.activation = _get_activation_fn(activation)
         self.pre_norm = pre_norm
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: str) -> None:
         if "activation" not in state:
             state["activation"] = tf.relu
         super(ApsTransformerEncoderLayer, self).__setstate__(state)
@@ -393,12 +419,12 @@ class TransformerRelEncoderLayer(ApsTransformerEncoderLayer):
     """
 
     def __init__(self,
-                 d_model,
-                 nhead,
-                 dim_feedforward=2048,
-                 dropout=0.1,
-                 activation="relu",
-                 pre_norm=False):
+                 d_model: int,
+                 nhead: int,
+                 dim_feedforward: int = 2048,
+                 dropout: float = 0.1,
+                 activation: str = "relu",
+                 pre_norm: bool = False) -> None:
         self_attn = RelMultiheadAttention(d_model, nhead, dropout=dropout)
         super(TransformerRelEncoderLayer,
               self).__init__(d_model,
@@ -409,11 +435,11 @@ class TransformerRelEncoderLayer(ApsTransformerEncoderLayer):
                              pre_norm=pre_norm)
 
     def forward(self,
-                src,
-                key_pos=None,
-                value_pos=None,
-                src_mask=None,
-                src_key_padding_mask=None):
+                src: th.Tensor,
+                key_pos: Optional[th.Tensor] = None,
+                value_pos: Optional[th.Tensor] = None,
+                src_mask: Optional[th.Tensor] = None,
+                src_key_padding_mask: Optional[th.Tensor] = None) -> th.Tensor:
         inp = src
         if self.pre_norm:
             src = self.norm1(src)
@@ -439,14 +465,14 @@ class TransformerXLEncoderLayer(ApsTransformerEncoderLayer):
     """
 
     def __init__(self,
-                 d_model,
-                 nhead,
-                 dim_feedforward=2048,
-                 dropout=0.1,
-                 activation="relu",
-                 pre_norm=False,
-                 rel_u=None,
-                 rel_v=None):
+                 d_model: int,
+                 nhead: int,
+                 dim_feedforward: int = 2048,
+                 dropout: float = 0.1,
+                 activation: str = "relu",
+                 pre_norm: bool = False,
+                 rel_u: Optional[nn.Parameter] = None,
+                 rel_v: Optional[nn.Parameter] = None) -> None:
         self_attn = XlMultiheadAttention(d_model,
                                          nhead,
                                          dropout=dropout,
@@ -461,10 +487,10 @@ class TransformerXLEncoderLayer(ApsTransformerEncoderLayer):
                              pre_norm=pre_norm)
 
     def forward(self,
-                src,
-                sin_pos_enc=None,
-                src_mask=None,
-                src_key_padding_mask=None):
+                src: th.Tensor,
+                sin_pos_enc: Optional[th.Tensor] = None,
+                src_mask: Optional[th.Tensor] = None,
+                src_key_padding_mask: Optional[th.Tensor] = None) -> th.Tensor:
         inp = src
         if self.pre_norm:
             src = self.norm1(src)
@@ -489,14 +515,17 @@ class ApsTransformerEncoder(nn.Module):
     """
     __constants__ = ['norm']
 
-    def __init__(self, encoder_layer, num_layers, norm=None):
+    def __init__(self,
+                 encoder_layer: nn.Module,
+                 num_layers: int,
+                 norm: Optional[nn.Module] = None) -> None:
         super(ApsTransformerEncoder, self).__init__()
         self.layers = nn.ModuleList(
             [copy.deepcopy(encoder_layer) for i in range(num_layers)])
         self.num_layers = num_layers
         self.norm = norm
 
-    def forward(self, src, **kwargs):
+    def forward(self, src: th.Tensor, **kwargs) -> th.Tensor:
         output = src
 
         for mod in self.layers:

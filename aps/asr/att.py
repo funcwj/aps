@@ -8,6 +8,7 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
+from typing import Optional, Dict, Tuple, List, Any
 from aps.asr.base.decoder import TorchDecoder
 from aps.asr.base.encoder import encoder_instance
 from aps.asr.base.attention import att_instance
@@ -18,24 +19,20 @@ class AttASR(nn.Module):
     Attention-based ASR model
     """
 
-    def __init__(
-            self,
-            input_size=80,
-            vocab_size=30,
-            sos=-1,
-            eos=-1,
-            ctc=False,
-            asr_transform=None,
-            # att
-            att_type="ctx",
-            att_kwargs=None,
-            # encoder
-            encoder_type="common",
-            encoder_proj=256,
-            encoder_kwargs=None,
-            # decoder
-            decoder_dim=512,
-            decoder_kwargs=None):
+    def __init__(self,
+                 input_size: int = 80,
+                 vocab_size: int = 30,
+                 sos: int = -1,
+                 eos: int = -1,
+                 ctc: bool = False,
+                 asr_transform: Optional[nn.Module] = None,
+                 att_type: str = "ctx",
+                 att_kwargs: Optional[Dict] = None,
+                 encoder_type: str = "common",
+                 encoder_proj: int = 256,
+                 encoder_kwargs: Optional[Dict] = None,
+                 decoder_dim: int = 512,
+                 decoder_kwargs: Optional[Dict] = None) -> None:
         super(AttASR, self).__init__()
         self.encoder = encoder_instance(encoder_type, input_size, encoder_proj,
                                         **encoder_kwargs)
@@ -51,7 +48,13 @@ class AttASR(nn.Module):
         self.ctc = nn.Linear(encoder_proj, vocab_size) if ctc else None
         self.asr_transform = asr_transform
 
-    def forward(self, x_pad, x_len, y_pad, ssr=0):
+    def forward(
+        self,
+        x_pad: th.Tensor,
+        x_len: Optional[th.Tensor],
+        y_pad: th.Tensor,
+        ssr: int = 0
+    ) -> Tuple[th.Tensor, th.Tensor, Optional[th.Tensor], Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -77,14 +80,14 @@ class AttASR(nn.Module):
         return outs, alis, ctc_branch, enc_len
 
     def beam_search(self,
-                    x,
-                    lm=None,
-                    lm_weight=0,
-                    beam=16,
-                    nbest=8,
-                    max_len=-1,
-                    vectorized=False,
-                    normalized=True):
+                    x: th.Tensor,
+                    lm: Optional[nn.Module] = None,
+                    lm_weight: float = 0,
+                    beam: int = 16,
+                    nbest: int = 8,
+                    max_len: int = -1,
+                    vectorized: bool = False,
+                    normalized: bool = True) -> List[Any]:
         """
         Args
             x: audio samples or acoustic features, S or Ti x F
@@ -125,12 +128,12 @@ class AttASR(nn.Module):
                                                 normalized=normalized)
 
     def beam_search_batch(self,
-                          x,
-                          x_len,
-                          beam=16,
-                          nbest=8,
-                          max_len=-1,
-                          normalized=True):
+                          x: th.Tensor,
+                          x_len: Optional[th.Tensor],
+                          beam: int = 16,
+                          nbest: int = 8,
+                          max_len: int = -1,
+                          normalized=True) -> List[Any]:
         """
         args
             x: audio samples or acoustic features, N x S or N x Ti x F

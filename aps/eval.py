@@ -10,13 +10,18 @@ from aps.asr import support_nnet as support_asr_nnet
 from aps.sse import support_nnet as support_sse_nnet
 from aps.transform import support_transform
 
+from typing import Dict, Tuple
+
 
 class Computer(object):
     """
     A simple wrapper for model evaluation
     """
 
-    def __init__(self, cpt_dir, device_id=-1, task="asr"):
+    def __init__(self,
+                 cpt_dir: str,
+                 device_id: int = -1,
+                 task: str = "asr") -> None:
         # load nnet
         self.epoch, self.nnet, self.conf = self._load(cpt_dir, task=task)
         # offload to device
@@ -28,7 +33,9 @@ class Computer(object):
         # set eval model
         self.nnet.eval()
 
-    def _load(self, cpt_dir, task="asr"):
+    def _load(self,
+              cpt_dir: str,
+              task: str = "asr") -> Tuple[int, th.nn.Module, Dict]:
         if task not in ["asr", "enh"]:
             raise ValueError(f"Unknown task name: {task}")
         cpt_dir = pathlib.Path(cpt_dir)

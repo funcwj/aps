@@ -13,14 +13,14 @@ try:
 except:
     raise ImportError("import Transformer module failed")
 
+from typing import Union, Optional, List, Any
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
 from aps.asr.base.decoder import trace_back_hypos
-
 from aps.const import IGNORE_ID, NEG_INF
 
 
-def prep_sub_mask(T, device="cpu"):
+def prep_sub_mask(T: int, device: Union[str, th.device] = "cpu") -> th.Tensor:
     """
     Prepare a square sub-sequence masks (-inf/0)
     egs: for N = 8, output
@@ -44,16 +44,16 @@ class TorchTransformerDecoder(nn.Module):
     """
 
     def __init__(self,
-                 vocab_size,
-                 att_dim=512,
-                 enc_dim=None,
-                 nhead=8,
-                 feedforward_dim=2048,
-                 scale_embed=False,
-                 pos_dropout=0,
-                 att_dropout=0.1,
-                 pos_enc=True,
-                 num_layers=6):
+                 vocab_size: int,
+                 att_dim: int = 512,
+                 enc_dim: Optional[int] = None,
+                 nhead: int = 8,
+                 feedforward_dim: int = 2048,
+                 scale_embed: bool = False,
+                 pos_dropout: float = 0,
+                 att_dropout: float = 0.1,
+                 pos_enc: bool = True,
+                 num_layers: int = 6) -> None:
         super(TorchTransformerDecoder, self).__init__()
         self.tgt_embed = IOEmbedding("sparse",
                                      vocab_size,
@@ -73,7 +73,11 @@ class TorchTransformerDecoder(nn.Module):
         self.output = nn.Linear(att_dim, vocab_size, bias=False)
         self.vocab_size = vocab_size
 
-    def forward(self, enc_out, enc_len, tgt_pad, sos=-1):
+    def forward(self,
+                enc_out: th.Tensor,
+                enc_len: Optional[th.Tensor],
+                tgt_pad: th.Tensor,
+                sos: int = -1) -> th.Tensor:
         """
         Args:
             enc_out: Ti x N x D
@@ -107,16 +111,16 @@ class TorchTransformerDecoder(nn.Module):
         return dec_out
 
     def beam_search(self,
-                    enc_out,
-                    lm=None,
-                    lm_weight=0,
-                    beam=16,
-                    sos=-1,
-                    eos=-1,
-                    nbest=8,
-                    max_len=-1,
-                    vectorized=True,
-                    normalized=True):
+                    enc_out: th.Tensor,
+                    lm: Optional[nn.Module] = None,
+                    lm_weight: float = 0,
+                    beam: int = 16,
+                    sos: int = -1,
+                    eos: int = -1,
+                    nbest: int = 8,
+                    max_len: int = -1,
+                    vectorized: bool = True,
+                    normalized: bool = True) -> List[Any]:
         """
         Beam search for Transformer
         Args:

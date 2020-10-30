@@ -20,15 +20,15 @@ class TorchTransformerLM(nn.Module):
     """
 
     def __init__(self,
-                 embed_size=256,
-                 vocab_size=40,
-                 att_dim=512,
-                 nhead=8,
-                 feedforward_dim=2048,
-                 scale_embed=False,
-                 pos_dropout=0.1,
-                 att_dropout=0.1,
-                 num_layers=6):
+                 embed_size: int = 256,
+                 vocab_size: int = 40,
+                 att_dim: int = 512,
+                 nhead: int = 8,
+                 feedforward_dim: int = 2048,
+                 scale_embed: bool = False,
+                 pos_dropout: float = 0.1,
+                 att_dropout: float = 0.1,
+                 num_layers: int = 6) -> None:
         super(TorchTransformerLM, self).__init__()
         if embed_size != att_dim:
             raise ValueError("Need embed_size == att_dim")

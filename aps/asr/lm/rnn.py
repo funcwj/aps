@@ -27,13 +27,13 @@ class TorchRNNLM(nn.Module):
     """
 
     def __init__(self,
-                 embed_size=256,
-                 vocab_size=40,
-                 rnn="lstm",
-                 rnn_layers=3,
-                 rnn_hidden=512,
-                 rnn_dropout=0.2,
-                 tie_weights=False):
+                 embed_size: int = 256,
+                 vocab_size: int = 40,
+                 rnn: str = "lstm",
+                 rnn_layers: int = 3,
+                 rnn_hidden: int = 512,
+                 rnn_dropout: float = 0.2,
+                 tie_weights: bool = False) -> None:
         super(TorchRNNLM, self).__init__()
         RNN = rnn.upper()
         supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
@@ -61,7 +61,7 @@ class TorchRNNLM(nn.Module):
         if tie_weights and embed_size == rnn_hidden:
             self.dist.weight = self.vocab_embed.weight
 
-    def init_weights(self, initrange=0.1):
+    def init_weights(self, initrange: float = 0.1) -> None:
         self.vocab_embed.weight.data.uniform_(-initrange, initrange)
         self.dist.bias.data.zero_()
         self.dist.weight.data.uniform_(-initrange, initrange)

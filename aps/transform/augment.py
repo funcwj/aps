@@ -6,14 +6,16 @@
 import random
 import torch as th
 
+from typing import Tuple, Union
 
-def tf_mask(batch,
-            shape,
-            max_bands=30,
-            max_frame=40,
-            num_freq_masks=2,
-            num_time_masks=2,
-            device="cpu"):
+
+def tf_mask(batch: int,
+            shape: Tuple[int],
+            max_bands: int = 30,
+            max_frame: int = 40,
+            num_freq_masks: int = 2,
+            num_time_masks: int = 2,
+            device: Union[str, th.device] = "cpu") -> th.Tensor:
     """
     Return batch of TF-masks
     Args:
@@ -42,7 +44,11 @@ def tf_mask(batch,
     return th.stack(mask)
 
 
-def random_mask(shape, max_steps=30, num_masks=2, order="freq", device="cpu"):
+def random_mask(shape: Tuple[int],
+                max_steps: int = 30,
+                num_masks: int = 2,
+                order: str = "freq",
+                device: Union[str, th.device] = "cpu") -> th.Tensor:
     """
     Generate random 0/1 masks
     Args:

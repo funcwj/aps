@@ -8,7 +8,19 @@ import torch as th
 from torch.optim import lr_scheduler
 
 
-def support_ss_scheduler(scheduler, **kwargs):
+class SsScheduler(object):
+    """
+    Basic class for schedule sampling
+    """
+
+    def __init__(self, ssr: float) -> None:
+        self.ssr = ssr
+
+    def step(self, epoch, accu):
+        raise NotImplementedError
+
+
+def support_ss_scheduler(scheduler: str, **kwargs) -> SsScheduler:
     """
     Return supported ss scheduler
     """
@@ -22,27 +34,15 @@ def support_ss_scheduler(scheduler, **kwargs):
     return scheduler_templ[scheduler](**kwargs)
 
 
-class SsScheduler(object):
-    """
-    Basic class for schedule sampling
-    """
-
-    def __init__(self, ssr):
-        self.ssr = ssr
-
-    def step(self, epoch, accu):
-        raise NotImplementedError
-
-
 class ConstScheduler(SsScheduler):
     """
     Use const schedule sampling rate
     """
 
-    def __init__(self, ssr=0):
+    def __init__(self, ssr: float = 0) -> None:
         super(ConstScheduler, self).__init__(ssr)
 
-    def step(self, epoch, accu):
+    def step(self, epoch: int, accu: float) -> float:
         return self.ssr
 
 
@@ -51,11 +51,11 @@ class TriggerScheduler(SsScheduler):
     Use schedule sampling rate when metrics triggered
     """
 
-    def __init__(self, ssr=0, trigger=0.6):
+    def __init__(self, ssr: float = 0, trigger: float = 0.6) -> None:
         super(TriggerScheduler, self).__init__(ssr)
         self.trigger = trigger
 
-    def step(self, epoch, accu):
+    def step(self, epoch: int, accu: float) -> float:
         return 0 if accu < self.trigger else self.ssr
 
 
@@ -64,14 +64,18 @@ class LinearScheduler(SsScheduler):
     Use linear schedule sampling rate
     """
 
-    def __init__(self, ssr=0, epoch_beg=10, epoch_end=20, update_interval=1):
+    def __init__(self,
+                 ssr: float = 0,
+                 epoch_beg: int = 10,
+                 epoch_end: int = 20,
+                 update_interval: int = 1) -> None:
         super(LinearScheduler, self).__init__(ssr)
         self.beg = epoch_beg
         self.end = epoch_end
         self.inc = ssr * update_interval / (epoch_end - epoch_beg)
         self.interval = update_interval
 
-    def step(self, epoch, accu):
+    def step(self, epoch: int, accu: float) -> float:
         if epoch < self.beg:
             return 0
         elif epoch >= self.end:

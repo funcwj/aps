@@ -12,9 +12,11 @@ import torch_complex.functional as cF
 
 from aps.asr.base.attention import padding_mask
 from aps.const import EPSILON
+from torch_complex import ComplexTensor
+from typing import Optional
 
 
-def trace(cplx_mat):
+def trace(cplx_mat: ComplexTensor) -> ComplexTensor:
     """
     Return trace of a complex matrices
     """
@@ -23,7 +25,8 @@ def trace(cplx_mat):
     return cplx_mat[E].view(*mat_size[:-1]).sum(-1)
 
 
-def beamform(weight, spectrogram):
+def beamform(weight: ComplexTensor,
+             spectrogram: ComplexTensor) -> ComplexTensor:
     """
     Do beamforming
     Args:
@@ -35,7 +38,8 @@ def beamform(weight, spectrogram):
     return (weight[..., None].conj() * spectrogram).sum(dim=1)
 
 
-def estimate_covar(mask, spectrogram):
+def estimate_covar(mask: th.Tensor,
+                   spectrogram: ComplexTensor) -> ComplexTensor:
     """
     Covariance matrices (PSD) estimation
     Args:
@@ -67,7 +71,11 @@ class MvdrBeamformer(nn.Module):
         self.mask_norm = mask_norm
         self.eps = eps
 
-    def _derive_weight(self, Rs, Rn, u, eps=1e-5):
+    def _derive_weight(self,
+                       Rs: ComplexTensor,
+                       Rn: ComplexTensor,
+                       u: th.Tensor,
+                       eps: float = 1e-5) -> ComplexTensor:
         """
         Compute mvdr beam weights
         Args:
@@ -91,7 +99,7 @@ class MvdrBeamformer(nn.Module):
         weight = Rn_inv_Rs_u / tr_Rn_inv_Rs[..., None]
         return weight
 
-    def _process_mask(self, mask, xlen):
+    def _process_mask(self, mask: th.Tensor, xlen: th.Tensor) -> th.Tensor:
         """
         Process mask estimated by networks
         """
@@ -106,7 +114,11 @@ class MvdrBeamformer(nn.Module):
         mask = th.transpose(mask, 1, 2)
         return mask
 
-    def forward(self, mask_s, x, mask_n=None, xlen=None):
+    def forward(self,
+                mask_s: th.Tensor,
+                x: ComplexTensor,
+                mask_n: Optional[th.Tensor] = None,
+                xlen: Optional[th.Tensor] = None) -> ComplexTensor:
         """
         Args:
             mask_s: real TF-masks (speech), N x T x F
@@ -137,12 +149,12 @@ class ChannelAttention(nn.Module):
     Compute u for mvdr beamforming
     """
 
-    def __init__(self, num_bins, att_dim):
+    def __init__(self, num_bins: int, att_dim: int) -> None:
         super(ChannelAttention, self).__init__()
         self.proj = nn.Linear(num_bins, att_dim)
         self.gvec = nn.Linear(att_dim, 1)
 
-    def forward(self, Rs):
+    def forward(self, Rs: ComplexTensor) -> th.Tensor:
         """
         Args:
             Rs: complex, N x F x C x C

@@ -7,12 +7,17 @@ import numpy as np
 
 from itertools import permutations
 
+from typing import Optional, Callable, Union, Tuple
 from pypesq import pesq
 from pystoi import stoi
 from museval.metrics import bss_eval_images
 
 
-def aps_sisnr(s, x, eps=1e-8, remove_dc=True, fs=None):
+def aps_sisnr(s: np.ndarray,
+              x: np.ndarray,
+              eps: float = 1e-8,
+              remove_dc: bool = True,
+              fs: Optional[int] = None) -> float:
     """
     Compute Si-SNR (scaled invariant SNR)
     Args:
@@ -35,21 +40,25 @@ def aps_sisnr(s, x, eps=1e-8, remove_dc=True, fs=None):
     return 20 * np.log10(vec_l2norm(t) / (vec_l2norm(n) + eps) + eps)
 
 
-def aps_pesq(ref, est, fs=16000):
+def aps_pesq(ref: np.ndarray, est: np.ndarray, fs: int = 16000) -> float:
     """
     Wrapper for pypesq.pesq
     """
     return pesq(ref, est, fs=fs)
 
 
-def aps_stoi(ref, est, fs=16000):
+def aps_stoi(ref: np.ndarray, est: np.ndarray, fs: int = 16000) -> float:
     """
     Wrapper for pystoi.stoi
     """
     return stoi(ref, est, fs_sig=fs)
 
 
-def _permute_eval(eval_func, ref, est, compute_permutation=False, fs=None):
+def _permute_eval(eval_func: Callable,
+                  ref: np.ndarray,
+                  est: np.ndarray,
+                  compute_permutation: bool = False,
+                  fs: Optional[int] = None) -> Union[float, Tuple[float, list]]:
     """
     Wrapper for computation of SiSNR/PESQ/STOI in permutation/non-permutation mode
     Args:
@@ -81,7 +90,12 @@ def _permute_eval(eval_func, ref, est, compute_permutation=False, fs=None):
         return max(metric), perm[max_idx]
 
 
-def permute_metric(name, ref, est, compute_permutation=False, fs=None):
+def permute_metric(
+        name: str,
+        ref: np.ndarray,
+        est: np.ndarray,
+        compute_permutation: bool = False,
+        fs: Optional[int] = None) -> Union[float, Tuple[float, list]]:
     """
     Computation of SiSNR/PESQ/STOI in permutation/non-permutation mode
     Args:
