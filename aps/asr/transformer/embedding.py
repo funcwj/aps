@@ -220,6 +220,8 @@ class IOEmbedding(nn.Module):
                 inner_channels=embed_dim if other_opts <= 0 else other_opts)
         elif embed_type == "sparse":
             self.embed = nn.Embedding(feature_dim, embed_dim)
+        elif embed_type == "none":
+            self.embed = None
         else:
             raise RuntimeError(f"Unsupported embedding type: {embed_type}")
         if pos_enc:
@@ -238,7 +240,10 @@ class IOEmbedding(nn.Module):
         Return:
             out: T' x N x F (to feed transformer)
         """
-        out = self.embed(inp)
+        if self.embed:
+            out = self.embed(inp)
+        else:
+            out = inp
         if self.posencode:
             out = self.posencode(out, t=t)
         else:

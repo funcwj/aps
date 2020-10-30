@@ -100,8 +100,8 @@ def test_dense_unet():
     assert y.shape == th.Size([64000])
 
 
-def test_freq_xfmr():
-    nnet_cls = support_nnet("freq_xfmr")
+def test_freq_rel_xfmr():
+    nnet_cls = support_nnet("freq_rel_transformer")
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
                              frame_hop=256)
@@ -111,8 +111,8 @@ def test_freq_xfmr():
                     num_bins=257,
                     att_dim=256,
                     nhead=4,
+                    k_dim=256,
                     feedforward_dim=512,
-                    pos_dropout=0.1,
                     att_dropout=0.1,
                     proj_dropout=0.1,
                     post_norm=True,

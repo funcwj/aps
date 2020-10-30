@@ -15,7 +15,7 @@ nnet_cls = {
     "freq_dprnn": FreqDPRNN,
     "base_rnn": ToyRNN,
     "phasen": Phasen,
-    "freq_xfmr": FreqTorchXfmr
+    "freq_rel_transformer": FreqRelTransformer
 }
 
 

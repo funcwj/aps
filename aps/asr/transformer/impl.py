@@ -8,6 +8,11 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+try:
+    from torch.nn import TransformerEncoderLayer
+except:
+    raise ImportError("import PyTorch's Transformer module failed")
+
 
 def _get_activation_fn(activation):
     if activation == "relu":
@@ -15,14 +20,6 @@ def _get_activation_fn(activation):
     elif activation == "gelu":
         return nn.GELU()
     raise RuntimeError(f"activation should be relu/gelu, not {activation}")
-
-
-def _get_transformer_encoder(encoder_layer, num_layers, norm=None):
-    if isinstance(encoder_layer, TransformerRelEncoderLayer):
-        return TransformerRelEncoder(encoder_layer, num_layers, norm=norm)
-    elif isinstance(encoder_layer, TransformerXLEncoderLayer):
-        return TransformerXLEncoder(encoder_layer, num_layers, norm=norm)
-    raise RuntimeError(f"Unknown transformer encoder layer")
 
 
 class ApsMultiheadAttention(nn.Module):
@@ -310,6 +307,54 @@ class XlMultiheadAttention(ApsMultiheadAttention):
         return output, att_weights
 
 
+class TransformerTorchEncoderLayer(TransformerEncoderLayer):
+    """
+    Wrapper for TransformerEncoderLayer (add pre-norm)
+    """
+
+    def __init__(self,
+                 d_model,
+                 nhead,
+                 dim_feedforward=2048,
+                 pre_norm=False,
+                 dropout=0.1,
+                 activation="relu"):
+        super(TransformerTorchEncoderLayer,
+              self).__init__(d_model,
+                             nhead,
+                             dim_feedforward=dim_feedforward,
+                             dropout=dropout,
+                             activation=activation)
+        self.pre_norm = pre_norm
+
+    def ffn(self, src):
+        """
+        Get output of the feedforward network
+        """
+        return self.dropout2(
+            self.linear2(self.dropout(self.activation(self.linear1(src)))))
+
+    def forward(self, src, src_mask=None, src_key_padding_mask=None):
+        """
+        Support for both pre-norm & post-norm
+        """
+        inp = src
+        if self.pre_norm:
+            src = self.norm1(src)
+        att = self.self_attn(src,
+                             src,
+                             src,
+                             attn_mask=src_mask,
+                             key_padding_mask=src_key_padding_mask)[0]
+        src = inp + self.dropout1(att)
+        if self.pre_norm:
+            src = src + self.dropout2(self.ffn(self.norm2(src)))
+        else:
+            src = self.norm1(src)
+            src = self.norm2(src + self.ffn(src))
+        return src
+
+
 class ApsTransformerEncoderLayer(nn.Module):
     """
     A base class for TransformerEncoderLayer
@@ -365,7 +410,7 @@ class TransformerRelEncoderLayer(ApsTransformerEncoderLayer):
 
     def forward(self,
                 src,
-                key_pos,
+                key_pos=None,
                 value_pos=None,
                 src_mask=None,
                 src_key_padding_mask=None):
@@ -417,7 +462,7 @@ class TransformerXLEncoderLayer(ApsTransformerEncoderLayer):
 
     def forward(self,
                 src,
-                sin_pos_enc,
+                sin_pos_enc=None,
                 src_mask=None,
                 src_key_padding_mask=None):
         inp = src
@@ -451,56 +496,11 @@ class ApsTransformerEncoder(nn.Module):
         self.num_layers = num_layers
         self.norm = norm
 
-
-class TransformerRelEncoder(ApsTransformerEncoder):
-    """
-    A stack of N TransformerRelEncoderLayer layers
-    """
-
-    def __init__(self, encoder_layer, num_layers, norm=None):
-        super(TransformerRelEncoder, self).__init__(encoder_layer,
-                                                    num_layers,
-                                                    norm=norm)
-
-    def forward(self,
-                src,
-                key_pos,
-                value_pos=None,
-                mask=None,
-                src_key_padding_mask=None):
+    def forward(self, src, **kwargs):
         output = src
 
         for mod in self.layers:
-            output = mod(output,
-                         key_pos,
-                         value_pos=value_pos,
-                         src_mask=mask,
-                         src_key_padding_mask=src_key_padding_mask)
-
-        if self.norm is not None:
-            output = self.norm(output)
-
-        return output
-
-
-class TransformerXLEncoder(ApsTransformerEncoder):
-    """
-    A stack of N TransformerXLEncoderLayer layers
-    """
-
-    def __init__(self, encoder_layer, num_layers, norm=None):
-        super(TransformerXLEncoder, self).__init__(encoder_layer,
-                                                   num_layers,
-                                                   norm=norm)
-
-    def forward(self, src, sin_pos_enc, mask=None, src_key_padding_mask=None):
-        output = src
-
-        for mod in self.layers:
-            output = mod(output,
-                         sin_pos_enc,
-                         src_mask=mask,
-                         src_key_padding_mask=src_key_padding_mask)
+            output = mod(output, **kwargs)
 
         if self.norm is not None:
             output = self.norm(output)

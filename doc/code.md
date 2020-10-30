@@ -19,7 +19,7 @@ Customized feature transform module in aps. The feature transform layer from `ap
 * `DfTransform`
 * `FixedBeamformer`
 
-The instance of `AsrTransform` or `EnhTransform` is passed to network prototype defined in `aps.asr`/`aps.sep` as a parameter for user-specific feature extraction.
+The instance of `AsrTransform` or `EnhTransform` is passed to network prototype defined in `aps.asr`/`aps.sse` as a parameter for user-specific feature extraction.
 
 ## `aps.trainer`
 
@@ -60,7 +60,7 @@ For enhancement/separation model, we have
 
 ## `aps.distributed`
 
-A package to handle distributed training and manage common interface.
+A package to handle distributed training and provide an unified interface.
 
 ## `aps.asr`
 
@@ -95,6 +95,7 @@ Speech enhancement/separation model. The implemented model are shown below:
 * `FreqConvTasNet`: Frequency domain TCN (Temporal Convolutional Network)
 * `DCUNet`: Deep Complexed Unet
 * `DCCRN`: Deep Complexed Convolutional Recurrent Network
+* `DenseUnet`: Unet boosted using DenseBlocks
 * `Phasen`: Phasen network
 * `CRNet`: Convolutional Recurrent Network for speech enhancement
 * `TimeDPRNN`: Time domain DPRNN

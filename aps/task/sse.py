@@ -13,7 +13,7 @@ import torch.nn.functional as tf
 from itertools import permutations
 
 from aps.task.base import Task
-from aps.task.utils import permu_invarint_objf, multiple_objf
+from aps.task.objf import permu_invarint_objf, multiple_objf
 from aps.transform.utils import STFT, init_melfilter
 from aps.const import EPSILON
 

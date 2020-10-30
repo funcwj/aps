@@ -8,19 +8,13 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
-from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
-
-try:
-    from torch.nn import TransformerEncoder
-except:
-    raise ImportError("import Transformer module failed")
-
 from queue import PriorityQueue
+from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.transformer.decoder import prep_sub_mask
-from aps.asr.transformer.encoder import ApsTransformerEncoderLayer
-
+from aps.asr.transformer.encoder import ApsTransformerEncoder
+from aps.asr.transformer.impl import TransformerTorchEncoderLayer
 from aps.asr.base.attention import padding_mask
 from aps.asr.base.decoder import OneHotEmbedding
 from aps.const import IGNORE_ID
@@ -287,13 +281,16 @@ class TorchTransformerDecoder(nn.Module):
                                      embed_dim=att_dim,
                                      dropout=pos_dropout,
                                      scale_embed=scale_embed)
-        decoder_layer = ApsTransformerEncoderLayer(
+        decoder_layer = TransformerTorchEncoderLayer(
             att_dim,
             nhead,
             dim_feedforward=feedforward_dim,
             dropout=att_dropout,
             pre_norm=not post_norm)
-        self.decoder = TransformerEncoder(decoder_layer, num_layers)
+        final_norm = None if post_norm else nn.LayerNorm(att_dim)
+        self.decoder = ApsTransformerEncoder(decoder_layer,
+                                             num_layers,
+                                             norm=final_norm)
         self.enc_proj = nn.Linear(enc_dim if enc_dim else att_dim,
                                   jot_dim,
                                   bias=False)
@@ -320,7 +317,7 @@ class TorchTransformerDecoder(nn.Module):
         tgt_pad = self.tgt_embed(tgt_pad)
         # To+1 x N x D
         dec_out = self.decoder(tgt_pad,
-                               mask=tgt_mask,
+                               src_mask=tgt_mask,
                                src_key_padding_mask=pad_mask)
         return self._pred_joint(enc_out, dec_out)
 

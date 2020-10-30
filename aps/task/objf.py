@@ -3,8 +3,58 @@
 
 import torch as th
 import torch.nn as nn
+import torch.nn.functional as tf
 
 from itertools import permutations
+from aps.const import IGNORE_ID
+
+
+def ce_objf(outs, tgts):
+    """
+    Cross entropy loss function
+    Args:
+        outs (Tensor): N x T x V
+        tgts (Tensor): N x T
+    Return
+        loss (Tensor): (1)
+    """
+    _, _, V = outs.shape
+    # N(To+1) x V
+    outs = outs.view(-1, V)
+    # N(To+1)
+    tgts = tgts.view(-1)
+    ce_loss = tf.cross_entropy(outs,
+                               tgts,
+                               ignore_index=IGNORE_ID,
+                               reduction="mean")
+    return ce_loss
+
+
+def ls_objf(outs, tgts, lsm_factor=0.1):
+    """
+    Label smooth loss function (using KL)
+    Args:
+        outs (Tensor): N x T x V
+        tgts (Tensor): N x T
+    Return
+        loss (Tensor): (1)
+    """
+    _, _, V = outs.shape
+    # NT x V
+    outs = outs.view(-1, V)
+    # NT
+    tgts = tgts.view(-1)
+    mask = (tgts != IGNORE_ID)
+    # M x V
+    outs = th.masked_select(outs, mask.unsqueeze(-1)).view(-1, V)
+    # M
+    tgts = th.masked_select(tgts, mask)
+    # M x V
+    dist = outs.new_full(outs.size(), lsm_factor / V)
+    dist = dist.scatter_(1, tgts.unsqueeze(-1), 1 - lsm_factor)
+    # KL distance
+    loss = tf.kl_div(tf.log_softmax(outs, -1), dist, reduction="batchmean")
+    return loss
 
 
 def multiple_objf(inp, ref, objf, weight=None, transform=None, batchmean=False):

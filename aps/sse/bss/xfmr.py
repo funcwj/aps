@@ -7,53 +7,11 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from aps.asr.transformer.encoder import TransformerEncoder, ApsTransformerEncoderLayer
-from aps.asr.transformer.embedding import PositionalEncoding
+from aps.asr.transformer.encoder import RelTransformerEncoder
+from aps.sse.utils import MaskNonLinear
 
 
-class TorchTransformer(nn.Module):
-    """
-    Wrapper for pytorch's Transformer Decoder
-    """
-
-    def __init__(self,
-                 att_dim=512,
-                 nhead=8,
-                 feedforward_dim=2048,
-                 pos_dropout=0.1,
-                 att_dropout=0.1,
-                 post_norm=True,
-                 num_layers=6):
-        super(TorchTransformer, self).__init__()
-        encoder_layer = ApsTransformerEncoderLayer(
-            att_dim,
-            nhead,
-            dim_feedforward=feedforward_dim,
-            dropout=att_dropout,
-            pre_norm=not post_norm)
-        self.encoder = TransformerEncoder(encoder_layer, num_layers)
-        self.pe = PositionalEncoding(att_dim, dropout=pos_dropout, max_len=2000)
-
-    def forward(self, inp):
-        """
-        Args:
-            inp: N x T x D
-        Return:
-            enc_out: N x T x D
-        """
-        # N x T x F => N x F x T
-        inp = self.pe(inp)
-        # T x N x D
-        enc_out = self.encoder(inp, mask=None, src_key_padding_mask=None)
-        # N x T x D
-        enc_out = enc_out.transpose(0, 1)
-        return enc_out
-
-
-supported_nonlinear = {"relu": tf.relu, "sigmoid": th.sigmoid}
-
-
-class FreqTorchXfmr(TorchTransformer):
+class FreqRelTransformer(RelTransformerEncoder):
     """
     Frequency domain Transformer model
     """
@@ -65,41 +23,48 @@ class FreqTorchXfmr(TorchTransformer):
                  num_bins=257,
                  att_dim=512,
                  nhead=8,
+                 k_dim=256,
                  feedforward_dim=2048,
-                 pos_dropout=0.1,
                  att_dropout=0.1,
                  proj_dropout=0.1,
                  post_norm=True,
+                 add_value_rel=False,
                  num_layers=6,
                  non_linear="sigmoid",
                  training_mode="freq"):
-        super(FreqTorchXfmr, self).__init__(att_dim=att_dim,
-                                            nhead=nhead,
-                                            feedforward_dim=feedforward_dim,
-                                            pos_dropout=pos_dropout,
-                                            att_dropout=att_dropout,
-                                            post_norm=post_norm,
-                                            num_layers=num_layers)
+        super(FreqRelTransformer,
+              self).__init__(input_size,
+                             input_embed="linear",
+                             att_dim=att_dim,
+                             k_dim=k_dim,
+                             nhead=nhead,
+                             feedforward_dim=feedforward_dim,
+                             scale_embed=False,
+                             pos_dropout=0,
+                             att_dropout=att_dropout,
+                             post_norm=post_norm,
+                             add_value_rel=add_value_rel,
+                             num_layers=num_layers)
         if enh_transform is None:
             raise RuntimeError("enh_transform can not be None")
-        if non_linear not in supported_nonlinear:
-            raise RuntimeError(f"Unsupported non-linear: {non_linear}")
         self.enh_transform = enh_transform
         self.mode = training_mode
         self.proj = nn.Sequential(nn.Linear(input_size, att_dim),
                                   nn.LayerNorm(att_dim),
                                   nn.Dropout(proj_dropout))
         self.mask = nn.Linear(att_dim, num_bins * num_spks)
-        self.non_linear = supported_nonlinear[non_linear]
+        self.non_linear = MaskNonLinear(non_linear)
         self.num_spks = num_spks
 
     def check_args(self, mix, training=True):
         if not training and mix.dim() != 1:
-            raise RuntimeError("FreqTorchXfmr expects 1D tensor (inference), " +
-                               f"got {mix.dim()} instead")
+            raise RuntimeError(
+                "FreqRelTransformer expects 1D tensor (inference), " +
+                f"got {mix.dim()} instead")
         if training and mix.dim() != 2:
-            raise RuntimeError("FreqTorchXfmr expects 2D tensor (training), " +
-                               f"got {mix.dim()} instead")
+            raise RuntimeError(
+                "FreqRelTransformer expects 2D tensor (training), " +
+                f"got {mix.dim()} instead")
 
     def infer(self, mix, mode="time"):
         """
@@ -123,8 +88,9 @@ class FreqTorchXfmr(TorchTransformer):
         """
         feats, stft, _ = self.enh_transform(mix, None)
         # stft: N x F x T
-        mix = self.proj(feats)
-        out = super().forward(mix)
+        out, _ = super().forward(feats, None)
+        # T x N x F => N x T x F
+        out = out.transpose(0, 1)
         # N x T x F
         mask = self.non_linear(self.mask(out))
         # N x F x T

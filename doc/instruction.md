@@ -57,7 +57,7 @@ usage: wav_simulate.py [-h] [--dump-ref-dir DUMP_REF_DIR] --src-spk SRC_SPK
 
 Almost all the hyper-parameters are in the yaml configuration files and the followings are allowed keys:
 
-* `nnet` and `nnet_conf`: Name of the networks and it's parameters. The supported networks are available in [aps/asr/\_\_init\_\_.py](../aps/asr/\_\_init\_\_.py) and [aps/sep/\_\_init\_\_.py](../aps/sep/\_\_init\_\_.py)
+* `nnet` and `nnet_conf`: Name of the networks and it's parameters. The supported networks are available in [aps/asr/\_\_init\_\_.py](../aps/asr/\_\_init\_\_.py) and [aps/sse/\_\_init\_\_.py](../aps/sse/\_\_init\_\_.py)
 
 * `task` and `task_conf`: Name of the task and it's parameters. The supported tasks are in [aps/task/\_\_init\_\_.py](../aps/task/\_\_init\_\_.py)
 

@@ -6,15 +6,10 @@
 import torch as th
 import torch.nn as nn
 
-try:
-    from torch.nn import TransformerEncoder, TransformerEncoderLayer
-except:
-    raise ImportError("import Transformer module failed")
-
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
-from aps.asr.transformer.xl import _get_transformer_encoder
-from aps.asr.transformer.xl import TransformerRelEncoderLayer, TransformerXLEncoderLayer
+from aps.asr.transformer.impl import TransformerTorchEncoderLayer, TransformerRelEncoderLayer, TransformerXLEncoderLayer
+from aps.asr.transformer.impl import ApsTransformerEncoder
 
 
 def support_xfmr_encoder(encoder_name):
@@ -30,54 +25,6 @@ def support_xfmr_encoder(encoder_name):
         return supported_encoder[encoder_name]
     else:
         return None
-
-
-class ApsTransformerEncoderLayer(TransformerEncoderLayer):
-    """
-    Transformer encoder with pre-norm
-    """
-
-    def __init__(self,
-                 d_model,
-                 nhead,
-                 dim_feedforward=2048,
-                 pre_norm=False,
-                 dropout=0.1,
-                 activation="relu"):
-        super(ApsTransformerEncoderLayer,
-              self).__init__(d_model,
-                             nhead,
-                             dim_feedforward=dim_feedforward,
-                             dropout=dropout,
-                             activation=activation)
-        self.pre_norm = pre_norm
-
-    def ffn(self, src):
-        """
-        Get output of the feedforward network
-        """
-        return self.dropout2(
-            self.linear2(self.dropout(self.activation(self.linear1(src)))))
-
-    def forward(self, src, src_mask=None, src_key_padding_mask=None):
-        """
-        Support for both pre-norm & post-norm
-        """
-        inp = src
-        if self.pre_norm:
-            src = self.norm1(src)
-        att = self.self_attn(src,
-                             src,
-                             src,
-                             attn_mask=src_mask,
-                             key_padding_mask=src_key_padding_mask)[0]
-        src = inp + self.dropout1(att)
-        if self.pre_norm:
-            src = src + self.dropout2(self.ffn(self.norm2(src)))
-        else:
-            src = self.norm1(src)
-            src = self.norm2(src + self.ffn(src))
-        return src
 
 
 class TorchTransformerEncoder(nn.Module):
@@ -107,16 +54,16 @@ class TorchTransformerEncoder(nn.Module):
                                      rel_enc=False,
                                      pos_enc=pos_enc,
                                      other_opts=embed_other_opts)
-        encoder_layer = ApsTransformerEncoderLayer(
+        encoder_layer = TransformerTorchEncoderLayer(
             att_dim,
             nhead,
             dim_feedforward=feedforward_dim,
             dropout=att_dropout,
             pre_norm=not post_norm)
         final_norm = None if post_norm else nn.LayerNorm(att_dim)
-        self.encoder = TransformerEncoder(encoder_layer,
-                                          num_layers,
-                                          norm=final_norm)
+        self.encoder = ApsTransformerEncoder(encoder_layer,
+                                             num_layers,
+                                             norm=final_norm)
         self.input_embed = input_embed
 
     def forward(self, x_pad, x_len):
@@ -135,7 +82,7 @@ class TorchTransformerEncoder(nn.Module):
         src_pad_mask = None if x_len is None else (padding_mask(x_len) == 1)
         # Ti x N x D
         enc_out = self.encoder(x_emb,
-                               mask=None,
+                               src_mask=None,
                                src_key_padding_mask=src_pad_mask)
         return enc_out, x_len
 
@@ -188,9 +135,9 @@ class RelTransformerEncoder(nn.Module):
             dropout=att_dropout,
             pre_norm=not post_norm)
         final_norm = None if post_norm else nn.LayerNorm(att_dim)
-        self.encoder = _get_transformer_encoder(encoder_layer,
-                                                num_layers,
-                                                norm=final_norm)
+        self.encoder = ApsTransformerEncoder(encoder_layer,
+                                             num_layers,
+                                             norm=final_norm)
         self.input_embed = input_embed
         self.k_dim = k_dim
 
@@ -230,8 +177,8 @@ class RelTransformerEncoder(nn.Module):
         key_pos, value_pos = self._get_relative_embed(x_emb)
         # Ti x N x D
         enc_out = self.encoder(x_emb,
-                               key_pos,
-                               mask=None,
+                               src_mask=None,
+                               key_pos=key_pos,
                                value_pos=value_pos,
                                src_key_padding_mask=src_pad_mask)
         return enc_out, x_len
@@ -279,9 +226,9 @@ class RelXLTransformerEncoder(nn.Module):
             rel_u=rel_u,
             rel_v=rel_v)
         final_norm = None if post_norm else nn.LayerNorm(att_dim)
-        self.encoder = _get_transformer_encoder(encoder_layer,
-                                                num_layers,
-                                                norm=final_norm)
+        self.encoder = ApsTransformerEncoder(encoder_layer,
+                                             num_layers,
+                                             norm=final_norm)
         self.input_embed = input_embed
 
     def forward(self, x_pad, x_len):
@@ -301,7 +248,7 @@ class RelXLTransformerEncoder(nn.Module):
         src_pad_mask = None if x_len is None else (padding_mask(x_len) == 1)
         # Ti x N x D
         enc_out = self.encoder(x_emb,
-                               p_enc,
-                               mask=None,
+                               sin_pos_enc=p_enc,
+                               src_mask=None,
                                src_key_padding_mask=src_pad_mask)
         return enc_out, x_len
