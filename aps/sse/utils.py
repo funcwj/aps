@@ -7,13 +7,18 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from typing import Optional
+
 
 class MaskNonLinear(nn.Module):
     """
     Non-linear function for mask activation
     """
 
-    def __init__(self, non_linear, scale=1, clip=None):
+    def __init__(self,
+                 non_linear: str,
+                 scale: float = 1,
+                 clip: Optional[float] = None) -> None:
         super(MaskNonLinear, self).__init__()
         supported_nonlinear = {
             "relu": tf.relu,
@@ -26,7 +31,7 @@ class MaskNonLinear(nn.Module):
         self.clip = clip
         self.scale = scale
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         out = self.func(inp) * self.scale
         if self.clip is not None:
             out = th.clamp_max(out, self.clip)

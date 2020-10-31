@@ -8,12 +8,14 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
+from typing import Tuple, List, Union, Optional, NoReturn
 
-def parse_1dstr(sstr):
+
+def parse_1dstr(sstr: str) -> List[int]:
     return list(map(int, sstr.split(",")))
 
 
-def parse_2dstr(sstr):
+def parse_2dstr(sstr: str) -> List[List[int]]:
     return [parse_1dstr(tok) for tok in sstr.split(";")]
 
 
@@ -27,7 +29,7 @@ class ComplexConv2d(nn.Module):
         self.real = nn.Conv2d(*args, **kwargs)
         self.imag = nn.Conv2d(*args, **kwargs)
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         Args:
             x (Tensor): N x C x 2F x T
@@ -51,7 +53,7 @@ class ComplexConvTranspose2d(nn.Module):
         self.real = nn.ConvTranspose2d(*args, **kwargs)
         self.imag = nn.ConvTranspose2d(*args, **kwargs)
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         Args:
             x (Tensor): N x C x 2F x T
@@ -75,7 +77,7 @@ class ComplexBatchNorm2d(nn.Module):
         self.real_bn = nn.BatchNorm2d(*args, **kwargs)
         self.imag_bn = nn.BatchNorm2d(*args, **kwargs)
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         xr, xi = th.chunk(x, 2, -2)
         xr = self.real_bn(xr)
         xi = self.imag_bn(xi)
@@ -89,13 +91,13 @@ class EncoderBlock(nn.Module):
     """
 
     def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 stride=1,
-                 padding=0,
-                 causal=False,
-                 cplx=True):
+                 in_channels: int,
+                 out_channels: int,
+                 kernel_size: Tuple[int],
+                 stride: int = 1,
+                 padding: int = 0,
+                 causal: bool = False,
+                 cplx: bool = True) -> None:
         super(EncoderBlock, self).__init__()
         conv_impl = ComplexConv2d if cplx else nn.Conv2d
         # NOTE: time stride should be 1
@@ -113,7 +115,7 @@ class EncoderBlock(nn.Module):
         self.causal = causal
         self.time_axis_pad = time_axis_pad
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         Args:
             x (Tensor): N x 2C x F x T
@@ -132,15 +134,15 @@ class DecoderBlock(nn.Module):
     """
 
     def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 stride=1,
-                 padding=0,
-                 output_padding=0,
-                 causal=False,
-                 cplx=True,
-                 last_layer=False):
+                 in_channels: int,
+                 out_channels: int,
+                 kernel_size: Tuple[int],
+                 stride: int = 1,
+                 padding: int = 0,
+                 output_padding: int = 0,
+                 causal: bool = False,
+                 cplx: bool = True,
+                 last_layer: bool = False) -> None:
         super(DecoderBlock, self).__init__()
         conv_impl = ComplexConvTranspose2d if cplx else nn.ConvTranspose2d
         var_kt = kernel_size[1] - 1
@@ -161,7 +163,7 @@ class DecoderBlock(nn.Module):
         self.causal = causal
         self.time_axis_pad = time_axis_pad
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         Args:
             x (Tensor): N x 2C x F x T
@@ -183,7 +185,13 @@ class Encoder(nn.Module):
         C: output channels
     """
 
-    def __init__(self, cplx, K, S, C, P, causal=False):
+    def __init__(self,
+                 cplx: bool,
+                 K: List[Tuple[int, int]],
+                 S: List[Tuple[int, int]],
+                 C: List[int],
+                 P: List[int],
+                 causal: bool = False) -> None:
         super(Encoder, self).__init__()
         layers = [
             EncoderBlock(C[i],
@@ -197,7 +205,7 @@ class Encoder(nn.Module):
         self.layers = nn.ModuleList(layers)
         self.num_layers = len(layers)
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> Tuple[List[th.Tensor], th.Tensor]:
         enc_h = []
         for index, layer in enumerate(self.layers):
             x = layer(x)
@@ -215,7 +223,15 @@ class Decoder(nn.Module):
         C: output channels
     """
 
-    def __init__(self, cplx, K, S, C, P, O, causal=False, connection="sum"):
+    def __init__(self,
+                 cplx: bool,
+                 K: List[Tuple[int, int]],
+                 S: List[Tuple[int, int]],
+                 C: List[int],
+                 P: List[int],
+                 O: List[int],
+                 causal: bool = False,
+                 connection: str = "sum") -> None:
         super(Decoder, self).__init__()
         if connection not in ["cat", "sum"]:
             raise ValueError(f"Unknown connection mode: {connection}")
@@ -233,7 +249,7 @@ class Decoder(nn.Module):
         self.layers = nn.ModuleList(layers)
         self.connection = connection
 
-    def forward(self, x, enc_h):
+    def forward(self, x: th.Tensor, enc_h: List[th.Tensor]) -> th.Tensor:
         # N = len(self.layers)
         for index, layer in enumerate(self.layers):
             if index == 0:
@@ -256,17 +272,17 @@ class DCUNet(nn.Module):
     """
 
     def __init__(self,
-                 cplx=True,
-                 K="7,5;7,5;7,5;5,3;5,3;5,3;5,3",
-                 S="2,1;2,1;2,1;2,1;2,1;2,1;2,1",
-                 C="32,32,64,64,64,64,64",
-                 P="1,1,1,1,1,1,1",
-                 O="0,0,0,0,0,0,0",
-                 num_branch=1,
-                 causal_conv=False,
-                 enh_transform=None,
-                 freq_padding=True,
-                 connection="sum"):
+                 cplx: bool = True,
+                 K: str = "7,5;7,5;7,5;5,3;5,3;5,3;5,3",
+                 S: str = "2,1;2,1;2,1;2,1;2,1;2,1;2,1",
+                 C: str = "32,32,64,64,64,64,64",
+                 P: str = "1,1,1,1,1,1,1",
+                 O: str = "0,0,0,0,0,0,0",
+                 num_branch: int = 1,
+                 causal_conv: bool = False,
+                 enh_transform: Optional[nn.Module] = None,
+                 freq_padding: bool = True,
+                 connection: str = "sum") -> None:
         super(DCUNet, self).__init__()
         """
         Args:
@@ -296,7 +312,7 @@ class DCUNet(nn.Module):
                                connection=connection)
         self.num_branch = num_branch
 
-    def sep(self, m, sr, si):
+    def sep(self, m: th.Tensor, sr: th.Tensor, si: th.Tensor) -> th.Tensor:
         # m: N x 2F x T
         if self.cplx:
             # N x F x T
@@ -310,7 +326,7 @@ class DCUNet(nn.Module):
             s = self.inverse_stft((sr * m, si * m), input="complex")
         return s
 
-    def check_args(self, mix, training=True):
+    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
         if not training and mix.dim() != 1:
             raise RuntimeError("DCUNet expects 1D tensor (inference), " +
                                f"got {mix.dim()} instead")
@@ -318,7 +334,7 @@ class DCUNet(nn.Module):
             raise RuntimeError("DCUNet expects 2D tensor (training), " +
                                f"got {mix.dim()} instead")
 
-    def infer(self, mix):
+    def infer(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): S
@@ -334,7 +350,7 @@ class DCUNet(nn.Module):
             else:
                 return [s[0] for s in sep]
 
-    def forward(self, s):
+    def forward(self, s: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             s (Tensor): N x S
@@ -362,28 +378,3 @@ class DCUNet(nn.Module):
         else:
             s = [self.sep(m[:, i], sr, si) for i in range(self.num_branch)]
         return s
-
-
-def make_unet(N, cplx=True):
-    """
-    Return unet with different layers
-    """
-    if N == 10:
-        K = [(7, 5)] * 2 + [(5, 3)] * 3
-        S = [(2, 1)] * 5
-        C = [1, 32, 64, 64, 64, 64] if cplx else [1, 45, 90, 90, 90, 90]
-        # P = [(3, 2)] * 2 + [(2, 1)] * 3
-    elif N == 16:
-        K = [(7, 5)] * 3 + [(5, 3)] * 5
-        S = [(2, 1)] * 8
-        C = [1, 32, 32] + [64] * 6 if cplx else [1, 45, 45] + [90] * 6
-        # P = [(3, 2)] * 3 + [(2, 1)] * 5
-    elif N == 20:
-        K = [(7, 1), (1, 7)] + [(7, 5)] * 2 + [(5, 3)] * 6
-        S = [(1, 1)] * 2 + [(2, 1)] * 8
-        C = [1, 32, 32] + [64] * 7 + [90] if cplx else [1, 45, 45
-                                                       ] + [90] * 7 + [180]
-        # P = [(3, 0), (0, 3), (3, 2), (3, 2)] + [(2, 1)] * 6
-    else:
-        raise RuntimeError(f"Unsupported N = {N}")
-    return K, S, C

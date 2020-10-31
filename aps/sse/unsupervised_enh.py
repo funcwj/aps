@@ -8,6 +8,8 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torch_complex import ComplexTensor
+from typing import Union, NoReturn, Optional
 from aps.asr.base.encoder import TorchRNNEncoder
 from aps.const import EPSILON
 
@@ -24,7 +26,9 @@ supported_plan = {
 }
 
 
-def norm_observation(mat, axis=-1, eps=EPSILON):
+def norm_observation(mat: np.ndarray,
+                     axis: int = -1,
+                     eps: float = EPSILON) -> np.ndarray:
     """
     L2 normalization for observation vectors
     """
@@ -33,7 +37,7 @@ def norm_observation(mat, axis=-1, eps=EPSILON):
     return mat / denorm
 
 
-def permu_aligner(masks, transpose=False):
+def permu_aligner(masks: np.ndarray, transpose: bool = False) -> np.ndarray:
     """
     Solve permutation problems for clustering based mask algorithm
     Reference: "https://raw.githubusercontent.com/fgnt/pb_bss/master/pb_bss/permutation_alignment.py"
@@ -88,12 +92,12 @@ class UnsupervisedEnh(TorchRNNEncoder):
                  input_size=257,
                  num_bins=257,
                  input_project=None,
-                 enh_transform=None,
-                 rnn="lstm",
-                 rnn_layers=3,
-                 rnn_hidden=512,
-                 rnn_dropout=0.2,
-                 rnn_bidir=False):
+                 enh_transform: Optional[nn.Module] = None,
+                 rnn: str = "lstm",
+                 rnn_layers: int = 3,
+                 rnn_hidden: int = 512,
+                 rnn_dropout: float = 0.2,
+                 rnn_bidir: bool = False) -> None:
         super(UnsupervisedEnh, self).__init__(input_size,
                                               num_bins,
                                               rnn=rnn,
@@ -107,7 +111,7 @@ class UnsupervisedEnh(TorchRNNEncoder):
         if enh_transform is None:
             raise ValueError("enh_transform can not be None")
 
-    def check_args(self, noisy, training=True):
+    def check_args(self, noisy: th.Tensor, training: bool = True) -> NoReturn:
         """
         Check input arguments
         """
@@ -120,7 +124,7 @@ class UnsupervisedEnh(TorchRNNEncoder):
                 "UnsupervisedEnh expects 2D tensor (training), " +
                 f"got {noisy.dim()} instead")
 
-    def infer(self, noisy):
+    def infer(self, noisy: th.Tensor) -> th.Tensor:
         """
         Args
             noisy: C x S
@@ -133,7 +137,7 @@ class UnsupervisedEnh(TorchRNNEncoder):
             _, masks = self.forward(noisy)
             return masks[0]
 
-    def forward(self, noisy):
+    def forward(self, noisy: th.Tensor) -> Union[ComplexTensor, th.Tensor]:
         """
         Args
             noisy: N x C x S

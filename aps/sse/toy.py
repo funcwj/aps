@@ -9,6 +9,7 @@ import torch.nn.functional as tf
 
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
+from typing import Optional, NoReturn, Union, List
 from aps.asr.base.encoder import TorchRNNEncoder
 
 
@@ -18,18 +19,18 @@ class ToyRNN(TorchRNNEncoder):
     """
 
     def __init__(self,
-                 input_size=257,
-                 input_project=None,
-                 num_bins=257,
-                 num_spks=2,
-                 enh_transform=None,
-                 rnn="lstm",
-                 rnn_layers=3,
-                 rnn_hidden=512,
-                 rnn_dropout=0.2,
-                 rnn_bidir=False,
-                 output_nonlinear="sigmoid",
-                 training_mode="freq"):
+                 input_size: int = 257,
+                 input_project: Optional[int] = None,
+                 num_bins: int = 257,
+                 num_spks: int = 2,
+                 enh_transform: Optional[nn.Module] = None,
+                 rnn: str = "lstm",
+                 rnn_layers: int = 3,
+                 rnn_hidden: int = 512,
+                 rnn_dropout: float = 0.2,
+                 rnn_bidir: bool = False,
+                 output_nonlinear: str = "sigmoid",
+                 training_mode: str = "freq") -> None:
         super(ToyRNN, self).__init__(input_size,
                                      num_bins * num_spks,
                                      input_project=input_project,
@@ -50,7 +51,7 @@ class ToyRNN(TorchRNNEncoder):
         self.output_nonlinear = output_nonlinear
         self.mode = training_mode
 
-    def check_args(self, mix, training=True):
+    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
         """
         Check args training | inference
         """
@@ -61,7 +62,8 @@ class ToyRNN(TorchRNNEncoder):
             raise RuntimeError("ToyRNN expects 2/3D tensor (training), " +
                                f"got {mix.dim()} instead")
 
-    def _forward(self, mix, mode):
+    def _forward(self, mix: th.Tensor,
+                 mode: str) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Forward function in time|freq mode
             time mode: return time domain signal
@@ -99,10 +101,11 @@ class ToyRNN(TorchRNNEncoder):
             if self.num_spks == 1:
                 return spk[0]
             else:
-                print(len(spk))
                 return spk
 
-    def infer(self, mix, mode="time"):
+    def infer(self,
+              mix: th.Tensor,
+              mode: str = "time") -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): (C) x S
@@ -116,7 +119,7 @@ class ToyRNN(TorchRNNEncoder):
             spk = self._forward(mix, mode)
             return spk[0] if self.num_spks == 1 else [s[0] for s in spk]
 
-    def forward(self, mix):
+    def forward(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): N x (C) x S
