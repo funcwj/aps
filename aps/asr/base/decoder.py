@@ -7,11 +7,10 @@ import random
 
 import torch as th
 import torch.nn as nn
-
 import torch.nn.functional as F
 
+from typing import List, Dict, Optional, Tuple, Union
 from aps.const import NEG_INF
-from typing import List, Any, Optional, Tuple
 
 
 def trace_back_hypos(point: th.Tensor,
@@ -19,7 +18,7 @@ def trace_back_hypos(point: th.Tensor,
                      hist_token: List[th.Tensor],
                      score: th.Tensor,
                      sos: int = 1,
-                     eos: int = 2) -> List[Any]:
+                     eos: int = 2) -> List[Dict]:
     """
     Trace back the decoding transcription sequence from the current time point
     Args:
@@ -106,7 +105,12 @@ class TorchDecoder(nn.Module):
         self.input_feeding = input_feeding
         self.vocab_size = vocab_size
 
-    def _step_decoder(self, emb_pre, att_ctx, dec_hid=None):
+    def _step_decoder(
+        self,
+        emb_pre: th.Tensor,
+        att_ctx: th.Tensor,
+        dec_hid: Union[th.Tensor, Tuple[th.Tensor, th.Tensor], None] = None
+    ) -> Tuple[th.Tensor, Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]]:
         """
         Args
             emb_pre: N x D_emb
@@ -119,14 +123,17 @@ class TorchDecoder(nn.Module):
         # N x 1 x D_dec => N x D_dec
         return dec_out.squeeze(1), hx
 
-    def _step(self,
-              out_pre,
-              enc_out,
-              att_ctx,
-              dec_hid=None,
-              att_ali=None,
-              enc_len=None,
-              proj=None):
+    def _step(
+        self,
+        out_pre: th.Tensor,
+        enc_out: th.Tensor,
+        att_ctx: th.Tensor,
+        dec_hid: Union[th.Tensor, Tuple[th.Tensor, th.Tensor], None] = None,
+        att_ali: Optional[th.Tensor] = None,
+        enc_len: Optional[th.Tensor] = None,
+        proj: Optional[th.Tensor] = None
+    ) -> Tuple[th.Tensor, th.Tensor, Union[th.Tensor, Tuple[
+            th.Tensor, th.Tensor]], th.Tensor, th.Tensor]:
         """
         Make a prediction step
         """
@@ -209,7 +216,7 @@ class TorchDecoder(nn.Module):
                     max_len: int = -1,
                     sos: int = -1,
                     eos: int = -1,
-                    normalized: bool = True) -> List[Any]:
+                    normalized: bool = True) -> List[Dict]:
         """
         Beam search algothrim (intuitive but not efficient)
         Args
@@ -321,7 +328,7 @@ class TorchDecoder(nn.Module):
                                max_len: int = -1,
                                sos: int = -1,
                                eos: int = -1,
-                               normalized: bool = True) -> List[Any]:
+                               normalized: bool = True) -> List[Dict]:
         """
         Vectorized beam search algothrim
         Args
@@ -476,7 +483,7 @@ class TorchDecoder(nn.Module):
                           max_len: int = -1,
                           sos: int = -1,
                           eos: int = -1,
-                          normalized: bool = True) -> List[Any]:
+                          normalized: bool = True) -> List[Dict]:
         """
         Batch level vectorized beam search algothrim (NOTE: not stable!)
         Args

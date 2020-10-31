@@ -8,7 +8,7 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
-from typing import Optional, Dict, Tuple, List, Any
+from typing import Optional, Dict, Tuple, List, Dict
 from aps.asr.base.decoder import TorchDecoder
 from aps.asr.base.encoder import encoder_instance
 from aps.asr.base.attention import att_instance
@@ -87,7 +87,7 @@ class AttASR(nn.Module):
                     nbest: int = 8,
                     max_len: int = -1,
                     vectorized: bool = False,
-                    normalized: bool = True) -> List[Any]:
+                    normalized: bool = True) -> List[Dict]:
         """
         Args
             x: audio samples or acoustic features, S or Ti x F
@@ -133,7 +133,7 @@ class AttASR(nn.Module):
                           beam: int = 16,
                           nbest: int = 8,
                           max_len: int = -1,
-                          normalized=True) -> List[Any]:
+                          normalized=True) -> List[Dict]:
         """
         args
             x: audio samples or acoustic features, N x S or N x Ti x F

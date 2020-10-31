@@ -2,13 +2,16 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import torch as th
+import torch.nn as nn
 import torch_complex.functional as cf
 
+from typing import Dict
+from torch_complex import ComplexTensor
 from aps.task.base import Task
 from aps.const import EPSILON
 
 
-def hermitian_det(Bk, eps=EPSILON):
+def hermitian_det(Bk: th.Tensor, eps: float = EPSILON) -> th.Tensor:
     """
     Compute determinant of the hermitian matrices
     Args:
@@ -32,7 +35,9 @@ def hermitian_det(Bk, eps=EPSILON):
     return det
 
 
-def estimate_covar(mask, obs, eps=EPSILON):
+def estimate_covar(mask: th.Tensor,
+                   obs: ComplexTensor,
+                   eps: float = EPSILON) -> ComplexTensor:
     """
     Covariance matrices estimation
     Args:
@@ -60,11 +65,12 @@ class UnsuperEnhTask(Task):
     Unsupervised enhancement using ML functions
     """
 
-    def __init__(self, nnet, eps=EPSILON):
-        super(UnsuperEnhTask, self).__init__(nnet)
+    def __init__(self, nnet: nn.Module, eps: float = EPSILON) -> None:
+        super(UnsuperEnhTask,
+              self).__init__(nnet, description="unsupervised enhancement")
         self.eps = eps
 
-    def log_pdf(self, mask, obs):
+    def log_pdf(self, mask: th.Tensor, obs: ComplexTensor) -> th.Tensor:
         """
         Compute log-pdf of the cacgmm distributions
         Args:
@@ -91,7 +97,7 @@ class UnsuperEnhTask(Task):
         # N x F x T
         return log_pdf
 
-    def forward(self, egs, **kwargs):
+    def forward(self, egs: Dict, **kwargs) -> Dict:
         """
         Compute ML loss, egs contains (without reference data)
             mix (Tensor): N x C x S

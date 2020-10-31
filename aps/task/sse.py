@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from itertools import permutations
+from typing import List, Dict, Any, Tuple, Callable, Optional
 
 from aps.task.base import Task
 from aps.task.objf import permu_invarint_objf, multiple_objf
@@ -23,7 +24,11 @@ __all__ = [
 ]
 
 
-def sisnr(x, s, eps=1e-8, zero_mean=True, non_nagetive=False):
+def sisnr(x: th.Tensor,
+          s: th.Tensor,
+          eps: float = 1e-8,
+          zero_mean: bool = True,
+          non_nagetive: bool = False) -> th.Tensor:
     """
     Computer SiSNR
     Args:
@@ -52,7 +57,10 @@ def sisnr(x, s, eps=1e-8, zero_mean=True, non_nagetive=False):
         return 20 * th.log10(eps + snr_linear)
 
 
-def snr(x, s, eps=1e-8, non_nagetive=False):
+def snr(x: th.Tensor,
+        s: th.Tensor,
+        eps: float = 1e-8,
+        non_nagetive: bool = False) -> th.Tensor:
     """
     Computer SNR
     Args:
@@ -75,7 +83,12 @@ def snr(x, s, eps=1e-8, non_nagetive=False):
         return 20 * th.log10(eps + snr_linear)
 
 
-def hybrid_objf(out, ref, objf, weight=None, permute=True, permu_num_spks=2):
+def hybrid_objf(out: List[Any],
+                ref: List[Any],
+                objf: Callable,
+                weight: Optional[List[float]] = None,
+                permute: bool = True,
+                permu_num_spks: int = 2) -> th.Tensor:
     """
     Return hybrid loss (pair-wise, permutated or pair-wise + permutated)
     """
@@ -108,8 +121,12 @@ class SepTask(Task):
     Base class for separation & enhancement task
     """
 
-    def __init__(self, nnet, ctx=None, name="unknown", weight=None):
-        super(SepTask, self).__init__(nnet, ctx=ctx, name=name)
+    def __init__(self,
+                 nnet: nn.Module,
+                 ctx: Optional[nn.Module] = None,
+                 description: str = "",
+                 weight: Optional[str] = None) -> None:
+        super(SepTask, self).__init__(nnet, ctx=ctx, description=description)
         if weight is not None:
             self.weight = list(map(float, weight.split(",")))
         else:
@@ -133,12 +150,19 @@ class TimeDomainTask(SepTask):
     Time domain task (to be implemented)
     """
 
-    def __init__(self, nnet, num_spks=2, permute=True, weight=None):
-        super(TimeDomainTask, self).__init__(nnet, weight=weight)
+    def __init__(self,
+                 nnet: nn.Module,
+                 num_spks: int = 2,
+                 permute: bool = True,
+                 description: str = "",
+                 weight: Optional[str] = None) -> None:
+        super(TimeDomainTask, self).__init__(nnet,
+                                             weight=weight,
+                                             description=description)
         self.num_spks = num_spks
         self.permute = permute  # use pit or not
 
-    def forward(self, egs, **kwargs):
+    def forward(self, egs: Dict, **kwargs) -> Dict:
         """
         egs contains:
             mix (Tensor): N x (C) x S
@@ -167,20 +191,22 @@ class SisnrTask(TimeDomainTask):
     """
 
     def __init__(self,
-                 nnet,
-                 num_spks=2,
-                 permute=True,
-                 weight=None,
-                 zero_mean=True,
-                 non_nagetive=False):
-        super(SisnrTask, self).__init__(nnet,
-                                        num_spks=num_spks,
-                                        permute=permute,
-                                        weight=weight)
+                 nnet: nn.Module,
+                 num_spks: int = 2,
+                 permute: bool = True,
+                 weight: Optional[str] = None,
+                 zero_mean: bool = True,
+                 non_nagetive: bool = False) -> None:
+        super(SisnrTask, self).__init__(
+            nnet,
+            num_spks=num_spks,
+            permute=permute,
+            weight=weight,
+            description="Using SiSNR objective function for training")
         self.zero_mean = zero_mean
         self.non_nagetive = non_nagetive
 
-    def objf(self, out, ref):
+    def objf(self, out: th.Tensor, ref: th.Tensor) -> th.Tensor:
         """
         Return negative SiSNR
         """
@@ -194,18 +220,20 @@ class SnrTask(TimeDomainTask):
     """
 
     def __init__(self,
-                 nnet,
-                 num_spks=2,
-                 permute=True,
-                 weight=None,
-                 non_nagetive=False):
-        super(SnrTask, self).__init__(nnet,
-                                      num_spks=num_spks,
-                                      permute=permute,
-                                      weight=weight)
+                 nnet: nn.Module,
+                 num_spks: int = 2,
+                 permute: bool = True,
+                 weight: Optional[str] = None,
+                 non_nagetive: bool = False) -> None:
+        super(SnrTask, self).__init__(
+            nnet,
+            num_spks=num_spks,
+            permute=permute,
+            weight=weight,
+            description="Using SNR objective function for training")
         self.non_nagetive = non_nagetive
 
-    def objf(self, out, ref):
+    def objf(self, out: th.Tensor, ref: th.Tensor) -> th.Tensor:
         """
         Return negative SNR
         """
@@ -217,15 +245,22 @@ class WaTask(TimeDomainTask):
     Time domain waveform approximation loss function
     """
 
-    def __init__(self, nnet, objf="L1", num_spks=2, permute=True, weight=None):
-        super(WaTask, self).__init__(nnet,
-                                     num_spks=num_spks,
-                                     permute=permute,
-                                     weight=weight)
+    def __init__(self,
+                 nnet: nn.Module,
+                 objf: str = "L1",
+                 num_spks: int = 2,
+                 permute: bool = True,
+                 weight: Optional[str] = None) -> None:
+        super(WaTask, self).__init__(
+            nnet,
+            num_spks=num_spks,
+            permute=permute,
+            weight=weight,
+            description="Using L1/L2 loss on waveform for training")
         # L2 or L1 loss
         self.objf_ptr = tf.l1_loss if objf == "L1" else tf.mse_loss
 
-    def objf(self, out, ref):
+    def objf(self, out: th.Tensor, ref: th.Tensor) -> th.Tensor:
         """
         L1 or L2
         """
@@ -239,16 +274,20 @@ class FreqSaTask(SepTask):
     """
 
     def __init__(self,
-                 nnet,
-                 phase_sensitive=False,
-                 truncated=None,
-                 permute=True,
-                 num_spks=2,
-                 masking=True,
-                 weight=None):
+                 nnet: nn.Module,
+                 phase_sensitive: bool = False,
+                 truncated: Optional[float] = None,
+                 permute: bool = True,
+                 masking: bool = True,
+                 num_spks: int = 2,
+                 description: str = "",
+                 weight: Optional[str] = None) -> None:
         # STFT context
         sa_ctx = nnet.enh_transform.ctx("forward_stft")
-        super(FreqSaTask, self).__init__(nnet, ctx=sa_ctx, weight=weight)
+        super(FreqSaTask, self).__init__(nnet,
+                                         ctx=sa_ctx,
+                                         weight=weight,
+                                         description=description)
         if not masking and truncated:
             raise ValueError(
                 "Conflict parameters: masksing = True while truncated != None")
@@ -258,7 +297,8 @@ class FreqSaTask(SepTask):
         self.masking = masking
         self.num_spks = num_spks
 
-    def _ref_mag(self, mix_mag, mix_pha, ref):
+    def _ref_mag(self, mix_mag: th.Tensor, mix_pha: th.Tensor,
+                 ref: th.Tensor) -> th.Tensor:
         """
         Compute reference magnitude for SA
         """
@@ -273,7 +313,7 @@ class FreqSaTask(SepTask):
             ref_mag = th.min(ref_mag, self.truncated * mix_mag)
         return ref_mag
 
-    def forward(self, egs, **kwargs):
+    def forward(self, egs: Dict, **kwargs) -> Dict:
         """
         Return chunk-level loss
         egs contains:
@@ -321,25 +361,28 @@ class LinearFreqSaTask(FreqSaTask):
     """
 
     def __init__(self,
-                 nnet,
-                 phase_sensitive=False,
-                 truncated=None,
-                 objf="L2",
-                 permute=True,
-                 num_spks=2,
-                 weight=None,
-                 masking=True):
-        super(LinearFreqSaTask, self).__init__(nnet,
-                                               phase_sensitive=phase_sensitive,
-                                               truncated=truncated,
-                                               permute=permute,
-                                               masking=masking,
-                                               weight=weight,
-                                               num_spks=num_spks)
+                 nnet: nn.Module,
+                 phase_sensitive: bool = False,
+                 truncated: Optional[float] = None,
+                 permute: bool = True,
+                 masking: bool = True,
+                 num_spks: int = 2,
+                 objf: str = "L2",
+                 weight: Optional[str] = None) -> None:
+        super(LinearFreqSaTask,
+              self).__init__(nnet,
+                             phase_sensitive=phase_sensitive,
+                             truncated=truncated,
+                             permute=permute,
+                             masking=masking,
+                             weight=weight,
+                             num_spks=num_spks,
+                             description="Using spectral approximation "
+                             "(MSA or tPSA) loss function")
         # L2 or L1 loss
         self.objf_ptr = tf.l1_loss if objf == "L1" else tf.mse_loss
 
-    def objf(self, out, ref):
+    def objf(self, out: th.Tensor, ref: th.Tensor) -> th.Tensor:
         """
         Return loss for each mini-batch
         """
@@ -348,7 +391,7 @@ class LinearFreqSaTask(FreqSaTask):
         loss = th.sum(loss.mean(-1), -1)
         return loss
 
-    def transform(self, tensor):
+    def transform(self, tensor: th.Tensor) -> th.Tensor:
         """
         Just return itself
         """
@@ -361,28 +404,30 @@ class MelFreqSaTask(FreqSaTask):
     """
 
     def __init__(self,
-                 nnet,
-                 phase_sensitive=False,
-                 truncated=None,
-                 weight=None,
-                 permute=True,
-                 num_spks=2,
-                 num_bins=257,
-                 masking=True,
-                 power_mag=False,
-                 num_mels=80,
-                 mel_log=False,
-                 mel_scale=1,
-                 mel_norm=True,
-                 sr=16000,
-                 fmax=8000):
-        super(MelFreqSaTask, self).__init__(nnet,
-                                            phase_sensitive=phase_sensitive,
-                                            truncated=truncated,
-                                            permute=permute,
-                                            masking=masking,
-                                            weight=weight,
-                                            num_spks=num_spks)
+                 nnet: nn.Module,
+                 phase_sensitive: bool = False,
+                 truncated: Optional[float] = None,
+                 weight: Optional[str] = None,
+                 permute: bool = True,
+                 num_spks: int = 2,
+                 num_bins: int = 257,
+                 masking: bool = True,
+                 power_mag: bool = False,
+                 num_mels: int = 80,
+                 mel_log: int = False,
+                 mel_scale: int = 1,
+                 mel_norm: bool = True,
+                 sr: int = 16000,
+                 fmax: int = 8000) -> None:
+        super(MelFreqSaTask,
+              self).__init__(nnet,
+                             phase_sensitive=phase_sensitive,
+                             truncated=truncated,
+                             permute=permute,
+                             masking=masking,
+                             weight=weight,
+                             num_spks=num_spks,
+                             description="Using L2 loss of the mel features")
         mel = init_melfilter(None,
                              num_bins=num_bins,
                              sr=sr,
@@ -393,7 +438,7 @@ class MelFreqSaTask(FreqSaTask):
         self.log = mel_log
         self.power_mag = power_mag
 
-    def transform(self, tensor):
+    def transform(self, tensor: th.Tensor) -> th.Tensor:
         """
         Return mel spectrogram
         """
@@ -405,7 +450,7 @@ class MelFreqSaTask(FreqSaTask):
             mel = th.log(1 + mel)
         return mel
 
-    def objf(self, out, ref):
+    def objf(self, out: th.Tensor, ref: th.Tensor) -> th.Tensor:
         """
         Computer MSE after mel-transform
         """
@@ -420,17 +465,18 @@ class TimeSaTask(SepTask):
     """
 
     def __init__(self,
-                 nnet,
-                 frame_len=512,
-                 frame_hop=256,
-                 center=False,
-                 window="sqrthann",
-                 round_pow_of_two=True,
-                 stft_normalized=False,
-                 pre_emphasis=0,
-                 permute=True,
-                 weight=None,
-                 num_spks=2):
+                 nnet: nn.Module,
+                 frame_len: int = 512,
+                 frame_hop: int = 256,
+                 center: bool = False,
+                 window: str = "sqrthann",
+                 round_pow_of_two: bool = True,
+                 stft_normalized: bool = False,
+                 pre_emphasis: float = 0,
+                 permute: bool = True,
+                 weight: Optional[float] = None,
+                 num_spks: int = 2,
+                 description: str = "") -> None:
         # STFT context
         sa_ctx = STFT(frame_len,
                       frame_hop,
@@ -438,12 +484,15 @@ class TimeSaTask(SepTask):
                       center=center,
                       round_pow_of_two=round_pow_of_two,
                       normalized=stft_normalized)
-        super(TimeSaTask, self).__init__(nnet, ctx=sa_ctx, weight=weight)
+        super(TimeSaTask, self).__init__(nnet,
+                                         ctx=sa_ctx,
+                                         weight=weight,
+                                         description=description)
         self.permute = permute
         self.num_spks = num_spks
         self.pre_emphasis = pre_emphasis
 
-    def _stft_mag(self, wav):
+    def _stft_mag(self, wav: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
         """
         Compute STFT magnitude for SA loss
         """
@@ -453,7 +502,7 @@ class TimeSaTask(SepTask):
         mag, _ = self.ctx(wav, output="polar")
         return mag
 
-    def forward(self, egs, **kwargs):
+    def forward(self, egs: Dict, **kwargs) -> Dict:
         """
         Return chunk-level loss
         egs contains:
@@ -493,17 +542,17 @@ class LinearTimeSaTask(TimeSaTask):
     """
 
     def __init__(self,
-                 nnet,
-                 frame_len=512,
-                 frame_hop=256,
-                 center=False,
-                 window="sqrthann",
-                 round_pow_of_two=True,
-                 stft_normalized=False,
-                 permute=True,
-                 weight=None,
-                 num_spks=2,
-                 objf="L2"):
+                 nnet: nn.Module,
+                 frame_len: int = 512,
+                 frame_hop: int = 256,
+                 center: bool = False,
+                 window: str = "sqrthann",
+                 round_pow_of_two: bool = True,
+                 stft_normalized: bool = False,
+                 permute: bool = True,
+                 weight: Optional[str] = None,
+                 num_spks: int = 2,
+                 objf: str = "L2") -> None:
         super(LinearTimeSaTask,
               self).__init__(nnet,
                              frame_len=frame_len,
@@ -514,7 +563,9 @@ class LinearTimeSaTask(TimeSaTask):
                              stft_normalized=stft_normalized,
                              permute=permute,
                              num_spks=num_spks,
-                             weight=weight)
+                             weight=weight,
+                             description="Using L1/L2 loss on magnitude "
+                             "of the waveform")
         # L2 or L1 loss
         self.objf_ptr = tf.l1_loss if objf == "L1" else tf.mse_loss
 
@@ -539,34 +590,37 @@ class MelTimeSaTask(TimeSaTask):
     """
 
     def __init__(self,
-                 nnet,
-                 frame_len=512,
-                 frame_hop=256,
-                 window="sqrthann",
-                 center=False,
-                 round_pow_of_two=True,
-                 stft_normalized=False,
-                 permute=True,
-                 weight=None,
-                 num_spks=2,
-                 num_bins=257,
-                 num_mels=80,
-                 power_mag=False,
-                 mel_log=False,
-                 mel_scale=1,
-                 mel_norm=True,
-                 sr=16000,
-                 fmax=7690):
-        super(MelTimeSaTask, self).__init__(nnet,
-                                            frame_len=frame_len,
-                                            frame_hop=frame_hop,
-                                            window=window,
-                                            center=center,
-                                            round_pow_of_two=round_pow_of_two,
-                                            stft_normalized=stft_normalized,
-                                            permute=permute,
-                                            num_spks=num_spks,
-                                            weight=weight)
+                 nnet: nn.Module,
+                 frame_len: int = 512,
+                 frame_hop: int = 256,
+                 window: str = "sqrthann",
+                 center: bool = False,
+                 round_pow_of_two: bool = True,
+                 stft_normalized: bool = False,
+                 permute: bool = True,
+                 weight: Optional[str] = None,
+                 num_spks: int = 2,
+                 num_bins: int = 257,
+                 num_mels: int = 80,
+                 power_mag: bool = False,
+                 mel_log: bool = False,
+                 mel_scale: int = 1,
+                 mel_norm: bool = True,
+                 sr: int = 16000,
+                 fmax: int = 7690) -> None:
+        super(MelTimeSaTask,
+              self).__init__(nnet,
+                             frame_len=frame_len,
+                             frame_hop=frame_hop,
+                             window=window,
+                             center=center,
+                             round_pow_of_two=round_pow_of_two,
+                             stft_normalized=stft_normalized,
+                             permute=permute,
+                             num_spks=num_spks,
+                             weight=weight,
+                             description="Using L2 loss on the mel "
+                             "features of the waveform")
         mel = init_melfilter(None,
                              num_bins=num_bins,
                              sr=sr,
@@ -577,7 +631,7 @@ class MelTimeSaTask(TimeSaTask):
         self.log = mel_log
         self.power_mag = power_mag
 
-    def transform(self, tensor):
+    def transform(self, tensor: th.Tensor) -> th.Tensor:
         """
         Return mel spectrogram
         """
@@ -589,7 +643,7 @@ class MelTimeSaTask(TimeSaTask):
             mel = th.log(1 + mel)
         return mel
 
-    def objf(self, out, ref):
+    def objf(self, out: th.Tensor, ref: th.Tensor) -> th.Tensor:
         """
         Computer MSE
         """
@@ -603,23 +657,31 @@ class ComplexMappingTask(SepTask):
     Complex Spectral Mapping
     """
 
-    def __init__(self, nnet, num_spks=2, weight=None, permute=True, objf="L1"):
+    def __init__(self,
+                 nnet: nn.Module,
+                 num_spks: int = 2,
+                 weight: Optional[str] = None,
+                 permute: bool = True,
+                 objf: str = "L1") -> None:
         # STFT context
         sa_ctx = nnet.enh_transform.ctx("forward_stft")
-        super(ComplexMappingTask, self).__init__(nnet,
-                                                 ctx=sa_ctx,
-                                                 weight=weight)
+        super(ComplexMappingTask, self).__init__(
+            nnet,
+            ctx=sa_ctx,
+            weight=weight,
+            description="Using complex mapping function for training")
         self.permute = permute
         self.num_spks = num_spks
         self.objf_ptr = tf.l1_loss if objf == "L1" else tf.mse_loss
 
-    def _build_ref(self, wav):
+    def _build_ref(self, wav: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
         """
         Return real/imag part of the STFT
         """
         return self.ctx(wav, output="complex")
 
-    def objf(self, out, ref):
+    def objf(self, out: Tuple[th.Tensor, th.Tensor],
+             ref: Tuple[th.Tensor, th.Tensor]) -> th.Tensor:
         """
         Return loss for each mini-batch
         """
@@ -631,7 +693,7 @@ class ComplexMappingTask(SepTask):
         loss = th.sum(loss.mean(-1), -1)
         return loss
 
-    def forward(self, egs, **kwargs):
+    def forward(self, egs: Dict, **kwargs) -> Dict:
         """
         Return chunk-level loss
         egs contains:

@@ -13,7 +13,7 @@ from torch.nn.utils import clip_grad_norm_
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from typing import Optional, Dict, Union, Tuple, NoReturn
+from typing import Optional, Dict, Union, Tuple, NoReturn, Iterable
 from aps.trainer.ss import support_ss_scheduler
 from aps.trainer.lr import support_lr_scheduler
 
@@ -400,7 +400,7 @@ class Trainer(object):
             else:
                 self.lr_scheduler.step()
 
-    def train(self, data_loader):
+    def train(self, data_loader: Iterable[Dict]) -> NoReturn:
         self.task.train()
         self.reporter.train()
         # for idx, egs in enumerate(data_loader):
@@ -410,7 +410,7 @@ class Trainer(object):
             # make one training step
             self.train_one_step(egs)
 
-    def eval(self, data_loader):
+    def eval(self, data_loader: Iterable[Dict]) -> NoReturn:
         self.task.eval()
         self.reporter.eval()
 
@@ -424,7 +424,7 @@ class Trainer(object):
                 # update statistics
                 self.reporter.update(stats)
 
-    def _prep_train(self, dev_loader):
+    def _prep_train(self, dev_loader: Iterable[Dict]) -> int:
         """
         Prepare for training
         """
@@ -447,7 +447,10 @@ class Trainer(object):
         self.reporter.log(sstr)
         return e
 
-    def run(self, trn_loader, dev_loader, num_epochs=50):
+    def run(self,
+            trn_loader: Iterable[Dict],
+            dev_loader: Iterable[Dict],
+            num_epochs: int = 50) -> NoReturn:
         """
         Run on whole training set and evaluate
         """
@@ -494,10 +497,10 @@ class Trainer(object):
         self.reporter.log(f"Training for {e:d}/{num_epochs:d} epochs done!")
 
     def run_batch_per_epoch(self,
-                            trn_loader,
-                            dev_loader,
-                            num_epochs=100,
-                            eval_interval=4000):
+                            trn_loader: Iterable[Dict],
+                            dev_loader: Iterable[Dict],
+                            num_epochs: int = 100,
+                            eval_interval: int = 4000) -> NoReturn:
         """
         Run on several batches and evaluate
         """

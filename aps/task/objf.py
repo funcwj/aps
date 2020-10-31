@@ -6,10 +6,11 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from itertools import permutations
+from typing import List, Any, Callable, Optional
 from aps.const import IGNORE_ID
 
 
-def ce_objf(outs, tgts):
+def ce_objf(outs: th.Tensor, tgts: th.Tensor) -> th.Tensor:
     """
     Cross entropy loss function
     Args:
@@ -30,7 +31,9 @@ def ce_objf(outs, tgts):
     return ce_loss
 
 
-def ls_objf(outs, tgts, lsm_factor=0.1):
+def ls_objf(outs: th.Tensor,
+            tgts: th.Tensor,
+            lsm_factor: float = 0.1) -> th.Tensor:
     """
     Label smooth loss function (using KL)
     Args:
@@ -57,7 +60,12 @@ def ls_objf(outs, tgts, lsm_factor=0.1):
     return loss
 
 
-def multiple_objf(inp, ref, objf, weight=None, transform=None, batchmean=False):
+def multiple_objf(inp: List[Any],
+                  ref: List[Any],
+                  objf: Callable,
+                  weight: Optional[List[float]] = None,
+                  transform: Optional[Callable] = None,
+                  batchmean: bool = False) -> th.Tensor:
     """
     Compute summary of multiple loss functions
     Args:
@@ -89,12 +97,12 @@ def multiple_objf(inp, ref, objf, weight=None, transform=None, batchmean=False):
     return loss
 
 
-def permu_invarint_objf(inp,
-                        ref,
-                        objf,
-                        transform=None,
-                        batchmean=False,
-                        return_permutation=False):
+def permu_invarint_objf(inp: List[Any],
+                        ref: List[Any],
+                        objf: Callable,
+                        transform: Optional[Callable] = None,
+                        batchmean: bool = False,
+                        return_permutation: bool = False) -> th.Tensor:
     """
     Compute permutation-invariant loss
     Args:
@@ -140,12 +148,12 @@ class MultiObjfComputer(nn.Module):
         super(MultiObjfComputer, self).__init__()
 
     def forward(self,
-                inp,
-                ref,
-                objf,
-                weight=None,
-                transform=None,
-                batchmean=False):
+                inp: List[Any],
+                ref: List[Any],
+                objf: Callable,
+                weight: Optional[List[float]] = None,
+                transform: Optional[Callable] = None,
+                batchmean: bool = False) -> th.Tensor:
         return multiple_objf(inp,
                              ref,
                              objf,
@@ -163,12 +171,12 @@ class PermuInvarintObjfComputer(nn.Module):
         super(PermuInvarintObjfComputer, self).__init__()
 
     def forward(self,
-                inp,
-                ref,
-                objf,
-                transform=None,
-                return_permutation=False,
-                batchmean=False):
+                inp: List[Any],
+                ref: List[Any],
+                objf: Callable,
+                transform: Optional[Callable] = None,
+                batchmean: bool = False,
+                return_permutation: bool = False) -> th.Tensor:
         return permu_invarint_objf(inp,
                                    ref,
                                    objf,

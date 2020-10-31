@@ -7,6 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
+from typing import Optional, Dict, Tuple, List
 from aps.asr.transformer.encoder import support_xfmr_encoder
 from aps.asr.transducer.decoder import TorchTransformerDecoder, TorchRNNDecoder
 from aps.asr.base.encoder import encoder_instance
@@ -18,14 +19,14 @@ class TorchTransducerASR(nn.Module):
     """
 
     def __init__(self,
-                 input_size=80,
-                 vocab_size=40,
-                 blank=-1,
-                 asr_transform=None,
-                 encoder_type="transformer",
-                 encoder_proj=None,
-                 encoder_kwargs=None,
-                 decoder_kwargs=None):
+                 input_size: int = 80,
+                 vocab_size: int = 40,
+                 blank: int = -1,
+                 asr_transform: Optional[nn.Module] = None,
+                 encoder_type: str = "transformer",
+                 encoder_proj: Optional[int] = None,
+                 encoder_kwargs: Optional[Dict] = None,
+                 decoder_kwargs: Optional[Dict] = None) -> None:
         super(TorchTransducerASR, self).__init__()
         if blank < 0:
             raise RuntimeError(f"Unsupported blank value: {blank}")
@@ -46,7 +47,11 @@ class TorchTransducerASR(nn.Module):
         self.blank = blank
         self.asr_transform = asr_transform
 
-    def forward(self, x_pad, x_len, y_pad, y_len):
+    def forward(self,
+                x_pad: th.Tensor,
+                x_len: Optional[th.Tensor],
+                y_pad: th.Tensor,
+                ssr: float = 0) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -68,7 +73,7 @@ class TorchTransducerASR(nn.Module):
         dec_out = self.decoder(enc_out, y_pad, blank=self.blank)
         return dec_out, enc_len
 
-    def _dec_prep(self, x):
+    def _dec_prep(self, x: th.Tensor) -> th.Tensor:
         """
         Parepare data for decoding
         """
@@ -89,7 +94,7 @@ class TorchTransducerASR(nn.Module):
             enc_out = enc_out.transpose(0, 1)
         return enc_out
 
-    def greedy_search(self, x):
+    def greedy_search(self, x: th.Tensor) -> List[Dict]:
         """
         Beam search for TorchTransducerASR
         """
@@ -98,14 +103,14 @@ class TorchTransducerASR(nn.Module):
             return self.decoder.greedy_search(enc_out, blank=self.blank)
 
     def beam_search(self,
-                    x,
-                    lm=None,
-                    lm_weight=0,
-                    beam=16,
-                    nbest=8,
-                    normalized=True,
-                    max_len=-1,
-                    vectorized=True):
+                    x: th.Tensor,
+                    lm: Optional[nn.Module] = None,
+                    lm_weight: float = 0,
+                    beam: int = 16,
+                    nbest: int = 8,
+                    normalized: bool = True,
+                    max_len: int = -1,
+                    vectorized: bool = True) -> List[Dict]:
         """
         Beam search for TorchTransducerASR
         """
@@ -153,7 +158,12 @@ class TransformerTransducerASR(nn.Module):
         self.blank = blank
         self.asr_transform = asr_transform
 
-    def forward(self, x_pad, x_len, y_pad, y_len):
+    def forward(self,
+                x_pad: th.Tensor,
+                x_len: Optional[th.Tensor],
+                y_pad: th.Tensor,
+                y_len: Optional[th.Tensor],
+                ssr: float = 0) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -175,7 +185,7 @@ class TransformerTransducerASR(nn.Module):
         dec_out = self.decoder(enc_out, y_pad, y_len, blank=self.blank)
         return dec_out, enc_len
 
-    def _dec_prep(self, x):
+    def _dec_prep(self, x: th.Tensor) -> th.Tensor:
         """
         Prepare data for decoding
         """
@@ -195,7 +205,7 @@ class TransformerTransducerASR(nn.Module):
             enc_out = enc_out.transpose(0, 1)
         return enc_out
 
-    def greedy_search(self, x):
+    def greedy_search(self, x: th.Tensor) -> List[Dict]:
         """
         Greedy search for TransformerTransducerASR
         """
@@ -204,14 +214,14 @@ class TransformerTransducerASR(nn.Module):
             return self.decoder.greedy_search(enc_out, blank=self.blank)
 
     def beam_search(self,
-                    x,
-                    lm=None,
-                    lm_weight=0,
-                    beam=16,
-                    nbest=8,
-                    normalized=True,
-                    max_len=-1,
-                    vectorized=True):
+                    x: th.Tensor,
+                    lm: Optional[nn.Module] = None,
+                    lm_weight: float = 0,
+                    beam: int = 16,
+                    nbest: int = 8,
+                    normalized: bool = True,
+                    max_len: int = -1,
+                    vectorized: bool = True) -> List[Dict]:
         """
         Beam search for TransformerTransducerASR
         """

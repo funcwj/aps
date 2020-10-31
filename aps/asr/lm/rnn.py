@@ -4,6 +4,7 @@
 import torch as th
 import torch.nn as nn
 
+from typing import NoReturn, Union, Tuple, Optional
 from aps.asr.base.decoder import OneHotEmbedding
 
 
@@ -61,12 +62,17 @@ class TorchRNNLM(nn.Module):
         if tie_weights and embed_size == rnn_hidden:
             self.dist.weight = self.vocab_embed.weight
 
-    def init_weights(self, initrange: float = 0.1) -> None:
+    def init_weights(self, initrange: float = 0.1) -> NoReturn:
         self.vocab_embed.weight.data.uniform_(-initrange, initrange)
         self.dist.bias.data.zero_()
         self.dist.weight.data.uniform_(-initrange, initrange)
 
-    def forward(self, token, h=None, token_len=None):
+    def forward(
+        self,
+        token: th.Tensor,
+        h: Union[th.Tensor, Tuple[th.Tensor, th.Tensor], None] = None,
+        token_len=Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]]:
         """
         Args:
             token: input token sequence, N x T

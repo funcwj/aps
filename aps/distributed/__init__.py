@@ -1,4 +1,5 @@
 from os import environ
+from typing import NoReturn
 import torch.distributed as dist
 
 try:
@@ -10,7 +11,7 @@ except ImportError:
 BACKEND = "none"
 
 
-def init(backend):
+def init(backend) -> NoReturn:
     """
     Set distributed backend
     """
@@ -32,14 +33,14 @@ def init(backend):
                                 world_size=int(environ["WORLD_SIZE"]))
 
 
-def get_backend():
+def get_backend() -> str:
     """
     Get distributed backend
     """
     return BACKEND
 
 
-def rank():
+def rank() -> int:
     """
     Return rank id
     """
@@ -53,7 +54,7 @@ def rank():
         return hvd.local_rank()
 
 
-def world_size():
+def world_size() -> int:
     """
     Return world size
     """

@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from queue import PriorityQueue
-from typing import List, Any, Optional, Union, Tuple, Dict
+from typing import List, Dict, Optional, Union, Tuple, Dict
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 from aps.asr.transformer.embedding import IOEmbedding
@@ -37,7 +37,7 @@ class Node(object):
 def _prep_nbest(container: Union[List, PriorityQueue],
                 nbest: int,
                 normalized: bool = True,
-                blank: int = 0) -> List[Any]:
+                blank: int = 0) -> List[Dict]:
     """
     Return nbest hypos from queue or list
     """
@@ -170,7 +170,7 @@ class TorchRNNDecoder(nn.Module):
                     beam: int = 16,
                     blank: int = 0,
                     nbest: int = 8,
-                    normalized: bool = True) -> List[Any]:
+                    normalized: bool = True) -> List[Dict]:
         """
         Beam search (best first) algorithm for RNN-T
         Args:

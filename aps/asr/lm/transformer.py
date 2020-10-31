@@ -9,6 +9,7 @@ try:
 except:
     raise ImportError("import Transformer module failed")
 
+from typing import Optional, Tuple
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.transformer.decoder import prep_sub_mask
 from aps.asr.base.attention import padding_mask
@@ -46,7 +47,12 @@ class TorchTransformerLM(nn.Module):
         self.dist = nn.Linear(att_dim, vocab_size)
         self.vocab_size = vocab_size
 
-    def forward(self, token, h=None, token_len=None):
+    def forward(
+            self,
+            token: th.Tensor,
+            h: Optional[th.Tensor] = None,
+            token_len: Optional[th.Tensor] = None
+    ) -> Tuple[th.Tensor, th.Tensor]:
         """
         args:
             token: input token sequence, N x T

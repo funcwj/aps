@@ -9,19 +9,13 @@ class StrToBoolAction(argparse.Action):
     """
 
     def __call__(self, parser, namespace, values, option_string=None):
-
-        def str2bool(value):
-            if value.lower() in ["true", "y", "yes", "1"]:
-                return True
-            elif value in ["false", "n", "no", "0"]:
-                return False
-            else:
-                raise ValueError
-
-        try:
-            setattr(namespace, self.dest, str2bool(values))
-        except ValueError:
-            raise Exception(f"Unknown value {values} for --{self.dest}")
+        if values.lower() in ["true", "y", "yes", "1"]:
+            bool_value = True
+        elif values in ["false", "n", "no", "0"]:
+            bool_value = False
+        else:
+            raise ValueError(f"Unknown value {values} for --{self.dest}")
+        setattr(namespace, self.dest, bool_value)
 
 
 class BaseTrainParser(object):

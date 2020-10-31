@@ -5,6 +5,7 @@ import yaml
 import pathlib
 
 import torch as th
+import torch.nn as nn
 
 from aps.asr import support_nnet as support_asr_nnet
 from aps.sse import support_nnet as support_sse_nnet
@@ -35,7 +36,7 @@ class Computer(object):
 
     def _load(self,
               cpt_dir: str,
-              task: str = "asr") -> Tuple[int, th.nn.Module, Dict]:
+              task: str = "asr") -> Tuple[int, nn.Module, Dict]:
         if task not in ["asr", "enh"]:
             raise ValueError(f"Unknown task name: {task}")
         cpt_dir = pathlib.Path(cpt_dir)

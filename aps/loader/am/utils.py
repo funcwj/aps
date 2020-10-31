@@ -6,19 +6,19 @@
 import torch as th
 
 import torch.utils.data as dat
-# import torch.distributed as dist
 import aps.distributed as dist
 
+from typing import Dict, List, Tuple, NoReturn, Optional
 from kaldi_python_io import Reader as BaseReader
 
 
-def process_token(text,
-                  utt2dur,
-                  vocab_dict,
-                  max_token_num=400,
-                  min_token_num=2,
-                  max_dur=3000,
-                  min_dur=40):
+def process_token(text: str,
+                  utt2dur: str,
+                  vocab_dict: Optional[Dict],
+                  max_token_num: int = 400,
+                  min_token_num: int = 2,
+                  max_dur: float = 3000,
+                  min_dur: float = 40) -> List[Dict]:
     utt2dur = BaseReader(utt2dur, value_processor=float)
     if vocab_dict:
         text_reader = BaseReader(text, num_tokens=-1, restrict=False)
@@ -63,14 +63,14 @@ class BatchSampler(dat.Sampler):
     """
 
     def __init__(self,
-                 dataset,
-                 batch_size,
-                 shuffle=False,
-                 batch_mode="adaptive",
-                 adapt_dur=800,
-                 adapt_token_num=150,
-                 min_batch_size=4,
-                 distributed=False):
+                 dataset: dat.Dataset,
+                 batch_size: int,
+                 shuffle: bool = False,
+                 batch_mode: str = "adaptive",
+                 adapt_dur: float = 800,
+                 adapt_token_num: int = 150,
+                 min_batch_size: int = 4,
+                 distributed: bool = False) -> None:
         if batch_mode not in ["adaptive", "constraint"]:
             raise ValueError(f"Unsupported batch mode: {batch_mode}")
         self.distributed = distributed
@@ -94,7 +94,8 @@ class BatchSampler(dat.Sampler):
         self.genfunc = th.randperm if shuffle else th.arange
         self.epoch = 0
 
-    def _work_const_batch_index(self, dataset, batch_size):
+    def _work_const_batch_index(self, dataset: dat.Dataset,
+                                batch_size: int) -> List[Tuple[int, int]]:
         beg = 0
         tot = len(dataset)
         cur_dur = 0
@@ -117,12 +118,13 @@ class BatchSampler(dat.Sampler):
             idx_bz.append((beg, tot))
         return idx_bz
 
-    def _work_adapt_batch_index(self,
-                                dataset,
-                                adapt_dur,
-                                adapt_token_num,
-                                batch_size,
-                                min_batch_size=4):
+    def _work_adapt_batch_index(
+            self,
+            dataset: dat.Dataset,
+            adapt_dur: float,
+            adapt_token_num: int,
+            batch_size: int,
+            min_batch_size: int = 4) -> List[Tuple[int, int]]:
         beg = 0
         tot = len(dataset)
         cur_bz = batch_size
@@ -150,8 +152,8 @@ class BatchSampler(dat.Sampler):
         for i in indices:
             yield list(range(*self.batches[i]))
 
-    def set_epoch(self, epoch):
+    def set_epoch(self, epoch: int) -> NoReturn:
         self.epoch = epoch
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.num_batches

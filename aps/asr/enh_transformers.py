@@ -5,8 +5,11 @@
 
 import torch as th
 import torch.nn as nn
-
 import torch.nn.functional as F
+
+from typing import Optional, Dict, Tuple
+from torch_complex import ComplexTensor
+from typing import Optional, List, Dict
 
 from aps.asr.transformers import TransformerASR
 from aps.asr.base.encoder import TorchRNNEncoder
@@ -22,19 +25,19 @@ class EnhTransformerASR(nn.Module):
 
     def __init__(
             self,
-            asr_input_size=80,
-            vocab_size=30,
-            sos=-1,
-            eos=-1,
+            asr_input_size: int = 80,
+            vocab_size: int = 30,
+            sos: int = -1,
+            eos: int = -1,
             # feature transform
-            asr_transform=None,
-            asr_cpt="",
-            ctc=False,
-            encoder_type="transformer",
-            encoder_proj=None,
-            encoder_kwargs=None,
-            decoder_type="transformer",
-            decoder_kwargs=None):
+            asr_transform: Optional[nn.Module] = None,
+            asr_cpt: str = "",
+            ctc: bool = False,
+            encoder_type: str = "transformer",
+            encoder_proj: Optional[int] = None,
+            encoder_kwargs: Optional[Dict] = None,
+            decoder_type: str = "transformer",
+            decoder_kwargs: Optional[Dict] = None) -> None:
         super(EnhTransformerASR, self).__init__()
         # Back-end feature transform
         self.asr_transform = asr_transform
@@ -62,7 +65,13 @@ class EnhTransformerASR(nn.Module):
         """
         raise NotImplementedError
 
-    def forward(self, x_pad, x_len, y_pad, ssr=0):
+    def forward(
+        self,
+        x_pad: th.Tensor,
+        x_len: Optional[th.Tensor],
+        y_pad: th.Tensor,
+        ssr: float = 0
+    ) -> Tuple[th.Tensor, None, Optional[th.Tensor], Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -79,14 +88,14 @@ class EnhTransformerASR(nn.Module):
         return self.transformer_asr(x_enh, x_len, y_pad, ssr=ssr)
 
     def beam_search(self,
-                    x,
-                    beam=8,
-                    lm=None,
-                    lm_weight=0,
-                    nbest=1,
-                    max_len=-1,
-                    vectorized=False,
-                    normalized=True):
+                    x: th.Tensor,
+                    beam: int = 16,
+                    lm: Optional[nn.Module] = None,
+                    lm_weight: float = 0,
+                    nbest: int = 8,
+                    max_len: int = -1,
+                    vectorized: bool = True,
+                    normalized: bool = True) -> List[Dict]:
         """
         Args
             x: C x S
@@ -110,7 +119,11 @@ class BeamTransformerASR(EnhTransformerASR):
     Beamformer-based front-end + LAS ASR
     """
 
-    def __init__(self, mode="tv", enh_transform=None, enh_conf=None, **kwargs):
+    def __init__(self,
+                 mode: str = "tv",
+                 enh_transform: Optional[nn.Module] = None,
+                 enh_conf: Optional[Dict] = None,
+                 **kwargs) -> None:
         super(BeamTransformerASR, self).__init__(**kwargs)
         conv_enh = {
             "ti": TimeInvariantFilter,
@@ -125,7 +138,9 @@ class BeamTransformerASR(EnhTransformerASR):
         self.enh = conv_enh[mode](**enh_conf)
         self.enh_transform = enh_transform
 
-    def _enhance(self, x_pad, x_len):
+    def _enhance(
+            self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         FE processing
         """
@@ -163,7 +178,9 @@ class MvdrTransformerASR(EnhTransformerASR):
         # MVDR beamformer
         self.mvdr_net = MvdrBeamformer(num_bins, **mvdr_kwargs)
 
-    def _enhance(self, x_pad, x_len):
+    def _enhance(
+            self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Mvdr beamforming and asr feature transform
         Args:
@@ -176,7 +193,9 @@ class MvdrTransformerASR(EnhTransformerASR):
         x_beam, _ = self.asr_transform(x_beam, None)
         return x_beam, x_len
 
-    def mvdr_beam(self, x_pad, x_len):
+    def mvdr_beam(
+            self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Mvdr beamforming and asr feature transform
         Args:
@@ -189,7 +208,10 @@ class MvdrTransformerASR(EnhTransformerASR):
         x_beam = self.mvdr_net(mask_s, x_cplx, xlen=x_len, mask_n=mask_n)
         return x_beam, x_len
 
-    def pred_mask(self, x_pad, x_len):
+    def pred_mask(
+        self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor], Optional[th.Tensor],
+               ComplexTensor]:
         """
         Output TF masks
         Args:

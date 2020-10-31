@@ -13,7 +13,7 @@ try:
 except:
     raise ImportError("import Transformer module failed")
 
-from typing import Union, Optional, List, Any
+from typing import Union, Optional, List, Dict
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
 from aps.asr.base.decoder import trace_back_hypos
@@ -120,7 +120,7 @@ class TorchTransformerDecoder(nn.Module):
                     nbest: int = 8,
                     max_len: int = -1,
                     vectorized: bool = True,
-                    normalized: bool = True) -> List[Any]:
+                    normalized: bool = True) -> List[Dict]:
         """
         Beam search for Transformer
         Args:

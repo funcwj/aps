@@ -21,15 +21,15 @@ try:
 except ImportError:
     rnnt_loss_available = False
 
+from typing import Tuple, Dict
 from aps.task.base import Task
 from aps.task.objf import ce_objf, ls_objf
-
 from aps.const import IGNORE_ID
 
 __all__ = ["CtcXentHybridTask", "TransducerTask", "LmXentTask"]
 
 
-def compute_accu(outs, tgts):
+def compute_accu(outs: th.Tensor, tgts: th.Tensor) -> float:
     """
     Compute frame-level accuracy
     """
@@ -42,7 +42,9 @@ def compute_accu(outs, tgts):
     return (ncorr / total).item()
 
 
-def process_asr_target(tgt_pad, tgt_len, eos=0):
+def process_asr_target(tgt_pad: th.Tensor,
+                       tgt_len: th.Tensor,
+                       eos: int = 0) -> Tuple[th.Tensor, th.Tensor]:
     """
     Process asr targets for inference and loss computation
     """
@@ -60,13 +62,18 @@ class CtcXentHybridTask(Task):
     CTC & Attention AM
     """
 
-    def __init__(self, nnet, lsm_factor=0, ctc_weight=0, blank=0):
-        super(CtcXentHybridTask, self).__init__(nnet)
+    def __init__(self,
+                 nnet: nn.Module,
+                 lsm_factor: float = 0,
+                 ctc_weight: float = 0,
+                 blank: int = 0) -> None:
+        super(CtcXentHybridTask, self).__init__(
+            nnet, description="multi-task training for ASR (CTC + Xent)")
         self.ctc_blank = blank
         self.ctc_weight = ctc_weight
         self.lsm_factor = lsm_factor
 
-    def forward(self, egs, ssr=0, **kwargs):
+    def forward(self, egs: Dict, ssr: int = 0, **kwargs) -> Dict:
         """
         Compute CTC & Attention loss, egs contains:
             src_pad (Tensor): N x Ti x F
@@ -118,13 +125,13 @@ class TransducerTask(Task):
     For Transducer based AM
     """
 
-    def __init__(self, nnet, blank=0):
-        super(TransducerTask, self).__init__(nnet)
+    def __init__(self, nnet: nn.Module, blank: int = 0) -> None:
+        super(TransducerTask, self).__init__(nnet, description="RNNT for ASR")
         self.blank = blank
         if not rnnt_loss_available:
             raise ImportError(f"from warp_rnnt import rnnt_loss failed")
 
-    def forward(self, egs, **kwargs):
+    def forward(self, egs: Dict, **kwargs) -> Dict:
         """
         Compute transducer loss, egs contains:
             src_pad (Tensor): N x Ti x F
@@ -156,12 +163,13 @@ class LmXentTask(Task):
     For LM
     """
 
-    def __init__(self, nnet, repackage_hidden=False):
-        super(LmXentTask, self).__init__(nnet)
+    def __init__(self, nnet: nn.Module, repackage_hidden: bool = False) -> None:
+        super(LmXentTask, self).__init__(nnet,
+                                         description="Xent for LM training")
         self.hidden = None
         self.repackage_hidden = repackage_hidden
 
-    def forward(self, egs, **kwargs):
+    def forward(self, egs: Dict, **kwargs) -> Dict:
         """
         Compute CE loss, egs contains
             src (Tensor): N x T+1
