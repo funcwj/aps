@@ -7,7 +7,9 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from typing import Optional, Tuple, NoReturn, List
 from aps.sse.enh.dcunet import Encoder, Decoder, parse_1dstr, parse_2dstr
+from aps.sse.utils import MaskNonLinear
 
 
 class LSTMP(nn.Module):
@@ -16,12 +18,12 @@ class LSTMP(nn.Module):
     """
 
     def __init__(self,
-                 in_features,
-                 hidden_size,
-                 num_layers=2,
-                 dropout=0,
-                 bidirectional=False,
-                 batch_first=True):
+                 in_features: int,
+                 hidden_size: int,
+                 num_layers: int = 2,
+                 dropout: float = 0,
+                 bidirectional: bool = False,
+                 batch_first: bool = True) -> None:
         super(LSTMP, self).__init__()
         self.lstm = nn.LSTM(in_features,
                             hidden_size,
@@ -33,7 +35,7 @@ class LSTMP(nn.Module):
                               in_features,
                               bias=False)
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
             inp (Tensor): N x T x C x F
@@ -53,12 +55,12 @@ class ComplexLSTMP(nn.Module):
     """
 
     def __init__(self,
-                 in_features,
-                 hidden_size,
-                 num_layers=2,
-                 dropout=0,
-                 bidirectional=False,
-                 batch_first=True):
+                 in_features: int,
+                 hidden_size: int,
+                 num_layers: int = 2,
+                 dropout: float = 0,
+                 bidirectional: bool = False,
+                 batch_first: bool = True) -> None:
         super(ComplexLSTMP, self).__init__()
         self.real = LSTMP(in_features,
                           hidden_size,
@@ -73,7 +75,7 @@ class ComplexLSTMP(nn.Module):
                           bidirectional=bidirectional,
                           batch_first=batch_first)
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
             inp (Tensor): N x T x C x 2F
@@ -96,12 +98,12 @@ class LSTMWrapper(nn.Module):
     """
 
     def __init__(self,
-                 in_features,
-                 num_layers=2,
-                 dropout=0,
-                 hidden_size=512,
-                 cplx=True,
-                 bidirectional=False):
+                 in_features: int,
+                 num_layers: int = 2,
+                 dropout: float = 0,
+                 hidden_size: int = 512,
+                 cplx: bool = True,
+                 bidirectional: bool = False) -> None:
         super(LSTMWrapper, self).__init__()
         if cplx:
             self.lstm = ComplexLSTMP(in_features,
@@ -118,7 +120,7 @@ class LSTMWrapper(nn.Module):
                               bidirectional=bidirectional,
                               batch_first=True)
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
             inp (Tensor): N x C x (2)F x T
@@ -133,33 +135,30 @@ class LSTMWrapper(nn.Module):
         return th.einsum("ntcf->ncft", out)
 
 
-supported_nonlinear = {"relu": tf.relu, "sigmoid": th.sigmoid, "tanh": th.tanh}
-
-
 class DCCRN(nn.Module):
     """
     Deep Complex Convolutional-RNN networks
     """
 
     def __init__(self,
-                 cplx=True,
-                 K="3,3;3,3;3,3;3,3;3,3;3,3;3,3",
-                 S="2,1;2,1;2,1;2,1;2,1;2,1;2,1",
-                 P="1,1,1,1,1,1,1",
-                 O="0,0,0,0,0,0,0",
-                 C="16,32,64,64,128,128,256",
-                 num_spks=2,
-                 connection="sum",
-                 rnn_hidden=512,
-                 rnn_layers=2,
-                 rnn_resize=1536,
-                 rnn_dropout=0,
-                 rnn_bidir=False,
-                 causal_conv=False,
-                 share_decoder=True,
-                 enh_transform=None,
-                 non_linear="tanh",
-                 training_mode="time"):
+                 cplx: bool = True,
+                 K: str = "3,3;3,3;3,3;3,3;3,3;3,3;3,3",
+                 S: str = "2,1;2,1;2,1;2,1;2,1;2,1;2,1",
+                 P: str = "1,1,1,1,1,1,1",
+                 O: str = "0,0,0,0,0,0,0",
+                 C: str = "16,32,64,64,128,128,256",
+                 num_spks: int = 2,
+                 connection: str = "sum",
+                 rnn_hidden: int = 512,
+                 rnn_layers: int = 2,
+                 rnn_resize: int = 1536,
+                 rnn_dropout: float = 0,
+                 rnn_bidir: bool = False,
+                 causal_conv: bool = False,
+                 share_decoder: bool = True,
+                 enh_transform: Optional[nn.Module] = None,
+                 non_linear: str = "tanh",
+                 training_mode: str = "time") -> None:
         """
         Args:
             K, S, C: kernel, stride, padding, channel size for convolution in encoder/decoder
@@ -170,10 +169,8 @@ class DCCRN(nn.Module):
         super(DCCRN, self).__init__()
         if enh_transform is None:
             raise RuntimeError("Missing configuration for enh_transform")
-        if non_linear not in supported_nonlinear:
-            raise ValueError(f"Unsupported nonlinear: {non_linear}")
         self.cplx = cplx
-        self.non_linear = supported_nonlinear[non_linear]
+        self.non_linear = MaskNonLinear(non_linear)
         self.enh_transform = enh_transform
         K = parse_2dstr(K)
         S = parse_2dstr(S)
@@ -214,7 +211,11 @@ class DCCRN(nn.Module):
         self.mode = training_mode
         self.share_decoder = share_decoder
 
-    def sep(self, m, sr, si, mode="freq"):
+    def sep(self,
+            m: th.Tensor,
+            sr: th.Tensor,
+            si: th.Tensor,
+            mode: str = "freq") -> th.Tensor:
         decoder = self.enh_transform.inverse_stft
         # m: N x 2F x T
         if self.cplx:
@@ -238,7 +239,7 @@ class DCCRN(nn.Module):
                 s = decoder((sr * m, si * m), input="complex")
         return s
 
-    def check_args(self, mix, training=True):
+    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
         if not training and mix.dim() != 1:
             raise RuntimeError("DCCRN expects 1D tensor (inference), " +
                                f"got {mix.dim()} instead")
@@ -246,7 +247,9 @@ class DCCRN(nn.Module):
             raise RuntimeError("DCCRN expects 2D tensor (training), " +
                                f"got {mix.dim()} instead")
 
-    def infer(self, mix, mode="time"):
+    def infer(self,
+              mix: th.Tensor,
+              mode: str = "time") -> Tuple[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): S
@@ -262,7 +265,9 @@ class DCCRN(nn.Module):
             else:
                 return [s[0] for s in sep]
 
-    def _forward(self, mix, mode="freq"):
+    def _forward(self,
+                 mix: th.Tensor,
+                 mode: str = "freq") -> Tuple[th.Tensor, List[th.Tensor]]:
         if self.cplx:
             # N x F x T
             sr, si = self.enh_transform.forward_stft(mix, output="complex")
@@ -299,7 +304,7 @@ class DCCRN(nn.Module):
                 for i in range(self.num_spks)
             ]
 
-    def forward(self, s):
+    def forward(self, s: th.Tensor) -> Tuple[th.Tensor, List[th.Tensor]]:
         """
         Args:
             s (Tensor): N x S

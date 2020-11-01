@@ -7,6 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from typing import Optional, List, Union, NoReturn
 from aps.sse.bss.tasnet import build_norm
 
 
@@ -15,7 +16,10 @@ class DpB(nn.Module):
     DP block
     """
 
-    def __init__(self, input_size, hidden_size, bi_inter=True):
+    def __init__(self,
+                 input_size: int,
+                 hidden_size: int,
+                 bi_inter: bool = True) -> None:
         super(DpB, self).__init__()
         self.inter_rnn = nn.LSTM(input_size,
                                  hidden_size,
@@ -34,7 +38,7 @@ class DpB(nn.Module):
         self.intra_proj = nn.Linear(hidden_size * 2, input_size)
         self.intra_norm = nn.LayerNorm(input_size)
 
-    def _intra(self, chunk):
+    def _intra(self, chunk: th.Tensor) -> th.Tensor:
         """
         Go through intra block
         """
@@ -52,7 +56,7 @@ class DpB(nn.Module):
         # N x L x K x F
         return intra_out.view(N, L, K, F)
 
-    def _inter(self, chunk):
+    def _inter(self, chunk: th.Tensor) -> th.Tensor:
         """
         Go through inter block
         """
@@ -69,7 +73,7 @@ class DpB(nn.Module):
         # N x K x L x F
         return inter_out.view(N, K, L, F)
 
-    def forward(self, chunk):
+    def forward(self, chunk: th.Tensor) -> th.Tensor:
         """
         Args:
             chunk (Tensor): N x F x K x L
@@ -94,7 +98,10 @@ class McB(nn.Module):
     The multiply and concat (MULCAT) block
     """
 
-    def __init__(self, input_size, hidden_size, bi_inter=True):
+    def __init__(self,
+                 input_size: int,
+                 hidden_size: int,
+                 bi_inter: bool = True) -> None:
         super(McB, self).__init__()
         self.inter_rnn1 = nn.LSTM(input_size,
                                   hidden_size,
@@ -125,7 +132,7 @@ class McB(nn.Module):
                                     input_size,
                                     bias=False)
 
-    def _intra(self, chunk):
+    def _intra(self, chunk: th.Tensor) -> th.Tensor:
         """
         Go through intra block
         """
@@ -145,7 +152,7 @@ class McB(nn.Module):
         # N x L x K x F
         return intra_out.view(N, L, K, F)
 
-    def _inter(self, chunk):
+    def _inter(self, chunk: th.Tensor) -> th.Tensor:
         """
         Go through inter block
         """
@@ -164,7 +171,7 @@ class McB(nn.Module):
         # N x K x L x F
         return inter_out.view(N, K, L, F)
 
-    def forward(self, chunk):
+    def forward(self, chunk: th.Tensor) -> th.Tensor:
         """
         Args:
             chunk (Tensor): N x F x K x L
@@ -190,16 +197,16 @@ class DPRNN(nn.Module):
     """
 
     def __init__(self,
-                 num_spks=2,
-                 chunk_len=100,
-                 input_norm="cLN",
-                 conv_filters=64,
-                 proj_filters=128,
-                 dprnn_layers=6,
-                 dprnn_hidden=128,
-                 dprnn_bi_inter=True,
-                 dprnn_block="dp",
-                 output_non_linear="sigmoid"):
+                 num_spks: int = 2,
+                 chunk_len: int = 100,
+                 input_norm: str = "cLN",
+                 conv_filters: int = 64,
+                 proj_filters: int = 128,
+                 dprnn_layers: int = 6,
+                 dprnn_hidden: int = 128,
+                 dprnn_bi_inter: bool = True,
+                 dprnn_block: str = "dp",
+                 output_non_linear: str = "sigmoid") -> None:
         super(DPRNN, self).__init__()
         supported_nonlinear = {"relu": tf.relu, "sigmoid": th.sigmoid, "": None}
         if output_non_linear not in supported_nonlinear:
@@ -221,7 +228,7 @@ class DPRNN(nn.Module):
         self.chunk_hop, self.chunk_len = chunk_len // 2, chunk_len
         self.num_spks = num_spks
 
-    def check_args(self, mix, training=True):
+    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
         """
         Check input arguments
         """
@@ -232,7 +239,7 @@ class DPRNN(nn.Module):
             raise RuntimeError(
                 f"DPRNN expects 2D tensor (training), but got {mix.dim()}")
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
             inp (Tensor): N x F x T
@@ -273,18 +280,18 @@ class TimeDPRNN(DPRNN):
     """
 
     def __init__(self,
-                 num_spks=2,
-                 input_norm="cLN",
-                 conv_kernels=16,
-                 conv_filters=64,
-                 proj_filters=128,
-                 chunk_len=100,
-                 dprnn_layers=6,
-                 dprnn_bi_inter=True,
-                 dprnn_hidden=128,
-                 dprnn_block="dp",
-                 non_linear="relu",
-                 masking=True):
+                 num_spks: int = 2,
+                 input_norm: str = "cLN",
+                 conv_kernels: int = 16,
+                 conv_filters: int = 64,
+                 proj_filters: int = 128,
+                 chunk_len: int = 100,
+                 dprnn_layers: int = 6,
+                 dprnn_bi_inter: bool = True,
+                 dprnn_hidden: int = 128,
+                 dprnn_block: str = "dp",
+                 non_linear: str = "relu",
+                 masking: bool = True) -> None:
         super(TimeDPRNN, self).__init__(num_spks=num_spks,
                                         chunk_len=chunk_len,
                                         input_norm=input_norm,
@@ -311,7 +318,7 @@ class TimeDPRNN(DPRNN):
                                           padding=0)
         self.masking = masking
 
-    def infer(self, mix):
+    def infer(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): S
@@ -324,7 +331,7 @@ class TimeDPRNN(DPRNN):
             sep = self.forward(mix)
             return sep[0] if self.num_spks == 1 else [s[0] for s in sep]
 
-    def forward(self, mix):
+    def forward(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): N x S
@@ -354,18 +361,18 @@ class FreqDPRNN(DPRNN):
     """
 
     def __init__(self,
-                 enh_transform=None,
-                 num_spks=2,
-                 num_bins=257,
-                 non_linear="relu",
-                 input_norm="",
-                 proj_filters=256,
-                 chunk_len=64,
-                 dprnn_layers=6,
-                 dprnn_bi_inter=True,
-                 dprnn_hidden=128,
-                 dprnn_block="dp",
-                 training_mode="freq"):
+                 enh_transform: Optional[nn.Module] = None,
+                 num_spks: int = 2,
+                 num_bins: int = 257,
+                 non_linear: str = "relu",
+                 input_norm: str = "",
+                 proj_filters: int = 256,
+                 chunk_len: int = 64,
+                 dprnn_layers: int = 6,
+                 dprnn_bi_inter: bool = True,
+                 dprnn_hidden: int = 128,
+                 dprnn_block: str = "dp",
+                 training_mode: str = "freq") -> None:
         super(FreqDPRNN, self).__init__(num_spks=num_spks,
                                         chunk_len=chunk_len,
                                         input_norm=input_norm,
@@ -381,7 +388,8 @@ class FreqDPRNN(DPRNN):
         self.enh_transform = enh_transform
         self.mode = training_mode
 
-    def _forward(self, mix, mode):
+    def _forward(self, mix: th.Tensor,
+                 mode: str) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Forward function in time|freq mode
         """
@@ -414,7 +422,9 @@ class FreqDPRNN(DPRNN):
                 ]
             return enh
 
-    def infer(self, mix, mode="time"):
+    def infer(self,
+              mix: th.Tensor,
+              mode: str = "time") -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): N x S
@@ -425,7 +435,7 @@ class FreqDPRNN(DPRNN):
             ret = self._forward(mix, mode=mode)
             return ret[0] if self.num_spks == 1 else [r[0] for r in ret]
 
-    def forward(self, mix):
+    def forward(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): N x S

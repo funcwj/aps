@@ -18,5 +18,6 @@ done
 
 for metric in sdr pesq stoi sisnr; do
   ../bin/compute_ss_metric.py --metric $metric \
-    data/metric/sse/bss_spk{1,2}.scp data/metric/sse/ref_spk{1,2}.scp
+    data/metric/sse/bss_spk1.scp,data/metric/sse/bss_spk2.scp \
+    data/metric/sse/ref_spk1.scp,data/metric/sse/ref_spk2.scp
 done

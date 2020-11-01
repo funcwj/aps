@@ -7,6 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from typing import Optional, List, Union, NoReturn, Tuple
 from aps.sse.bss.dccrn import LSTMWrapper, parse_1dstr, parse_2dstr
 from aps.sse.utils import MaskNonLinear
 """
@@ -20,14 +21,14 @@ class EncoderBlock(nn.Module):
     """
 
     def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size=(3, 3),
-                 stride=1,
-                 padding=(1, 1),
-                 dropout=0,
-                 norm="IN",
-                 first_layer=False):
+                 in_channels: int,
+                 out_channels: int,
+                 kernel_size: Tuple[int, int] = (3, 3),
+                 stride: str = 1,
+                 padding: Tuple[int, int] = (1, 1),
+                 dropout: float = 0,
+                 norm: str = "IN",
+                 first_layer: bool = False) -> None:
         super(EncoderBlock, self).__init__()
         self.conv = nn.Conv2d(in_channels,
                               out_channels,
@@ -42,7 +43,7 @@ class EncoderBlock(nn.Module):
         else:
             self.elu, self.inst = None, None
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         out = self.conv(inp)
         if self.inst is None:
             return out
@@ -58,15 +59,15 @@ class DecoderBlock(nn.Module):
     """
 
     def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size=(3, 3),
-                 stride=1,
-                 padding=(1, 1),
-                 output_padding=(0, 0),
-                 norm="IN",
-                 dropout=0,
-                 last_layer=False):
+                 in_channels: int,
+                 out_channels: int,
+                 kernel_size: Tuple[int, int] = (3, 3),
+                 stride: str = 1,
+                 padding: Tuple[int, int] = (1, 1),
+                 output_padding: Tuple[int, int] = (0, 0),
+                 dropout: float = 0,
+                 norm: str = "IN",
+                 last_layer: bool = False) -> None:
         super(DecoderBlock, self).__init__()
         self.conv = nn.ConvTranspose2d(in_channels,
                                        out_channels,
@@ -82,7 +83,7 @@ class DecoderBlock(nn.Module):
         else:
             self.elu, self.inst = None, None
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         out = self.conv(inp)
         if self.inst is None:
             return out
@@ -98,13 +99,13 @@ class DenseBlock(nn.Module):
     """
 
     def __init__(self,
-                 in_channels,
-                 out_channels,
-                 growth_rate,
-                 kernel_size=(3, 3),
-                 num_layers=5,
-                 stride=1,
-                 norm="IN"):
+                 in_channels: int,
+                 out_channels: int,
+                 growth_rate: int,
+                 kernel_size: Tuple[int, int] = (3, 3),
+                 num_layers: int = 5,
+                 stride: int = 1,
+                 norm: str = "IN") -> None:
         super(DenseBlock, self).__init__()
         self.blocks = nn.ModuleList([
             EncoderBlock(in_channels if i == 0 else in_channels +
@@ -116,7 +117,7 @@ class DenseBlock(nn.Module):
                          padding=(1, 1)) for i in range(num_layers)
         ])
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         inputs = [inp]
         for conv in self.blocks:
             # inp = th.cat(inputs, dim=1)
@@ -131,15 +132,15 @@ class EncoderDenseBlock(nn.Module):
     """
 
     def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size=(3, 3),
-                 stride=1,
-                 dropout=0,
-                 padding=(1, 1),
-                 norm="IN",
-                 inner_dense_layer=5,
-                 first_layer=False):
+                 in_channels: int,
+                 out_channels: int,
+                 kernel_size: Tuple[int, int] = (3, 3),
+                 stride: int = 1,
+                 dropout: float = 0,
+                 padding: Tuple[int, int] = (1, 1),
+                 norm: str = "IN",
+                 inner_dense_layer: int = 5,
+                 first_layer: bool = False) -> None:
         super(EncoderDenseBlock, self).__init__()
         self.sub1 = EncoderBlock(in_channels,
                                  out_channels,
@@ -157,7 +158,7 @@ class EncoderDenseBlock(nn.Module):
                                stride=(1, 1),
                                norm=norm)
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         sub1 = self.sub1(inp)
         return self.sub2(sub1)
 
@@ -168,17 +169,17 @@ class DecoderDenseBlock(nn.Module):
     """
 
     def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size=(3, 3),
-                 stride=1,
-                 padding=(1, 1),
-                 output_padding=(0, 0),
-                 dropout=0,
-                 norm="IN",
-                 inner_dense_layer=5,
-                 last_layer=False,
-                 last_out_channels=2):
+                 in_channels: int,
+                 out_channels: int,
+                 kernel_size: Tuple[int, int] = (3, 3),
+                 stride: int = 1,
+                 padding: Tuple[int, int] = (1, 1),
+                 output_padding: Tuple[int, int] = (0, 0),
+                 dropout: float = 0,
+                 norm: str = "IN",
+                 inner_dense_layer: int = 5,
+                 last_layer: bool = False,
+                 last_out_channels: int = 2) -> None:
         super(DecoderDenseBlock, self).__init__()
         self.sub1 = DenseBlock(in_channels * 2,
                                in_channels * 2,
@@ -198,7 +199,7 @@ class DecoderDenseBlock(nn.Module):
             norm=norm,
             last_layer=last_layer)
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         sub1 = self.sub1(inp)
         return self.sub2(sub1)
 
@@ -211,7 +212,14 @@ class Encoder(nn.Module):
         C: output channels
     """
 
-    def __init__(self, K, S, C, P, num_dense_blocks=4, dropout=0, norm="IN"):
+    def __init__(self,
+                 K: List[Tuple[int, int]],
+                 S: List[Tuple[int, int]],
+                 C: List[int],
+                 P: List[int],
+                 num_dense_blocks: int = 4,
+                 dropout: float = 0,
+                 norm: str = "IN") -> None:
         super(Encoder, self).__init__()
         total_layers = len(C) - 1
         layers = [
@@ -238,7 +246,7 @@ class Encoder(nn.Module):
         ]
         self.encoders = nn.ModuleList(layers)
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> List[th.Tensor]:
         enc_h = []
         for index, conv in enumerate(self.encoders):
             x = conv(x)
@@ -256,15 +264,15 @@ class Decoder(nn.Module):
     """
 
     def __init__(self,
-                 K,
-                 S,
-                 C,
-                 P,
-                 O,
-                 enc_channel=None,
-                 dropout=0,
-                 norm="IN",
-                 num_dense_blocks=4):
+                 K: List[Tuple[int, int]],
+                 S: List[Tuple[int, int]],
+                 C: List[int],
+                 P: List[int],
+                 O: List[int],
+                 enc_channel: Optional[List[int]] = None,
+                 dropout: float = 0,
+                 norm: str = "IN",
+                 num_dense_blocks: int = 4) -> None:
         super(Decoder, self).__init__()
         total_layers = len(C) - 1
         layers = [
@@ -296,7 +304,7 @@ class Decoder(nn.Module):
         ]
         self.decoders = nn.ModuleList(layers)
 
-    def forward(self, x, enc_h):
+    def forward(self, x: th.Tensor, enc_h: List[th.Tensor]) -> th.Tensor:
         # N = len(self.decoders)
         for index, conv in enumerate(self.decoders):
             if index == 0:
@@ -314,28 +322,28 @@ class DenseUnet(nn.Module):
     """
 
     def __init__(self,
-                 inp_cplx=False,
-                 out_cplx=False,
-                 K="3,3;3,3;3,3;3,3;3,3;3,3;3,3;3,3",
-                 S="1,1;2,1;2,1;2,1;2,1;2,1;2,1;2,1",
-                 P="0,1;0,1;0,1;0,1;0,1;0,1;0,1;0,1;0,1",
-                 O="0,0,0,0,0,0,0,0",
-                 enc_channel="16,32,32,32,32,64,128,384",
-                 dec_channel="32,16,32,32,32,32,64,128",
-                 conv_dropout=0,
-                 norm="IN",
-                 num_spks=2,
-                 rnn_hidden=512,
-                 rnn_layers=2,
-                 rnn_resize=512,
-                 rnn_bidir=False,
-                 rnn_dropout=0,
-                 num_dense_blocks=4,
-                 enh_transform=None,
-                 non_linear="sigmoid",
-                 non_linear_scale=1,
-                 non_linear_clip=None,
-                 training_mode="freq"):
+                 inp_cplx: bool = False,
+                 out_cplx: bool = False,
+                 K: str = "3,3;3,3;3,3;3,3;3,3;3,3;3,3;3,3",
+                 S: str = "1,1;2,1;2,1;2,1;2,1;2,1;2,1;2,1",
+                 P: str = "0,1;0,1;0,1;0,1;0,1;0,1;0,1;0,1;0,1",
+                 O: str = "0,0,0,0,0,0,0,0",
+                 enc_channel: str = "16,32,32,32,32,64,128,384",
+                 dec_channel: str = "32,16,32,32,32,32,64,128",
+                 conv_dropout: float = 0,
+                 norm: str = "IN",
+                 num_spks: int = 2,
+                 rnn_hidden: int = 512,
+                 rnn_layers: int = 2,
+                 rnn_resize: int = 512,
+                 rnn_bidir: bool = False,
+                 rnn_dropout: float = 0,
+                 num_dense_blocks: int = 4,
+                 enh_transform: Optional[nn.Module] = None,
+                 non_linear: str = "sigmoid",
+                 non_linear_scale: int = 1,
+                 non_linear_clip: Optional[float] = None,
+                 training_mode: str = "freq") -> None:
         super(DenseUnet, self).__init__()
         if enh_transform is None:
             raise RuntimeError("Missing configuration for enh_transform")
@@ -379,7 +387,12 @@ class DenseUnet(nn.Module):
         self.inp_cplx = inp_cplx
         self.out_cplx = out_cplx
 
-    def sep(self, m, sr, si, mode="freq"):
+    def sep(self,
+            m: th.Tensor,
+            sr: th.Tensor,
+            si: th.Tensor,
+            mode: str = "freq") -> Union[th.Tensor, Tuple[th.Tensor,
+                                                          th.Tensor]]:
         decoder = self.enh_transform.inverse_stft
         # m: N x 2 x F x T
         if self.out_cplx:
@@ -419,7 +432,7 @@ class DenseUnet(nn.Module):
                                 input="complex")
         return s
 
-    def check_args(self, mix, training=True):
+    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
         if not training and mix.dim() != 1:
             raise RuntimeError("DenseUnet expects 1D tensor (inference), " +
                                f"got {mix.dim()} instead")
@@ -427,7 +440,11 @@ class DenseUnet(nn.Module):
             raise RuntimeError("DenseUnet expects 2D tensor (training), " +
                                f"got {mix.dim()} instead")
 
-    def infer(self, mix, mode="time"):
+    def infer(
+        self,
+        mix: th.Tensor,
+        mode: str = "time"
+    ) -> Union[th.Tensor, List[th.Tensor], List[Tuple[th.Tensor, th.Tensor]]]:
         """
         Args:
             mix (Tensor): S
@@ -441,9 +458,17 @@ class DenseUnet(nn.Module):
             if self.num_spks == 1:
                 return sep[0]
             else:
-                return [s[0] for s in sep]
+                bss = []
+                for s in sep:
+                    bss.append(s[0] if isinstance(s, th.Tensor) else (s[0][0],
+                                                                      s[1][0]))
+                return bss
 
-    def _forward(self, mix, mode="freq"):
+    def _forward(
+        self,
+        mix: th.Tensor,
+        mode: str = "freq"
+    ) -> Union[th.Tensor, List[th.Tensor], List[Tuple[th.Tensor, th.Tensor]]]:
         # NOTE: update real input!
         if self.inp_cplx:
             # N x F x T
@@ -479,7 +504,9 @@ class DenseUnet(nn.Module):
             chunk_m = th.chunk(spk_m, self.num_spks, 1)
             return [self.sep(m, sr, si, mode=mode) for m in chunk_m]
 
-    def forward(self, s):
+    def forward(
+        self, s: th.Tensor
+    ) -> Union[th.Tensor, List[th.Tensor], List[Tuple[th.Tensor, th.Tensor]]]:
         """
         Args:
             s (Tensor): N x S

@@ -7,6 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from typing import Optional, Union, Tuple, NoReturn
 from aps.const import EPSILON
 
 batchnorm_non_linear = {
@@ -21,7 +22,8 @@ class PhasenConv2d(nn.Conv2d):
     Conv2d for Phasen (keeping time/frequency dimention not changed)
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size):
+    def __init__(self, in_channels: int, out_channels: int,
+                 kernel_size: Tuple[int, int]) -> None:
         padding_size = ((kernel_size[0] - 1) // 2, (kernel_size[1] - 1) // 2)
         super(PhasenConv2d, self).__init__(in_channels,
                                            out_channels,
@@ -35,11 +37,11 @@ class PhasenBatchNorm1d(nn.BatchNorm1d):
     BatchNorm1d for Phasen (following a non-linear layer)
     """
 
-    def __init__(self, num_features, non_linear="relu"):
+    def __init__(self, num_features: int, non_linear: str = "relu") -> None:
         super(PhasenBatchNorm1d, self).__init__(num_features, momentum=0)
         self.non_linear = batchnorm_non_linear[non_linear]
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         out = super().forward(inp)
         return self.non_linear(out)
 
@@ -49,11 +51,11 @@ class PhasenBatchNorm2d(nn.BatchNorm2d):
     BatchNorm2d for Phasen (following a non-linear layer)
     """
 
-    def __init__(self, num_features, non_linear="relu"):
+    def __init__(self, num_features: int, non_linear: str = "relu") -> None:
         super(PhasenBatchNorm2d, self).__init__(num_features, momentum=0)
         self.non_linear = batchnorm_non_linear[non_linear]
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         out = super().forward(inp)
         return self.non_linear(out)
 
@@ -63,7 +65,10 @@ class PhasenGlobalNorm(nn.Module):
     Global Normalization for Phasen
     """
 
-    def __init__(self, dim, eps=1e-05, elementwise_affine=True):
+    def __init__(self,
+                 dim: int,
+                 eps: float = 1e-05,
+                 elementwise_affine: bool = True) -> None:
         super(PhasenGlobalNorm, self).__init__()
         self.eps = eps
         self.normalized_dim = dim
@@ -75,7 +80,7 @@ class PhasenGlobalNorm(nn.Module):
             self.register_parameter("weight", None)
             self.register_parameter("bias", None)
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
             inp: N x C x F x T
@@ -105,7 +110,11 @@ class FTBlock(nn.Module):
     Frequency Transformation Block
     """
 
-    def __init__(self, channel_amp, num_bins=257, channel_r=5, conv1d_kernel=9):
+    def __init__(self,
+                 channel_amp: int,
+                 num_bins: int = 257,
+                 channel_r: int = 5,
+                 conv1d_kernel: int = 9) -> None:
         super(FTBlock, self).__init__()
         self.conv1x1_1 = nn.Sequential(
             nn.Conv2d(channel_amp, channel_r, (1, 1)),
@@ -121,7 +130,7 @@ class FTBlock(nn.Module):
             nn.Conv2d(2 * channel_amp, channel_amp, (1, 1)),
             PhasenBatchNorm2d(channel_amp, non_linear="relu"))
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
             inp: N x Ca x F x T
@@ -156,11 +165,11 @@ class TSBlock(nn.Module):
     """
 
     def __init__(self,
-                 channel_amp,
-                 channel_pha,
-                 num_bins=257,
-                 channel_r=5,
-                 conv1d_kernel=9):
+                 channel_amp: int,
+                 channel_pha: int,
+                 num_bins: int = 257,
+                 channel_r: int = 5,
+                 conv1d_kernel: int = 9) -> None:
         super(TSBlock, self).__init__()
         self.ftb1 = FTBlock(channel_amp,
                             num_bins=num_bins,
@@ -185,7 +194,7 @@ class TSBlock(nn.Module):
         self.att_a = nn.Conv2d(channel_pha, channel_amp, (1, 1))
         self.att_p = nn.Conv2d(channel_amp, channel_pha, (1, 1))
 
-    def forward(self, amp_and_pha):
+    def forward(self, amp_and_pha: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args:
             amp (Tensor): N x Ca x F x T
@@ -211,16 +220,16 @@ class Phasen(nn.Module):
     """
 
     def __init__(self,
-                 channel_amp,
-                 channel_pha,
-                 enh_transform=None,
-                 num_tsbs=3,
-                 num_bins=257,
-                 channel_r=5,
-                 conv1d_kernel=9,
-                 lstm_hidden=256,
-                 linear_size=512,
-                 training_mode="freq"):
+                 channel_amp: int,
+                 channel_pha: int,
+                 enh_transform: Optional[nn.Module] = None,
+                 num_tsbs: int = 3,
+                 num_bins: int = 257,
+                 channel_r: int = 5,
+                 conv1d_kernel: int = 9,
+                 lstm_hidden: int = 256,
+                 linear_size: int = 512,
+                 training_mode: int = "freq") -> None:
         super(Phasen, self).__init__()
         if enh_transform is None:
             raise RuntimeError("Missing configuration for enh_transform")
@@ -259,7 +268,7 @@ class Phasen(nn.Module):
         self.conv1x1_p = nn.Conv2d(channel_pha, 2, (1, 1))
         self.training_mode = training_mode
 
-    def check_args(self, mix, training=True):
+    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
         if not training and mix.dim() != 1:
             raise RuntimeError("Phasen expects 1D tensor (inference), " +
                                f"got {mix.dim()} instead")
@@ -267,7 +276,11 @@ class Phasen(nn.Module):
             raise RuntimeError("Phasen expects 2D tensor (training), " +
                                f"got {mix.dim()} instead")
 
-    def _forward(self, mix, mode="freq"):
+    def _forward(
+            self,
+            mix: th.Tensor,
+            mode: str = "freq"
+    ) -> Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]:
         """
         Args:
             mix (Tensor): N x S
@@ -300,16 +313,16 @@ class Phasen(nn.Module):
         amp = amp.transpose(1, 2)
         # N x F x T
         mask = self.linear_a(amp)
+        sr = sr * mask
+        si = si * mask
+        pr, pi = pha[:, 0], pha[:, 1]
+        pack_cplx = (sr * pr - si * pi, sr * pi + si * pr)
         if mode == "freq":
-            return mask, pha
+            return pack_cplx
         else:
-            sr = sr * mask
-            si = si * mask
-            pr, pi = pha[:, 0], pha[:, 1]
-            return self.inverse_stft((sr * pr - si * pi, sr * pi + si * pr),
-                                     input="complex")
+            return self.inverse_stft(pack_cplx, input="complex")
 
-    def infer(self, mix):
+    def infer(self, mix: th.Tensor) -> th.Tensor:
         """
         Args:
             mix (Tensor): S
@@ -322,7 +335,7 @@ class Phasen(nn.Module):
             enh = self._forward(mix, mode="time")
             return enh[0]
 
-    def forward(self, mix):
+    def forward(self, mix: th.Tensor):
         """
         Args:
             mix (Tensor): N x S

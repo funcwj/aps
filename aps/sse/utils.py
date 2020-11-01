@@ -22,6 +22,7 @@ class MaskNonLinear(nn.Module):
         super(MaskNonLinear, self).__init__()
         supported_nonlinear = {
             "relu": tf.relu,
+            "tanh": tf.tanh,
             "sigmoid": th.sigmoid,
             "softmax": tf.softmax
         }

@@ -12,6 +12,7 @@ exp/
 log/
 checkpoint/
 cache/
+build/
 
 # examples
 /example/*/*/data

@@ -6,6 +6,8 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
+from typing import Optional, NoReturn, Union, List
+
 
 class ChannelWiseLayerNorm(nn.LayerNorm):
     """
@@ -15,13 +17,13 @@ class ChannelWiseLayerNorm(nn.LayerNorm):
     def __init__(self, *args, **kwargs):
         super(ChannelWiseLayerNorm, self).__init__(*args, **kwargs)
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         x: N x C x T
         """
         if x.dim() != 3:
-            raise RuntimeError("{} accept 3D tensor as input".format(
-                self.__name__))
+            raise RuntimeError(
+                "ChannelWiseLayerNorm accepts 3D tensor as input")
         # N x C x T => N x T x C
         x = th.transpose(x, 1, 2)
         # LN
@@ -36,7 +38,10 @@ class GlobalChannelLayerNorm(nn.Module):
     Global channel layer normalization
     """
 
-    def __init__(self, dim, eps=1e-05, elementwise_affine=True):
+    def __init__(self,
+                 dim: int,
+                 eps: float = 1e-05,
+                 elementwise_affine: bool = True) -> None:
         super(GlobalChannelLayerNorm, self).__init__()
         self.eps = eps
         self.normalized_dim = dim
@@ -48,13 +53,13 @@ class GlobalChannelLayerNorm(nn.Module):
             self.register_parameter("weight", None)
             self.register_parameter("bias", None)
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         x: N x C x T
         """
         if x.dim() != 3:
-            raise RuntimeError("{} accept 3D tensor as input".format(
-                self.__name__))
+            raise RuntimeError(
+                "GlobalChannelLayerNorm accepts 3D tensor as input")
         # N x 1 x 1
         mean = th.mean(x, (1, 2), keepdim=True)
         var = th.mean((x - mean)**2, (1, 2), keepdim=True)
@@ -65,12 +70,12 @@ class GlobalChannelLayerNorm(nn.Module):
             x = (x - mean) / th.sqrt(var + self.eps)
         return x
 
-    def extra_repr(self):
+    def extra_repr(self) -> str:
         return "{normalized_dim}, eps={eps}, " \
             "elementwise_affine={elementwise_affine}".format(**self.__dict__)
 
 
-def build_norm(norm, dim):
+def build_norm(norm: str, dim: int) -> nn.Module:
     """
     Build normalize layer
     LN cost more memory than BN
@@ -85,7 +90,7 @@ def build_norm(norm, dim):
         return GlobalChannelLayerNorm(dim, elementwise_affine=True)
 
 
-def build_blocks(N, B, **kwargs):
+def build_blocks(N: int, B: int, **kwargs) -> nn.Module:
     """
     Build Conv1D blocks
     """
@@ -106,7 +111,7 @@ class Conv1D(nn.Conv1d):
     def __init__(self, *args, **kwargs):
         super(Conv1D, self).__init__(*args, **kwargs)
 
-    def forward(self, x, squeeze=False):
+    def forward(self, x: th.Tensor, squeeze: bool = False) -> th.Tensor:
         """
         x: N x L or N x C x L
         """
@@ -126,7 +131,7 @@ class ConvTrans1D(nn.ConvTranspose1d):
     def __init__(self, *args, **kwargs):
         super(ConvTrans1D, self).__init__(*args, **kwargs)
 
-    def forward(self, x, squeeze=False):
+    def forward(self, x: th.Tensor, squeeze: bool = False) -> th.Tensor:
         """
         x: N x L or N x C x L
         """
@@ -144,13 +149,13 @@ class DsConv1D(nn.Module):
     """
 
     def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 dilation=1,
-                 causal=False,
-                 bias=True,
-                 norm="BN"):
+                 in_channels: int,
+                 out_channels: int,
+                 kernel_size: int,
+                 dilation: int = 1,
+                 causal: bool = False,
+                 bias: bool = True,
+                 norm: str = "BN") -> None:
         super(DsConv1D, self).__init__()
         self.dconv_causal = causal
         self.pad_value = dilation * (kernel_size - 1)
@@ -166,7 +171,7 @@ class DsConv1D(nn.Module):
         self.norm = build_norm(norm, in_channels)
         self.sconv = nn.Conv1d(in_channels, out_channels, 1, bias=True)
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         x = self.dconv(x)
         if self.dconv_causal:
             x = x[:, :, :-self.pad_value]
@@ -181,12 +186,12 @@ class Conv1DBlock(nn.Module):
     """
 
     def __init__(self,
-                 in_channels=256,
-                 conv_channels=512,
-                 kernel_size=3,
-                 dilation=1,
-                 norm="cLN",
-                 causal=False):
+                 in_channels: int = 256,
+                 conv_channels: int = 512,
+                 kernel_size: int = 3,
+                 dilation: int = 1,
+                 norm: str = "cLN",
+                 causal: bool = False) -> None:
         super(Conv1DBlock, self).__init__()
         # 1x1 conv
         self.conv = Conv1D(in_channels, conv_channels, 1)
@@ -200,7 +205,7 @@ class Conv1DBlock(nn.Module):
                                bias=True,
                                norm=norm)
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         y = self.conv(x)
         y = self.norm(self.prelu(y))
         y = self.dsconv(y)
@@ -216,19 +221,19 @@ class TimeConvTasNet(nn.Module):
     """
 
     def __init__(self,
-                 L=20,
-                 N=256,
-                 X=8,
-                 R=4,
-                 B=256,
-                 H=512,
-                 P=3,
-                 norm="BN",
-                 num_spks=2,
-                 non_linear="relu",
-                 input_norm="cLN",
-                 block_residual=False,
-                 causal=False):
+                 L: int = 20,
+                 N: int = 256,
+                 X: int = 8,
+                 R: int = 4,
+                 B: int = 256,
+                 H: int = 512,
+                 P: int = 3,
+                 norm: str = "BN",
+                 num_spks: int = 2,
+                 non_linear: str = "relu",
+                 input_norm: str = "cLN",
+                 block_residual: bool = False,
+                 causal: bool = False) -> None:
         super(TimeConvTasNet, self).__init__()
         supported_nonlinear = {
             "relu": F.relu,
@@ -266,7 +271,7 @@ class TimeConvTasNet(nn.Module):
         self.num_spks = num_spks
         self.block_residual = block_residual
 
-    def check_args(self, mix, training=True):
+    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
         """
         Check args training | inference
         """
@@ -277,7 +282,7 @@ class TimeConvTasNet(nn.Module):
             raise RuntimeError(f"ConvTasNet expects 2D tensor (training), " +
                                f"but got {mix.dim()}")
 
-    def infer(self, mix):
+    def infer(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): S
@@ -291,7 +296,7 @@ class TimeConvTasNet(nn.Module):
             sep = self.forward(mix)
             return sep
 
-    def forward(self, mix):
+    def forward(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): N x S
@@ -329,20 +334,20 @@ class FreqConvTasNet(nn.Module):
     """
 
     def __init__(self,
-                 enh_transform=None,
-                 in_features=257,
-                 B=6,
-                 K=3,
-                 N=3,
-                 conv_channels=512,
-                 proj_channels=256,
-                 norm="BN",
-                 num_spks=2,
-                 num_bins=257,
-                 non_linear="relu",
-                 causal=False,
-                 block_residual=False,
-                 training_mode="freq"):
+                 enh_transform: Optional[nn.Module] = None,
+                 in_features: int = 257,
+                 B: int = 6,
+                 K: int = 3,
+                 N: int = 3,
+                 conv_channels: int = 512,
+                 proj_channels: int = 256,
+                 norm: str = "BN",
+                 num_spks: int = 2,
+                 num_bins: int = 257,
+                 non_linear: str = "relu",
+                 causal: bool = False,
+                 block_residual: bool = False,
+                 training_mode: str = "freq") -> None:
         super(FreqConvTasNet, self).__init__()
         supported_nonlinear = {"relu": F.relu, "sigmoid": th.sigmoid}
         if non_linear not in supported_nonlinear:
@@ -368,7 +373,7 @@ class FreqConvTasNet(nn.Module):
         self.mode = training_mode
         self.block_residual = block_residual
 
-    def check_args(self, mix, training=True):
+    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
         """
         Check args training | inference
         """
@@ -382,7 +387,8 @@ class FreqConvTasNet(nn.Module):
                 f"FreqConvTasNet expects 2/3D tensor (training), " +
                 f"got {mix.dim()} instead")
 
-    def _forward(self, mix, mode):
+    def _forward(self, mix: th.Tensor,
+                 mode: str) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Forward function in time|freq mode
         """
@@ -421,7 +427,9 @@ class FreqConvTasNet(nn.Module):
                 ]
             return enh
 
-    def infer(self, mix, mode="time"):
+    def infer(self,
+              mix: th.Tensor,
+              mode: str = "time") -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): N x S
@@ -432,7 +440,7 @@ class FreqConvTasNet(nn.Module):
             ret = self._forward(mix, mode=mode)
             return ret[0] if self.num_spks == 1 else [r[0] for r in ret]
 
-    def forward(self, mix):
+    def forward(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args
             mix (Tensor): N x (C) x S

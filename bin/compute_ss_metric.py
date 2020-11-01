@@ -21,7 +21,9 @@ def run(args):
         raise RuntimeError(f"Number of the speakers doesn't matched")
     single_speaker = len(splited_est_scps) == 1
 
-    reporter = AverageReporter(args.spk2class, name="SiSNR", unit="dB")
+    reporter = AverageReporter(args.spk2class,
+                               name=args.metric.upper(),
+                               unit="dB")
     utt_val = open(args.per_utt, "w") if args.per_utt else None
     utt_ali = open(args.utt_ali, "w") if args.utt_ali else None
 

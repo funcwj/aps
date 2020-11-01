@@ -43,7 +43,7 @@ def test_phasen():
     inp = th.rand(4, 64000)
     x, y = phasen(inp)
     assert x.shape == th.Size([4, 257, 249])
-    assert y.shape == th.Size([4, 2, 257, 249])
+    assert y.shape == th.Size([4, 257, 249])
     z = phasen.infer(inp[1])
     assert z.shape == th.Size([64000])
 

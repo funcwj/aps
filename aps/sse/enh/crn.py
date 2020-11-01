@@ -7,6 +7,8 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from typing import Tuple, Optional, NoReturn
+
 
 class CRNLayer(nn.Module):
     """
@@ -14,14 +16,14 @@ class CRNLayer(nn.Module):
     """
 
     def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size=(3, 3),
-                 stride_size=(1, 2),
-                 encoder=True,
-                 causal=False,
-                 output_layer=False,
-                 output_padding=0):
+                 in_channels: int,
+                 out_channels: int,
+                 kernel_size: Tuple[int, int] = (3, 3),
+                 stride_size: Tuple[int, int] = (1, 2),
+                 encoder: bool = True,
+                 causal: bool = False,
+                 output_layer: bool = False,
+                 output_padding: int = 0) -> None:
         super(CRNLayer, self).__init__()
         # NOTE: time stride should be 1
         var_kt = kernel_size[0] - 1
@@ -45,7 +47,7 @@ class CRNLayer(nn.Module):
         self.causal_conv = causal
         self.time_axis_pad = time_axis_pad
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         Args:
             x (Tensor): N x C x T x F
@@ -74,11 +76,11 @@ class CRNet(nn.Module):
     }
 
     def __init__(self,
-                 num_bins=161,
-                 causal_conv=False,
-                 mode="masking",
-                 output_nonlinear="softplus",
-                 enh_transform=None):
+                 num_bins: int = 161,
+                 causal_conv: bool = False,
+                 mode: str = "masking",
+                 output_nonlinear: str = "softplus",
+                 enh_transform: Optional[nn.Module] = None) -> None:
         super(CRNet, self).__init__()
         if output_nonlinear not in self.supported_nonlinear:
             raise RuntimeError(
@@ -119,7 +121,7 @@ class CRNet(nn.Module):
                             bidirectional=False)
         self.mode = mode
 
-    def check_args(self, mix, training=True):
+    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
         if not training and mix.dim() != 1:
             raise RuntimeError("CRNet expects 1D tensor (inference), " +
                                f"got {mix.dim()} instead")
@@ -127,7 +129,7 @@ class CRNet(nn.Module):
             raise RuntimeError("CRNet expects 2D tensor (training), " +
                                f"got {mix.dim()} instead")
 
-    def infer(self, mix):
+    def infer(self, mix: th.Tensor) -> th.Tensor:
         """
         Args:
             mix: (Tensor): N x S
@@ -147,7 +149,7 @@ class CRNet(nn.Module):
             enh = self.enh_transform.inverse_stft((mag, pha), input="polar")
             return enh[0]
 
-    def forward(self, mix):
+    def forward(self, mix: th.Tensor) -> th.Tensor:
         """
         Args:
             mix (Tensor): N x S

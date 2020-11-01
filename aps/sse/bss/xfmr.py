@@ -7,6 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from typing import Optional, List, Union, NoReturn
 from aps.asr.transformer.encoder import RelTransformerEncoder
 from aps.sse.utils import MaskNonLinear
 
@@ -17,21 +18,21 @@ class FreqRelTransformer(RelTransformerEncoder):
     """
 
     def __init__(self,
-                 enh_transform=None,
-                 input_size=257,
-                 num_spks=2,
-                 num_bins=257,
-                 att_dim=512,
-                 nhead=8,
-                 k_dim=256,
-                 feedforward_dim=2048,
-                 att_dropout=0.1,
-                 proj_dropout=0.1,
-                 post_norm=True,
-                 add_value_rel=False,
-                 num_layers=6,
-                 non_linear="sigmoid",
-                 training_mode="freq"):
+                 enh_transform: Optional[nn.Module] = None,
+                 input_size: int = 257,
+                 num_spks: int = 2,
+                 num_bins: int = 257,
+                 att_dim: int = 512,
+                 nhead: int = 8,
+                 k_dim: int = 256,
+                 feedforward_dim: int = 2048,
+                 att_dropout: float = 0.1,
+                 proj_dropout: float = 0.1,
+                 post_norm: bool = True,
+                 add_value_rel: bool = False,
+                 num_layers: int = 6,
+                 non_linear: str = "sigmoid",
+                 training_mode: str = "freq") -> None:
         super(FreqRelTransformer,
               self).__init__(input_size,
                              input_embed="linear",
@@ -56,7 +57,7 @@ class FreqRelTransformer(RelTransformerEncoder):
         self.non_linear = MaskNonLinear(non_linear)
         self.num_spks = num_spks
 
-    def check_args(self, mix, training=True):
+    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
         if not training and mix.dim() != 1:
             raise RuntimeError(
                 "FreqRelTransformer expects 1D tensor (inference), " +
@@ -66,7 +67,9 @@ class FreqRelTransformer(RelTransformerEncoder):
                 "FreqRelTransformer expects 2D tensor (training), " +
                 f"got {mix.dim()} instead")
 
-    def infer(self, mix, mode="time"):
+    def infer(self,
+              mix: th.Tensor,
+              mode: str = "time") -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): S
@@ -82,7 +85,9 @@ class FreqRelTransformer(RelTransformerEncoder):
             else:
                 return [s[0] for s in sep]
 
-    def _forward(self, mix, mode="freq"):
+    def _forward(self,
+                 mix: th.Tensor,
+                 mode: str = "freq") -> Union[th.Tensor, List[th.Tensor]]:
         """
         Forward function in time|freq mode
         """
@@ -111,7 +116,7 @@ class FreqRelTransformer(RelTransformerEncoder):
             else:
                 return spk
 
-    def forward(self, s):
+    def forward(self, s: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             s (Tensor): N x S
