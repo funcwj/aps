@@ -111,10 +111,10 @@ class ProgressReporter(object):
                 self.board_writer.add_scalar(f"accu/{self.mode}", accu, epoch)
         cost = self.timer.elapsed()
         if accu is not None:
-            hstr = f"Loss/Accu(time/N, lr={lr:.3e}) - Epoch {epoch:2d}: "
+            hstr = f"Loss/Accu(time/#batch, lr={lr:.3e}) - Epoch {epoch:2d}: "
             cstr = f"{self.mode} = {loss:.4f}/{accu:.2f}({cost:.2f}m/{N:d})"
         else:
-            hstr = f"Loss(time/N, lr={lr:.3e}) - Epoch {epoch:2d}: "
+            hstr = f"Loss(time/#batch, lr={lr:.3e}) - Epoch {epoch:2d}: "
             cstr = f"{self.mode} = {loss:.4f}({cost:.2f}m/{N:d})"
         return loss, accu, hstr + cstr
 

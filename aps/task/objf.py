@@ -118,8 +118,8 @@ def permu_invarint_objf(inp: List[Any],
 
     def perm_objf(permute, out, ref):
         """
-            Return tensor (P x N) for each permutation and mini-batch
-            """
+        Return tensor (P x N) for each permutation and mini-batch
+        """
         return sum([objf(out[s], ref[t]) for s, t in enumerate(permute)
                    ]) / len(permute)
 
@@ -130,6 +130,7 @@ def permu_invarint_objf(inp: List[Any],
     loss_mat = th.stack(
         [perm_objf(p, inp, ref) for p in permutations(range(len(inp)))])
 
+    # if we want to maximize the objective, i.e, snr, remember to add negative flag to the objf
     loss, index = th.min(loss_mat, dim=0)
     if batchmean:
         loss = th.mean(loss)

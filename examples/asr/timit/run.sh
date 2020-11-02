@@ -23,7 +23,7 @@ num_workers=2
 prog_interval=100
 
 # decoding
-beam_size=32
+beam_size=24
 nbest=8
 
 . ./utils/parse_options.sh || exit 1
@@ -56,5 +56,6 @@ if [ $stage -le 3 ]; then
     data/timit/test/wav.scp \
     exp/timit/$exp/dec
   # wer
-  ./bin/compute_wer.py exp/timit/$exp/dec/beam24.decode data/timit/test/text
+  ./bin/compute_wer.py exp/timit/$exp/dec/beam${beam_size}.decode \
+    data/timit/test/text
 fi

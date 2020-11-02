@@ -4,48 +4,17 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import yaml
-import codecs
-import random
 import pprint
-import pathlib
 import argparse
-
-import torch as th
-import numpy as np
 
 from aps.utils import set_seed
 from aps.opts import BaseTrainParser
 from aps.trainer.ddp import DdpTrainer
-
 from aps.loader import support_loader
 from aps.transform import support_transform
 from aps.task import support_task
+from aps.conf import load_ss_conf
 from aps.sse import support_nnet
-
-constrained_conf_keys = [
-    "nnet", "nnet_conf", "task", "task_conf", "data_conf", "trainer_conf",
-    "enh_transform"
-]
-
-
-def load_conf(yaml_conf):
-    """
-    Load yaml configurations
-    """
-    # load configurations
-    with open(yaml_conf, "r") as f:
-        conf = yaml.full_load(f)
-
-    # create task_conf if None
-    if "task_conf" not in conf:
-        conf["task_conf"] = {}
-
-    for key in conf.keys():
-        if key not in constrained_conf_keys:
-            raise ValueError(f"Invalid configuration item: {key}")
-
-    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
-    return conf
 
 
 def run(args):
@@ -54,7 +23,7 @@ def run(args):
     if seed is not None:
         print(f"Set random seed as {seed}")
 
-    conf = load_conf(args.conf)
+    conf = load_ss_conf(args.conf)
     print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
 
     data_conf = conf["data_conf"]

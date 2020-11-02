@@ -1,3 +1,4 @@
 1. Beam search in batch mode (also optimization)
-2. More example recipes
-3. ...
+2. LM fusion (decoding)
+3. More recipes (speaker tasks)
+4. ...

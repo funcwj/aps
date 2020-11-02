@@ -4,31 +4,18 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import yaml
-import codecs
-import random
 import pprint
-import pathlib
 import argparse
 
-from os import environ
-
-import torch as th
-import numpy as np
-
 from aps.utils import set_seed
-from aps.opts import BaseTrainParser
+from aps.opts import DistributedTrainParser
 from aps.trainer import HvdTrainer, DdpTrainer
-
 from aps.loader import support_loader
 from aps.transform import support_transform
 from aps.task import support_task
+from aps.conf import load_ss_conf
 from aps.sse import support_nnet
 from aps import distributed
-
-constrained_conf_keys = [
-    "nnet", "nnet_conf", "task", "task_conf", "data_conf", "trainer_conf",
-    "enh_transform"
-]
 
 
 def train_worker(task, conf, args):
@@ -88,32 +75,13 @@ def train_worker(task, conf, args):
                                 eval_interval=args.eval_interval)
 
 
-def load_conf(yaml_conf):
-    """
-    Load yaml configurations
-    """
-    # load configurations
-    with open(yaml_conf, "r") as f:
-        conf = yaml.full_load(f)
-
-    # create task_conf if None
-    if "task_conf" not in conf:
-        conf["task_conf"] = {}
-
-    for key in conf.keys():
-        if key not in constrained_conf_keys:
-            raise ValueError(f"Invalid configuration item: {key}")
-
-    return conf
-
-
 def run(args):
     # set random seed
     seed = set_seed(args.seed)
     if seed is not None:
         print(f"Set random seed as {seed}")
 
-    conf = load_conf(args.conf)
+    conf = load_ss_conf(args.conf)
 
     ss_cls = support_nnet(conf["nnet"])
     # with or without enh_tranform
@@ -134,21 +102,7 @@ if __name__ == "__main__":
         "Using python -m torch.distributed.launch or horovodrun to launch the command. "
         "See scripts/distributed_train_ss.sh ",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[BaseTrainParser.parser])
-    parser.add_argument("--device-ids",
-                        type=str,
-                        default="0,1",
-                        help="Training on which GPU devices")
-    parser.add_argument("--distributed",
-                        type=str,
-                        default="torch",
-                        choices=["torch", "horovod"],
-                        help="Which distributed backend to use")
-    parser.add_argument("--dev-batch-factor",
-                        type=int,
-                        default=2,
-                        help="Use batch_size/dev_batch_factor "
-                        "for validation batch size")
+        parents=[DistributedTrainParser.parser])
     args = parser.parse_args()
     print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
           flush=True)

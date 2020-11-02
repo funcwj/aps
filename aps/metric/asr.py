@@ -12,8 +12,8 @@ def permute_wer(hlist: List[str], rlist: List[str]) -> float:
     """
     Compute edit distance between N pairs
     Args:
-        hlist: list[vector], hypothesis
-        rlist: list[vector], reference
+        hlist: list[str], hypothesis
+        rlist: list[str], reference
     Return:
         float: WER
     """

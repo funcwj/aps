@@ -4,20 +4,16 @@
 
 import yaml
 import codecs
-import random
 import pprint
-import pathlib
 import argparse
-
-import numpy as np
-import torch as th
 
 from aps.utils import set_seed
 from aps.opts import BaseTrainParser
 from aps.trainer.ddp import DdpTrainer
 from aps.loader import support_loader
-from aps.asr import support_nnet
 from aps.task import support_task
+from aps.conf import load_lm_conf
+from aps.asr import support_nnet
 
 constrained_conf_keys = [
     "nnet", "nnet_conf", "task", "task_conf", "data_conf", "trainer_conf"
@@ -30,31 +26,11 @@ def run(args):
     if seed is not None:
         print(f"Set random seed as {seed}")
 
-    # load configurations
-    with open(args.conf, "r") as f:
-        conf = yaml.full_load(f)
-
-    # create task_conf if None
-    if "task_conf" not in conf:
-        conf["task_conf"] = {}
-
+    conf, vocab = load_lm_conf(args.conf, args.dict)
     print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
-    # add dictionary info
-    with codecs.open(args.dict, encoding="utf-8") as f:
-        vocab = {}
-        for line in f:
-            unit, idx = line.split()
-            vocab[unit] = int(idx)
-
-    if "<sos>" not in vocab or "<eos>" not in vocab:
-        raise ValueError(f"Missing <sos>/<eos> in {args.dict}")
     eos = vocab["<eos>"]
     sos = vocab["<sos>"]
     conf["nnet_conf"]["vocab_size"] = len(vocab)
-
-    for key in conf.keys():
-        if key not in constrained_conf_keys:
-            raise ValueError(f"Invalid configuration item: {key}")
 
     data_conf = conf["data_conf"]
     trn_loader = support_loader(**data_conf["train"],
