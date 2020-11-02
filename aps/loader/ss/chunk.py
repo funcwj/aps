@@ -292,7 +292,8 @@ class WaveChunkDataLoader(object):
         return 0
 
     def set_epoch(self, epoch: int) -> NoReturn:
-        self.sampler.set_epoch(epoch)
+        if self.sampler:
+            self.sampler.set_epoch(epoch)
 
     def __iter__(self) -> Iterator[Dict]:
         chunk_list = []

@@ -37,13 +37,22 @@ class FasterDecoder(Computer):
     Decoder wrapper
     """
 
-    def __init__(self, cpt_dir, device_id=-1):
+    def __init__(self, cpt_dir, function="beam_search", device_id=-1):
         super(FasterDecoder, self).__init__(cpt_dir, device_id=device_id)
+        if not hasattr(self.nnet, function):
+            raise RuntimeError(
+                f"AM doesn't have the decoding function: {function}")
+        self.decode = getattr(self.nnet, function)
+        self.function = function
         logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
+        logger.info(f"Using decoding function: {function}")
 
     def run(self, src, **kwargs):
         src = th.from_numpy(src).to(self.device)
-        return self.nnet.beam_search(src, **kwargs)
+        if self.function == "greedy_search":
+            return self.decode(src)
+        else:
+            return self.decode(src, **kwargs)
 
 
 def run(args):
@@ -176,6 +185,11 @@ if __name__ == "__main__":
                         type=str,
                         default="",
                         help="If not empty, dump n-best hypothesis")
+    parser.add_argument("--function",
+                        type=str,
+                        choices=["beam_search", "greedy_search"],
+                        default="beam_search",
+                        help="Name of the decoding function")
     parser.add_argument("--vectorized",
                         action=StrToBoolAction,
                         default="true",

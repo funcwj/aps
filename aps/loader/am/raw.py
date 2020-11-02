@@ -168,4 +168,4 @@ class AudioDataLoader(dat.DataLoader):
                                               collate_fn=egs_collate)
 
     def set_epoch(self, epoch: int) -> NoReturn:
-        self.sampler.set_epoch(epoch)
+        self.batch_sampler.set_epoch(epoch)

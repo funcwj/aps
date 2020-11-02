@@ -21,3 +21,6 @@ for metric in sdr pesq stoi sisnr; do
     data/metric/sse/bss_spk1.scp,data/metric/sse/bss_spk2.scp \
     data/metric/sse/ref_spk1.scp,data/metric/sse/ref_spk2.scp
 done
+
+../bin/compute_gmvn.py --transform asr --sr 16000 \
+  data/dataloader/ss/wav.1.scp data/gmvn/transform.yaml data/gmvn/gmvn.pt

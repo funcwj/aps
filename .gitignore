@@ -6,6 +6,7 @@ __pycache__/
 /asset/
 /bin/debug*
 /local/
+/tests/data/gmvn/gmvn.pt
 *.log
 
 exp/

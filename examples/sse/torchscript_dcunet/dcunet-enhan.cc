@@ -1,4 +1,5 @@
-// wujian@2020
+// Copyright 2020 Jian Wu
+// License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 #include <sox.h>
 #include <torch/script.h>
