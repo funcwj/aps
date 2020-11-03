@@ -44,7 +44,7 @@ def run(args):
         raise RuntimeError("batch_size == 1, use decode.py instead")
     # build dictionary
     if args.dict:
-        vocab = load_dict(args.dict)
+        vocab = load_dict(args.dict, reverse=True)
     else:
         vocab = None
     decoder = BatchDecoder(args.checkpoint, device_id=args.device_id)

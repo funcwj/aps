@@ -18,7 +18,9 @@ all_am_conf_keys = required_keys + [
 all_lm_conf_keys = required_keys + ["cmd_args"]
 
 
-def load_dict(dict_path: str, required: List[str] = ["<sos>", "<eos>"]) -> Dict:
+def load_dict(dict_path: str,
+              required: List[str] = ["<sos>", "<eos>"],
+              reverse: bool = False) -> Dict:
     """
     Load the dictionary object
     """
@@ -26,12 +28,17 @@ def load_dict(dict_path: str, required: List[str] = ["<sos>", "<eos>"]) -> Dict:
         vocab = {}
         for line in f:
             tok, idx = line.split()
-            if tok in vocab:
-                raise RuntimeError(f"Duplicated token in {dict_path}: {tok}")
-            vocab[tok] = int(idx)
-    for token in required:
-        if token not in vocab:
-            raise ValueError(f"Miss token: {token} in {dict_path}")
+            if reverse:
+                vocab[int(idx)] = tok
+            else:
+                if tok in vocab:
+                    raise RuntimeError(
+                        f"Duplicated token in {dict_path}: {tok}")
+                vocab[tok] = int(idx)
+    if not reverse:
+        for token in required:
+            if token not in vocab:
+                raise ValueError(f"Miss token: {token} in {dict_path}")
     return vocab
 
 

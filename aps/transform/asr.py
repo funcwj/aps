@@ -36,7 +36,8 @@ class SpectrogramTransform(STFT):
                  round_pow_of_two: bool = True,
                  normalized: bool = False,
                  onesided: bool = True,
-                 mode: str = "librosa") -> None:
+                 mode: str = "librosa",
+                 pre_emphasis: float = 0) -> None:
         super(SpectrogramTransform,
               self).__init__(frame_len,
                              frame_hop,
@@ -46,12 +47,16 @@ class SpectrogramTransform(STFT):
                              normalized=normalized,
                              onesided=onesided,
                              mode=mode)
+        self.pre_emphasis = pre_emphasis
 
     def dim(self):
         return self.num_bins
 
     def len(self, xlen: th.Tensor) -> th.Tensor:
         return self.num_frames(xlen)
+
+    def extra_repr(self) -> str:
+        return self.expr + f", pre_emphasis={self.pre_emphasis}"
 
     def forward(self, x: th.Tensor) -> th.Tensor:
         """
@@ -60,6 +65,8 @@ class SpectrogramTransform(STFT):
         Return:
             m (Tensor): magnitude, N x (C) x T x F
         """
+        if self.pre_emphasis > 0:
+            x[..., 1:] = x[..., 1:] - self.pre_emphasis * x[..., :-1]
         m, _ = super().forward(x)
         m = th.transpose(m, -1, -2)
         return m
@@ -406,6 +413,7 @@ class FeatureTransform(nn.Module):
                  round_pow_of_two: bool = True,
                  stft_normalized: bool = False,
                  stft_mode: str = "librosa",
+                 pre_emphasis: float = 0,
                  sr: int = 16000,
                  num_mels: int = 80,
                  num_ceps: int = 13,
@@ -440,11 +448,17 @@ class FeatureTransform(nn.Module):
         for tok in trans_tokens:
             if tok == "spectrogram":
                 transform.append(
-                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs))
+                    SpectrogramTransform(frame_len,
+                                         frame_hop,
+                                         **stft_kwargs,
+                                         pre_emphasis=pre_emphasis))
                 feats_dim = transform[-1].dim()
             elif tok == "fbank":
                 fbank = [
-                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    SpectrogramTransform(frame_len,
+                                         frame_hop,
+                                         **stft_kwargs,
+                                         pre_emphasis=pre_emphasis),
                     MelTransform(frame_len,
                                  round_pow_of_two=round_pow_of_two,
                                  sr=sr,
@@ -455,7 +469,10 @@ class FeatureTransform(nn.Module):
                 feats_dim = transform[-1].dim()
             elif tok == "mfcc":
                 log_fbank = [
-                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    SpectrogramTransform(frame_len,
+                                         frame_hop,
+                                         **stft_kwargs,
+                                         pre_emphasis=pre_emphasis),
                     MelTransform(frame_len,
                                  round_pow_of_two=round_pow_of_two,
                                  sr=sr,

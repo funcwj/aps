@@ -13,7 +13,7 @@ from torch.nn.utils import clip_grad_norm_
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from typing import Optional, Dict, Union, Tuple, NoReturn, Iterable
+from typing import Optional, Dict, List, Union, Tuple, NoReturn, Iterable
 from aps.trainer.ss import support_ss_scheduler
 from aps.trainer.lr import support_lr_scheduler
 
@@ -46,7 +46,7 @@ class ProgressReporter(object):
             logger_loc = (checkpoint / "trainer.log").as_posix()
             self.header = "Trainer"
         else:
-            logger_loc = (checkpoint / f"trainer.rank{rank}.log").as_posix()
+            logger_loc = (checkpoint / f"trainer.rank.{rank}.log").as_posix()
             self.header = f"Rank {rank}"
 
         self.logger = get_logger(logger_loc, file=True)
@@ -170,7 +170,7 @@ class Trainer(object):
     def __init__(self,
                  task: th.nn.Module,
                  rank: Optional[int] = None,
-                 device_ids: int = 0,
+                 device_ids: Union[str, int, List[int]] = 0,
                  checkpoint: Union[str, Path] = "cpt",
                  optimizer: str = "adam",
                  optimizer_kwargs: Optional[Dict] = None,
@@ -179,12 +179,12 @@ class Trainer(object):
                  lr_scheduler_period: str = "epoch",
                  ss_scheduler: str = "const",
                  ss_scheduler_kwargs: Optional[Dict] = None,
-                 clip_gradient: Optional[int] = None,
+                 clip_gradient: Optional[float] = None,
                  gaussian_noise_std: Optional[float] = None,
                  prog_interval: int = 100,
                  save_interval: int = -1,
-                 resume: int = "",
-                 init: int = "",
+                 resume: str = "",
+                 init: str = "",
                  tensorboard: bool = False,
                  stop_criterion: str = "loss",
                  no_impr: int = 6,
@@ -539,7 +539,7 @@ class Trainer(object):
                     if better:
                         self.save_checkpoint(e, best=True)
                     else:
-                        sstr += f" | no impr{self.stop_criterion.no_impr:d}, "
+                        sstr += f" | no impr {self.stop_criterion.no_impr:d}, "
                         sstr += f"best = {self.stop_criterion.best:.4f}"
                     self.reporter.log(sstr)
                     # lr schedule here

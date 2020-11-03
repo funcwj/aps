@@ -112,23 +112,24 @@ def permu_invarint_objf(inp: List[Any],
     Return:
         loss (Tensor): N (per mini-batch) if batchmean == False
     """
-    if len(inp) != len(ref):
+    num_spks = len(inp)
+    if num_spks != len(ref):
         raise ValueError("Size mismatch between #inp and " +
-                         f"#ref: {len(inp)} vs {len(ref)}")
+                         f"#ref: {num_spks} vs {len(ref)}")
 
-    def perm_objf(permute, out, ref):
+    def permu_objf(permu, out, ref):
         """
         Return tensor (P x N) for each permutation and mini-batch
         """
-        return sum([objf(out[s], ref[t]) for s, t in enumerate(permute)
-                   ]) / len(permute)
+        return sum([objf(out[s], ref[t]) for s, t in enumerate(permu)
+                   ]) / len(permu)
 
     if transform:
         inp = [transform(i) for i in inp]
         ref = [transform(r) for r in ref]
 
     loss_mat = th.stack(
-        [perm_objf(p, inp, ref) for p in permutations(range(len(inp)))])
+        [permu_objf(p, inp, ref) for p in permutations(range(num_spks))])
 
     # if we want to maximize the objective, i.e, snr, remember to add negative flag to the objf
     loss, index = th.min(loss_mat, dim=0)

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import torch as th
 from torch.nn.utils import clip_grad_norm_
-from typing import Optional, Dict, Union, Tuple, NoReturn
+from typing import Optional, Dict, List, Union, Tuple, NoReturn
 
 import aps.distributed as dist
 from aps.trainer.base import Trainer, add_gaussian_noise
@@ -21,7 +21,7 @@ class HvdTrainer(Trainer):
     def __init__(self,
                  task: th.nn.Module,
                  rank: Optional[int] = None,
-                 device_ids: int = 0,
+                 device_ids: Union[str, int, List[int]] = 0,
                  checkpoint: Union[str, Path] = "cpt",
                  optimizer: str = "adam",
                  optimizer_kwargs: Optional[Dict] = None,
@@ -30,12 +30,12 @@ class HvdTrainer(Trainer):
                  lr_scheduler_period: str = "epoch",
                  ss_scheduler: str = "const",
                  ss_scheduler_kwargs: Optional[Dict] = None,
-                 clip_gradient: Optional[int] = None,
+                 clip_gradient: Optional[float] = None,
                  gaussian_noise_std: Optional[float] = None,
                  prog_interval: int = 100,
                  save_interval: int = -1,
-                 resume: int = "",
-                 init: int = "",
+                 resume: str = "",
+                 init: str = "",
                  tensorboard: bool = False,
                  stop_criterion: str = "loss",
                  no_impr: int = 6,
@@ -79,8 +79,9 @@ class HvdTrainer(Trainer):
         hvd.broadcast_optimizer_state(self.optimizer, root_rank=0)
         self.reporter.log(f"HVD: using horovod, rank = {self.rank}, " +
                           f"world_size={dist.world_size()}")
-        self.reporter.log("HVD: for BatchNorm layer, please set momentum=0 or "
-                          "track_running_stats=False")
+        self.reporter.log(
+            "Horovod: for BatchNorm layer, please set momentum=0 or "
+            "track_running_stats=False")
 
     def train_one_step(self, egs: Dict) -> bool:
         """
