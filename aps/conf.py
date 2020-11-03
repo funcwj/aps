@@ -8,42 +8,47 @@ import codecs
 
 from typing import Dict, List, Tuple
 
-base_keys = [
+required_keys = [
     "nnet", "nnet_conf", "task", "task_conf", "data_conf", "trainer_conf"
 ]
-required_ss_conf_keys = base_keys + ["enh_transform"]
-required_am_conf_keys = base_keys + ["enh_transform", "asr_transform"]
-required_lm_conf_keys = base_keys
+all_ss_conf_keys = required_keys + ["enh_transform", "cmd_args"]
+all_am_conf_keys = required_keys + [
+    "enh_transform", "asr_transform", "cmd_args"
+]
+all_lm_conf_keys = required_keys + ["cmd_args"]
 
 
-def load_dict(dict_path: str) -> Dict:
+def load_dict(dict_path: str, required: List[str] = ["<sos>", "<eos>"]) -> Dict:
     """
     Load the dictionary object
     """
     with codecs.open(dict_path, encoding="utf-8") as f:
         vocab = {}
         for line in f:
-            unit, idx = line.split()
-            vocab[unit] = int(idx)
-
-    if "<sos>" not in vocab or "<eos>" not in vocab:
-        raise ValueError(f"Missing <sos>/<eos> in {dict_path}")
+            tok, idx = line.split()
+            if tok in vocab:
+                raise RuntimeError(f"Duplicated token in {dict_path}: {tok}")
+            vocab[tok] = int(idx)
+    for token in required:
+        if token not in vocab:
+            raise ValueError(f"Miss token: {token} in {dict_path}")
     return vocab
 
 
-def check_conf(conf: Dict, constrained: List[str]) -> Dict:
+def check_conf(conf: Dict, required_keys: List[str],
+               all_keys: [List[str]]) -> Dict:
     """
     Check the format of the configurations
     """
     # check the invalid item
     for key in conf.keys():
-        if key not in constrained + ["cmd_args"]:
+        if key not in all_keys:
             raise ValueError(f"Get invalid configuration item: {key}")
     # create task_conf if None
     if "task_conf" not in conf:
         conf["task_conf"] = {}
     # check the missing items
-    for key in constrained:
+    for key in required_keys:
         if key not in conf.keys():
             raise ValueError(f"Miss the item in the configuration: {key}?")
     return conf
@@ -55,7 +60,7 @@ def load_ss_conf(yaml_conf: str) -> Dict:
     """
     with open(yaml_conf, "r") as f:
         conf = yaml.full_load(f)
-    return check_conf(conf, required_ss_conf_keys)
+    return check_conf(conf, required_keys, all_ss_conf_keys)
 
 
 def load_lm_conf(yaml_conf: str, dict_path: str) -> Dict:
@@ -64,7 +69,7 @@ def load_lm_conf(yaml_conf: str, dict_path: str) -> Dict:
     """
     with open(yaml_conf, "r") as f:
         conf = yaml.full_load(f)
-    conf = check_conf(conf, required_lm_conf_keys)
+    conf = check_conf(conf, required_keys, all_lm_conf_keys)
     vocab = load_dict(dict_path)
     return conf, vocab
 
@@ -75,7 +80,7 @@ def load_am_conf(yaml_conf: str, dict_path: str) -> Tuple[Dict, Dict]:
     """
     with open(yaml_conf, "r") as f:
         conf = yaml.full_load(f)
-    conf = check_conf(conf, required_am_conf_keys)
+    conf = check_conf(conf, required_keys, all_am_conf_keys)
 
     # add dict info
     nnet_conf = conf["nnet_conf"]

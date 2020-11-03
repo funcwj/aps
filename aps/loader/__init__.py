@@ -10,9 +10,3 @@ loader_cls = {
     "lm_bptt": lm.bptt.DataLoader,
     "lm_utt": lm.utt.DataLoader
 }
-
-
-def support_loader(fmt="am_raw", **kwargs):
-    if fmt not in loader_cls:
-        raise RuntimeError(f"Unsupported DataLoader type: {fmt}")
-    return loader_cls[fmt](**kwargs)

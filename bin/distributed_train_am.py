@@ -9,12 +9,9 @@ import argparse
 
 from aps.utils import set_seed
 from aps.trainer import DdpTrainer, HvdTrainer
-from aps.loader import support_loader
-from aps.transform import support_transform
-from aps.task import support_task
 from aps.conf import load_am_conf
 from aps.opts import DistributedTrainParser
-from aps.asr import support_nnet
+from aps.libs import aps_transform, aps_task, aps_dataloader, aps_asr_nnet
 from aps import distributed
 
 
@@ -54,7 +51,7 @@ def train_worker(task, conf, vocab_dict, args):
             f"Number of process != world size: {num_process} vs {distributed.world_size()}"
         )
     data_conf = conf["data_conf"]
-    trn_loader = support_loader(**data_conf["train"],
+    trn_loader = aps_dataloader(**data_conf["train"],
                                 train=True,
                                 distributed=True,
                                 fmt=data_conf["fmt"],
@@ -62,7 +59,7 @@ def train_worker(task, conf, vocab_dict, args):
                                 batch_size=args.batch_size // num_process,
                                 num_workers=args.num_workers // num_process,
                                 **data_conf["loader"])
-    dev_loader = support_loader(**data_conf["valid"],
+    dev_loader = aps_dataloader(**data_conf["valid"],
                                 train=False,
                                 distributed=False,
                                 fmt=data_conf["fmt"],
@@ -81,6 +78,7 @@ def train_worker(task, conf, vocab_dict, args):
 
 
 def run(args):
+    print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     # set random seed
     seed = set_seed(args.seed)
     if seed is not None:
@@ -88,13 +86,13 @@ def run(args):
 
     conf, vocab_dict = load_am_conf(args.conf, args.dict)
 
-    asr_cls = support_nnet(conf["nnet"])
+    asr_cls = aps_asr_nnet(conf["nnet"])
     asr_transform = None
     enh_transform = None
     if "asr_transform" in conf:
-        asr_transform = support_transform("asr")(**conf["asr_transform"])
+        asr_transform = aps_transform("asr")(**conf["asr_transform"])
     if "enh_transform" in conf:
-        enh_transform = support_transform("enh")(**conf["enh_transform"])
+        enh_transform = aps_transform("enh")(**conf["enh_transform"])
 
     if enh_transform:
         nnet = asr_cls(enh_transform=enh_transform,
@@ -105,7 +103,7 @@ def run(args):
     else:
         nnet = asr_cls(**conf["nnet_conf"])
 
-    task = support_task(conf["task"], nnet, **conf["task_conf"])
+    task = aps_task(conf["task"], nnet, **conf["task_conf"])
     train_worker(task, conf, vocab_dict, args)
 
 
@@ -123,6 +121,4 @@ if __name__ == "__main__":
                         required=True,
                         help="Dictionary file")
     args = parser.parse_args()
-    print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
-          flush=True)
     run(args)

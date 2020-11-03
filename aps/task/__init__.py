@@ -16,9 +16,3 @@ task_cls = {
     "time_linear_sa": LinearTimeSaTask,
     "time_mel_sa": MelTimeSaTask
 }
-
-
-def support_task(task, nnet, **kwargs):
-    if task not in task_cls:
-        raise RuntimeError(f"Unsupported task: {task}")
-    return task_cls[task](nnet, **kwargs)

@@ -10,6 +10,7 @@ import torch as th
 
 from aps.eval import Computer
 from aps.opts import StrToBoolAction
+from aps.conf import load_dict
 from aps.utils import get_logger, io_wrapper
 from aps.loader import AudioReader
 
@@ -57,11 +58,7 @@ class FasterDecoder(Computer):
 def run(args):
     # build dictionary
     if args.dict:
-        with codecs.open(args.dict, "r", encoding="utf-8") as f:
-            vocab = {}
-            for pair in f:
-                unit, idx = pair.split()
-                vocab[int(idx)] = unit
+        vocab = load_dict(args.dict)
     else:
         vocab = None
     decoder = FasterDecoder(args.checkpoint, device_id=args.device_id)

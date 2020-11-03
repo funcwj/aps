@@ -1,8 +1,8 @@
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-from typing import Optional
 import torch.nn as nn
+from typing import Optional
 
 
 class Task(nn.Module):

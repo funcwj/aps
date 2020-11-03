@@ -10,11 +10,8 @@ import argparse
 from aps.utils import set_seed
 from aps.opts import DistributedTrainParser
 from aps.trainer import HvdTrainer, DdpTrainer
-from aps.loader import support_loader
-from aps.transform import support_transform
-from aps.task import support_task
 from aps.conf import load_ss_conf
-from aps.sse import support_nnet
+from aps.libs import aps_transform, aps_task, aps_dataloader, aps_sse_nnet
 from aps import distributed
 
 
@@ -51,14 +48,14 @@ def train_worker(task, conf, args):
             f"Number of process != world size: {num_process} vs {distributed.world_size()}"
         )
     data_conf = conf["data_conf"]
-    trn_loader = support_loader(train=True,
+    trn_loader = aps_dataloader(train=True,
                                 fmt=data_conf["fmt"],
                                 batch_size=args.batch_size // num_process,
                                 num_workers=args.num_workers // num_process,
                                 distributed=True,
                                 **data_conf["loader"],
                                 **data_conf["train"])
-    dev_loader = support_loader(train=False,
+    dev_loader = aps_dataloader(train=False,
                                 fmt=data_conf["fmt"],
                                 batch_size=args.batch_size //
                                 args.dev_batch_factor,
@@ -76,6 +73,7 @@ def train_worker(task, conf, args):
 
 
 def run(args):
+    print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     # set random seed
     seed = set_seed(args.seed)
     if seed is not None:
@@ -83,15 +81,15 @@ def run(args):
 
     conf = load_ss_conf(args.conf)
 
-    ss_cls = support_nnet(conf["nnet"])
+    sse_cls = aps_sse_nnet(conf["nnet"])
     # with or without enh_tranform
     if "enh_transform" in conf:
-        enh_transform = support_transform("enh")(**conf["enh_transform"])
-        nnet = ss_cls(enh_transform=enh_transform, **conf["nnet_conf"])
+        enh_transform = aps_transform("enh")(**conf["enh_transform"])
+        nnet = sse_cls(enh_transform=enh_transform, **conf["nnet_conf"])
     else:
-        nnet = ss_cls(**conf["nnet_conf"])
+        nnet = sse_cls(**conf["nnet_conf"])
 
-    task = support_task(conf["task"], nnet, **conf["task_conf"])
+    task = aps_task(conf["task"], nnet, **conf["task_conf"])
     train_worker(task, conf, args)
 
 
@@ -104,6 +102,4 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[DistributedTrainParser.parser])
     args = parser.parse_args()
-    print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
-          flush=True)
     run(args)

@@ -6,7 +6,7 @@ from .transducers import TransformerTransducerASR, TorchTransducerASR
 from .lm.rnn import TorchRNNLM
 from .lm.transformer import TorchTransformerLM
 
-nnet_cls = {
+asr_nnet_cls = {
     "rnn_lm": TorchRNNLM,
     "transformer_lm": TorchTransformerLM,
     "att": AttASR,
@@ -18,9 +18,3 @@ nnet_cls = {
     "transformer_transducer": TransformerTransducerASR,
     "common_transducer": TorchTransducerASR
 }
-
-
-def support_nnet(nnet_type):
-    if nnet_type not in nnet_cls:
-        raise RuntimeError(f"Unsupported network type: {nnet_type}")
-    return nnet_cls[nnet_type]

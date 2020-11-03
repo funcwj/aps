@@ -9,45 +9,43 @@ import argparse
 
 from aps.utils import set_seed
 from aps.opts import BaseTrainParser
-from aps.trainer.ddp import DdpTrainer
-from aps.loader import support_loader
-from aps.transform import support_transform
-from aps.task import support_task
+from aps.trainer import DdpTrainer
 from aps.conf import load_ss_conf
-from aps.sse import support_nnet
+from aps.libs import aps_transform, aps_task, aps_dataloader, aps_sse_nnet
 
 
 def run(args):
+    print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     # set random seed
     seed = set_seed(args.seed)
     if seed is not None:
         print(f"Set random seed as {seed}")
 
     conf = load_ss_conf(args.conf)
-    print("Arguments in yaml:\n{}".format(pprint.pformat(conf)), flush=True)
+    print(f"Arguments in yaml:\n{pprint.pformat(conf)}", flush=True)
 
     data_conf = conf["data_conf"]
-    trn_loader = support_loader(**data_conf["train"],
+    trn_loader = aps_dataloader(**data_conf["train"],
                                 train=True,
                                 fmt=data_conf["fmt"],
                                 batch_size=args.batch_size,
                                 num_workers=args.num_workers,
                                 **data_conf["loader"])
-    dev_loader = support_loader(**data_conf["valid"],
+    dev_loader = aps_dataloader(**data_conf["valid"],
                                 train=False,
                                 fmt=data_conf["fmt"],
                                 batch_size=args.batch_size,
                                 num_workers=args.num_workers,
                                 **data_conf["loader"])
 
-    ss_cls = support_nnet(conf["nnet"])
+    sse_cls = aps_sse_nnet(conf["nnet"])
     if "enh_transform" in conf:
-        enh_transform = support_transform("enh")(**conf["enh_transform"])
-        nnet = ss_cls(enh_transform=enh_transform, **conf["nnet_conf"])
+        enh_transform = aps_transform("enh")(**conf["enh_transform"])
+        nnet = sse_cls(enh_transform=enh_transform, **conf["nnet_conf"])
     else:
-        nnet = ss_cls(**conf["nnet_conf"])
+        nnet = sse_cls(**conf["nnet_conf"])
 
-    task = support_task(conf["task"], nnet, **conf["task_conf"])
+    task = aps_task(conf["task"], nnet, **conf["task_conf"])
 
     trainer = DdpTrainer(task,
                          device_ids=args.device_id,
@@ -83,6 +81,4 @@ if __name__ == "__main__":
                         default="0",
                         help="Training on which GPU device")
     args = parser.parse_args()
-    print("Arguments in args:\n{}".format(pprint.pformat(vars(args))),
-          flush=True)
     run(args)

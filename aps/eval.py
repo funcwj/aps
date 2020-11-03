@@ -7,10 +7,7 @@ import pathlib
 import torch as th
 import torch.nn as nn
 
-from aps.asr import support_nnet as support_asr_nnet
-from aps.sse import support_nnet as support_sse_nnet
-from aps.transform import support_transform
-
+from aps.libs import aps_transform, aps_asr_nnet, aps_sse_nnet
 from typing import Dict, Tuple
 
 
@@ -45,17 +42,17 @@ class Computer(object):
         with open(cpt_dir / "train.yaml", "r") as f:
             conf = yaml.full_load(f)
             if task == "asr":
-                net_cls = support_asr_nnet(conf["nnet"])
+                net_cls = aps_asr_nnet(conf["nnet"])
             else:
-                net_cls = support_sse_nnet(conf["nnet"])
+                net_cls = aps_sse_nnet(conf["nnet"])
         asr_transform = None
         enh_transform = None
         self.accept_raw = False
         if "asr_transform" in conf:
-            asr_transform = support_transform("asr")(**conf["asr_transform"])
+            asr_transform = aps_transform("asr")(**conf["asr_transform"])
             self.accept_raw = True
         if "enh_transform" in conf:
-            enh_transform = support_transform("enh")(**conf["enh_transform"])
+            enh_transform = aps_transform("enh")(**conf["enh_transform"])
             self.accept_raw = True
         if enh_transform and asr_transform:
             nnet = net_cls(enh_transform=enh_transform,
