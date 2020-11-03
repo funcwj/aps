@@ -8,9 +8,7 @@ import pytest
 import torch as th
 
 from torch.nn.utils import clip_grad_norm_
-
-from aps.task import support_task
-from aps.sse import support_nnet as support_sse_nnet
+from aps.libs import aps_task, aps_sse_nnet
 from aps.transform import EnhTransform
 
 
@@ -18,13 +16,13 @@ def toy_rnn(mode, num_spks):
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
                              frame_hop=256)
-    return support_sse_nnet("base_rnn")(enh_transform=transform,
-                                        num_bins=257,
-                                        input_size=257,
-                                        rnn_layers=2,
-                                        num_spks=num_spks,
-                                        rnn_hidden=256,
-                                        training_mode=mode)
+    return aps_sse_nnet("base_rnn")(enh_transform=transform,
+                                    num_bins=257,
+                                    input_size=257,
+                                    rnn_layers=2,
+                                    num_spks=num_spks,
+                                    rnn_hidden=256,
+                                    training_mode=mode)
 
 
 def gen_egs(num_spks):
@@ -56,7 +54,7 @@ def run_epochs(task, egs, iters):
 def test_wa(num_branch, num_spks, permute):
     nnet = toy_rnn("time", num_branch)
     kwargs = {"permute": permute, "num_spks": num_spks, "objf": "L1"}
-    task = support_task("wa", nnet, **kwargs)
+    task = aps_task("wa", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
 
@@ -69,7 +67,7 @@ def test_wa(num_branch, num_spks, permute):
 def test_sisnr(num_branch, num_spks, permute):
     nnet = toy_rnn("time", num_branch)
     kwargs = {"permute": permute, "num_spks": num_spks, "non_nagetive": True}
-    task = support_task("sisnr", nnet, **kwargs)
+    task = aps_task("sisnr", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
 
@@ -82,7 +80,7 @@ def test_sisnr(num_branch, num_spks, permute):
 def test_snr(num_branch, num_spks, permute):
     nnet = toy_rnn("time", num_branch)
     kwargs = {"permute": permute, "num_spks": num_spks, "non_nagetive": True}
-    task = support_task("snr", nnet, **kwargs)
+    task = aps_task("snr", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
 
@@ -101,7 +99,7 @@ def test_linear_freq_sa(num_branch, num_spks, permute):
         "num_spks": num_spks,
         "objf": "L2"
     }
-    task = support_task("linear_sa", nnet, **kwargs)
+    task = aps_task("linear_sa", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
 
@@ -120,7 +118,7 @@ def test_mel_freq_sa(num_branch, num_spks, permute):
         "num_spks": num_spks,
         "num_mels": 80
     }
-    task = support_task("mel_sa", nnet, **kwargs)
+    task = aps_task("mel_sa", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
 
@@ -142,7 +140,7 @@ def test_linear_time_sa(num_branch, num_spks, permute):
         "num_spks": num_spks,
         "objf": "L2"
     }
-    task = support_task("time_linear_sa", nnet, **kwargs)
+    task = aps_task("time_linear_sa", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
 
@@ -164,6 +162,6 @@ def test_mel_time_sa(num_branch, num_spks, permute):
         "num_mels": 80,
         "num_spks": num_spks
     }
-    task = support_task("time_mel_sa", nnet, **kwargs)
+    task = aps_task("time_mel_sa", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)

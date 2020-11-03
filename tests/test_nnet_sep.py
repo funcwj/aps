@@ -5,12 +5,12 @@
 
 import torch as th
 
-from aps.sse import support_nnet
+from aps.libs import aps_sse_nnet
 from aps.transform import EnhTransform
 
 
 def test_base_rnn():
-    nnet_cls = support_nnet("base_rnn")
+    nnet_cls = aps_sse_nnet("base_rnn")
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
                              frame_hop=256)
@@ -29,7 +29,7 @@ def test_base_rnn():
 
 
 def test_phasen():
-    nnet_cls = support_nnet("phasen")
+    nnet_cls = aps_sse_nnet("phasen")
     transform = EnhTransform(feats="", frame_len=512, frame_hop=256)
     phasen = nnet_cls(12,
                       4,
@@ -49,7 +49,7 @@ def test_phasen():
 
 
 def test_dcunet():
-    nnet_cls = support_nnet("dcunet")
+    nnet_cls = aps_sse_nnet("dcunet")
     transform = EnhTransform(feats="", frame_len=512, frame_hop=256)
     dcunet = nnet_cls(enh_transform=transform,
                       K="7,5;7,5;5,3;5,3;3,3;3,3",
@@ -70,7 +70,7 @@ def test_dcunet():
 
 
 def test_dense_unet():
-    nnet_cls = support_nnet("dense_unet")
+    nnet_cls = aps_sse_nnet("dense_unet")
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
                              frame_hop=256)
@@ -101,7 +101,7 @@ def test_dense_unet():
 
 
 def test_freq_rel_xfmr():
-    nnet_cls = support_nnet("freq_rel_transformer")
+    nnet_cls = aps_sse_nnet("freq_rel_transformer")
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
                              frame_hop=256)
@@ -127,7 +127,7 @@ def test_freq_rel_xfmr():
 
 
 def test_tasnet():
-    nnet_cls = support_nnet("time_tasnet")
+    nnet_cls = aps_sse_nnet("time_tasnet")
     tasnet = nnet_cls(L=40,
                       N=256,
                       X=8,
@@ -149,7 +149,7 @@ def test_tasnet():
 
 
 def test_dprnn():
-    nnet_cls = support_nnet("time_dprnn")
+    nnet_cls = aps_sse_nnet("time_dprnn")
     dprnn = nnet_cls(num_spks=1,
                      input_norm="cLN",
                      conv_kernels=16,
@@ -169,7 +169,7 @@ def test_dprnn():
 
 
 def test_dccrn():
-    nnet_cls = support_nnet("dccrn")
+    nnet_cls = aps_sse_nnet("dccrn")
     transform = EnhTransform(feats="", frame_len=512, frame_hop=256)
     dccrn = nnet_cls(enh_transform=transform,
                      cplx=True,
@@ -190,7 +190,7 @@ def test_dccrn():
 
 
 def test_unsuper_enh():
-    nnet_cls = support_nnet("unsupervised_enh")
+    nnet_cls = aps_sse_nnet("unsupervised_enh")
     transform = EnhTransform(feats="spectrogram-log-cmvn-ipd",
                              frame_len=512,
                              frame_hop=256,

@@ -5,9 +5,8 @@
 
 import torch as th
 
-from aps.task import support_task
+from aps.libs import aps_task, aps_asr_nnet
 from aps.transform import AsrTransform
-from aps.asr import support_nnet as support_asr_nnet
 
 
 def test_ctc_xent():
@@ -15,7 +14,7 @@ def test_ctc_xent():
                                  frame_len=400,
                                  frame_hop=160,
                                  window="hamm")
-    nnet_cls = support_asr_nnet("att")
+    nnet_cls = aps_asr_nnet("att")
     vocab_size = 100
     batch_size = 4
     default_rnn_decoder_kwargs = {
@@ -47,11 +46,11 @@ def test_ctc_xent():
                        encoder_kwargs=default_rnn_encoder_kwargs,
                        decoder_dim=512,
                        decoder_kwargs=default_rnn_decoder_kwargs)
-    task = support_task("ctc_xent",
-                        att_asr,
-                        lsm_factor=0.1,
-                        ctc_weight=0.2,
-                        blank=vocab_size - 1)
+    task = aps_task("ctc_xent",
+                    att_asr,
+                    lsm_factor=0.1,
+                    ctc_weight=0.2,
+                    blank=vocab_size - 1)
     x_len = th.randint(16000, 16000 * 5, (batch_size,)).sort(-1,
                                                              descending=True)[0]
     x = th.rand(4, x_len.max().item())
@@ -71,7 +70,7 @@ def test_rnnt():
 
 
 def test_lm_xent():
-    nnet_cls = support_asr_nnet("rnn_lm")
+    nnet_cls = aps_asr_nnet("rnn_lm")
     vocab_size = 100
     batch_size = 4
     rnnlm = nnet_cls(embed_size=256,
@@ -81,7 +80,7 @@ def test_lm_xent():
                      rnn_hidden=512,
                      rnn_dropout=0.2,
                      tie_weights=False)
-    task = support_task("lm", rnnlm)
+    task = aps_task("lm", rnnlm)
     U = th.randint(10, 20, (1,)).item()
     x = th.randint(0, vocab_size - 1, (batch_size, U + 1))
     egs = {"src": x[:-1], "tgt": x[1:], "len": None}

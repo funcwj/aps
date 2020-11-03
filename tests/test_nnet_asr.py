@@ -6,7 +6,7 @@
 import pytest
 import torch as th
 
-from aps.asr import support_nnet
+from aps.libs import aps_asr_nnet
 from aps.transform import AsrTransform, EnhTransform
 
 default_rnn_decoder_kwargs = {
@@ -167,7 +167,7 @@ def gen_egs(vocab_size, batch_size, num_channels=1):
     }),
 ])
 def test_att(att_type, att_kwargs):
-    nnet_cls = support_nnet("att")
+    nnet_cls = aps_asr_nnet("att")
     vocab_size = 100
     batch_size = 4
     asr_transform = AsrTransform(feats="fbank-log-cmvn",
@@ -200,7 +200,7 @@ def test_att(att_type, att_kwargs):
     })
 ])
 def test_mvdr_att(att_type, att_kwargs):
-    nnet_cls = support_nnet("mvdr_att")
+    nnet_cls = aps_asr_nnet("mvdr_att")
     vocab_size = 100
     batch_size = 4
     num_channels = 4
@@ -274,7 +274,7 @@ def test_mvdr_att(att_type, att_kwargs):
         })
 ])
 def test_beam_att(mode, enh_kwargs):
-    nnet_cls = support_nnet("beam_att")
+    nnet_cls = aps_asr_nnet("beam_att")
     vocab_size = 100
     batch_size = 4
     num_channels = 4
@@ -311,7 +311,7 @@ def test_beam_att(mode, enh_kwargs):
     pytest.param("tdnn_fsmn", tdnn_fsmn_encoder_kwargs)
 ])
 def test_common_encoder(enc_type, enc_kwargs):
-    nnet_cls = support_nnet("att")
+    nnet_cls = aps_asr_nnet("att")
     vocab_size = 100
     batch_size = 4
     asr_transform = AsrTransform(feats="fbank-log-cmvn",
@@ -347,7 +347,7 @@ def test_common_encoder(enc_type, enc_kwargs):
     pytest.param("transformer_rel_xl", transformer_rel_xl_encoder_kwargs)
 ])
 def test_transformer_encoder(enc_type, enc_kwargs):
-    nnet_cls = support_nnet("transformer")
+    nnet_cls = aps_asr_nnet("transformer")
     vocab_size = 100
     batch_size = 4
     asr_transform = AsrTransform(feats="fbank-log-cmvn",
@@ -382,7 +382,7 @@ def test_transformer_encoder(enc_type, enc_kwargs):
     pytest.param("transformer_rel_xl", transformer_rel_xl_encoder_kwargs)
 ])
 def test_common_transducer(enc_type, enc_kwargs):
-    nnet_cls = support_nnet("common_transducer")
+    nnet_cls = aps_asr_nnet("common_transducer")
     vocab_size = 100
     batch_size = 4
     decoder_kwargs = {
@@ -423,7 +423,7 @@ def test_common_transducer(enc_type, enc_kwargs):
     pytest.param("transformer_rel_xl", transformer_rel_xl_encoder_kwargs)
 ])
 def test_transformer_transducer(enc_type, enc_kwargs):
-    nnet_cls = support_nnet("transformer_transducer")
+    nnet_cls = aps_asr_nnet("transformer_transducer")
     vocab_size = 100
     batch_size = 4
     decoder_kwargs = {
