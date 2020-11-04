@@ -1,9 +1,11 @@
-# Copyright 2019 Jian Wu
+# Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import importlib
 import torch.nn as nn
 
+from os.path import basename
+from importlib.machinery import SourceFileLoader
 from aps.transform import transform_cls
 from aps.loader import loader_cls
 from aps.task import task_cls
@@ -17,10 +19,12 @@ def dynamic_importlib(sstr: str) -> Any:
     """
     Import lib from the given string: e.g., toy_nnet.py:ToyNet
     """
-    pypath, name = sstr.split(":")
-    lib = importlib.import_module(pypath)
-    if hasattr(lib, name):
-        return getattr(lib, name)
+    path, cls_name = sstr.split(":")
+    pkg_name = basename(path).split(".")[0]
+    loader = SourceFileLoader(pkg_name, path)
+    libs = loader.load_module(pkg_name)
+    if hasattr(libs, cls_name):
+        return getattr(libs, cls_name)
     else:
         raise ImportError(f"Import {sstr} failed")
 

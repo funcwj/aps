@@ -5,7 +5,6 @@
 
 import torch as th
 import torch.nn as nn
-import torch.nn.functional as tf
 
 from typing import Optional
 
@@ -21,10 +20,10 @@ class MaskNonLinear(nn.Module):
                  clip: Optional[float] = None) -> None:
         super(MaskNonLinear, self).__init__()
         supported_nonlinear = {
-            "relu": tf.relu,
-            "tanh": tf.tanh,
+            "relu": th.relu,
+            "tanh": th.tanh,
             "sigmoid": th.sigmoid,
-            "softmax": tf.softmax
+            "softmax": th.softmax
         }
         if non_linear not in supported_nonlinear:
             raise ValueError(f"Unsupported nonlinear: {non_linear}")

@@ -27,3 +27,4 @@ done
 
 ../utils/wav_duration.py --output sample data/dataloader/ss/wav.1.scp -
 ../utils/archive_wav.py data/dataloader/ss/wav.1.scp /dev/null
+head data/metric/asr/ref.text | ../utils/tokenizer.pl --space "<space>" -
