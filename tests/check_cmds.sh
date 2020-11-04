@@ -24,3 +24,6 @@ done
 
 ../bin/compute_gmvn.py --transform asr --sr 16000 \
   data/dataloader/ss/wav.1.scp data/gmvn/transform.yaml data/gmvn/gmvn.pt
+
+../utils/wav_duration.py --output sample data/dataloader/ss/wav.1.scp -
+../utils/archive_wav.py data/dataloader/ss/wav.1.scp /dev/null

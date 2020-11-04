@@ -109,9 +109,9 @@ class EncoderBlock(nn.Module):
                               stride=stride,
                               padding=(padding, time_axis_pad))
         if cplx:
-            self.bn = ComplexBatchNorm2d(out_channels, momentum=0)
+            self.bn = ComplexBatchNorm2d(out_channels)
         else:
-            self.bn = nn.BatchNorm2d(out_channels, momentum=0)
+            self.bn = nn.BatchNorm2d(out_channels)
         self.causal = causal
         self.time_axis_pad = time_axis_pad
 
@@ -157,9 +157,9 @@ class DecoderBlock(nn.Module):
             self.bn = None
         else:
             if cplx:
-                self.bn = ComplexBatchNorm2d(out_channels, momentum=0)
+                self.bn = ComplexBatchNorm2d(out_channels)
             else:
-                self.bn = nn.BatchNorm2d(out_channels, momentum=0)
+                self.bn = nn.BatchNorm2d(out_channels)
         self.causal = causal
         self.time_axis_pad = time_axis_pad
 

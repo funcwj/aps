@@ -7,7 +7,7 @@ from pathlib import Path
 
 import torch as th
 from torch.nn.parallel import DistributedDataParallel
-from typing import Optional, Dict, Union, Tuple, NoReturn
+from typing import Optional, Dict, List, Union, Tuple, NoReturn
 
 from aps.trainer.base import Trainer
 import aps.distributed as dist

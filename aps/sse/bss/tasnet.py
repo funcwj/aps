@@ -81,11 +81,11 @@ def build_norm(norm: str, dim: int) -> nn.Module:
     LN cost more memory than BN
     """
     if norm not in ["cLN", "gLN", "BN"]:
-        raise RuntimeError("Unsupported normalize layer: {}".format(norm))
+        raise RuntimeError(f"Unsupported normalize layer: {norm}")
     if norm == "cLN":
         return ChannelWiseLayerNorm(dim, elementwise_affine=True)
     elif norm == "BN":
-        return nn.BatchNorm1d(dim, momentum=0)
+        return nn.BatchNorm1d(dim)
     else:
         return GlobalChannelLayerNorm(dim, elementwise_affine=True)
 
@@ -282,7 +282,9 @@ class TimeConvTasNet(nn.Module):
             raise RuntimeError(f"ConvTasNet expects 2D tensor (training), " +
                                f"but got {mix.dim()}")
 
-    def infer(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
+    def infer(self,
+              mix: th.Tensor,
+              mode: str = "time") -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): S

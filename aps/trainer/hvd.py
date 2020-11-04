@@ -80,8 +80,9 @@ class HvdTrainer(Trainer):
         self.reporter.log(f"HVD: using horovod, rank = {self.rank}, " +
                           f"world_size={dist.world_size()}")
         self.reporter.log(
-            "Horovod: for BatchNorm layer, please set momentum=0 or "
-            "track_running_stats=False")
+            "Horovod: BatchNorm layer will cause different dev loss on "
+            "each processing due to momentum != 0 or "
+            "track_running_stats = True")
 
     def train_one_step(self, egs: Dict) -> bool:
         """

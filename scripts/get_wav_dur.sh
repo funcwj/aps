@@ -6,6 +6,7 @@
 set -eu
 
 nj=20
+max_jobs_run=""
 cmd="utils/run.pl"
 output="sample"
 
@@ -22,6 +23,8 @@ split_scp=""
 for n in $(seq $nj); do split_scp="$split_scp $log_dir/wav.$n.scp"; done
 
 ./utils/split_scp.pl $data_dir/wav.scp $split_scp || exit 1
+
+[ ! -z $max_jobs_run ] && cmd="$cmd --max-jobs-run $max_jobs_run"
 
 $cmd JOB=1:$nj $log_dir/log/get_wav_dur.JOB.log \
   ./utils/wav_duration.py --output $output $log_dir/wav.JOB.scp $log_dir/dur.JOB
