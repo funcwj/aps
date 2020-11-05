@@ -249,29 +249,18 @@ class Trainer(object):
             self.reporter.log(f"Model summary:\n{task.nnet}")
         self.task.to(self.default_device)
 
-        if resume:
-            state_dict = self.load_checkpoint(resume, "resume")
-        elif init:
-            state_dict = self.load_checkpoint(init, "init")
+        if resume or init:
+            self.cpt_stats, optimizer_dict = self.load_checkpoint(
+                resume if resume else init, "resume" if resume else "init")
         else:
-            state_dict = self.load_checkpoint("", "")
+            self.cpt_stats, optimizer_dict = None, None
         # make optimizer
         self.optimizer = self.create_optimizer(optimizer,
                                                optimizer_kwargs,
-                                               state=state_dict["optimizer"])
-
-        # make ss scheduler
-        if ss_scheduler_kwargs:
-            if ss_scheduler not in ss_scheduler_cls:
-                raise ValueError(f"Unsupported ss scheduler: {ss_scheduler}")
-            self.ss_scheduler = ss_scheduler_cls[ss_scheduler](
-                **ss_scheduler_kwargs)
-            self.reporter.log(f"Using schedule sampling: {ss_scheduler}")
-        else:
-            self.ss_scheduler = None
+                                               state=optimizer_dict)
 
         # make lr scheduler
-        lr_scheduler_kwargs["state"] = state_dict["lr_scheduler"]
+        lr_scheduler_kwargs["state"] = self.cpt_stats["lr_scheduler_dict"]
         if lr_scheduler == "reduce_lr":
             if lr_scheduler_period != "epoch":
                 warnings.warn("For reduce_lr scheduler, lr_scheduler_period " +
@@ -286,6 +275,16 @@ class Trainer(object):
         self.lr_scheduler = self.create_scheduler(lr_scheduler, self.optimizer,
                                                   **lr_scheduler_kwargs)
         self.lr_scheduler_period = lr_scheduler_period
+
+        # make ss scheduler
+        if ss_scheduler_kwargs:
+            if ss_scheduler not in ss_scheduler_cls:
+                raise ValueError(f"Unsupported ss scheduler: {ss_scheduler}")
+            self.ss_scheduler = ss_scheduler_cls[ss_scheduler](
+                **ss_scheduler_kwargs)
+            self.reporter.log(f"Using schedule sampling: {ss_scheduler}")
+        else:
+            self.ss_scheduler = None
 
         # logging
         if rank is None:
@@ -347,29 +346,27 @@ class Trainer(object):
             self.reporter.log("Load scheduler state dict from checkpoint")
         return lr_scheduler
 
-    def load_checkpoint(self, cpt_path: str, manner: str = "resume") -> Dict:
+    def load_checkpoint(
+            self,
+            cpt_path: str,
+            manner: str = "resume") -> Tuple[Optional[Dict], Optional[Dict]]:
         """
         Load checkpoint
         """
-        if not cpt_path:
-            return {"lr_scheduler": None, "optimizer": None}
         if manner not in ["resume", "init"]:
             raise ValueError(f"Unsupported manner: {manner}")
-        cpt = th.load(cpt_path, map_location="cpu")
-        self.cur_epoch = cpt["epoch"]
-        self.task.nnet.load_state_dict(cpt["model_state_dict"])
+        cpt_stats = th.load(cpt_path, map_location="cpu")
+        self.cur_epoch = cpt_stats["epoch"]
+        self.task.nnet.load_state_dict(cpt_stats["model_state_dict"])
         optimizer_dict = None
         if manner == "resume":
             self.reporter.log(f"Resume from checkpoint {cpt_path}: " +
                               f"epoch {self.cur_epoch}")
-            optimizer_dict = cpt["optim_state_dict"]
+            optimizer_dict = cpt_stats["optim_state_dict"]
         else:
             self.reporter.log(f"Intialized from checkpoint {cpt_path}: " +
                               f"epoch {self.cur_epoch}")
-        return {
-            "lr_scheduler": cpt["lr_scheduler_dict"],
-            "optimizer": optimizer_dict
-        }
+        return cpt_stats, optimizer_dict
 
     def checkpoint_states(self, epoch: int) -> Dict:
         """

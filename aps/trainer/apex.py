@@ -84,9 +84,9 @@ class ApexTrainer(Trainer):
         # using apex synced BN
         self.task = apex.parallel.convert_syncbn_model(self.task)
         # O0: FP32 training & O3 FP16 training
-        self.task, self.optimizer = amp.initialize(self.task,
-                                                   self.optimizer,
-                                                   opt_level=opt_level)
+        self.task, self.optimizer = apex.amp.initialize(self.task,
+                                                        self.optimizer,
+                                                        opt_level=opt_level)
         self.reporter.log(f"Apex: Using opt-level {opt_level}")
         if self.cuda_devices >= 2:
             self.distributed = True
@@ -97,6 +97,9 @@ class ApexTrainer(Trainer):
                 self.task, delay_allreduce=True)
         else:
             self.distributed = False
+        # restore amp stats
+        if self.cpt_stats:
+            apex.amp.load_state_dict(self.cpt_stats["amp_state_dict"])
 
     def train_one_step(self, egs: Dict) -> bool:
         """
@@ -113,7 +116,8 @@ class ApexTrainer(Trainer):
         loss = stats["loss"].item()
         # backward if not nan/inf
         if math.isfinite(loss):
-            with amp.scale_loss(stats["loss"], self.optimizer) as scaled_loss:
+            with apex.amp.scale_loss(stats["loss"],
+                                     self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
             self.reporter.log(f"Invalid loss {loss:.3f}, skip...")
@@ -123,7 +127,7 @@ class ApexTrainer(Trainer):
         norm = -1
         if self.clip_gradient:
             # for apex
-            norm = clip_grad_norm_(amp.master_params(self.optimizer),
+            norm = clip_grad_norm_(apex.amp.master_params(self.optimizer),
                                    self.clip_gradient)
         # step optimizer and update statistics
         if math.isfinite(norm):
@@ -147,8 +151,8 @@ class ApexTrainer(Trainer):
         return {
             "epoch":
                 epoch,
-            "amp":
-                amp.state_dict(),
+            "amp_state_dict":
+                apex.amp.state_dict(),
             "model_state_dict":
                 self.task.module.nnet.state_dict()
                 if self.distributed else self.task.nnet.state_dict(),

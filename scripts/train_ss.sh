@@ -6,9 +6,9 @@
 set -eu
 
 gpu=0
-trainer="ddp"
 seed=777
 epochs=100
+trainer="ddp"
 tensorboard=false
 batch_size=64
 num_workers=4
