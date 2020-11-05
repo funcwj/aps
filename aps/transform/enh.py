@@ -3,7 +3,7 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
-Feature transform for Enhancement/Separation
+Spatial feature transform (for Speech Separation & Enhancement), using enh.py for abbreviation
 """
 import math
 
@@ -11,7 +11,7 @@ import torch as th
 import torch.nn as nn
 
 from torch_complex.tensor import ComplexTensor
-
+from typing import Union, List, Optional, Tuple
 from aps.transform.utils import STFT, iSTFT
 from aps.transform.asr import LogTransform, AbsTransform, CmvnTransform, SpecAugTransform
 from aps.const import MATH_PI, EPSILON
@@ -22,7 +22,10 @@ class IpdTransform(nn.Module):
     Compute inter-channel phase difference
     """
 
-    def __init__(self, ipd_index="1,0", cos=True, sin=False):
+    def __init__(self,
+                 ipd_index: str = "1,0",
+                 cos: bool = True,
+                 sin: bool = False) -> None:
         super(IpdTransform, self).__init__()
         split_index = lambda sstr: [
             tuple(map(int, p.split(","))) for p in sstr.split(";")
@@ -36,10 +39,10 @@ class IpdTransform(nn.Module):
         self.sin = sin
         self.num_pairs = len(pair) * 2 if cos and sin else len(pair)
 
-    def extra_repr(self):
+    def extra_repr(self) -> str:
         return f"ipd_index={self.ipd_index}, cos={self.cos}, sin={self.sin}"
 
-    def forward(self, p):
+    def forward(self, p: th.Tensor) -> th.Tensor:
         """
         Accept multi-channel phase and output inter-channel phase difference
         Args
@@ -81,12 +84,12 @@ class DfTransform(nn.Module):
     """
 
     def __init__(self,
-                 geometric="7ch_circle",
-                 sr=16000,
-                 velocity=340,
-                 num_bins=257,
-                 num_doas=1,
-                 af_index="1,0;2,0;3,0;4,0;5,0;6,0"):
+                 geometric: str = "7ch_circle",
+                 sr: int = 16000,
+                 velocity: int = 340,
+                 num_bins: int = 257,
+                 num_doas: int = 1,
+                 af_index: str = "1,0;2,0;3,0;4,0;5,0;6,0") -> None:
         super(DfTransform, self).__init__()
         if geometric not in ["7ch_circle"]:
             raise RuntimeError(f"Unsupported array geometric: {geometric}")
@@ -108,7 +111,7 @@ class DfTransform(nn.Module):
         # 1 x F
         self.omega = nn.Parameter(omega[None, :], requires_grad=False)
 
-    def _oracle_phase_delay(self, doa):
+    def _oracle_phase_delay(self, doa: th.Tensor) -> th.Tensor:
         """
         Compute oracle phase delay given DoA
         Args
@@ -148,13 +151,13 @@ class DfTransform(nn.Module):
         else:
             return None
 
-    def extra_repr(self):
+    def extra_repr(self) -> str:
         return (
             f"geometric={self.geometric}, af_index={self.af_index}, " +
             f"sr={self.sr}, num_bins={self.num_bins}, velocity={self.velocity}, "
             + f"known_doa={self.num_doas == 1}")
 
-    def _compute_af(self, ipd, doa):
+    def _compute_af(self, ipd: th.Tensor, doa: th.Tensor) -> th.Tensor:
         """
         Compute angle feature
         Args
@@ -182,7 +185,8 @@ class DfTransform(nn.Module):
             af = th.mean(af, dim=2)
         return af
 
-    def forward(self, p, doa):
+    def forward(self, p: th.Tensor, doa: Union[th.Tensor,
+                                               List[th.Tensor]]) -> th.Tensor:
         """
         Accept doa of the speaker & multi-channel phase, output angle feature
         Args
@@ -220,11 +224,11 @@ class FixedBeamformer(nn.Module):
     """
 
     def __init__(self,
-                 num_beams,
-                 num_channels,
-                 num_bins,
-                 weight=None,
-                 requires_grad=False):
+                 num_beams: int,
+                 num_channels: int,
+                 num_bins: int,
+                 weight: Optional[str] = None,
+                 requires_grad: bool = False) -> None:
         super(FixedBeamformer, self).__init__()
         if weight:
             # (2, num_directions, num_channels, num_bins)
@@ -244,13 +248,20 @@ class FixedBeamformer(nn.Module):
                                  requires_grad=requires_grad)
         self.requires_grad = requires_grad
 
-    def extra_repr(self):
+    def extra_repr(self) -> str:
         B, M, F, _ = self.real.shape
         return (f"num_beams={B}, num_channels={M}, " +
                 f"num_bins={F}, init_weight={self.init_weight}, " +
                 f"requires_grad={self.requires_grad}")
 
-    def forward(self, x, beam=None, squeeze=False, trans=False, cplx=True):
+    def forward(
+            self,
+            x: th.Tensor,
+            beam: Optional[th.Tensor] = None,
+            squeeze: bool = False,
+            trans: bool = False,
+            cplx: bool = True
+    ) -> Union[ComplexTensor, Tuple[th.Tensor, th.Tensor]]:
         """
         Args:
             x (Complex Tensor): N x C x F x T
@@ -294,27 +305,27 @@ class FeatureTransform(nn.Module):
     """
 
     def __init__(self,
-                 feats="spectrogram-log-cmvn",
-                 frame_len=512,
-                 frame_hop=256,
-                 window="sqrthann",
-                 round_pow_of_two=True,
-                 stft_normalized=False,
-                 stft_mode="librosa",
-                 center=False,
-                 sr=16000,
-                 gcmvn="",
-                 norm_mean=True,
-                 norm_var=True,
-                 aug_prob=0,
-                 aug_max_bands=90,
-                 aug_max_frame=40,
-                 num_aug_bands=2,
-                 num_aug_frame=2,
-                 ipd_index="",
-                 cos_ipd=True,
-                 sin_ipd=False,
-                 eps=EPSILON):
+                 feats: str = "spectrogram-log-cmvn",
+                 frame_len: int = 512,
+                 frame_hop: int = 256,
+                 window: str = "sqrthann",
+                 round_pow_of_two: bool = True,
+                 stft_normalized: bool = False,
+                 stft_mode: str = "librosa",
+                 center: bool = False,
+                 sr: int = 16000,
+                 gcmvn: str = "",
+                 norm_mean: bool = True,
+                 norm_var: bool = True,
+                 aug_prob: float = 0,
+                 aug_max_bands: int = 90,
+                 aug_max_frame: int = 40,
+                 num_aug_bands: int = 2,
+                 num_aug_frame: int = 2,
+                 ipd_index: str = "",
+                 cos_ipd: bool = True,
+                 sin_ipd: bool = False,
+                 eps: float = EPSILON) -> None:
         super(FeatureTransform, self).__init__()
         self.frame_len = frame_len
         self.frame_hop = frame_hop
@@ -374,7 +385,7 @@ class FeatureTransform(nn.Module):
             self.aug_transform = None
         self.feats_dim = feats_dim
 
-    def ctx(self, name="forward_stft"):
+    def ctx(self, name: str = "forward_stft") -> nn.Module:
         """
         Return ctx(STFT/iSTFT) for task defined in src/aps/task
         """
@@ -388,7 +399,12 @@ class FeatureTransform(nn.Module):
             raise ValueError(f"Unknown task context: {name}")
         return ctx[name]
 
-    def forward(self, wav_pad, wav_len, norm_obs=False):
+    def forward(
+        self,
+        wav_pad: th.Tensor,
+        wav_len: Optional[th.Tensor],
+        norm_obs: bool = False
+    ) -> Tuple[th.Tensor, ComplexTensor, Optional[th.Tensor]]:
         """
         Args:
             wav_pad (Tensor): raw waveform, N x C x S or N x S

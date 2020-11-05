@@ -6,15 +6,11 @@
 import torch as th
 import torch.nn as nn
 
-try:
-    from torch.nn import TransformerEncoder, TransformerEncoderLayer
-except:
-    raise ImportError("import Transformer module failed")
-
+from typing import Optional, Tuple
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
-from aps.asr.transformer.xl import _get_transformer_encoder
-from aps.asr.transformer.xl import TransformerRelEncoderLayer, TransformerXLEncoderLayer
+from aps.asr.transformer.impl import TransformerTorchEncoderLayer, TransformerRelEncoderLayer, TransformerXLEncoderLayer
+from aps.asr.transformer.impl import ApsTransformerEncoder
 
 
 def support_xfmr_encoder(encoder_name):
@@ -32,72 +28,24 @@ def support_xfmr_encoder(encoder_name):
         return None
 
 
-class ApsTransformerEncoderLayer(TransformerEncoderLayer):
-    """
-    Transformer encoder with pre-norm
-    """
-
-    def __init__(self,
-                 d_model,
-                 nhead,
-                 dim_feedforward=2048,
-                 pre_norm=False,
-                 dropout=0.1,
-                 activation="relu"):
-        super(ApsTransformerEncoderLayer,
-              self).__init__(d_model,
-                             nhead,
-                             dim_feedforward=dim_feedforward,
-                             dropout=dropout,
-                             activation=activation)
-        self.pre_norm = pre_norm
-
-    def ffn(self, src):
-        """
-        Get output of the feedforward network
-        """
-        return self.dropout2(
-            self.linear2(self.dropout(self.activation(self.linear1(src)))))
-
-    def forward(self, src, src_mask=None, src_key_padding_mask=None):
-        """
-        Support for both pre-norm & post-norm
-        """
-        inp = src
-        if self.pre_norm:
-            src = self.norm1(src)
-        att = self.self_attn(src,
-                             src,
-                             src,
-                             attn_mask=src_mask,
-                             key_padding_mask=src_key_padding_mask)[0]
-        src = inp + self.dropout1(att)
-        if self.pre_norm:
-            src = src + self.dropout2(self.ffn(self.norm2(src)))
-        else:
-            src = self.norm1(src)
-            src = self.norm2(src + self.ffn(src))
-        return src
-
-
 class TorchTransformerEncoder(nn.Module):
     """
     Wrapper for pytorch's Transformer Decoder
     """
 
     def __init__(self,
-                 input_size,
-                 input_embed="conv2d",
-                 embed_other_opts=-1,
-                 att_dim=512,
-                 nhead=8,
-                 feedforward_dim=2048,
-                 scale_embed=False,
-                 pos_dropout=0.1,
-                 att_dropout=0.1,
-                 post_norm=True,
-                 pos_enc=True,
-                 num_layers=6):
+                 input_size: int,
+                 input_embed: str = "conv2d",
+                 embed_other_opts: int = -1,
+                 att_dim: int = 512,
+                 nhead: int = 8,
+                 feedforward_dim: int = 2048,
+                 scale_embed: bool = False,
+                 pos_dropout: float = 0.1,
+                 att_dropout: float = 0.1,
+                 post_norm: bool = True,
+                 pos_enc: bool = True,
+                 num_layers: int = 6) -> None:
         super(TorchTransformerEncoder, self).__init__()
         self.src_embed = IOEmbedding(input_embed,
                                      input_size,
@@ -107,19 +55,21 @@ class TorchTransformerEncoder(nn.Module):
                                      rel_enc=False,
                                      pos_enc=pos_enc,
                                      other_opts=embed_other_opts)
-        encoder_layer = ApsTransformerEncoderLayer(
+        encoder_layer = TransformerTorchEncoderLayer(
             att_dim,
             nhead,
             dim_feedforward=feedforward_dim,
             dropout=att_dropout,
             pre_norm=not post_norm)
         final_norm = None if post_norm else nn.LayerNorm(att_dim)
-        self.encoder = TransformerEncoder(encoder_layer,
-                                          num_layers,
-                                          norm=final_norm)
+        self.encoder = ApsTransformerEncoder(encoder_layer,
+                                             num_layers,
+                                             norm=final_norm)
         self.input_embed = input_embed
 
-    def forward(self, x_pad, x_len):
+    def forward(
+            self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x F
@@ -135,7 +85,7 @@ class TorchTransformerEncoder(nn.Module):
         src_pad_mask = None if x_len is None else (padding_mask(x_len) == 1)
         # Ti x N x D
         enc_out = self.encoder(x_emb,
-                               mask=None,
+                               src_mask=None,
                                src_key_padding_mask=src_pad_mask)
         return enc_out, x_len
 
@@ -148,17 +98,17 @@ class RelTransformerEncoder(nn.Module):
     def __init__(self,
                  input_size,
                  input_embed="conv2d",
-                 embed_other_opts=-1,
-                 att_dim=512,
-                 k_dim=128,
-                 nhead=8,
-                 feedforward_dim=2048,
-                 scale_embed=False,
-                 pos_dropout=0.1,
-                 att_dropout=0.1,
-                 post_norm=True,
-                 add_value_rel=False,
-                 num_layers=6):
+                 embed_other_opts: int = -1,
+                 att_dim: int = 512,
+                 k_dim: int = 128,
+                 nhead: int = 8,
+                 feedforward_dim: int = 2048,
+                 scale_embed: bool = False,
+                 pos_dropout: float = 0.1,
+                 att_dropout: float = 0.1,
+                 post_norm: bool = True,
+                 add_value_rel: bool = False,
+                 num_layers: int = 6) -> None:
         super(RelTransformerEncoder, self).__init__()
         self.src_embed = IOEmbedding(input_embed,
                                      input_size,
@@ -169,11 +119,15 @@ class RelTransformerEncoder(nn.Module):
                                      other_opts=embed_other_opts)
         embed_size = 2 * k_dim + 1
         embed_dim = att_dim // nhead
-        self.key_pos = IOEmbedding("sparse", embed_size, embed_dim=embed_dim)
+        self.key_pos = IOEmbedding("sparse",
+                                   embed_size,
+                                   embed_dim=embed_dim,
+                                   pos_enc=False)
         if add_value_rel:
             self.val_pos = IOEmbedding("sparse",
                                        embed_size,
-                                       embed_dim=embed_dim)
+                                       embed_dim=embed_dim,
+                                       pos_enc=False)
         else:
             self.val_pos = None
 
@@ -184,13 +138,14 @@ class RelTransformerEncoder(nn.Module):
             dropout=att_dropout,
             pre_norm=not post_norm)
         final_norm = None if post_norm else nn.LayerNorm(att_dim)
-        self.encoder = _get_transformer_encoder(encoder_layer,
-                                                num_layers,
-                                                norm=final_norm)
+        self.encoder = ApsTransformerEncoder(encoder_layer,
+                                             num_layers,
+                                             norm=final_norm)
         self.input_embed = input_embed
         self.k_dim = k_dim
 
-    def _get_relative_embed(self, inp):
+    def _get_relative_embed(
+            self, inp: th.Tensor) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Return relative embeddings
         """
@@ -208,7 +163,9 @@ class RelTransformerEncoder(nn.Module):
             val_pos = None
         return key_pos, val_pos
 
-    def forward(self, x_pad, x_len):
+    def forward(
+            self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x F
@@ -226,8 +183,8 @@ class RelTransformerEncoder(nn.Module):
         key_pos, value_pos = self._get_relative_embed(x_emb)
         # Ti x N x D
         enc_out = self.encoder(x_emb,
-                               key_pos,
-                               mask=None,
+                               src_mask=None,
+                               key_pos=key_pos,
                                value_pos=value_pos,
                                src_key_padding_mask=src_pad_mask)
         return enc_out, x_len
@@ -239,18 +196,18 @@ class RelXLTransformerEncoder(nn.Module):
     """
 
     def __init__(self,
-                 input_size,
-                 input_embed="conv2d",
-                 embed_other_opts=-1,
-                 att_dim=512,
-                 nhead=8,
-                 feedforward_dim=2048,
-                 scale_embed=False,
-                 pos_dropout=0.1,
-                 att_dropout=0.1,
-                 post_norm=True,
-                 untie_rel=True,
-                 num_layers=6):
+                 input_size: int,
+                 input_embed: str = "conv2d",
+                 embed_other_opts: int = -1,
+                 att_dim: int = 512,
+                 nhead: int = 8,
+                 feedforward_dim: int = 2048,
+                 scale_embed: bool = False,
+                 pos_dropout: float = 0.1,
+                 att_dropout: float = 0.1,
+                 post_norm: bool = True,
+                 untie_rel: bool = True,
+                 num_layers: int = 6) -> None:
         super(RelXLTransformerEncoder, self).__init__()
         self.src_embed = IOEmbedding(input_embed,
                                      input_size,
@@ -275,12 +232,14 @@ class RelXLTransformerEncoder(nn.Module):
             rel_u=rel_u,
             rel_v=rel_v)
         final_norm = None if post_norm else nn.LayerNorm(att_dim)
-        self.encoder = _get_transformer_encoder(encoder_layer,
-                                                num_layers,
-                                                norm=final_norm)
+        self.encoder = ApsTransformerEncoder(encoder_layer,
+                                             num_layers,
+                                             norm=final_norm)
         self.input_embed = input_embed
 
-    def forward(self, x_pad, x_len):
+    def forward(
+            self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x F
@@ -297,7 +256,7 @@ class RelXLTransformerEncoder(nn.Module):
         src_pad_mask = None if x_len is None else (padding_mask(x_len) == 1)
         # Ti x N x D
         enc_out = self.encoder(x_emb,
-                               p_enc,
-                               mask=None,
+                               sin_pos_enc=p_enc,
+                               src_mask=None,
                                src_key_padding_mask=src_pad_mask)
         return enc_out, x_len

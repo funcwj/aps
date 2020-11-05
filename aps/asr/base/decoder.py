@@ -7,13 +7,18 @@ import random
 
 import torch as th
 import torch.nn as nn
-
 import torch.nn.functional as F
 
+from typing import List, Dict, Optional, Tuple, Union
 from aps.const import NEG_INF
 
 
-def trace_back_hypos(point, back_point, hist_token, score, sos=1, eos=2):
+def trace_back_hypos(point: th.Tensor,
+                     back_point: List[th.Tensor],
+                     hist_token: List[th.Tensor],
+                     score: th.Tensor,
+                     sos: int = 1,
+                     eos: int = 2) -> List[Dict]:
     """
     Trace back the decoding transcription sequence from the current time point
     Args:
@@ -40,14 +45,14 @@ class OneHotEmbedding(nn.Module):
     Onehot encode
     """
 
-    def __init__(self, vocab_size):
+    def __init__(self, vocab_size: int):
         super(OneHotEmbedding, self).__init__()
         self.vocab_size = vocab_size
 
     def extra_repr(self):
         return f"vocab_size={self.vocab_size}"
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         args:
             x: ...
@@ -68,15 +73,15 @@ class TorchDecoder(nn.Module):
     """
 
     def __init__(self,
-                 enc_proj,
-                 vocab_size,
-                 dec_rnn="lstm",
-                 rnn_layers=3,
-                 rnn_hidden=512,
-                 rnn_dropout=0.0,
-                 attention=None,
-                 input_feeding=False,
-                 vocab_embeded=True):
+                 enc_proj: int,
+                 vocab_size: int,
+                 dec_rnn: str = "lstm",
+                 rnn_layers: int = 3,
+                 rnn_hidden: int = 512,
+                 rnn_dropout: float = 0.0,
+                 attention: Optional[nn.Module] = None,
+                 input_feeding: bool = False,
+                 vocab_embeded: bool = True) -> None:
         super(TorchDecoder, self).__init__()
         RNN = dec_rnn.upper()
         supported_rnn = {"RNN": nn.RNN, "GRU": nn.GRU, "LSTM": nn.LSTM}
@@ -100,7 +105,12 @@ class TorchDecoder(nn.Module):
         self.input_feeding = input_feeding
         self.vocab_size = vocab_size
 
-    def _step_decoder(self, emb_pre, att_ctx, dec_hid=None):
+    def _step_decoder(
+        self,
+        emb_pre: th.Tensor,
+        att_ctx: th.Tensor,
+        dec_hid: Union[th.Tensor, Tuple[th.Tensor, th.Tensor], None] = None
+    ) -> Tuple[th.Tensor, Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]]:
         """
         Args
             emb_pre: N x D_emb
@@ -113,14 +123,17 @@ class TorchDecoder(nn.Module):
         # N x 1 x D_dec => N x D_dec
         return dec_out.squeeze(1), hx
 
-    def _step(self,
-              out_pre,
-              enc_out,
-              att_ctx,
-              dec_hid=None,
-              att_ali=None,
-              enc_len=None,
-              proj=None):
+    def _step(
+        self,
+        out_pre: th.Tensor,
+        enc_out: th.Tensor,
+        att_ctx: th.Tensor,
+        dec_hid: Union[th.Tensor, Tuple[th.Tensor, th.Tensor], None] = None,
+        att_ali: Optional[th.Tensor] = None,
+        enc_len: Optional[th.Tensor] = None,
+        proj: Optional[th.Tensor] = None
+    ) -> Tuple[th.Tensor, th.Tensor, Union[th.Tensor, Tuple[
+            th.Tensor, th.Tensor]], th.Tensor, th.Tensor]:
         """
         Make a prediction step
         """
@@ -137,7 +150,12 @@ class TorchDecoder(nn.Module):
         pred = self.pred(F.relu(proj))
         return att_ali, att_ctx, dec_hid, proj, pred
 
-    def forward(self, enc_pad, enc_len, tgt_pad, sos=-1, schedule_sampling=0):
+    def forward(self,
+                enc_pad: th.Tensor,
+                enc_len: Optional[th.Tensor],
+                tgt_pad: th.Tensor,
+                sos: int = -1,
+                schedule_sampling: float = 0) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args
             enc_pad: N x Ti x D_enc
@@ -192,13 +210,13 @@ class TorchDecoder(nn.Module):
         return outs, alis
 
     def beam_search(self,
-                    enc_out,
-                    beam=8,
-                    nbest=1,
-                    max_len=-1,
-                    sos=-1,
-                    eos=-1,
-                    normalized=True):
+                    enc_out: th.Tensor,
+                    beam: int = 8,
+                    nbest: int = 1,
+                    max_len: int = -1,
+                    sos: int = -1,
+                    eos: int = -1,
+                    normalized: bool = True) -> List[Dict]:
         """
         Beam search algothrim (intuitive but not efficient)
         Args
@@ -302,15 +320,15 @@ class TorchDecoder(nn.Module):
         } for n in nbest_hypos[:nbest]]
 
     def beam_search_vectorized(self,
-                               enc_out,
-                               lm=None,
-                               lm_weight=0,
-                               beam=8,
-                               nbest=1,
-                               max_len=-1,
-                               sos=-1,
-                               eos=-1,
-                               normalized=True):
+                               enc_out: th.Tensor,
+                               lm: Optional[nn.Module] = None,
+                               lm_weight: float = 0,
+                               beam: int = 8,
+                               nbest: int = 1,
+                               max_len: int = -1,
+                               sos: int = -1,
+                               eos: int = -1,
+                               normalized: bool = True) -> List[Dict]:
         """
         Vectorized beam search algothrim
         Args
@@ -458,14 +476,14 @@ class TorchDecoder(nn.Module):
         return nbest_hypos[:nbest]
 
     def beam_search_batch(self,
-                          enc_out,
-                          enc_len,
-                          beam=8,
-                          nbest=1,
-                          max_len=-1,
-                          sos=-1,
-                          eos=-1,
-                          normalized=True):
+                          enc_out: th.Tensor,
+                          enc_len: th.Tensor,
+                          beam: int = 8,
+                          nbest: int = 1,
+                          max_len: int = -1,
+                          sos: int = -1,
+                          eos: int = -1,
+                          normalized: bool = True) -> List[Dict]:
         """
         Batch level vectorized beam search algothrim (NOTE: not stable!)
         Args

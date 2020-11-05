@@ -10,8 +10,7 @@ import librosa
 import torch as th
 import numpy as np
 
-from torch_complex.tensor import ComplexTensor
-
+from torch_complex import ComplexTensor
 from aps.transform.utils import forward_stft, inverse_stft
 from aps.loader import read_audio
 from aps.transform import AsrTransform, EnhTransform, FixedBeamformer, DfTransform
@@ -71,6 +70,7 @@ def test_asr_transform(wav, feats, shape):
     transform = AsrTransform(feats=feats,
                              frame_len=400,
                              frame_hop=160,
+                             pre_emphasis=0.96,
                              aug_prob=0.2)
     feats, _ = transform(th.from_numpy(wav[None, ...]), None)
     assert feats.shape == th.Size(shape)

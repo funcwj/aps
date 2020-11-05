@@ -13,7 +13,7 @@ from torch.nn.utils import clip_grad_norm_
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-
+from typing import Optional, Dict, List, Union, Tuple, NoReturn, Iterable
 from aps.trainer.ss import support_ss_scheduler
 from aps.trainer.lr import support_lr_scheduler
 
@@ -21,7 +21,7 @@ from aps.utils import load_obj, get_device_ids, get_logger, SimpleTimer
 from aps.task import Task
 
 
-def add_gaussian_noise(nnet, std=0.075):
+def add_gaussian_noise(nnet: th.nn.Module, std: float = 0.075) -> NoReturn:
     """
     Add gaussian noise to updated weights
     """
@@ -35,14 +35,18 @@ class ProgressReporter(object):
     A simple progress reporter
     """
 
-    def __init__(self, checkpoint, period=100, tensorboard=True, rank=None):
+    def __init__(self,
+                 checkpoint: Path,
+                 period: int = 100,
+                 tensorboard: bool = True,
+                 rank: Optional[int] = None) -> None:
         self.period = period
         self.rank = rank
         if rank is None:
             logger_loc = (checkpoint / "trainer.log").as_posix()
             self.header = "Trainer"
         else:
-            logger_loc = (checkpoint / f"trainer.rank{rank}.log").as_posix()
+            logger_loc = (checkpoint / f"trainer.rank.{rank}.log").as_posix()
             self.header = f"Rank {rank}"
 
         self.logger = get_logger(logger_loc, file=True)
@@ -53,24 +57,24 @@ class ProgressReporter(object):
             self.board_writer = None
         self.reset()
 
-    def log(self, sstr):
+    def log(self, sstr: str) -> NoReturn:
         self.logger.info(f"{self.header}: {sstr}")
 
-    def eval(self):
+    def eval(self) -> NoReturn:
         self.log(">> Set eval mode ...")
         self.mode = "valid"
         self.reset()
 
-    def train(self):
+    def train(self) -> NoReturn:
         self.log(">> Set train mode ...")
         self.mode = "train"
         self.reset()
 
-    def reset(self):
+    def reset(self) -> NoReturn:
         self.stats = defaultdict(list)
         self.timer = SimpleTimer()
 
-    def update(self, dict_obj):
+    def update(self, dict_obj: Dict) -> NoReturn:
         if dict_obj is None:
             return
         for key, value in dict_obj.items():
@@ -78,7 +82,7 @@ class ProgressReporter(object):
                 value = value.item()
             self.add(key, value)
 
-    def add(self, key, value):
+    def add(self, key: str, value: float) -> NoReturn:
         self.stats[key].append(value)
         N = len(self.stats[key])
         if not N % self.period:
@@ -89,7 +93,7 @@ class ProgressReporter(object):
                 avg = sum(self.stats[key][-self.period:]) / self.period
                 self.log(f"Processed {N:.2e} batches ({key} = {avg:+.2f}) ...")
 
-    def report(self, epoch, lr):
+    def report(self, epoch: int, lr: float) -> Tuple[float, float, str]:
         N = len(self.stats["loss"])
         if self.mode == "valid":
             sstr = ",".join(
@@ -107,10 +111,10 @@ class ProgressReporter(object):
                 self.board_writer.add_scalar(f"accu/{self.mode}", accu, epoch)
         cost = self.timer.elapsed()
         if accu is not None:
-            hstr = f"Loss/Accu(time/N, lr={lr:.3e}) - Epoch {epoch:2d}: "
+            hstr = f"Loss/Accu(time/#batch, lr={lr:.3e}) - Epoch {epoch:2d}: "
             cstr = f"{self.mode} = {loss:.4f}/{accu:.2f}({cost:.2f}m/{N:d})"
         else:
-            hstr = f"Loss(time/N, lr={lr:.3e}) - Epoch {epoch:2d}: "
+            hstr = f"Loss(time/#batch, lr={lr:.3e}) - Epoch {epoch:2d}: "
             cstr = f"{self.mode} = {loss:.4f}({cost:.2f}m/{N:d})"
         return loss, accu, hstr + cstr
 
@@ -121,27 +125,27 @@ class StopCriterion(object):
     """
 
     def __init__(self,
-                 no_impr,
-                 mode="min",
-                 init_criterion=math.inf,
-                 no_impr_thres=2e-3):
+                 no_impr: int,
+                 mode: str = "min",
+                 init_criterion: float = math.inf,
+                 no_impr_thres: float = 2e-3) -> None:
         self.max_no_impr = no_impr
         self.no_impr = 0
         self.no_impr_thres = no_impr_thres
         self.mode = mode
         self.best_criterion = init_criterion
 
-    def reset(self, update_value):
+    def reset(self, update_value: float) -> NoReturn:
         self.best_criterion = update_value
 
-    def stop(self):
+    def stop(self) -> bool:
         return self.no_impr == self.max_no_impr
 
     @property
-    def best(self):
+    def best(self) -> float:
         return self.best_criterion
 
-    def step(self, update_value):
+    def step(self, update_value: float) -> bool:
         is_better = True
         # loss
         if self.mode == "min":
@@ -164,27 +168,27 @@ class Trainer(object):
     """
 
     def __init__(self,
-                 task,
-                 rank=None,
-                 device_ids=0,
-                 checkpoint="cpt",
-                 optimizer="adam",
-                 optimizer_kwargs=None,
-                 lr_scheduler="reduce_lr",
-                 lr_scheduler_kwargs=None,
-                 lr_scheduler_period="epoch",
-                 ss_scheduler="const",
-                 ss_scheduler_kwargs=None,
-                 clip_gradient=None,
-                 gaussian_noise_std=None,
-                 prog_interval=100,
-                 save_interval=-1,
-                 resume="",
-                 init="",
-                 tensorboard=False,
-                 stop_criterion="loss",
-                 no_impr=6,
-                 no_impr_thres=1e-3):
+                 task: th.nn.Module,
+                 rank: Optional[int] = None,
+                 device_ids: Union[str, int, List[int]] = 0,
+                 checkpoint: Union[str, Path] = "cpt",
+                 optimizer: str = "adam",
+                 optimizer_kwargs: Optional[Dict] = None,
+                 lr_scheduler: str = "reduce_lr",
+                 lr_scheduler_kwargs: Optional[Dict] = None,
+                 lr_scheduler_period: str = "epoch",
+                 ss_scheduler: str = "const",
+                 ss_scheduler_kwargs: Optional[Dict] = None,
+                 clip_gradient: Optional[float] = None,
+                 gaussian_noise_std: Optional[float] = None,
+                 prog_interval: int = 100,
+                 save_interval: int = -1,
+                 resume: str = "",
+                 init: str = "",
+                 tensorboard: bool = False,
+                 stop_criterion: str = "loss",
+                 no_impr: int = 6,
+                 no_impr_thres: float = 1e-3) -> None:
         if not isinstance(task, Task):
             raise TypeError(
                 f"Trainer accepts Task object, but got {type(task)}")
@@ -308,7 +312,10 @@ class Trainer(object):
             self.reporter.log("Add gaussian noise to weights, with " +
                               f"std = {gaussian_noise_std}")
 
-    def create_optimizer(self, optimizer, kwargs, state=None):
+    def create_optimizer(self,
+                         optimizer: str,
+                         kwargs: Dict,
+                         state: Optional[Dict] = None) -> th.optim.Optimizer:
         """
         Return a pytorch-optimizer
         """
@@ -331,13 +338,13 @@ class Trainer(object):
             self.reporter.log("Load optimizer state dict from checkpoint")
         return opt
 
-    def save_checkpoint(self, epoch, best=True):
+    def save_checkpoint(self, epoch: int, best: bool = True) -> NoReturn:
         """
         Save checkpoint (epoch, model, optimizer)
         """
         raise NotImplementedError
 
-    def train_one_step(self, egs):
+    def train_one_step(self, egs: Dict) -> bool:
         """
         Make one training step
 
@@ -379,7 +386,9 @@ class Trainer(object):
             self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
             return False
 
-    def lr_scheduler_step(self, update_value, end_at="epoch"):
+    def lr_scheduler_step(self,
+                          update_value: Optional[float],
+                          end_at: str = "epoch") -> NoReturn:
         """
         Make one step in lr scheduler
         """
@@ -391,7 +400,7 @@ class Trainer(object):
             else:
                 self.lr_scheduler.step()
 
-    def train(self, data_loader):
+    def train(self, data_loader: Iterable[Dict]) -> NoReturn:
         self.task.train()
         self.reporter.train()
         # for idx, egs in enumerate(data_loader):
@@ -401,7 +410,7 @@ class Trainer(object):
             # make one training step
             self.train_one_step(egs)
 
-    def eval(self, data_loader):
+    def eval(self, data_loader: Iterable[Dict]) -> NoReturn:
         self.task.eval()
         self.reporter.eval()
 
@@ -415,7 +424,7 @@ class Trainer(object):
                 # update statistics
                 self.reporter.update(stats)
 
-    def _prep_train(self, dev_loader):
+    def _prep_train(self, dev_loader: Iterable[Dict]) -> int:
         """
         Prepare for training
         """
@@ -438,7 +447,10 @@ class Trainer(object):
         self.reporter.log(sstr)
         return e
 
-    def run(self, trn_loader, dev_loader, num_epochs=50):
+    def run(self,
+            trn_loader: Iterable[Dict],
+            dev_loader: Iterable[Dict],
+            num_epochs: int = 50) -> NoReturn:
         """
         Run on whole training set and evaluate
         """
@@ -485,10 +497,10 @@ class Trainer(object):
         self.reporter.log(f"Training for {e:d}/{num_epochs:d} epochs done!")
 
     def run_batch_per_epoch(self,
-                            trn_loader,
-                            dev_loader,
-                            num_epochs=100,
-                            eval_interval=4000):
+                            trn_loader: Iterable[Dict],
+                            dev_loader: Iterable[Dict],
+                            num_epochs: int = 100,
+                            eval_interval: int = 4000) -> NoReturn:
         """
         Run on several batches and evaluate
         """
@@ -527,7 +539,7 @@ class Trainer(object):
                     if better:
                         self.save_checkpoint(e, best=True)
                     else:
-                        sstr += f" | no impr{self.stop_criterion.no_impr:d}, "
+                        sstr += f" | no impr {self.stop_criterion.no_impr:d}, "
                         sstr += f"best = {self.stop_criterion.best:.4f}"
                     self.reporter.log(sstr)
                     # lr schedule here

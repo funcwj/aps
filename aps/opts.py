@@ -5,26 +5,23 @@ import argparse
 
 class StrToBoolAction(argparse.Action):
     """
-    Since argparse.store_true is not very convenient
+    Since don't like argparse.store_true or argparse.store_false
     """
 
     def __call__(self, parser, namespace, values, option_string=None):
-
-        def str2bool(value):
-            if value.lower() in ["true", "y", "yes", "1"]:
-                return True
-            elif value in ["false", "n", "no", "0"]:
-                return False
-            else:
-                raise ValueError
-
-        try:
-            setattr(namespace, self.dest, str2bool(values))
-        except ValueError:
-            raise Exception(f"Unknown value {values} for --{self.dest}")
+        if values.lower() in ["true", "y", "yes", "1"]:
+            bool_value = True
+        elif values in ["false", "n", "no", "0"]:
+            bool_value = False
+        else:
+            raise ValueError(f"Unknown value {values} for --{self.dest}")
+        setattr(namespace, self.dest, bool_value)
 
 
-class BaseTrainParser(object):
+def get_aps_parser():
+    """
+    Return default training parser for aps
+    """
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--conf",
                         type=str,
@@ -55,7 +52,8 @@ class BaseTrainParser(object):
                         type=int,
                         default=4000,
                         help="Number of batches trained per epoch "
-                        "(for larger training dataset & distributed training)")
+                        "(for larger training dataset & "
+                        "distributed training)")
     parser.add_argument("--save-interval",
                         type=int,
                         default=-1,
@@ -63,7 +61,8 @@ class BaseTrainParser(object):
     parser.add_argument("--prog-interval",
                         type=int,
                         default=100,
-                        help="Interval to report the progress of the training")
+                        help="Interval to report the "
+                        "progress of the training")
     parser.add_argument("--num-workers",
                         type=int,
                         default=4,
@@ -76,3 +75,32 @@ class BaseTrainParser(object):
                         type=str,
                         default="777",
                         help="Random seed used for random package")
+    return parser
+
+
+class BaseTrainParser(object):
+    """
+    Parser class for training commands
+    """
+    parser = get_aps_parser()
+
+
+class DistributedTrainParser(BaseTrainParser):
+    """
+    Parser class for distributed training
+    """
+    parser = get_aps_parser()
+    parser.add_argument("--device-ids",
+                        type=str,
+                        default="0,1",
+                        help="Training on which GPU devices")
+    parser.add_argument("--distributed",
+                        type=str,
+                        default="torch",
+                        choices=["torch", "horovod"],
+                        help="Which distributed backend to use")
+    parser.add_argument("--dev-batch-factor",
+                        type=int,
+                        default=2,
+                        help="Use batch_size/dev_batch_factor "
+                        "for validation batch size")

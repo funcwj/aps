@@ -11,9 +11,10 @@ import librosa.filters as filters
 
 from scipy.fftpack import dct
 from aps.const import EPSILON
+from typing import Optional, Union, Tuple
 
 
-def init_window(wnd, frame_len):
+def init_window(wnd: str, frame_len: int) -> th.Tensor:
     """
     Return window coefficient
     """
@@ -40,13 +41,13 @@ def init_window(wnd, frame_len):
     return c
 
 
-def init_kernel(frame_len,
-                frame_hop,
-                window,
-                round_pow_of_two=True,
-                normalized=False,
-                inverse=False,
-                mode="librosa"):
+def init_kernel(frame_len: int,
+                frame_hop: int,
+                window: str,
+                round_pow_of_two: bool = True,
+                normalized: bool = False,
+                inverse: bool = False,
+                mode: str = "librosa") -> th.Tensor:
     """
     Return STFT kernels
     """
@@ -78,14 +79,14 @@ def init_kernel(frame_len,
     return K
 
 
-def init_melfilter(frame_len,
-                   round_pow_of_two=True,
-                   num_bins=None,
-                   sr=16000,
-                   num_mels=80,
-                   fmin=0.0,
-                   fmax=None,
-                   norm=False):
+def init_melfilter(frame_len: int,
+                   round_pow_of_two: bool = True,
+                   num_bins: Optional[int] = None,
+                   sr: int = 16000,
+                   num_mels: int = 80,
+                   fmin: float = 0.0,
+                   fmax: Optional[float] = None,
+                   norm: bool = False) -> th.Tensor:
     """
     Return mel-filters
     """
@@ -110,7 +111,7 @@ def init_melfilter(frame_len,
     return th.tensor(mel, dtype=th.float32)
 
 
-def init_dct(num_ceps=13, num_mels=40):
+def init_dct(num_ceps: int = 13, num_mels: int = 40) -> th.Tensor:
     """
     Return DCT matrix
     """
@@ -119,12 +120,13 @@ def init_dct(num_ceps=13, num_mels=40):
     return th.tensor(dct_mat, dtype=th.float32)
 
 
-def _forward_stft(wav,
-                  kernel,
-                  output="polar",
-                  frame_hop=256,
-                  onesided=False,
-                  center=False):
+def _forward_stft(
+        wav: th.Tensor,
+        kernel: th.Tensor,
+        output: str = "polar",
+        frame_hop: int = 256,
+        onesided: bool = False,
+        center: bool = False) -> Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]:
     """
     STFT inner function
     Args:
@@ -176,13 +178,13 @@ def _forward_stft(wav,
         return (mag, pha)
 
 
-def _inverse_stft(transform,
-                  kernel,
-                  window,
-                  input="polar",
-                  frame_hop=256,
-                  onesided=False,
-                  center=False):
+def _inverse_stft(transform: Union[th.Tensor, Tuple[th.Tensor, th.Tensor]],
+                  kernel: th.Tensor,
+                  window: th.Tensor,
+                  input: str = "polar",
+                  frame_hop: int = 256,
+                  onesided: bool = False,
+                  center: bool = False) -> th.Tensor:
     """
     iSTFT inner function
     Args:
@@ -249,16 +251,17 @@ def _inverse_stft(transform,
     return s
 
 
-def forward_stft(wav,
-                 frame_len,
-                 frame_hop,
-                 output="complex",
-                 window="sqrthann",
-                 round_pow_of_two=True,
-                 normalized=False,
-                 onesided=True,
-                 center=False,
-                 mode="librosa"):
+def forward_stft(
+        wav: th.Tensor,
+        frame_len: int,
+        frame_hop: int,
+        output: str = "complex",
+        window: str = "sqrthann",
+        round_pow_of_two: bool = True,
+        normalized: bool = False,
+        onesided: bool = True,
+        center: bool = False,
+        mode: str = "librosa") -> Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]:
     """
     STFT function implementation, equals to STFT layer
     """
@@ -278,16 +281,16 @@ def forward_stft(wav,
                          center=center)
 
 
-def inverse_stft(transform,
-                 frame_len,
-                 frame_hop,
-                 input="complex",
-                 window="sqrthann",
-                 round_pow_of_two=True,
-                 normalized=False,
-                 onesided=True,
-                 center=False,
-                 mode="librosa"):
+def inverse_stft(transform: Union[th.Tensor, Tuple[th.Tensor, th.Tensor]],
+                 frame_len: int,
+                 frame_hop: int,
+                 input: str = "complex",
+                 window: str = "sqrthann",
+                 round_pow_of_two: bool = True,
+                 normalized: bool = False,
+                 onesided: bool = True,
+                 center: bool = False,
+                 mode: str = "librosa") -> th.Tensor:
     """
     iSTFT function implementation, equals to iSTFT layer
     """
@@ -318,15 +321,15 @@ class STFTBase(nn.Module):
     """
 
     def __init__(self,
-                 frame_len,
-                 frame_hop,
-                 window="sqrthann",
-                 round_pow_of_two=True,
-                 normalized=False,
-                 onesided=True,
-                 inverse=False,
-                 center=False,
-                 mode="librosa"):
+                 frame_len: int,
+                 frame_hop: int,
+                 window: str = "sqrthann",
+                 round_pow_of_two: bool = True,
+                 normalized: bool = False,
+                 onesided: bool = True,
+                 inverse: bool = False,
+                 center: bool = False,
+                 mode="librosa") -> None:
         super(STFTBase, self).__init__()
         w = init_window(window, frame_len)
         K = init_kernel(frame_len,
@@ -349,7 +352,7 @@ class STFTBase(nn.Module):
             f"normalized={normalized}, center={self.center}, mode={self.mode}, "
             + f"kernel_size={self.num_bins}x{self.K.shape[2]}")
 
-    def num_frames(self, num_samples):
+    def num_frames(self, num_samples: th.Tensor) -> th.Tensor:
         """
         Compute number of the frames
         """
@@ -361,7 +364,7 @@ class STFTBase(nn.Module):
             num_samples += num_ffts
         return (num_samples - num_ffts) // self.frame_hop + 1
 
-    def extra_repr(self):
+    def extra_repr(self) -> str:
         return self.expr
 
 
@@ -373,7 +376,11 @@ class STFT(STFTBase):
     def __init__(self, *args, **kwargs):
         super(STFT, self).__init__(*args, inverse=False, **kwargs)
 
-    def forward(self, wav, output="polar"):
+    def forward(
+            self,
+            wav: th.Tensor,
+            output: str = "polar"
+    ) -> Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]:
         """
         Accept (single or multiple channel) raw waveform and output magnitude and phase
         Args
@@ -397,7 +404,9 @@ class iSTFT(STFTBase):
     def __init__(self, *args, **kwargs):
         super(iSTFT, self).__init__(*args, inverse=True, **kwargs)
 
-    def forward(self, transform, input="polar"):
+    def forward(self,
+                transform: Union[th.Tensor, Tuple[th.Tensor, th.Tensor]],
+                input: str = "polar") -> th.Tensor:
         """
         Accept phase & magnitude and output raw waveform
         Args

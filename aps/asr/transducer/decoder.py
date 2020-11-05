@@ -8,19 +8,14 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
-from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
-
-try:
-    from torch.nn import TransformerEncoder
-except:
-    raise ImportError("import Transformer module failed")
-
 from queue import PriorityQueue
+from typing import List, Dict, Optional, Union, Tuple, Dict
+from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.transformer.decoder import prep_sub_mask
-from aps.asr.transformer.encoder import ApsTransformerEncoderLayer
-
+from aps.asr.transformer.encoder import ApsTransformerEncoder
+from aps.asr.transformer.impl import TransformerTorchEncoderLayer
 from aps.asr.base.attention import padding_mask
 from aps.asr.base.decoder import OneHotEmbedding
 from aps.const import IGNORE_ID
@@ -39,7 +34,10 @@ class Node(object):
         return self.score >= other.score
 
 
-def _prep_nbest(container, nbest, normalized=True, blank=0):
+def _prep_nbest(container: Union[List, PriorityQueue],
+                nbest: int,
+                normalized: bool = True,
+                blank: int = 0) -> List[Dict]:
     """
     Return nbest hypos from queue or list
     """
@@ -68,14 +66,14 @@ class TorchRNNDecoder(nn.Module):
     """
 
     def __init__(self,
-                 vocab_size,
-                 embed_size=512,
-                 enc_dim=512,
-                 jot_dim=512,
-                 dec_rnn="lstm",
-                 dec_layers=3,
-                 dec_hidden=512,
-                 dec_dropout=0.0):
+                 vocab_size: int,
+                 embed_size: int = 512,
+                 enc_dim: int = 512,
+                 jot_dim: int = 512,
+                 dec_rnn: str = "lstm",
+                 dec_layers: int = 3,
+                 dec_hidden: int = 512,
+                 dec_dropout: float = 0.0) -> None:
         super(TorchRNNDecoder, self).__init__()
         RNN = dec_rnn.upper()
         supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
@@ -97,7 +95,10 @@ class TorchRNNDecoder(nn.Module):
         self.vocab_size = vocab_size
         self.output = nn.Linear(jot_dim, vocab_size, bias=False)
 
-    def forward(self, enc_out, tgt_pad, blank=0):
+    def forward(self,
+                enc_out: th.Tensor,
+                tgt_pad: th.Tensor,
+                blank: int = 0) -> th.Tensor:
         """
         Args:
             enc_out: N x Ti x D
@@ -112,7 +113,7 @@ class TorchRNNDecoder(nn.Module):
         # N x Ti x To+1 x V
         return self._pred_joint(enc_out, dec_out)
 
-    def _pred_joint(self, enc_out, dec_out):
+    def _pred_joint(self, enc_out: th.Tensor, dec_out: th.Tensor) -> th.Tensor:
         """
         Joint network prediction
         Args:
@@ -138,7 +139,7 @@ class TorchRNNDecoder(nn.Module):
         dec_out, hidden = self.decoder(pred_prev_emb, hidden)
         return dec_out[:, -1], hidden
 
-    def greedy_search(self, enc_out, blank=0):
+    def greedy_search(self, enc_out: th.Tensor, blank: int = 0) -> List[Dict]:
         """
         Greedy search algorithm for RNN-T
         Args:
@@ -163,13 +164,13 @@ class TorchRNNDecoder(nn.Module):
         return [{"score": score, "trans": [blank] + trans + [blank]}]
 
     def beam_search(self,
-                    enc_out,
-                    lm=None,
-                    lm_weight=0,
-                    beam=16,
-                    blank=0,
-                    nbest=8,
-                    normalized=True):
+                    enc_out: th.Tensor,
+                    lm: Optional[nn.Module] = None,
+                    lm_weight: float = 0,
+                    beam: int = 16,
+                    blank: int = 0,
+                    nbest: int = 8,
+                    normalized: bool = True) -> List[Dict]:
         """
         Beam search (best first) algorithm for RNN-T
         Args:
@@ -270,30 +271,33 @@ class TorchTransformerDecoder(nn.Module):
     """
 
     def __init__(self,
-                 vocab_size,
-                 enc_dim=None,
-                 jot_dim=512,
-                 att_dim=512,
-                 nhead=8,
-                 feedforward_dim=2048,
-                 scale_embed=False,
-                 pos_dropout=0.1,
-                 att_dropout=0.1,
-                 num_layers=6,
-                 post_norm=True):
+                 vocab_size: int,
+                 enc_dim: Optional[int] = None,
+                 jot_dim: int = 512,
+                 att_dim: int = 512,
+                 nhead: int = 8,
+                 feedforward_dim: int = 2048,
+                 scale_embed: bool = False,
+                 pos_dropout: float = 0.1,
+                 att_dropout: float = 0.1,
+                 num_layers: int = 6,
+                 post_norm: bool = True) -> None:
         super(TorchTransformerDecoder, self).__init__()
         self.tgt_embed = IOEmbedding("sparse",
                                      vocab_size,
                                      embed_dim=att_dim,
                                      dropout=pos_dropout,
                                      scale_embed=scale_embed)
-        decoder_layer = ApsTransformerEncoderLayer(
+        decoder_layer = TransformerTorchEncoderLayer(
             att_dim,
             nhead,
             dim_feedforward=feedforward_dim,
             dropout=att_dropout,
             pre_norm=not post_norm)
-        self.decoder = TransformerEncoder(decoder_layer, num_layers)
+        final_norm = None if post_norm else nn.LayerNorm(att_dim)
+        self.decoder = ApsTransformerEncoder(decoder_layer,
+                                             num_layers,
+                                             norm=final_norm)
         self.enc_proj = nn.Linear(enc_dim if enc_dim else att_dim,
                                   jot_dim,
                                   bias=False)
@@ -301,7 +305,11 @@ class TorchTransformerDecoder(nn.Module):
         self.vocab_size = vocab_size
         self.output = nn.Linear(jot_dim, vocab_size, bias=False)
 
-    def forward(self, enc_out, tgt_pad, tgt_len, blank=0):
+    def forward(self,
+                enc_out: th.Tensor,
+                tgt_pad: th.Tensor,
+                tgt_len: Optional[th.Tensor],
+                blank: int = 0) -> th.Tensor:
         """
         Args:
             enc_out: Ti x N x D
@@ -320,11 +328,11 @@ class TorchTransformerDecoder(nn.Module):
         tgt_pad = self.tgt_embed(tgt_pad)
         # To+1 x N x D
         dec_out = self.decoder(tgt_pad,
-                               mask=tgt_mask,
+                               src_mask=tgt_mask,
                                src_key_padding_mask=pad_mask)
         return self._pred_joint(enc_out, dec_out)
 
-    def _pred_joint(self, enc_out, dec_out):
+    def _pred_joint(self, enc_out: th.Tensor, dec_out: th.Tensor) -> th.Tensor:
         """
         Joint network prediction
         Args:
@@ -346,7 +354,10 @@ class TorchTransformerDecoder(nn.Module):
             output = output.contiguous()
         return output
 
-    def _step_decoder(self, pred_prev, prev_embed=None):
+    def _step_decoder(self,
+                      pred_prev: th.Tensor,
+                      prev_embed: Optional[th.Tensor] = None
+                     ) -> Tuple[th.Tensor, th.Tensor]:
         """
         Make one step for decoder
         Args:
@@ -364,7 +375,7 @@ class TorchTransformerDecoder(nn.Module):
         dec_out = self.decoder(prev_embed, mask=tgt_mask)
         return dec_out[-1], prev_embed
 
-    def greedy_search(self, enc_out, blank=0):
+    def greedy_search(self, enc_out: th.Tensor, blank: int = 0) -> List[Dict]:
         """
         Greedy search algorithm for RNN-T
         Args:
@@ -389,13 +400,13 @@ class TorchTransformerDecoder(nn.Module):
         return [{"score": score, "trans": [blank] + trans + [blank]}]
 
     def beam_search(self,
-                    enc_out,
-                    lm=None,
-                    lm_weight=0,
-                    beam=16,
-                    blank=0,
-                    nbest=8,
-                    normalized=True):
+                    enc_out: th.Tensor,
+                    lm: Optional[nn.Module] = None,
+                    lm_weight: float = 0,
+                    beam: int = 16,
+                    blank: int = 0,
+                    nbest: int = 8,
+                    normalized: bool = True) -> List[Dict]:
         """
         Beam search (best first) algorithm for RNN-T
         Args:

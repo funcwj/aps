@@ -9,23 +9,23 @@ ref: https://github.com/pytorch/examples/tree/master/word_language_model
 
 import random
 import torch as th
-
 import torch.utils.data as dat
 
+from typing import Iterable, Dict, Optional, NoReturn, Iterator
 from aps.loader.lm.utt import Dataset
 from kaldi_python_io import Reader as BaseReader
 
 
-def DataLoader(text="",
-               vocab_dict="",
-               train=True,
-               sos=-1,
-               eos=-1,
-               faster=False,
-               batch_size=64,
-               chunk_size=20,
-               num_workers=0,
-               min_token_num=5):
+def DataLoader(text: str = "",
+               vocab_dict: Optional[Dict] = None,
+               train: bool = True,
+               sos: int = -1,
+               eos: int = -1,
+               faster: bool = False,
+               batch_size: int = 64,
+               chunk_size: int = 20,
+               num_workers: int = 0,
+               min_token_num: int = 5) -> Iterable[Dict]:
     dataset = Dataset(text,
                       vocab_dict,
                       faster=faster,
@@ -42,7 +42,11 @@ class BpttDataLoader(object):
     LM loader for bptt training
     """
 
-    def __init__(self, dataset, shuffle=True, batch_size=64, chunk_size=20):
+    def __init__(self,
+                 dataset: dat.Dataset,
+                 shuffle: bool = True,
+                 batch_size: int = 64,
+                 chunk_size: int = 20) -> None:
         utt_lens = [len(tok) for tok in dataset]
         seq_lens = sum(utt_lens) // batch_size
         self.num_batches = seq_lens // chunk_size - 1
@@ -51,7 +55,7 @@ class BpttDataLoader(object):
         self.batch_size = batch_size
         self.chunk_size = chunk_size
 
-    def batchify(self):
+    def batchify(self) -> th.Tensor:
         if self.shuffle:
             # shuffle the token list
             random.shuffle(self.token_list)
@@ -63,13 +67,13 @@ class BpttDataLoader(object):
         # N x S
         return token_set.view(self.batch_size, S).contiguous()
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.num_batches
 
-    def set_epoch(self, epoch):
+    def set_epoch(self, epoch: int) -> NoReturn:
         pass
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Dict]:
         # N x S
         token_batch = self.batchify()
         for beg in range(0, token_batch.shape[-1] - self.chunk_size,

@@ -8,12 +8,14 @@ import torch.nn as nn
 
 import torch.nn.functional as tf
 
+from typing import Optional, Tuple, Union
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 from aps.asr.base.layers import CustomRNNLayer, FSMNLayer, TDNNLayer
 
 
-def encoder_instance(encoder_type, input_size, output_size, **kwargs):
+def encoder_instance(encoder_type: str, input_size: int, output_size: int,
+                     **kwargs) -> nn.Module:
     """
     Return encoder instance
     """
@@ -36,15 +38,15 @@ class TorchRNNEncoder(nn.Module):
     """
 
     def __init__(self,
-                 input_size,
-                 output_size,
-                 input_project=None,
-                 rnn="lstm",
-                 rnn_layers=3,
-                 rnn_hidden=512,
-                 rnn_dropout=0.2,
-                 rnn_bidir=False,
-                 non_linear=""):
+                 input_size: int,
+                 output_size: int,
+                 input_project: Optional[int] = None,
+                 rnn: str = "lstm",
+                 rnn_layers: int = 3,
+                 rnn_hidden: int = 512,
+                 rnn_dropout: int = 0.2,
+                 rnn_bidir: bool = False,
+                 non_linear: str = ""):
         super(TorchRNNEncoder, self).__init__()
         RNN = rnn.upper()
         supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
@@ -77,7 +79,12 @@ class TorchRNNEncoder(nn.Module):
     def flat(self):
         self.rnn.flatten_parameters()
 
-    def forward(self, inp, inp_len, max_len=None):
+    def forward(
+            self,
+            inp: th.Tensor,
+            inp_len: Optional[th.Tensor],
+            max_len: Optional[int] = None
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             inp (Tensor): (N) x Ti x F
@@ -121,17 +128,17 @@ class CustomRNNEncoder(nn.Module):
     """
 
     def __init__(self,
-                 input_size,
-                 output_size,
-                 rnn="lstm",
-                 rnn_layers=3,
-                 rnn_bidir=True,
-                 rnn_dropout=0.0,
-                 rnn_hidden=512,
-                 rnn_project=None,
-                 layernorm=False,
-                 use_pyramid=False,
-                 add_forward_backward=False):
+                 input_size: int,
+                 output_size: int,
+                 rnn: str = "lstm",
+                 rnn_layers: int = 3,
+                 rnn_bidir: bool = True,
+                 rnn_dropout: float = 0.0,
+                 rnn_hidden: int = 512,
+                 rnn_project: Optional[int] = None,
+                 layernorm: bool = False,
+                 use_pyramid: bool = False,
+                 add_forward_backward: bool = False):
         super(CustomRNNEncoder, self).__init__()
 
         def derive_in_size(layer_idx):
@@ -166,7 +173,9 @@ class CustomRNNEncoder(nn.Module):
         self.rnns = nn.ModuleList(rnn_list)
         self.use_pyramid = use_pyramid
 
-    def _downsample_concat(self, inp, inp_len):
+    def _downsample_concat(
+            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Do downsampling for RNN output
         """
@@ -180,7 +189,9 @@ class CustomRNNEncoder(nn.Module):
             inp_len = inp_len // 2
         return inp, inp_len
 
-    def forward(self, inp, inp_len):
+    def forward(
+            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             inp (Tensor): (N) x Ti x F
@@ -196,7 +207,7 @@ class CustomRNNEncoder(nn.Module):
         return inp, inp_len
 
 
-def parse_str_int(str_or_int, num_layers):
+def parse_str_int(str_or_int: Union[str, int], num_layers: int):
     """
     Parse string or int, egs:
         1,1,2 => [1, 1, 2]
@@ -218,14 +229,14 @@ class TDNNEncoder(nn.Module):
     """
 
     def __init__(self,
-                 input_size,
-                 output_size,
-                 dim=512,
-                 norm="BN",
-                 num_layers=3,
-                 stride="2,2,2",
-                 dilation="1,1,1",
-                 dropout=0):
+                 input_size: int,
+                 output_size: int,
+                 dim: int = 512,
+                 norm: str = "BN",
+                 num_layers: int = 3,
+                 stride: str = "2,2,2",
+                 dilation: str = "1,1,1",
+                 dropout: float = 0):
         super(TDNNEncoder, self).__init__()
         stride_conf = parse_str_int(stride, num_layers)
         dilation_conf = parse_str_int(dilation, num_layers)
@@ -246,7 +257,9 @@ class TDNNEncoder(nn.Module):
             sub_sampling *= s
         self.sub_sampling = sub_sampling
 
-    def forward(self, inp, inp_len):
+    def forward(
+            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             inp (Tensor): N x Ti x F
@@ -269,16 +282,16 @@ class FSMNEncoder(nn.Module):
     """
 
     def __init__(self,
-                 input_size,
-                 output_size,
-                 project_size=512,
-                 num_layers=4,
-                 residual=True,
-                 lctx=3,
-                 rctx=3,
-                 norm="BN",
-                 dilation=1,
-                 dropout=0):
+                 input_size: int,
+                 output_size: int,
+                 project_size: int = 512,
+                 num_layers: int = 4,
+                 residual: bool = True,
+                 lctx: int = 3,
+                 rctx: int = 3,
+                 norm: str = "BN",
+                 dilation: int = 1,
+                 dropout: float = 0):
         super(FSMNEncoder, self).__init__()
         dilations = parse_str_int(dilation, num_layers)
         self.layers = nn.ModuleList([
@@ -293,7 +306,9 @@ class FSMNEncoder(nn.Module):
         ])
         self.res = residual
 
-    def forward(self, inp, inp_len):
+    def forward(
+            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             inp (Tensor): N x T x F, input
@@ -323,21 +338,21 @@ class TimeDelayRNNEncoder(nn.Module):
     """
 
     def __init__(self,
-                 input_size,
-                 output_size,
-                 tdnn_dim=512,
-                 tdnn_norm="BN",
-                 tdnn_layers=2,
-                 tdnn_stride="2,2",
-                 tdnn_dilation="1,1",
-                 tdnn_dropout=0,
-                 rnn="lstm",
-                 rnn_layers=3,
-                 rnn_bidir=True,
-                 rnn_dropout=0.2,
-                 rnn_project=None,
-                 rnn_layernorm=False,
-                 rnn_hidden=512):
+                 input_size: int,
+                 output_size: int,
+                 tdnn_dim: int = 512,
+                 tdnn_norm: str = "BN",
+                 tdnn_layers: int = 2,
+                 tdnn_stride: str = "2,2",
+                 tdnn_dilation: str = "1,1",
+                 tdnn_dropout: float = 0,
+                 rnn: str = "lstm",
+                 rnn_layers: int = 3,
+                 rnn_bidir: bool = True,
+                 rnn_dropout: float = 0.2,
+                 rnn_project: Optional[int] = None,
+                 rnn_layernorm: bool = False,
+                 rnn_hidden: int = 512):
         super(TimeDelayRNNEncoder, self).__init__()
         self.tdnn_enc = TDNNEncoder(input_size,
                                     None,
@@ -357,7 +372,9 @@ class TimeDelayRNNEncoder(nn.Module):
                                          rnn_project=rnn_project,
                                          rnn_hidden=rnn_hidden)
 
-    def forward(self, inp, inp_len):
+    def forward(
+            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             inp (Tensor): N x Ti x F
@@ -377,22 +394,22 @@ class TimeDelayFSMNEncoder(nn.Module):
     """
 
     def __init__(self,
-                 input_size,
-                 output_size,
-                 tdnn_dim=512,
-                 tdnn_norm="BN",
-                 tdnn_layers=2,
-                 tdnn_stride="2,2",
-                 tdnn_dilation="1,1",
-                 tdnn_dropout=0.2,
-                 fsmn_layers=4,
-                 fsmn_lctx=10,
-                 fsmn_rctx=10,
-                 fsmn_norm="LN",
-                 fsmn_residual=True,
-                 fsmn_dilation=1,
-                 fsmn_project=512,
-                 fsmn_dropout=0.2):
+                 input_size: int,
+                 output_size: int,
+                 tdnn_dim: int = 512,
+                 tdnn_norm: str = "BN",
+                 tdnn_layers: int = 2,
+                 tdnn_stride: str = "2,2",
+                 tdnn_dilation: str = "1,1",
+                 tdnn_dropout: float = 0.2,
+                 fsmn_layers: int = 4,
+                 fsmn_lctx: int = 10,
+                 fsmn_rctx: int = 10,
+                 fsmn_norm: str = "LN",
+                 fsmn_residual: bool = True,
+                 fsmn_dilation: int = 1,
+                 fsmn_project: int = 512,
+                 fsmn_dropout: float = 0.2):
         super(TimeDelayFSMNEncoder, self).__init__()
         self.tdnn_enc = TDNNEncoder(input_size,
                                     None,
@@ -413,7 +430,9 @@ class TimeDelayFSMNEncoder(nn.Module):
                                     num_layers=fsmn_layers,
                                     dropout=fsmn_dropout)
 
-    def forward(self, inp, inp_len):
+    def forward(
+            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             inp (Tensor): N x Ti x F

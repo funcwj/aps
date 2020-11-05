@@ -12,21 +12,22 @@ import torch as th
 import torch.utils.data as dat
 
 from torch.nn.utils.rnn import pad_sequence
+from typing import NoReturn, List, Dict, Tuple, Optional, Callable, Iterator, Iterable
 from kaldi_python_io import Reader as BaseReader
 
 
-def DataLoader(text="",
-               vocab_dict="",
-               train=True,
-               sos=-1,
-               eos=-1,
-               faster=False,
-               min_token_num=2,
-               max_token_num=2000,
-               adapt_token_num=400,
-               min_batch_size=8,
-               batch_size=64,
-               num_workers=0):
+def DataLoader(text: str = "",
+               vocab_dict: Optional[Dict] = None,
+               train: bool = True,
+               sos: int = -1,
+               eos: int = -1,
+               faster: bool = False,
+               min_token_num: int = 2,
+               max_token_num: int = 2000,
+               adapt_token_num: int = 400,
+               min_batch_size: int = 8,
+               batch_size: int = 64,
+               num_workers: int = 0) -> Iterable[Dict]:
     dataset = Dataset(text,
                       vocab_dict,
                       faster=faster,
@@ -48,11 +49,11 @@ class BatchSampler(dat.Sampler):
     """
 
     def __init__(self,
-                 token_set,
-                 batch_size,
-                 min_batch_size=8,
-                 adapt_token_num=400,
-                 shuffle=False):
+                 token_set: List[List[int]],
+                 batch_size: int,
+                 min_batch_size: int = 8,
+                 adapt_token_num: int = 400,
+                 shuffle: bool = False) -> None:
         self.min_batch_size = min_batch_size
         self.adapt_token_num = adapt_token_num
         self.genfunc = th.randperm if shuffle else th.arange
@@ -63,7 +64,8 @@ class BatchSampler(dat.Sampler):
                                          batch_size)
             self.batches += indices
 
-    def _sort_indices(self, subset, batch_size):
+    def _sort_indices(self, subset: List[int],
+                      batch_size: int) -> List[List[int]]:
         utts_len = [len(seq) for seq in subset]
         # short -> long
         desc_idx = th.argsort(th.tensor(utts_len, dtype=th.int32),
@@ -78,19 +80,19 @@ class BatchSampler(dat.Sampler):
             beg += cur_bz
         return batches
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[List[int]]:
         indices = self.genfunc(len(self.batches)).tolist()
         for i in indices:
             yield self.batches[i]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.batches)
 
 
-def parse_faster(scp_path,
-                 value_processor=lambda x: x,
-                 num_tokens=2,
-                 restrict=True):
+def parse_faster(scp_path: str,
+                 value_processor: Callable = lambda x: x,
+                 num_tokens: int = 2,
+                 restrict: bool = True) -> Dict:
     scp_dict = dict()
     with open(scp_path, "r") as f:
         raw_lines = f.readlines()
@@ -120,26 +122,26 @@ class FasterTextReader(object):
     """
 
     def __init__(self,
-                 scp_path,
-                 value_processor=lambda x: x,
-                 num_tokens=2,
-                 restrict=True):
+                 scp_path: str,
+                 value_processor: Callable = lambda x: x,
+                 num_tokens: int = 2,
+                 restrict: bool = True) -> None:
         self.index_dict = parse_faster(scp_path,
                                        value_processor=value_processor,
                                        num_tokens=num_tokens,
                                        restrict=restrict)
         self.index_keys = list(self.index_dict.keys())
 
-    def _load(self, key):
+    def _load(self, key: str) -> List[str]:
         return self.index_dict[key]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.index_dict)
 
-    def __contains__(self, key):
+    def __contains__(self, key: str) -> bool:
         return key in self.index_dict
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Tuple[str, List[str]]]:
         for key in self.index_keys:
             yield key, self._load(key)
 
@@ -150,12 +152,12 @@ class Dataset(dat.Dataset):
     """
 
     def __init__(self,
-                 text,
-                 vocab_dict,
-                 faster=False,
-                 min_token_num=2,
-                 max_token_num=2000,
-                 eos=None):
+                 text: str,
+                 vocab_dict: Optional[Dict],
+                 faster: bool = False,
+                 min_token_num: int = 2,
+                 max_token_num: int = 2000,
+                 eos: Optional[int] = None) -> None:
         reader_cls = FasterTextReader if faster else BaseReader
         if vocab_dict:
             text_reader = reader_cls(text, num_tokens=-1, restrict=False)
@@ -184,27 +186,27 @@ class Dataset(dat.Dataset):
                 else:
                     self.token_set.append(toks + [eos])
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> List[int]:
         return self.token_set[index]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.token_set)
 
 
-class UttDataLoader(object):
+class UttDataLoader(dat.DataLoader):
     """
     DataLoader for LM training
     """
 
     def __init__(self,
-                 dataset,
-                 sos=-1,
-                 eos=-1,
-                 shuffle=True,
-                 batch_size=64,
-                 num_workers=0,
-                 adapt_token_num=400,
-                 min_batch_size=8):
+                 dataset: dat.Dataset,
+                 sos: int = -1,
+                 eos: int = -1,
+                 shuffle: bool = True,
+                 batch_size: int = 64,
+                 num_workers: int = 0,
+                 adapt_token_num: int = 400,
+                 min_batch_size: int = 8) -> None:
         if sos < 0 or eos < 0:
             raise ValueError(f"Invalid sos/eos value: {sos}/{eos}")
         self.eos = eos
@@ -214,10 +216,10 @@ class UttDataLoader(object):
                                shuffle=shuffle,
                                min_batch_size=min_batch_size,
                                adapt_token_num=adapt_token_num)
-        self.batch_loader = dat.DataLoader(dataset,
-                                           batch_sampler=sampler,
-                                           num_workers=num_workers,
-                                           collate_fn=self.egs_collate)
+        super(UttDataLoader, self).__init__(dataset,
+                                            batch_sampler=sampler,
+                                            num_workers=num_workers,
+                                            collate_fn=self.egs_collate)
 
     def egs_collate(self, egs):
         ntok = [len(eg) + 1 for eg in egs]
@@ -229,12 +231,5 @@ class UttDataLoader(object):
             "len": th.tensor(ntok, dtype=th.int64)
         }
 
-    def __len__(self):
-        return len(self.batch_loader)
-
-    def set_epoch(self, epoch):
+    def set_epoch(self, epoch: int) -> NoReturn:
         pass
-
-    def __iter__(self):
-        for egs in self.batch_loader:
-            yield egs

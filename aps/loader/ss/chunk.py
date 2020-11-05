@@ -13,22 +13,20 @@ import aps.distributed as dist
 
 from torch.utils.data.dataloader import default_collate
 from kaldi_python_io import Reader as BaseReader
-
+from typing import List, Dict, Iterator, NoReturn, Optional, Union, Iterable
 from aps.loader.audio import AudioReader
 
-type_seq = (list, tuple)
 
-
-def DataLoader(train=True,
-               sr=16000,
-               mix_scp="",
-               doa_scp="",
-               ref_scp="",
-               emb_scp="",
-               chunk_size=64000,
-               batch_size=16,
-               distributed=False,
-               num_workers=4):
+def DataLoader(train: bool = True,
+               sr: int = 16000,
+               mix_scp: str = "",
+               doa_scp: str = "",
+               ref_scp: str = "",
+               emb_scp: str = "",
+               chunk_size: int = 64000,
+               batch_size: int = 16,
+               distributed: bool = False,
+               num_workers: int = 4) -> Iterable[Dict]:
     """
     Return a online-chunk dataloader for enhancement/separation tasks
     args
@@ -45,7 +43,7 @@ def DataLoader(train=True,
             return scp_str
         else:
             token = scp_str.split(",")
-            return token[0] if len(token) == 1 else token
+            return token[0] if len(token) == 1 else list(token)
 
     doa_scp = parse_args(doa_scp)
     ref_scp = parse_args(ref_scp)
@@ -68,26 +66,26 @@ class NumpyReader(BaseReader):
     Sequential/Random Reader for numpy's ndarray(*.npy) file
     """
 
-    def __init__(self, npy_scp):
+    def __init__(self, npy_scp: str) -> None:
         super(NumpyReader, self).__init__(npy_scp)
 
-    def _load(self, key):
+    def _load(self, key: str) -> np.ndarray:
         return np.load(self.index_dict[key])
 
 
-class ScriptDataset(object):
+class ScriptDataset(dat.Dataset):
     """
     Dataset configured by scripts
     """
 
     def __init__(self,
-                 mix_scp="",
-                 doa_scp="",
-                 emb_scp="",
-                 ref_scp=None,
-                 sr=16000):
+                 mix_scp: str = "",
+                 doa_scp: Union[str, List[str]] = "",
+                 emb_scp: str = "",
+                 ref_scp: Union[str, List[str]] = "",
+                 sr: int = 16000) -> None:
         self.mix = AudioReader(mix_scp, sr=sr)
-        if isinstance(ref_scp, type_seq):
+        if isinstance(ref_scp, list):
             self.ref = [AudioReader(ref, sr=sr) for ref in ref_scp]
             self.num_ref = len(ref_scp)
         elif ref_scp:
@@ -97,7 +95,7 @@ class ScriptDataset(object):
             self.ref = None
             self.num_ref = 0
         self.num_doa = 0
-        if isinstance(doa_scp, type_seq):
+        if isinstance(doa_scp, list):
             self.doa = [
                 BaseReader(doa, value_processor=lambda x: np.float32(x))
                 for doa in doa_scp
@@ -112,17 +110,17 @@ class ScriptDataset(object):
 
         self.emb = NumpyReader(emb_scp) if emb_scp else None
 
-    def _make_ref(self, key):
+    def _make_ref(self, key: str) -> Union[np.ndarray, List[np.ndarray]]:
         return self.ref[key] if self.num_ref == 1 else [
             reader[key] for reader in self.ref
         ]
 
-    def _make_doa(self, key):
+    def _make_doa(self, key: str) -> Union[float, List[float]]:
         return self.doa[key] if self.num_doa == 1 else [
             reader[key] for reader in self.doa
         ]
 
-    def _idx(self, key):
+    def _idx(self, key: str) -> Dict:
         eg = {}
         if self.ref is not None:
             eg["ref"] = self._make_ref(key)
@@ -132,16 +130,16 @@ class ScriptDataset(object):
             eg["emb"] = self.emb[key]
         return eg
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> Dict:
         key = self.mix.index_keys[index]
         eg = self._idx(key)
         eg["mix"] = self.mix[key]
         return eg
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.mix)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Dict]:
         for key, mix in self.mix:
             eg = self._idx(key)
             eg["mix"] = mix
@@ -153,26 +151,31 @@ class ChunkSplitter(object):
     Split utterance into small chunks
     """
 
-    def __init__(self, chunk_size, train=True, hop=16000):
+    def __init__(self,
+                 chunk_size: int,
+                 train: bool = True,
+                 hop: int = 16000) -> None:
         self.chunk_size = chunk_size
         self.hop = hop
         self.train = train
 
-    def _chunk(self, mat_or_seq, s):
-        if isinstance(mat_or_seq, type_seq):
+    def _chunk(self, mat_or_seq: Union[np.ndarray, List[np.ndarray]],
+               s: int) -> Union[np.ndarray, List[np.ndarray]]:
+        if isinstance(mat_or_seq, list):
             return [mat[s:s + self.chunk_size] for mat in mat_or_seq]
         else:
             return mat_or_seq[s:s + self.chunk_size]
 
-    def pad(self, mat_or_seq, pad_width):
-        if isinstance(mat_or_seq, type_seq):
+    def pad(self, mat_or_seq: Union[np.ndarray, List[np.ndarray]],
+            pad_width: int) -> Union[np.ndarray, List[np.ndarray]]:
+        if isinstance(mat_or_seq, list):
             return [
                 np.pad(mat, (0, pad_width), "constant") for mat in mat_or_seq
             ]
         else:
             return np.pad(mat_or_seq, (0, pad_width), "constant")
 
-    def _make_chunk(self, eg, s):
+    def _make_chunk(self, eg: Dict, s: int) -> List[Dict]:
         """
         Make a chunk instance, which contains:
             "mix": ndarray,
@@ -191,7 +194,7 @@ class ChunkSplitter(object):
             chunk["emb"] = eg["emb"]
         return chunk
 
-    def split(self, eg):
+    def split(self, eg: Dict) -> List[Dict]:
         N = eg["mix"].shape[-1]
         # too short, throw away
         if N < self.hop:
@@ -229,12 +232,12 @@ class WaveChunkDataLoader(object):
     """
 
     def __init__(self,
-                 dataset,
-                 num_workers=4,
-                 chunk_size=64000,
-                 batch_size=16,
-                 distributed=False,
-                 train=True):
+                 dataset: dat.Dataset,
+                 num_workers: int = 4,
+                 chunk_size: int = 64000,
+                 batch_size: int = 16,
+                 distributed: bool = False,
+                 train: bool = True) -> None:
         self.dataset = dataset
         self.train = train
         self.batch_size = batch_size
@@ -263,7 +266,7 @@ class WaveChunkDataLoader(object):
         chunk = []
         for eg in batch:
             # split bss egs into target separation egs
-            if isinstance(eg, type_seq):
+            if isinstance(eg, list):
                 for bias_eg in eg:
                     c = self.splitter.split(bias_eg)
                     chunk += c
@@ -271,7 +274,7 @@ class WaveChunkDataLoader(object):
                 chunk += self.splitter.split(eg)
         return chunk
 
-    def _merge(self, chunk_list):
+    def _merge(self, chunk_list: List[Dict]):
         """
         Merge chunk list into mini-batch
         """
@@ -285,13 +288,14 @@ class WaveChunkDataLoader(object):
         rn = N % self.batch_size
         return blist, chunk_list[-rn:] if rn else []
 
-    def __len__(self):
+    def __len__(self) -> int:
         return 0
 
-    def set_epoch(self, epoch):
-        self.sampler.set_epoch(epoch)
+    def set_epoch(self, epoch: int) -> NoReturn:
+        if self.sampler:
+            self.sampler.set_epoch(epoch)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Dict]:
         chunk_list = []
         for chunks in self.eg_loader:
             chunk_list += chunks

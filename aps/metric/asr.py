@@ -5,14 +5,15 @@
 
 import editdistance as ed
 from itertools import permutations
+from typing import List
 
 
-def permute_wer(hlist, rlist):
+def permute_wer(hlist: List[str], rlist: List[str]) -> float:
     """
     Compute edit distance between N pairs
     Args:
-        hlist: list[vector], hypothesis
-        rlist: list[vector], reference
+        hlist: list[str], hypothesis
+        rlist: list[str], reference
     Return:
         float: WER
     """
@@ -22,8 +23,8 @@ def permute_wer(hlist, rlist):
 
     N = len(hlist)
     if N != len(rlist):
-        raise RuntimeError("size do not match between hlist "
-                           "and rlist: {:d} vs {:d}".format(N, len(rlist)))
+        raise RuntimeError("size do not match between hlist " +
+                           f"and rlist: {N} vs {len(rlist)}")
     wers = []
     for order in permutations(range(N)):
         wers.append(distance(hlist, [rlist[n] for n in order]))

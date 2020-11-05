@@ -3,9 +3,11 @@
 
 import math
 from os import environ
+from pathlib import Path
 
 import torch as th
 from torch.nn.parallel import DistributedDataParallel
+from typing import Optional, Dict, List, Union, Tuple, NoReturn
 
 from aps.trainer.base import Trainer
 import aps.distributed as dist
@@ -17,27 +19,27 @@ class DdpTrainer(Trainer):
     """
 
     def __init__(self,
-                 task,
-                 rank=None,
-                 device_ids=0,
-                 checkpoint="cpt",
-                 optimizer="adam",
-                 optimizer_kwargs=None,
-                 lr_scheduler="reduce_lr",
-                 lr_scheduler_period="epoch",
-                 lr_scheduler_kwargs=None,
-                 ss_scheduler="const",
-                 ss_scheduler_kwargs=None,
-                 clip_gradient=None,
-                 gaussian_noise_std=None,
-                 prog_interval=100,
-                 save_interval=-1,
-                 resume="",
-                 init="",
-                 tensorboard=False,
-                 stop_criterion="loss",
-                 no_impr=6,
-                 no_impr_thres=1e-3):
+                 task: th.nn.Module,
+                 rank: Optional[int] = None,
+                 device_ids: Union[str, int, List[int]] = 0,
+                 checkpoint: Union[str, Path] = "cpt",
+                 optimizer: str = "adam",
+                 optimizer_kwargs: Optional[Dict] = None,
+                 lr_scheduler: str = "reduce_lr",
+                 lr_scheduler_kwargs: Optional[Dict] = None,
+                 lr_scheduler_period: str = "epoch",
+                 ss_scheduler: str = "const",
+                 ss_scheduler_kwargs: Optional[Dict] = None,
+                 clip_gradient: Optional[float] = None,
+                 gaussian_noise_std: Optional[float] = None,
+                 prog_interval: int = 100,
+                 save_interval: int = -1,
+                 resume: str = "",
+                 init: str = "",
+                 tensorboard: bool = False,
+                 stop_criterion: str = "loss",
+                 no_impr: int = 6,
+                 no_impr_thres: float = 1e-3) -> None:
         super(DdpTrainer,
               self).__init__(task,
                              rank=rank,
@@ -64,7 +66,7 @@ class DdpTrainer(Trainer):
             raise ValueError(f"aps.distributed doesn't use torch as backend")
         self.setup_distributed()
 
-    def setup_distributed(self):
+    def setup_distributed(self) -> NoReturn:
         """
         Setup environment for distributed training
         """
@@ -78,7 +80,7 @@ class DdpTrainer(Trainer):
         else:
             self.distributed = False
 
-    def save_checkpoint(self, epoch, best=True):
+    def save_checkpoint(self, epoch: int, best: bool = True) -> NoReturn:
         """
         Save checkpoint (epoch, model, optimizer)
         """

@@ -14,26 +14,27 @@ import torch.utils.data as dat
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data.dataloader import default_collate
 
+from typing import Dict, Iterable, Optional, NoReturn
 from kaldi_python_io import ScriptReader
 
 from aps.loader.am.utils import process_token, BatchSampler
 
 
-def DataLoader(train=True,
-               distributed=False,
-               feats_scp="",
-               text="",
-               utt2dur="",
-               vocab_dict="",
-               max_token_num=400,
-               max_dur=3000,
-               min_dur=40,
-               adapt_dur=800,
-               adapt_token_num=150,
-               batch_size=32,
-               batch_mode="adaptive",
-               num_workers=0,
-               min_batch_size=4):
+def DataLoader(train: bool = True,
+               distributed: bool = False,
+               feats_scp: str = "",
+               text: str = "",
+               utt2dur: str = "",
+               vocab_dict: Optional[Dict] = None,
+               max_token_num: int = 400,
+               max_dur: float = 3000,
+               min_dur: float = 40,
+               adapt_dur: float = 800,
+               adapt_token_num: int = 150,
+               batch_size: int = 32,
+               batch_mode: str = "adaptive",
+               num_workers: int = 0,
+               min_batch_size: int = 4) -> Iterable[Dict]:
     dataset = Dataset(feats_scp,
                       text,
                       utt2dur,
@@ -58,13 +59,13 @@ class Dataset(dat.Dataset):
     """
 
     def __init__(self,
-                 feats_scp,
-                 text,
-                 utt2num_frames,
-                 vocab_dict,
-                 max_token_num=400,
-                 max_frame_num=3000,
-                 min_frame_num=40):
+                 feats_scp: str,
+                 text: str,
+                 utt2num_frames: str,
+                 vocab_dict: Optional[Dict],
+                 max_token_num: int = 400,
+                 max_frame_num: float = 3000,
+                 min_frame_num: float = 40) -> None:
         self.feats_reader = ScriptReader(feats_scp)
         # sorted
         self.token_reader = process_token(text,
@@ -74,7 +75,7 @@ class Dataset(dat.Dataset):
                                           max_dur=max_frame_num,
                                           min_dur=min_frame_num)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Dict:
         tok = self.token_reader[idx]
         key = tok["key"]
         return {
@@ -84,11 +85,11 @@ class Dataset(dat.Dataset):
             "token": tok["tok"]
         }
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.token_reader)
 
 
-def egs_collate(egs):
+def egs_collate(egs: Dict) -> Dict:
 
     def pad_seq(olist, value=0):
         return pad_sequence(olist, batch_first=True, padding_value=value)
@@ -105,40 +106,33 @@ def egs_collate(egs):
     }
 
 
-class KaldiDataLoader(object):
+class KaldiDataLoader(dat.DataLoader):
     """
     Acoustic dataloader for seq2seq model training
     """
 
     def __init__(self,
-                 dataset,
-                 shuffle=True,
-                 distributed=False,
-                 num_workers=0,
-                 adapt_frame_num=800,
-                 adapt_token_num=150,
-                 batch_size=32,
-                 batch_mode="adaptive",
-                 min_batch_size=4):
-        self.sampler = BatchSampler(dataset,
-                                    batch_size,
-                                    shuffle=shuffle,
-                                    batch_mode=batch_mode,
-                                    distributed=distributed,
-                                    adapt_dur=adapt_frame_num,
-                                    adapt_token_num=adapt_token_num,
-                                    min_batch_size=min_batch_size)
-        self.batch_loader = dat.DataLoader(dataset,
-                                           batch_sampler=self.sampler,
-                                           num_workers=num_workers,
-                                           collate_fn=egs_collate)
+                 dataset: dat.Dataset,
+                 shuffle: bool = True,
+                 distributed: bool = False,
+                 num_workers: int = 0,
+                 adapt_frame_num: float = 800,
+                 adapt_token_num: int = 150,
+                 batch_size: int = 32,
+                 batch_mode: str = "adaptive",
+                 min_batch_size: int = 4) -> None:
+        sampler = BatchSampler(dataset,
+                               batch_size,
+                               shuffle=shuffle,
+                               batch_mode=batch_mode,
+                               distributed=distributed,
+                               adapt_dur=adapt_frame_num,
+                               adapt_token_num=adapt_token_num,
+                               min_batch_size=min_batch_size)
+        super(KaldiDataLoader, self).__init__(dataset,
+                                              batch_sampler=sampler,
+                                              num_workers=num_workers,
+                                              collate_fn=egs_collate)
 
-    def __len__(self):
-        return len(self.batch_loader)
-
-    def set_epoch(self, epoch):
-        self.sampler.set_epoch(epoch)
-
-    def __iter__(self):
-        for egs in self.batch_loader:
-            yield egs
+    def set_epoch(self, epoch: int) -> NoReturn:
+        self.batch_sampler.set_epoch(epoch)

@@ -8,8 +8,10 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
+from typing import Optional, Tuple
 
-def padding_mask(vec, device=None):
+
+def padding_mask(vec: th.Tensor, device: th.device = None) -> th.Tensor:
     """
     Generate padding masks
 
@@ -30,7 +32,8 @@ def padding_mask(vec, device=None):
     return mask.to(device) if device is not None else mask
 
 
-def att_instance(att_type, enc_dim, dec_dim, **kwargs):
+def att_instance(att_type: str, enc_dim: int, dec_dim: int,
+                 **kwargs) -> th.nn.Module:
     """
     Return attention instance
     """
@@ -44,7 +47,7 @@ def att_instance(att_type, enc_dim, dec_dim, **kwargs):
         # ...
     }
     if att_type not in supported_att:
-        raise RuntimeError("Unknown attention type: {}".format(att_type))
+        raise RuntimeError(f"Unknown attention type: {att_type}")
     return supported_att[att_type](enc_dim, dec_dim, **kwargs)
 
 
@@ -56,7 +59,7 @@ class Conv1D(nn.Conv1d):
     def __init__(self, *args, **kwargs):
         super(Conv1D, self).__init__(*args, **kwargs)
 
-    def forward(self, x, squeeze=False):
+    def forward(self, x: th.Tensor, squeeze: bool = False) -> th.Tensor:
         """
         x: N x L or N x C x L
         """
@@ -76,11 +79,11 @@ class LocAttention(nn.Module):
     """
 
     def __init__(self,
-                 enc_dim,
-                 dec_dim,
-                 att_dim=512,
-                 att_channels=128,
-                 att_kernel=11):
+                 enc_dim: int,
+                 dec_dim: int,
+                 att_dim: int = 512,
+                 att_channels: int = 128,
+                 att_kernel: int = 11):
         super(LocAttention, self).__init__()
         self.enc_proj = nn.Linear(enc_dim, att_dim)
         self.dec_proj = nn.Linear(dec_dim, att_dim, bias=False)
@@ -100,7 +103,9 @@ class LocAttention(nn.Module):
         self.enc_part = None
         self.pad_mask = None
 
-    def forward(self, enc_pad, enc_len, dec_prev, ali_prev):
+    def forward(self, enc_pad: th.Tensor, enc_len: Optional[th.Tensor],
+                dec_prev: th.Tensor,
+                ali_prev: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args
             enc_pad: N x Ti x D_enc
@@ -158,7 +163,7 @@ class CtxAttention(nn.Module):
         "Neural Machine Translation by Jointly Learning to Align and Translate"
     """
 
-    def __init__(self, enc_dim, dec_dim, att_dim=512):
+    def __init__(self, enc_dim: int, dec_dim: int, att_dim: int = 512):
         super(CtxAttention, self).__init__()
         self.enc_proj = nn.Linear(enc_dim, att_dim)
         self.dec_proj = nn.Linear(dec_dim, att_dim, bias=False)
@@ -170,7 +175,9 @@ class CtxAttention(nn.Module):
         self.enc_part = None
         self.pad_mask = None
 
-    def forward(self, enc_pad, enc_len, dec_prev, ali_prev):
+    def forward(self, enc_pad: th.Tensor, enc_len: Optional[th.Tensor],
+                dec_prev: th.Tensor,
+                ali_prev: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args
             enc_pad: N x Ti x D_enc
@@ -210,7 +217,7 @@ class DotAttention(nn.Module):
         "Vocabulary Conversational Speech Recognition"
     """
 
-    def __init__(self, enc_dim, dec_dim, att_dim=512):
+    def __init__(self, enc_dim: int, dec_dim: int, att_dim: int = 512):
         super(DotAttention, self).__init__()
 
         self.enc_proj = nn.Linear(enc_dim, att_dim)
@@ -222,11 +229,13 @@ class DotAttention(nn.Module):
         self.enc_part = None
         self.pad_mask = None
 
-    def forward(self, enc_pad, enc_len, dec_prev, ali_prev):
+    def forward(self, enc_pad: th.Tensor, enc_len: Optional[th.Tensor],
+                dec_prev: th.Tensor,
+                ali_prev: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args
             enc_pad: N x Ti x D_enc
-            enc_len: N
+            enc_len: N or None
             dec_prev: N x D_dec
             ali_prev: N x Ti (do not use here)
         Return
@@ -260,7 +269,11 @@ class MHCtxAttention(nn.Module):
     Multi-head context attention
     """
 
-    def __init__(self, enc_dim, dec_dim, att_dim=512, att_head=4):
+    def __init__(self,
+                 enc_dim: int,
+                 dec_dim: int,
+                 att_dim: int = 512,
+                 att_head: int = 4):
         super(MHCtxAttention, self).__init__()
         # value, key, query
         self.enc_proj = nn.Linear(enc_dim, att_dim * att_head)
@@ -284,7 +297,9 @@ class MHCtxAttention(nn.Module):
         self.key_part = None
         self.pad_mask = None
 
-    def forward(self, enc_pad, enc_len, dec_prev, ali_prev):
+    def forward(self, enc_pad: th.Tensor, enc_len: Optional[th.Tensor],
+                dec_prev: th.Tensor,
+                ali_prev: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args
             enc_pad: N x Ti x D_enc
@@ -345,7 +360,11 @@ class MHDotAttention(nn.Module):
     Multi-head dot attention
     """
 
-    def __init__(self, enc_dim, dec_dim, att_dim=512, att_head=4):
+    def __init__(self,
+                 enc_dim: int,
+                 dec_dim: int,
+                 att_dim: int = 512,
+                 att_head: int = 4):
         super(MHDotAttention, self).__init__()
         # value, key, query
         self.enc_proj = nn.Linear(enc_dim, att_dim * att_head, bias=False)
@@ -362,7 +381,9 @@ class MHDotAttention(nn.Module):
         self.key_part = None
         self.pad_mask = None
 
-    def forward(self, enc_pad, enc_len, dec_prev, ali_prev):
+    def forward(self, enc_pad: th.Tensor, enc_len: Optional[th.Tensor],
+                dec_prev: th.Tensor,
+                ali_prev: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args
             enc_pad: N x Ti x D_enc
@@ -418,12 +439,12 @@ class MHLocAttention(nn.Module):
     """
 
     def __init__(self,
-                 enc_dim,
-                 dec_dim,
-                 att_dim=512,
-                 att_channels=128,
-                 att_kernel=11,
-                 att_head=4):
+                 enc_dim: int,
+                 dec_dim: int,
+                 att_dim: int = 512,
+                 att_channels: int = 128,
+                 att_kernel: int = 11,
+                 att_head: int = 4):
         super(MHLocAttention, self).__init__()
         # value, key, query
         self.enc_proj = nn.Linear(enc_dim, att_dim * att_head)
@@ -458,7 +479,9 @@ class MHLocAttention(nn.Module):
         self.key_part = None
         self.pad_mask = None
 
-    def forward(self, enc_pad, enc_len, dec_prev, ali_prev):
+    def forward(self, enc_pad: th.Tensor, enc_len: Optional[th.Tensor],
+                dec_prev: th.Tensor,
+                ali_prev: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args
             enc_pad: N x Ti x D_enc

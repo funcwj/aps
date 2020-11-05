@@ -9,6 +9,8 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
+from typing import Union, Tuple
+
 
 class PositionalEncoding(nn.Module):
     """
@@ -17,11 +19,11 @@ class PositionalEncoding(nn.Module):
     """
 
     def __init__(self,
-                 embed_dim,
-                 dropout=0.1,
-                 max_len=5000,
-                 rel_enc=False,
-                 scale_embed=False):
+                 embed_dim: int,
+                 dropout: float = 0.1,
+                 max_len: int = 5000,
+                 rel_enc: bool = False,
+                 scale_embed: bool = False) -> None:
         super(PositionalEncoding, self).__init__()
         pos_enc = th.zeros(max_len, embed_dim)
         if rel_enc:
@@ -52,7 +54,9 @@ class PositionalEncoding(nn.Module):
             state.pop("pos_enc")
         return state
 
-    def forward(self, inp, t=0):
+    def forward(self,
+                inp: th.Tensor,
+                t: int = 0) -> Union[th.Tensor, Tuple[nn.Parameter, th.Tensor]]:
         """
         Args:
             inp: N x T x D
@@ -80,12 +84,12 @@ class LinearEmbedding(nn.Module):
     Linear projection embedding
     """
 
-    def __init__(self, input_size, embed_dim=512):
+    def __init__(self, input_size: int, embed_dim: int = 512) -> None:
         super(LinearEmbedding, self).__init__()
         self.proj = nn.Linear(input_size, embed_dim)
         self.norm = nn.LayerNorm(embed_dim)
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
             inp: features from asr transform, N x T x F
@@ -102,7 +106,10 @@ class Conv1dEmbedding(nn.Module):
     1d-conv embedding
     """
 
-    def __init__(self, input_size, embed_dim=512, inner_channels=256):
+    def __init__(self,
+                 input_size: int,
+                 embed_dim: int = 512,
+                 inner_channels: int = 256) -> None:
         super(Conv1dEmbedding, self).__init__()
         self.conv1 = nn.Conv1d(input_size,
                                inner_channels,
@@ -115,7 +122,7 @@ class Conv1dEmbedding(nn.Module):
                                stride=2,
                                padding=1)
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
             inp: features from front-end or asr transform, N x B x T x F or N x T x F
@@ -147,7 +154,10 @@ class Conv2dEmbedding(nn.Module):
     Speech-transformer: A no-recurrence sequence-to-sequence model for speech recognition
     """
 
-    def __init__(self, input_size, embed_dim=512, input_channels=1):
+    def __init__(self,
+                 input_size: int,
+                 embed_dim: int = 512,
+                 input_channels: int = 1) -> None:
         super(Conv2dEmbedding, self).__init__()
         inner_channels = embed_dim // 2
         self.conv1 = nn.Conv2d(input_channels,
@@ -164,7 +174,7 @@ class Conv2dEmbedding(nn.Module):
         input_size = (input_size - 1) // 2 + 1
         self.proj = nn.Linear(input_size * inner_channels, embed_dim)
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
             inp: N x T x F (from asr transform) or N x C x T x F (from front-end processing)
@@ -197,14 +207,14 @@ class IOEmbedding(nn.Module):
     """
 
     def __init__(self,
-                 embed_type,
-                 feature_dim,
-                 embed_dim=512,
-                 dropout=0.1,
-                 other_opts=-1,
-                 scale_embed=False,
-                 pos_enc=True,
-                 rel_enc=False):
+                 embed_type: str,
+                 feature_dim: int,
+                 embed_dim: int = 512,
+                 dropout: float = 0.1,
+                 other_opts: int = -1,
+                 scale_embed: bool = False,
+                 pos_enc: bool = True,
+                 rel_enc: bool = False) -> None:
         super(IOEmbedding, self).__init__()
         if embed_type == "linear":
             self.embed = LinearEmbedding(feature_dim, embed_dim=embed_dim)
@@ -220,6 +230,8 @@ class IOEmbedding(nn.Module):
                 inner_channels=embed_dim if other_opts <= 0 else other_opts)
         elif embed_type == "sparse":
             self.embed = nn.Embedding(feature_dim, embed_dim)
+        elif embed_type == "none":
+            self.embed = None
         else:
             raise RuntimeError(f"Unsupported embedding type: {embed_type}")
         if pos_enc:
@@ -231,14 +243,17 @@ class IOEmbedding(nn.Module):
         else:
             self.posencode = None
 
-    def forward(self, inp, t=0):
+    def forward(self, inp: th.Tensor, t: int = 0) -> th.Tensor:
         """
         Args:
             inp: N x T x F (from asr transform)
         Return:
             out: T' x N x F (to feed transformer)
         """
-        out = self.embed(inp)
+        if self.embed:
+            out = self.embed(inp)
+        else:
+            out = inp
         if self.posencode:
             out = self.posencode(out, t=t)
         else:

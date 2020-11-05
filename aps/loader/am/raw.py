@@ -13,27 +13,28 @@ import torch.utils.data as dat
 
 from torch.nn.utils.rnn import pad_sequence
 
+from typing import Dict, Iterable, Optional, NoReturn
 from aps.loader.am.utils import process_token, BatchSampler
 from aps.loader.audio import AudioReader
 
 
-def DataLoader(train=True,
-               distributed=False,
-               wav_scp="",
-               sr=16000,
-               channel=-1,
-               text="",
-               utt2dur="",
-               vocab_dict="",
-               max_token_num=400,
-               max_dur=30,
-               min_dur=0.4,
-               adapt_dur=8,
-               adapt_token_num=150,
-               batch_size=32,
-               batch_mode="adaptive",
-               num_workers=0,
-               min_batch_size=4):
+def DataLoader(train: bool = True,
+               distributed: bool = False,
+               wav_scp: str = "",
+               sr: int = 16000,
+               channel: int = -1,
+               text: str = "",
+               utt2dur: str = "",
+               vocab_dict: Optional[Dict] = None,
+               max_token_num: int = 400,
+               max_dur: float = 30,
+               min_dur: float = 0.4,
+               adapt_dur: float = 8,
+               adapt_token_num: int = 150,
+               batch_size: int = 32,
+               batch_mode: str = "adaptive",
+               num_workers: int = 0,
+               min_batch_size: int = 4) -> Iterable[Dict]:
     dataset = Dataset(wav_scp,
                       text,
                       utt2dur,
@@ -60,17 +61,17 @@ class Dataset(dat.Dataset):
     """
 
     def __init__(self,
-                 wav_scp,
-                 text,
-                 utt2dur,
-                 vocab_dict,
-                 sr=16000,
-                 channel=-1,
-                 max_token_num=400,
-                 max_wav_dur=30,
-                 min_wav_dur=0.4,
-                 adapt_wav_dur=8,
-                 adapt_token_num=150):
+                 wav_scp: str,
+                 text: str,
+                 utt2dur: str,
+                 vocab_dict: Optional[Dict],
+                 sr: int = 16000,
+                 channel: int = -1,
+                 max_token_num: int = 400,
+                 max_wav_dur: float = 30,
+                 min_wav_dur: float = 0.4,
+                 adapt_wav_dur: float = 8,
+                 adapt_token_num: int = 150) -> None:
         self.audio_reader = AudioReader(wav_scp,
                                         sr=sr,
                                         channel=channel,
@@ -82,7 +83,7 @@ class Dataset(dat.Dataset):
                                           max_dur=max_wav_dur,
                                           min_dur=min_wav_dur)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Dict:
         tok = self.token_reader[idx]
         key = tok["key"]
         wav = self.audio_reader[key]
@@ -96,11 +97,11 @@ class Dataset(dat.Dataset):
                 "tok": tok["tok"]
             }
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.token_reader)
 
 
-def egs_collate(egs):
+def egs_collate(egs: Dict) -> Dict:
 
     def pad_seq(seq, value=0):
         peek_dim = seq[0].dim()
@@ -137,40 +138,34 @@ def egs_collate(egs):
     return egs
 
 
-class AudioDataLoader(object):
+class AudioDataLoader(dat.DataLoader):
     """
     Acoustic dataloader for seq2seq model training
     """
 
     def __init__(self,
-                 dataset,
-                 shuffle=True,
-                 distributed=False,
-                 num_workers=0,
-                 adapt_wav_dur=8,
-                 adapt_token_num=150,
-                 batch_size=32,
-                 batch_mode="adaptive",
-                 min_batch_size=4):
-        self.sampler = BatchSampler(dataset,
-                                    batch_size,
-                                    shuffle=shuffle,
-                                    distributed=distributed,
-                                    batch_mode=batch_mode,
-                                    adapt_dur=adapt_wav_dur,
-                                    adapt_token_num=adapt_token_num,
-                                    min_batch_size=min_batch_size)
-        self.batch_loader = dat.DataLoader(dataset,
-                                           batch_sampler=self.sampler,
-                                           num_workers=num_workers,
-                                           collate_fn=egs_collate)
+                 dataset: dat.Dataset,
+                 shuffle: bool = True,
+                 distributed: bool = False,
+                 num_workers: int = 0,
+                 adapt_wav_dur: float = 8,
+                 adapt_token_num: int = 150,
+                 batch_size: int = 32,
+                 batch_mode: str = "adaptive",
+                 min_batch_size: int = 4) -> None:
+        sampler = BatchSampler(dataset,
+                               batch_size,
+                               shuffle=shuffle,
+                               distributed=distributed,
+                               batch_mode=batch_mode,
+                               adapt_dur=adapt_wav_dur,
+                               adapt_token_num=adapt_token_num,
+                               min_batch_size=min_batch_size)
 
-    def __len__(self):
-        return len(self.batch_loader)
+        super(AudioDataLoader, self).__init__(dataset,
+                                              batch_sampler=sampler,
+                                              num_workers=num_workers,
+                                              collate_fn=egs_collate)
 
-    def set_epoch(self, epoch):
-        self.sampler.set_epoch(epoch)
-
-    def __iter__(self):
-        for egs in self.batch_loader:
-            yield egs
+    def set_epoch(self, epoch: int) -> NoReturn:
+        self.batch_sampler.set_epoch(epoch)

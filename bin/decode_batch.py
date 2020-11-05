@@ -14,6 +14,7 @@ from torch.nn.utils.rnn import pad_sequence
 from aps.loader import AudioReader
 from aps.utils import get_logger, io_wrapper
 from aps.opts import StrToBoolAction
+from aps.conf import load_dict
 from aps.eval import Computer
 
 from kaldi_python_io import ScriptReader
@@ -43,11 +44,7 @@ def run(args):
         raise RuntimeError("batch_size == 1, use decode.py instead")
     # build dictionary
     if args.dict:
-        with codecs.open(args.dict, "r", encoding="utf-8") as f:
-            vocab = {}
-            for pair in f:
-                unit, idx = pair.split()
-                vocab[int(idx)] = unit
+        vocab = load_dict(args.dict, reverse=True)
     else:
         vocab = None
     decoder = BatchDecoder(args.checkpoint, device_id=args.device_id)

@@ -17,6 +17,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
+from typing import Optional, Union
 from aps.transform.utils import STFT, init_melfilter, init_dct
 from aps.transform.augment import tf_mask
 from aps.const import EPSILON
@@ -28,14 +29,15 @@ class SpectrogramTransform(STFT):
     """
 
     def __init__(self,
-                 frame_len,
-                 frame_hop,
-                 center=False,
-                 window="hamm",
-                 round_pow_of_two=True,
-                 normalized=False,
-                 onesided=True,
-                 mode="librosa"):
+                 frame_len: int,
+                 frame_hop: int,
+                 center: bool = False,
+                 window: str = "hamm",
+                 round_pow_of_two: bool = True,
+                 normalized: bool = False,
+                 onesided: bool = True,
+                 mode: str = "librosa",
+                 pre_emphasis: float = 0) -> None:
         super(SpectrogramTransform,
               self).__init__(frame_len,
                              frame_hop,
@@ -45,20 +47,26 @@ class SpectrogramTransform(STFT):
                              normalized=normalized,
                              onesided=onesided,
                              mode=mode)
+        self.pre_emphasis = pre_emphasis
 
     def dim(self):
         return self.num_bins
 
-    def len(self, xlen):
+    def len(self, xlen: th.Tensor) -> th.Tensor:
         return self.num_frames(xlen)
 
-    def forward(self, x):
+    def extra_repr(self) -> str:
+        return self.expr + f", pre_emphasis={self.pre_emphasis}"
+
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         Args:
             x (Tensor): input signal, N x (C) x S
         Return:
             m (Tensor): magnitude, N x (C) x T x F
         """
+        if self.pre_emphasis > 0:
+            x[..., 1:] = x[..., 1:] - self.pre_emphasis * x[..., :-1]
         m, _ = super().forward(x)
         m = th.transpose(m, -1, -2)
         return m
@@ -69,14 +77,14 @@ class AbsTransform(nn.Module):
     Absolute transform
     """
 
-    def __init__(self, eps=1e-5):
+    def __init__(self, eps: float = 1e-5) -> None:
         super(AbsTransform, self).__init__()
         self.eps = eps
 
-    def extra_repr(self):
+    def extra_repr(self) -> str:
         return f"eps={self.eps:.3e}"
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         Args:
             x (Tensor or ComplexTensor): N x T x F
@@ -94,13 +102,13 @@ class MelTransform(nn.Module):
     """
 
     def __init__(self,
-                 frame_len,
-                 round_pow_of_two=True,
-                 sr=16000,
-                 num_mels=80,
-                 fmin=0.0,
-                 fmax=None,
-                 requires_grad=False):
+                 frame_len: int,
+                 round_pow_of_two: bool = True,
+                 sr: int = 16000,
+                 num_mels: int = 80,
+                 fmin: float = 0.0,
+                 fmax: Optional[float] = None,
+                 requires_grad: bool = False) -> None:
         super(MelTransform, self).__init__()
         # num_mels x (N // 2 + 1)
         filters = init_melfilter(frame_len,
@@ -114,14 +122,14 @@ class MelTransform(nn.Module):
         self.fmin = fmin
         self.fmax = sr // 2 if fmax is None else fmax
 
-    def dim(self):
+    def dim(self) -> int:
         return self.num_mels
 
-    def extra_repr(self):
+    def extra_repr(self) -> str:
         return "fmin={0}, fmax={1}, mel_filter={2[0]}x{2[1]}".format(
             self.fmin, self.fmax, self.filters.shape)
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         Args:
             x (Tensor): spectrogram, N x (C) x T x F
@@ -141,17 +149,17 @@ class LogTransform(nn.Module):
     Transform linear domain to log domain
     """
 
-    def __init__(self, eps=1e-5):
+    def __init__(self, eps: float = 1e-5) -> None:
         super(LogTransform, self).__init__()
         self.eps = eps
 
-    def dim_scale(self):
+    def dim_scale(self) -> int:
         return 1
 
-    def extra_repr(self):
+    def extra_repr(self) -> str:
         return f"eps={self.eps:.3e}"
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         Args:
             x (Tensor): linear, N x (C) x T x F
@@ -167,7 +175,10 @@ class DiscreteCosineTransform(nn.Module):
     DCT as a layer (for mfcc features)
     """
 
-    def __init__(self, num_ceps=13, num_mels=40, lifter=0):
+    def __init__(self,
+                 num_ceps: int = 13,
+                 num_mels: int = 40,
+                 lifter: float = 0) -> None:
         super(DiscreteCosineTransform, self).__init__()
         self.lifter = lifter
         self.num_ceps = num_ceps
@@ -181,14 +192,14 @@ class DiscreteCosineTransform(nn.Module):
         else:
             self.cepstral_lifter = None
 
-    def dim(self):
+    def dim(self) -> int:
         return self.num_ceps
 
-    def extra_repr(self):
+    def extra_repr(self) -> str:
         return "cepstral_lifter={0}, dct={1[0]}x{1[1]}".format(
             self.lifter, self.dct.shape)
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         Args:
             x (Tensor): log mel-fbank, N x (C) x T x B
@@ -206,7 +217,11 @@ class CmvnTransform(nn.Module):
     Utterance-level mean-variance normalization
     """
 
-    def __init__(self, norm_mean=True, norm_var=True, gcmvn="", eps=1e-5):
+    def __init__(self,
+                 norm_mean: bool = True,
+                 norm_var: bool = True,
+                 gcmvn: str = "",
+                 eps: float = 1e-5) -> None:
         super(CmvnTransform, self).__init__()
         self.gmean, self.gstd = None, None
         if gcmvn:
@@ -219,14 +234,14 @@ class CmvnTransform(nn.Module):
         self.gcmvn = gcmvn
         self.eps = eps
 
-    def extra_repr(self):
+    def extra_repr(self) -> str:
         return f"norm_mean={self.norm_mean}, norm_var={self.norm_var}, " + \
             f"gcmvn_stats={self.gcmvn}, eps={self.eps:.3e}"
 
-    def dim_scale(self):
+    def dim_scale(self) -> int:
         return 1
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         Args:
             x (Tensor): feature before normalization, N x (C) x T x F
@@ -255,21 +270,21 @@ class SpecAugTransform(nn.Module):
     """
 
     def __init__(self,
-                 p=0.5,
-                 max_bands=30,
-                 max_frame=40,
-                 num_freq_masks=2,
-                 num_time_masks=2):
+                 p: float = 0.5,
+                 max_bands: int = 30,
+                 max_frame: int = 40,
+                 num_freq_masks: int = 2,
+                 num_time_masks: int = 2) -> None:
         super(SpecAugTransform, self).__init__()
         self.fnum, self.tnum = num_freq_masks, num_time_masks
         self.F, self.T = max_bands, max_frame
         self.p = p
 
-    def extra_repr(self):
+    def extra_repr(self) -> str:
         return f"max_bands={self.F}, max_frame={self.T}, p={self.p}, " \
                 + f"num_freq_masks={self.fnum}, num_time_masks={self.tnum}"
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         Args:
             x (Tensor): original features, N x (C) x T x F
@@ -300,19 +315,19 @@ class SpliceTransform(nn.Module):
     Do splicing as well as downsampling if needed
     """
 
-    def __init__(self, lctx=0, rctx=0, ds_rate=1):
+    def __init__(self, lctx: int = 0, rctx: int = 0, ds_rate: int = 1) -> None:
         super(SpliceTransform, self).__init__()
         self.rate = ds_rate
         self.lctx = max(lctx, 0)
         self.rctx = max(rctx, 0)
 
-    def extra_repr(self):
+    def extra_repr(self) -> str:
         return f"context=({self.lctx}, {self.rctx}), downsample_rate={self.rate}"
 
-    def dim_scale(self):
+    def dim_scale(self) -> int:
         return (1 + self.rctx + self.lctx)
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         args:
             x (Tensor): original feature, N x ... x Ti x F
@@ -340,18 +355,18 @@ class DeltaTransform(nn.Module):
     Add delta features
     """
 
-    def __init__(self, ctx=2, order=2):
+    def __init__(self, ctx: int = 2, order: int = 2) -> None:
         super(DeltaTransform, self).__init__()
         self.ctx = ctx
         self.order = order
 
-    def extra_repr(self):
+    def extra_repr(self) -> str:
         return f"context={self.ctx}, order={self.order}"
 
-    def dim_scale(self):
+    def dim_scale(self) -> int:
         return self.order
 
-    def _add_delta(self, x):
+    def _add_delta(self, x: th.Tensor) -> th.Tensor:
         dx = th.zeros_like(x)
         for i in range(1, self.ctx + 1):
             dx[..., :-i, :] += i * x[..., i:, :]
@@ -361,7 +376,7 @@ class DeltaTransform(nn.Module):
         dx = dx / (2 * sum(i**2 for i in range(1, self.ctx + 1)))
         return dx
 
-    def forward(self, x):
+    def forward(self, x: th.Tensor) -> th.Tensor:
         """
         args:
             x (Tensor): original feature, N x (C) x T x F
@@ -390,33 +405,34 @@ class FeatureTransform(nn.Module):
     """
 
     def __init__(self,
-                 feats="fbank-log-cmvn",
-                 frame_len=400,
-                 frame_hop=160,
-                 window="hamm",
-                 center=False,
-                 round_pow_of_two=True,
-                 stft_normalized=False,
-                 stft_mode="librosa",
-                 sr=16000,
-                 num_mels=80,
-                 num_ceps=13,
-                 lifter=0,
-                 aug_prob=0,
-                 aug_max_bands=30,
-                 aug_max_frame=40,
-                 num_aug_bands=2,
-                 num_aug_frame=2,
-                 norm_mean=True,
-                 norm_var=True,
-                 gcmvn="",
-                 ds_rate=1,
-                 lctx=1,
-                 rctx=1,
-                 delta_ctx=2,
-                 delta_order=2,
-                 requires_grad=False,
-                 eps=EPSILON):
+                 feats: str = "fbank-log-cmvn",
+                 frame_len: int = 400,
+                 frame_hop: int = 160,
+                 window: str = "hamm",
+                 center: bool = False,
+                 round_pow_of_two: bool = True,
+                 stft_normalized: bool = False,
+                 stft_mode: str = "librosa",
+                 pre_emphasis: float = 0,
+                 sr: int = 16000,
+                 num_mels: int = 80,
+                 num_ceps: int = 13,
+                 lifter: float = 0,
+                 aug_prob: float = 0,
+                 aug_max_bands: int = 30,
+                 aug_max_frame: int = 40,
+                 num_aug_bands: int = 2,
+                 num_aug_frame: int = 2,
+                 norm_mean: bool = True,
+                 norm_var: bool = True,
+                 gcmvn: str = "",
+                 ds_rate: int = 1,
+                 lctx: int = 1,
+                 rctx: int = 1,
+                 delta_ctx: int = 2,
+                 delta_order: int = 2,
+                 requires_grad: bool = False,
+                 eps: float = EPSILON) -> None:
         super(FeatureTransform, self).__init__()
         trans_tokens = feats.split("-")
         transform = []
@@ -432,11 +448,17 @@ class FeatureTransform(nn.Module):
         for tok in trans_tokens:
             if tok == "spectrogram":
                 transform.append(
-                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs))
+                    SpectrogramTransform(frame_len,
+                                         frame_hop,
+                                         **stft_kwargs,
+                                         pre_emphasis=pre_emphasis))
                 feats_dim = transform[-1].dim()
             elif tok == "fbank":
                 fbank = [
-                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    SpectrogramTransform(frame_len,
+                                         frame_hop,
+                                         **stft_kwargs,
+                                         pre_emphasis=pre_emphasis),
                     MelTransform(frame_len,
                                  round_pow_of_two=round_pow_of_two,
                                  sr=sr,
@@ -447,7 +469,10 @@ class FeatureTransform(nn.Module):
                 feats_dim = transform[-1].dim()
             elif tok == "mfcc":
                 log_fbank = [
-                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    SpectrogramTransform(frame_len,
+                                         frame_hop,
+                                         **stft_kwargs,
+                                         pre_emphasis=pre_emphasis),
                     MelTransform(frame_len,
                                  round_pow_of_two=round_pow_of_two,
                                  sr=sr,
@@ -504,7 +529,7 @@ class FeatureTransform(nn.Module):
         self.feats_dim = feats_dim
         self.downsample_rate = downsample_rate
 
-    def num_frames(self, wav_len):
+    def num_frames(self, wav_len: th.Tensor) -> th.Tensor:
         """
         Work out number of frames
         """
@@ -513,7 +538,9 @@ class FeatureTransform(nn.Module):
                 "0-th layer of transform is not SpectrogramTransform")
         return self.transform[0].len(wav_len)
 
-    def forward(self, wav_pad, wav_len):
+    def forward(
+            self, wav_pad: th.Tensor, wav_len: Optional[th.Tensor]
+    ) -> Union[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             wav_pad (Tensor): raw waveform: N x C x S or N x S

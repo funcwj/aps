@@ -13,10 +13,15 @@ import scipy.signal as ss
 
 from kaldi_python_io import Reader as BaseReader
 
+from typing import Optional, IO, Union, Any, NoReturn, Tuple
 from aps.const import MAX_INT16, EPSILON
 
 
-def read_audio(fname, beg=0, end=None, norm=True, sr=16000):
+def read_audio(fname: Union[str, IO[Any]],
+               beg: int = 0,
+               end: Optional[int] = None,
+               norm: bool = True,
+               sr: int = 16000) -> np.ndarray:
     """
     Read audio files using soundfile (support multi-channel & chunk)
     args:
@@ -46,7 +51,10 @@ def read_audio(fname, beg=0, end=None, norm=True, sr=16000):
     return samps
 
 
-def write_audio(fname, samps, sr=16000, norm=True):
+def write_audio(fname: Union[str, IO[Any]],
+                samps: np.ndarray,
+                sr: int = 16000,
+                norm: bool = True) -> NoReturn:
     """
     Write audio files, support single/multi-channel
     """
@@ -67,7 +75,10 @@ def write_audio(fname, samps, sr=16000, norm=True):
     sf.write(fname, samps, sr)
 
 
-def add_room_response(spk, rir, early_energy=False, sr=16000):
+def add_room_response(spk: np.ndarray,
+                      rir: np.ndarray,
+                      early_energy: bool = False,
+                      sr: int = 16000) -> Tuple[np.ndarray, float]:
     """
     Convolute source signal with selected rirs
     Args
@@ -95,7 +106,7 @@ def add_room_response(spk, rir, early_energy=False, sr=16000):
         return revb, np.mean(revb[0]**2)
 
 
-def run_command(command, wait=True):
+def run_command(command: str, wait: bool = True):
     """
     Runs shell commands. These are usually a sequence of
     commands connected by pipes, so we use shell=True
@@ -127,14 +138,18 @@ class AudioReader(BaseReader):
         ...
     """
 
-    def __init__(self, wav_scp, sr=16000, norm=True, channel=-1):
+    def __init__(self,
+                 wav_scp: str,
+                 sr: int = 16000,
+                 norm: bool = True,
+                 channel: int = -1) -> None:
         super(AudioReader, self).__init__(wav_scp, num_tokens=2)
         self.sr = sr
         self.ch = channel
         self.norm = norm
         self.mngr = {}
 
-    def _load(self, key):
+    def _load(self, key: str) -> Optional[np.ndarray]:
         fname = self.index_dict[key]
         # return C x N or N
         if ":" in fname:
@@ -170,14 +185,14 @@ class AudioReader(BaseReader):
             samps = samps[self.ch]
         return samps
 
-    def nsamps(self, key):
+    def nsamps(self, key: str) -> int:
         """
         Number of samples
         """
         data = self._load(key)
         return data.shape[-1]
 
-    def power(self, key):
+    def power(self, key: str) -> float:
         """
         Power of utterance
         """
@@ -185,7 +200,7 @@ class AudioReader(BaseReader):
         s = data if data.ndim == 1 else data[0]
         return np.linalg.norm(s, 2)**2 / data.size
 
-    def duration(self, key):
+    def duration(self, key: str) -> float:
         """
         Utterance duration
         """

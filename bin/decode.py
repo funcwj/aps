@@ -3,7 +3,6 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-import sys
 import codecs
 import argparse
 
@@ -11,6 +10,7 @@ import torch as th
 
 from aps.eval import Computer
 from aps.opts import StrToBoolAction
+from aps.conf import load_dict
 from aps.utils import get_logger, io_wrapper
 from aps.loader import AudioReader
 
@@ -37,23 +37,28 @@ class FasterDecoder(Computer):
     Decoder wrapper
     """
 
-    def __init__(self, cpt_dir, device_id=-1):
+    def __init__(self, cpt_dir, function="beam_search", device_id=-1):
         super(FasterDecoder, self).__init__(cpt_dir, device_id=device_id)
+        if not hasattr(self.nnet, function):
+            raise RuntimeError(
+                f"AM doesn't have the decoding function: {function}")
+        self.decode = getattr(self.nnet, function)
+        self.function = function
         logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
+        logger.info(f"Using decoding function: {function}")
 
     def run(self, src, **kwargs):
         src = th.from_numpy(src).to(self.device)
-        return self.nnet.beam_search(src, **kwargs)
+        if self.function == "greedy_search":
+            return self.decode(src)
+        else:
+            return self.decode(src, **kwargs)
 
 
 def run(args):
     # build dictionary
     if args.dict:
-        with codecs.open(args.dict, "r", encoding="utf-8") as f:
-            vocab = {}
-            for pair in f:
-                unit, idx = pair.split()
-                vocab[int(idx)] = unit
+        vocab = load_dict(args.dict, reverse=True)
     else:
         vocab = None
     decoder = FasterDecoder(args.checkpoint, device_id=args.device_id)
@@ -176,6 +181,11 @@ if __name__ == "__main__":
                         type=str,
                         default="",
                         help="If not empty, dump n-best hypothesis")
+    parser.add_argument("--function",
+                        type=str,
+                        choices=["beam_search", "greedy_search"],
+                        default="beam_search",
+                        help="Name of the decoding function")
     parser.add_argument("--vectorized",
                         action=StrToBoolAction,
                         default="true",

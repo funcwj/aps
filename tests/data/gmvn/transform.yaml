@@ -1,0 +1,10 @@
+asr_transform:
+  feats: "fbank-log-cmvn-splice"
+  frame_len: 400
+  frame_hop: 160
+  window: "hamm"
+  round_pow_of_two: true
+  sr: 16000
+  num_mels: 80
+  lctx: 1
+  rctx: 1

@@ -7,6 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from typing import Optional, Tuple
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 
@@ -15,7 +16,7 @@ class Normalize1d(nn.Module):
     Wrapper for BatchNorm1d & LayerNorm
     """
 
-    def __init__(self, name, in_features):
+    def __init__(self, name: str, in_features: int):
         super(Normalize1d, self).__init__()
         name = name.upper()
         if name not in ["BN", "LN"]:
@@ -26,7 +27,7 @@ class Normalize1d(nn.Module):
             self.norm = nn.LayerNorm(in_features)
         self.name = name
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
             inp (Tensor): N x F x T
@@ -49,13 +50,13 @@ class TDNNLayer(nn.Module):
     """
 
     def __init__(self,
-                 input_size,
-                 output_size,
-                 kernel_size=3,
-                 stride=2,
-                 dilation=1,
-                 norm="BN",
-                 dropout=0):
+                 input_size: int,
+                 output_size: int,
+                 kernel_size: int = 3,
+                 stride: int = 2,
+                 dilation: int = 1,
+                 norm: str = "BN",
+                 dropout: float = 0):
         super(TDNNLayer, self).__init__()
         self.conv1d = nn.Conv1d(input_size,
                                 output_size,
@@ -67,7 +68,7 @@ class TDNNLayer(nn.Module):
         self.dropout = nn.Dropout(p=dropout) if dropout > 0 else None
         self.down_sampling = stride
 
-    def forward(self, inp):
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
             inp (Tensor): (N) x T x F
@@ -98,14 +99,14 @@ class FSMNLayer(nn.Module):
     """
 
     def __init__(self,
-                 input_size,
-                 output_size,
-                 project_size,
-                 lctx=3,
-                 rctx=3,
-                 norm="BN",
-                 dilation=0,
-                 dropout=0):
+                 input_size: int,
+                 output_size: int,
+                 project_size: int,
+                 lctx: int = 3,
+                 rctx: int = 3,
+                 norm: int = "BN",
+                 dilation: int = 0,
+                 dropout: float = 0):
         super(FSMNLayer, self).__init__()
         self.inp_proj = nn.Linear(input_size, project_size, bias=False)
         self.ctx_size = lctx + rctx + 1
@@ -123,7 +124,10 @@ class FSMNLayer(nn.Module):
             self.norm = None
         self.out_drop = nn.Dropout(p=dropout) if dropout > 0 else None
 
-    def forward(self, inp, memory=None):
+    def forward(
+            self,
+            inp: th.Tensor,
+            memory: Optional[th.Tensor] = None) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args:
             inp (Tensor): N x T x F, current input
@@ -164,14 +168,14 @@ class CustomRNNLayer(nn.Module):
     """
 
     def __init__(self,
-                 input_size,
-                 hidden_size=512,
-                 project_size=None,
-                 rnn="lstm",
-                 layernorm=False,
-                 dropout=0.0,
-                 bidirectional=False,
-                 add_forward_backward=False):
+                 input_size: int,
+                 hidden_size: int = 512,
+                 project_size: Optional[int] = None,
+                 rnn: str = "lstm",
+                 layernorm: bool = False,
+                 dropout: float = 0.0,
+                 bidirectional: bool = False,
+                 add_forward_backward: bool = False):
         super(CustomRNNLayer, self).__init__()
         RNN = rnn.upper()
         supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
@@ -193,7 +197,8 @@ class CustomRNNLayer(nn.Module):
     def flat(self):
         self.rnn.flatten_parameters()
 
-    def forward(self, inp_pad, inp_len):
+    def forward(self, inp_pad: th.Tensor,
+                inp_len: Optional[th.Tensor]) -> th.Tensor:
         """
         Args:
             inp_pad (Tensor): N x Ti x F

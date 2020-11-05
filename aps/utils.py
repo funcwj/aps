@@ -12,13 +12,16 @@ import logging
 import torch as th
 import numpy as np
 
-default_logger_format = "%(asctime)s [%(pathname)s:%(lineno)s - %(levelname)s ] %(message)s"
+from typing import NoReturn, Tuple, Any, Union, Optional
+
+aps_logger_format = "%(asctime)s [%(pathname)s:%(lineno)s - %(levelname)s ] %(message)s"
+aps_time_format = "%Y-%m-%d %H:%M:%S"
 
 
-def get_logger(name,
-               format_str=default_logger_format,
-               date_format="%Y-%m-%d %H:%M:%S",
-               file=False):
+def get_logger(name: str,
+               format_str: str = aps_logger_format,
+               date_format: str = aps_time_format,
+               file: bool = False) -> logging.Logger:
     """
     Get logger instance
     """
@@ -38,7 +41,7 @@ def get_logger(name,
     return logger
 
 
-def io_wrapper(io_str, mode):
+def io_wrapper(io_str: str, mode: str) -> Tuple[bool, Any]:
     """
     Wrapper for IO stream
     """
@@ -56,7 +59,7 @@ def io_wrapper(io_str, mode):
     return std, stream
 
 
-def load_obj(obj, device):
+def load_obj(obj: Any, device: Union[th.device, str]) -> Any:
     """
     Offload tensor object in obj to cuda device
     """
@@ -72,7 +75,7 @@ def load_obj(obj, device):
         return cuda(obj)
 
 
-def get_device_ids(device_ids):
+def get_device_ids(device_ids: Union[str, int]) -> Tuple[int]:
     """
     Got device ids
     """
@@ -92,7 +95,7 @@ def get_device_ids(device_ids):
     return device_ids
 
 
-def set_seed(seed_str):
+def set_seed(seed_str: str) -> Optional[int]:
     """
     Set random seed for numpy & torch & cuda
     """
@@ -113,11 +116,11 @@ class SimpleTimer(object):
     A simple timer
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.reset()
 
-    def reset(self):
+    def reset(self) -> NoReturn:
         self.start = time.time()
 
-    def elapsed(self):
+    def elapsed(self) -> float:
         return (time.time() - self.start) / 60

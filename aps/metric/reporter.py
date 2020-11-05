@@ -2,6 +2,7 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 from collections import defaultdict
+from typing import Optional, NoReturn
 from kaldi_python_io import Reader as BaseReader
 
 
@@ -10,7 +11,10 @@ class MetricReporter(object):
     Metric reporter (WER, SiSNR, SDR ...)
     """
 
-    def __init__(self, spk2class=None, name="UNK", unit="UNK"):
+    def __init__(self,
+                 spk2class: Optional[str] = None,
+                 name: str = "UNK",
+                 unit: str = "UNK") -> None:
         self.s2c = BaseReader(spk2class) if spk2class else None
         self.val = defaultdict(float)
         self.name = name
@@ -28,20 +32,23 @@ class AverageReporter(MetricReporter):
     Reportor for SDR, PESQ, SiSNR
     """
 
-    def __init__(self, spk2class=None, name="UNK", unit="UNK"):
+    def __init__(self,
+                 spk2class: Optional[str] = None,
+                 name: str = "UNK",
+                 unit: str = "UNK") -> None:
         super(AverageReporter, self).__init__(spk2class=spk2class,
                                               name=name,
                                               unit=unit)
         self.cnt = defaultdict(int)
 
-    def add(self, key, val):
+    def add(self, key: str, val: float) -> NoReturn:
         cls_str = "NG"
         if self.s2c:
             cls_str = self.s2c[key]
         self.val[cls_str] += val
         self.cnt[cls_str] += 1
 
-    def report(self):
+    def report(self) -> NoReturn:
         print(f"{self.name} ({self.unit}) Report: ")
         tot_utt = sum([self.cnt[cls_str] for cls_str in self.cnt])
         tot_snr = sum([self.val[cls_str] for cls_str in self.val])
@@ -59,14 +66,17 @@ class WerReporter(MetricReporter):
     Reportor for WER, CER
     """
 
-    def __init__(self, spk2class=None, name="UNK", unit="UNK"):
+    def __init__(self,
+                 spk2class: Optional[str] = None,
+                 name: str = "UNK",
+                 unit: str = "UNK") -> None:
         super(WerReporter, self).__init__(spk2class=spk2class,
                                           name=name,
                                           unit=unit)
         self.tot = defaultdict(float)
         self.cnt = 0
 
-    def add(self, key, val, tot):
+    def add(self, key: str, val: float, tot: int) -> NoReturn:
         cls_str = "NG"
         if self.s2c:
             cls_str = self.s2c[key]
@@ -74,7 +84,7 @@ class WerReporter(MetricReporter):
         self.tot[cls_str] += tot
         self.cnt += 1
 
-    def report(self):
+    def report(self) -> NoReturn:
         print(f"{self.name} ({self.unit}) Report: ")
         sum_err = sum([self.val[cls_str] for cls_str in self.val])
         sum_len = sum([self.tot[cls_str] for cls_str in self.tot])

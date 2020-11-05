@@ -2,7 +2,9 @@
 
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
-
+"""
+For ASR task
+"""
 import math
 import numpy as np
 import torch as th
@@ -19,51 +21,15 @@ try:
 except ImportError:
     rnnt_loss_available = False
 
+from typing import Tuple, Dict
 from aps.task.base import Task
+from aps.task.objf import ce_objf, ls_objf
 from aps.const import IGNORE_ID
 
 __all__ = ["CtcXentHybridTask", "TransducerTask", "LmXentTask"]
 
 
-def ce_loss(outs, tgts):
-    """
-    Cross entropy loss
-    """
-    _, _, V = outs.shape
-    # N(To+1) x V
-    outs = outs.view(-1, V)
-    # N(To+1)
-    tgts = tgts.view(-1)
-    ce_loss = tf.cross_entropy(outs,
-                               tgts,
-                               ignore_index=IGNORE_ID,
-                               reduction="mean")
-    return ce_loss
-
-
-def ls_loss(outs, tgts, lsm_factor=0.1):
-    """
-    Label smooth loss (using KL)
-    """
-    _, _, V = outs.shape
-    # NT x V
-    outs = outs.view(-1, V)
-    # NT
-    tgts = tgts.view(-1)
-    mask = (tgts != IGNORE_ID)
-    # M x V
-    outs = th.masked_select(outs, mask.unsqueeze(-1)).view(-1, V)
-    # M
-    tgts = th.masked_select(tgts, mask)
-    # M x V
-    dist = outs.new_full(outs.size(), lsm_factor / V)
-    dist = dist.scatter_(1, tgts.unsqueeze(-1), 1 - lsm_factor)
-    # KL distance
-    loss = tf.kl_div(tf.log_softmax(outs, -1), dist, reduction="batchmean")
-    return loss
-
-
-def compute_accu(outs, tgts):
+def compute_accu(outs: th.Tensor, tgts: th.Tensor) -> float:
     """
     Compute frame-level accuracy
     """
@@ -76,7 +42,9 @@ def compute_accu(outs, tgts):
     return (ncorr / total).item()
 
 
-def process_asr_target(tgt_pad, tgt_len, eos=0):
+def process_asr_target(tgt_pad: th.Tensor,
+                       tgt_len: th.Tensor,
+                       eos: int = 0) -> Tuple[th.Tensor, th.Tensor]:
     """
     Process asr targets for inference and loss computation
     """
@@ -94,13 +62,18 @@ class CtcXentHybridTask(Task):
     CTC & Attention AM
     """
 
-    def __init__(self, nnet, lsm_factor=0, ctc_weight=0, blank=0):
-        super(CtcXentHybridTask, self).__init__(nnet)
+    def __init__(self,
+                 nnet: nn.Module,
+                 lsm_factor: float = 0,
+                 ctc_weight: float = 0,
+                 blank: int = 0) -> None:
+        super(CtcXentHybridTask, self).__init__(
+            nnet, description="multi-task training for ASR (CTC + Xent)")
         self.ctc_blank = blank
         self.ctc_weight = ctc_weight
         self.lsm_factor = lsm_factor
 
-    def forward(self, egs, ssr=0, **kwargs):
+    def forward(self, egs: Dict, ssr: int = 0, **kwargs) -> Dict:
         """
         Compute CTC & Attention loss, egs contains:
             src_pad (Tensor): N x Ti x F
@@ -121,9 +94,9 @@ class CtcXentHybridTask(Task):
                                                  ssr=ssr)
         # compute loss
         if self.lsm_factor > 0:
-            loss = ls_loss(outs, tgts, lsm_factor=self.lsm_factor)
+            loss = ls_objf(outs, tgts, lsm_factor=self.lsm_factor)
         else:
-            loss = ce_loss(outs, tgts)
+            loss = ce_objf(outs, tgts)
 
         stats = {}
         if self.ctc_weight > 0:
@@ -152,13 +125,13 @@ class TransducerTask(Task):
     For Transducer based AM
     """
 
-    def __init__(self, nnet, blank=0):
-        super(TransducerTask, self).__init__(nnet)
+    def __init__(self, nnet: nn.Module, blank: int = 0) -> None:
+        super(TransducerTask, self).__init__(nnet, description="RNNT for ASR")
         self.blank = blank
         if not rnnt_loss_available:
             raise ImportError(f"from warp_rnnt import rnnt_loss failed")
 
-    def forward(self, egs, **kwargs):
+    def forward(self, egs: Dict, **kwargs) -> Dict:
         """
         Compute transducer loss, egs contains:
             src_pad (Tensor): N x Ti x F
@@ -190,12 +163,13 @@ class LmXentTask(Task):
     For LM
     """
 
-    def __init__(self, nnet, repackage_hidden=False):
-        super(LmXentTask, self).__init__(nnet)
+    def __init__(self, nnet: nn.Module, repackage_hidden: bool = False) -> None:
+        super(LmXentTask, self).__init__(nnet,
+                                         description="Xent for LM training")
         self.hidden = None
         self.repackage_hidden = repackage_hidden
 
-    def forward(self, egs, **kwargs):
+    def forward(self, egs: Dict, **kwargs) -> Dict:
         """
         Compute CE loss, egs contains
             src (Tensor): N x T+1
@@ -207,7 +181,7 @@ class LmXentTask(Task):
             pred, self.hidden = self.nnet(egs["src"], self.hidden)
         else:
             pred, _ = self.nnet(egs["src"], None, egs["len"])
-        loss = ce_loss(pred, egs["tgt"])
+        loss = ce_objf(pred, egs["tgt"])
         accu = compute_accu(pred, egs["tgt"])
         stats = {"accu": accu, "loss": loss, "@ppl": math.exp(loss.item())}
         return stats

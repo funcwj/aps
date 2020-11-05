@@ -7,9 +7,11 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .transformer.decoder import TorchTransformerDecoder
-from .transformer.encoder import support_xfmr_encoder
-from .base.encoder import encoder_instance
+from typing import Optional, Dict, Tuple, Union, List
+
+from aps.asr.transformer.decoder import TorchTransformerDecoder
+from aps.asr.transformer.encoder import support_xfmr_encoder
+from aps.asr.base.encoder import encoder_instance
 
 
 class TransformerASR(nn.Module):
@@ -18,17 +20,17 @@ class TransformerASR(nn.Module):
     """
 
     def __init__(self,
-                 input_size=80,
-                 vocab_size=40,
-                 sos=-1,
-                 eos=-1,
-                 ctc=False,
-                 asr_transform=None,
-                 encoder_type="transformer",
-                 encoder_proj=None,
-                 encoder_kwargs=None,
-                 decoder_type="transformer",
-                 decoder_kwargs=None):
+                 input_size: int = 80,
+                 vocab_size: int = 40,
+                 sos: int = -1,
+                 eos: int = -1,
+                 ctc: bool = False,
+                 asr_transform: Optional[nn.Module] = None,
+                 encoder_type: str = "transformer",
+                 encoder_proj: Optional[int] = None,
+                 encoder_kwargs: Optional[Dict] = None,
+                 decoder_type: str = "transformer",
+                 decoder_kwargs: Optional[Dict] = None) -> None:
         super(TransformerASR, self).__init__()
         if eos < 0 or sos < 0:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
@@ -53,7 +55,13 @@ class TransformerASR(nn.Module):
         self.ctc = nn.Linear(decoder_kwargs["att_dim"],
                              vocab_size) if ctc else None
 
-    def forward(self, x_pad, x_len, y_pad, ssr=0):
+    def forward(
+        self,
+        x_pad: th.Tensor,
+        x_len: Optional[th.Tensor],
+        y_pad: th.Tensor,
+        ssr: float = 0
+    ) -> Tuple[th.Tensor, None, Optional[th.Tensor], Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -80,14 +88,14 @@ class TransformerASR(nn.Module):
         return dec_out, None, ctc_branch, enc_len
 
     def beam_search(self,
-                    x,
-                    beam=16,
-                    lm=None,
-                    lm_weight=0,
-                    nbest=8,
-                    max_len=-1,
-                    vectorized=True,
-                    normalized=True):
+                    x: th.Tensor,
+                    beam: int = 16,
+                    lm: Optional[nn.Module] = None,
+                    lm_weight: float = 0,
+                    nbest: int = 8,
+                    max_len: int = -1,
+                    vectorized: bool = True,
+                    normalized: bool = True) -> List[Dict]:
         """
         Beam search for Transformer
         """

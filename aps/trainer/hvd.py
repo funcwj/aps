@@ -3,12 +3,13 @@
 
 import math
 from os import environ
+from pathlib import Path
 
 import torch as th
 from torch.nn.utils import clip_grad_norm_
+from typing import Optional, Dict, List, Union, Tuple, NoReturn
 
 import aps.distributed as dist
-
 from aps.trainer.base import Trainer, add_gaussian_noise
 
 
@@ -18,27 +19,27 @@ class HvdTrainer(Trainer):
     """
 
     def __init__(self,
-                 task,
-                 rank=None,
-                 device_ids=0,
-                 checkpoint="cpt",
-                 optimizer="adam",
-                 optimizer_kwargs=None,
-                 lr_scheduler="reduce_lr",
-                 lr_scheduler_period="epoch",
-                 lr_scheduler_kwargs=None,
-                 ss_scheduler="const",
-                 ss_scheduler_kwargs=None,
-                 clip_gradient=None,
-                 gaussian_noise_std=None,
-                 prog_interval=100,
-                 save_interval=-1,
-                 resume="",
-                 init="",
-                 tensorboard=False,
-                 stop_criterion="loss",
-                 no_impr=6,
-                 no_impr_thres=1e-3):
+                 task: th.nn.Module,
+                 rank: Optional[int] = None,
+                 device_ids: Union[str, int, List[int]] = 0,
+                 checkpoint: Union[str, Path] = "cpt",
+                 optimizer: str = "adam",
+                 optimizer_kwargs: Optional[Dict] = None,
+                 lr_scheduler: str = "reduce_lr",
+                 lr_scheduler_kwargs: Optional[Dict] = None,
+                 lr_scheduler_period: str = "epoch",
+                 ss_scheduler: str = "const",
+                 ss_scheduler_kwargs: Optional[Dict] = None,
+                 clip_gradient: Optional[float] = None,
+                 gaussian_noise_std: Optional[float] = None,
+                 prog_interval: int = 100,
+                 save_interval: int = -1,
+                 resume: str = "",
+                 init: str = "",
+                 tensorboard: bool = False,
+                 stop_criterion: str = "loss",
+                 no_impr: int = 6,
+                 no_impr_thres: float = 1e-3) -> None:
         super(HvdTrainer,
               self).__init__(task,
                              rank=rank,
@@ -67,7 +68,7 @@ class HvdTrainer(Trainer):
             raise ValueError(f"horovod is not installed in current environment")
         self.setup_distributed()
 
-    def setup_distributed(self):
+    def setup_distributed(self) -> NoReturn:
         """
         Setup environment for distributed training
         """
@@ -78,10 +79,12 @@ class HvdTrainer(Trainer):
         hvd.broadcast_optimizer_state(self.optimizer, root_rank=0)
         self.reporter.log(f"HVD: using horovod, rank = {self.rank}, " +
                           f"world_size={dist.world_size()}")
-        self.reporter.log("HVD: for BatchNorm layer, please set momentum=0 or "
-                          "track_running_stats=False")
+        self.reporter.log(
+            "Horovod: BatchNorm layer will cause different dev loss on "
+            "each processing due to momentum != 0 or "
+            "track_running_stats = True")
 
-    def train_one_step(self, egs):
+    def train_one_step(self, egs: Dict) -> bool:
         """
         Make one training step for hovorod
 
@@ -129,7 +132,7 @@ class HvdTrainer(Trainer):
             self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
             return False
 
-    def save_checkpoint(self, epoch, best=True):
+    def save_checkpoint(self, epoch: int, best: bool = True) -> NoReturn:
         """
         Save checkpoint (epoch, model, optimizer)
         """

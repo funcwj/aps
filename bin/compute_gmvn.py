@@ -8,8 +8,8 @@ import argparse
 
 import torch as th
 
-from aps.transform import support_transform
 from aps.loader import AudioReader
+from aps.libs import aps_transform
 
 
 def run(args):
@@ -28,7 +28,7 @@ def run(args):
 
     feats_conf = "-".join(feats_conf_list)
     conf[trans_key]["feats"] = feats_conf
-    transform = support_transform(args.transform)(**conf[trans_key])
+    transform = aps_transform(args.transform)(**conf[trans_key])
     print(f"Compute gmvn on feature {feats_conf}")
     gmvn = th.zeros([2, transform.feats_dim])
     num_utts = 0

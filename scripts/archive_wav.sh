@@ -8,6 +8,7 @@
 set -eu
 
 nj=32
+max_jobs_run=""
 cmd="utils/run.pl"
 
 . ./utils/parse_options.sh || exit 1
@@ -28,6 +29,8 @@ split_wav_scp=""
 for n in $split_id; do split_wav_scp="$split_wav_scp $data_dir/split$nj/wav.$n.scp"; done
 
 ./utils/split_scp.pl $data_dir/wav.scp $split_wav_scp
+
+[ ! -z $max_jobs_run ] && cmd="$cmd --max-jobs-run $max_jobs_run"
 
 exp=$(basename $data_dir)
 $cmd JOB=1:$nj exp/archive_wav/$exp/archive_wav.JOB.log \

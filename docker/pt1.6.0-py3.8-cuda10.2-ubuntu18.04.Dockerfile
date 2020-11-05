@@ -40,7 +40,8 @@ RUN conda install -y python=$PYTHON_VERSION
 RUN conda install -y pytorch==$PYTORCH_VERSION torchvision cudatoolkit=$CUDA_VERSION -c pytorch
 RUN conda install -y pyyaml matplotlib tqdm scipy h5py pybind11
 RUN conda install -y -c conda-forge tensorboard pysoundfile librosa && conda clean -ya
-RUN pip install torch_complex kaldi_python_io editdistance warp_rnnt && python -m warp_rnnt.test
+RUN pip install torch_complex kaldi_python_io editdistance \
+    museval pystoi pypesq warp_rnnt && python -m warp_rnnt.test
 
 # install hovorod
 RUN ldconfig /usr/local/cuda/targets/x86_64-linux/lib/stubs && \
