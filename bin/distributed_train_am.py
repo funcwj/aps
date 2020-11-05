@@ -8,10 +8,9 @@ import pprint
 import argparse
 
 from aps.utils import set_seed
-from aps.trainer import DdpTrainer, HvdTrainer
 from aps.conf import load_am_conf
 from aps.opts import DistributedTrainParser
-from aps.libs import aps_transform, aps_task, aps_dataloader, aps_asr_nnet
+from aps.libs import aps_transform, aps_task, aps_dataloader, aps_asr_nnet, aps_trainer
 from aps import distributed
 
 
@@ -23,7 +22,7 @@ def train_worker(task, conf, vocab_dict, args):
     distributed.init(args.distributed)
     rank = distributed.rank()
 
-    Trainer = {"torch": DdpTrainer, "horovod": HvdTrainer}[args.distributed]
+    Trainer = aps_trainer(args.trainer)
     # construct trainer
     # torch.distributed.launch will provide
     # environment variables, and requires that you use init_method="env://".
@@ -36,6 +35,7 @@ def train_worker(task, conf, vocab_dict, args):
                       save_interval=args.save_interval,
                       prog_interval=args.prog_interval,
                       tensorboard=args.tensorboard,
+                      opt_level=args.opt_level,
                       **conf["trainer_conf"])
 
     # dump configurations

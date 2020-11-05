@@ -14,8 +14,8 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from typing import Optional, Dict, List, Union, Tuple, NoReturn, Iterable
-from aps.trainer.ss import support_ss_scheduler
-from aps.trainer.lr import support_lr_scheduler
+from aps.trainer.ss import ss_scheduler_cls
+from aps.trainer.lr import lr_scheduler_cls
 
 from aps.utils import load_obj, get_device_ids, get_logger, SimpleTimer
 from aps.task import Task
@@ -188,7 +188,8 @@ class Trainer(object):
                  tensorboard: bool = False,
                  stop_criterion: str = "loss",
                  no_impr: int = 6,
-                 no_impr_thres: float = 1e-3) -> None:
+                 no_impr_thres: float = 1e-3,
+                 **kwargs) -> None:
         if not isinstance(task, Task):
             raise TypeError(
                 f"Trainer accepts Task object, but got {type(task)}")
@@ -248,52 +249,43 @@ class Trainer(object):
             self.reporter.log(f"Model summary:\n{task.nnet}")
         self.task.to(self.default_device)
 
-        lr_scheduler_dict = None
-        if resume or init:
-            cpt_path = resume if resume else init
-            cpt = th.load(cpt_path, map_location="cpu")
-            self.cur_epoch = cpt["epoch"]
-            task.nnet.load_state_dict(cpt["model_state_dict"])
-            lr_scheduler_dict = cpt["lr_scheduler_dict"]
-            if resume:
-                self.reporter.log(f"Resume from checkpoint {cpt_path}: " +
-                                  f"epoch {self.cur_epoch}")
-                self.optimizer = self.create_optimizer(
-                    optimizer, optimizer_kwargs, state=cpt["optim_state_dict"])
-            else:
-                self.reporter.log(f"Intialized from checkpoint {cpt_path}: " +
-                                  f"epoch {self.cur_epoch}")
-                self.optimizer = self.create_optimizer(optimizer,
-                                                       optimizer_kwargs)
+        if resume:
+            state_dict = self.load_checkpoint(resume, "resume")
+        elif init:
+            state_dict = self.load_checkpoint(init, "init")
         else:
-            self.optimizer = self.create_optimizer(optimizer, optimizer_kwargs)
+            state_dict = self.load_checkpoint("", "")
+        # make optimizer
+        self.optimizer = self.create_optimizer(optimizer,
+                                               optimizer_kwargs,
+                                               state=state_dict["optimizer"])
 
+        # make ss scheduler
         if ss_scheduler_kwargs:
-            self.ss_scheduler = support_ss_scheduler(ss_scheduler,
-                                                     **ss_scheduler_kwargs)
+            if ss_scheduler not in ss_scheduler_cls:
+                raise ValueError(f"Unsupported ss scheduler: {ss_scheduler}")
+            self.ss_scheduler = ss_scheduler_cls[ss_scheduler](
+                **ss_scheduler_kwargs)
             self.reporter.log(f"Using schedule sampling: {ss_scheduler}")
         else:
             self.ss_scheduler = None
 
+        # make lr scheduler
+        lr_scheduler_kwargs["state"] = state_dict["lr_scheduler"]
         if lr_scheduler == "reduce_lr":
             if lr_scheduler_period != "epoch":
                 warnings.warn("For reduce_lr scheduler, lr_scheduler_period " +
                               "shoule be \'epoch\'")
                 lr_scheduler_period = "epoch"
-            self.lr_scheduler = support_lr_scheduler(lr_scheduler,
-                                                     self.optimizer,
-                                                     mode=mode,
-                                                     threshold_mode="abs",
-                                                     threshold=no_impr_thres,
-                                                     **lr_scheduler_kwargs)
-        else:
-            self.lr_scheduler = support_lr_scheduler(lr_scheduler,
-                                                     self.optimizer,
-                                                     **lr_scheduler_kwargs)
+                reduce_lr_kwargs = {
+                    "mode": mode,
+                    "threshold_mode": "abs",
+                    "threshold": no_impr_thres
+                }
+                lr_scheduler_kwargs.update(reduce_lr_kwargs)
+        self.lr_scheduler = self.create_scheduler(lr_scheduler, self.optimizer,
+                                                  **lr_scheduler_kwargs)
         self.lr_scheduler_period = lr_scheduler_period
-
-        if lr_scheduler_dict:
-            self.lr_scheduler.load_state_dict(lr_scheduler_dict)
 
         # logging
         if rank is None:
@@ -317,7 +309,7 @@ class Trainer(object):
                          kwargs: Dict,
                          state: Optional[Dict] = None) -> th.optim.Optimizer:
         """
-        Return a pytorch-optimizer
+        Return a PyTorch optimizer
         """
         supported_optimizer = {
             "sgd": th.optim.SGD,  # momentum, weight_decay, lr
@@ -338,11 +330,64 @@ class Trainer(object):
             self.reporter.log("Load optimizer state dict from checkpoint")
         return opt
 
-    def save_checkpoint(self, epoch: int, best: bool = True) -> NoReturn:
+    def create_scheduler(self,
+                         scheduler: str,
+                         optimizer: th.optim.Optimizer,
+                         state: Optional[Dict] = None,
+                         **kwargs):
         """
-        Save checkpoint (epoch, model, optimizer)
+        Return a learning rate scheduler
+        """
+        if scheduler not in lr_scheduler_cls:
+            raise ValueError(f"Unsupported lr scheduler: {scheduler}")
+        lr_scheduler = lr_scheduler_cls[scheduler](optimizer, **kwargs)
+        self.reporter.log(f"Create scheduler {scheduler}: {kwargs}")
+        if state is not None:
+            lr_scheduler.load_state_dict(state)
+            self.reporter.log("Load scheduler state dict from checkpoint")
+        return lr_scheduler
+
+    def load_checkpoint(self, cpt_path: str, manner: str = "resume") -> Dict:
+        """
+        Load checkpoint
+        """
+        if not cpt_path:
+            return {"lr_scheduler": None, "optimizer": None}
+        if manner not in ["resume", "init"]:
+            raise ValueError(f"Unsupported manner: {manner}")
+        cpt = th.load(cpt_path, map_location="cpu")
+        self.cur_epoch = cpt["epoch"]
+        self.task.nnet.load_state_dict(cpt["model_state_dict"])
+        optimizer_dict = None
+        if manner == "resume":
+            self.reporter.log(f"Resume from checkpoint {cpt_path}: " +
+                              f"epoch {self.cur_epoch}")
+            optimizer_dict = cpt["optim_state_dict"]
+        else:
+            self.reporter.log(f"Intialized from checkpoint {cpt_path}: " +
+                              f"epoch {self.cur_epoch}")
+        return {
+            "lr_scheduler": cpt["lr_scheduler_dict"],
+            "optimizer": optimizer_dict
+        }
+
+    def checkpoint_states(self, epoch: int) -> Dict:
+        """
+        Return states of the checkpoint to be saved
         """
         raise NotImplementedError
+
+    def save_checkpoint(self, epoch: int, best: bool = True) -> NoReturn:
+        """
+        Save checkpoint (epoch, model, optimizer, ...)
+        """
+        if self.rank in [0, None]:
+            cpt = self.checkpoint_states(epoch)
+            cpt_name = "{}.pt.tar".format("best" if best else "last")
+            th.save(cpt, self.checkpoint / cpt_name)
+            self.reporter.log(f"Save checkpoint {self.checkpoint / cpt_name}")
+            if self.save_interval > 0 and epoch % self.save_interval == 0:
+                th.save(cpt, self.checkpoint / f"{epoch}.pt.tar")
 
     def train_one_step(self, egs: Dict) -> bool:
         """
@@ -372,15 +417,14 @@ class Trainer(object):
         # step optimizer and update statistics
         if math.isfinite(norm):
             self.optimizer.step()
-            # schedule lr if needed
-            self.lr_scheduler_step(None, end_at="step")
-
             if self.gaussian_noise_std:
                 add_gaussian_noise(self.task, std=self.gaussian_noise_std)
             if norm != -1:
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
             self.reporter.update(stats)
+            # schedule lr if needed
+            self.lr_scheduler_step(None, end_at="step")
             return True
         else:
             self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")

@@ -6,6 +6,7 @@
 set -eu
 
 gpu=0
+trainer="ddp"
 seed=777
 epochs=100
 tensorboard=false
@@ -38,6 +39,7 @@ bin/train_ss.py \
   --batch-size $batch_size \
   --epochs $epochs \
   --device-id $gpu \
+  --trainer $trainer \
   --eval-interval $eval_interval \
   > $data.train_ss.$exp_id.log 2>&1
 

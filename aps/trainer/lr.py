@@ -67,16 +67,10 @@ class NoamLR(lr_scheduler._LRScheduler):
         ]
 
 
-scheduler_cls = {
+lr_scheduler_cls = {
     "reduce_lr": lr_scheduler.ReduceLROnPlateau,
     "step_lr": lr_scheduler.StepLR,
     "multi_step_lr": CustomMultiStepLR,
     "exponential_lr": lr_scheduler.ExponentialLR,
     "noam_lr": NoamLR
 }
-
-
-def support_lr_scheduler(scheduler, optimizer, **kwargs):
-    if scheduler not in scheduler_cls:
-        raise ValueError(f"Unsupported lr scheduler: {scheduler}")
-    return scheduler_cls[scheduler](optimizer, **kwargs)

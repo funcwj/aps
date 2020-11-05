@@ -39,7 +39,8 @@ class DdpTrainer(Trainer):
                  tensorboard: bool = False,
                  stop_criterion: str = "loss",
                  no_impr: int = 6,
-                 no_impr_thres: float = 1e-3) -> None:
+                 no_impr_thres: float = 1e-3,
+                 **kwargs) -> None:
         super(DdpTrainer,
               self).__init__(task,
                              rank=rank,
@@ -63,7 +64,8 @@ class DdpTrainer(Trainer):
                              no_impr=no_impr,
                              no_impr_thres=no_impr_thres)
         if dist.get_backend() not in ["torch", "none"]:
-            raise ValueError(f"aps.distributed doesn't use torch as backend")
+            raise ValueError(
+                "DdpTrainer should use torch/none as distributed backend")
         self.setup_distributed()
 
     def setup_distributed(self) -> NoReturn:
@@ -80,24 +82,18 @@ class DdpTrainer(Trainer):
         else:
             self.distributed = False
 
-    def save_checkpoint(self, epoch: int, best: bool = True) -> NoReturn:
+    def checkpoint_states(self, epoch: int) -> Dict:
         """
-        Save checkpoint (epoch, model, optimizer)
+        Return states of the checkpoint to be saved
         """
-        if self.rank in [0, None]:
-            cpt = {
-                "epoch":
-                    epoch,
-                "model_state_dict":
-                    self.task.module.nnet.state_dict()
-                    if self.distributed else self.task.nnet.state_dict(),
-                "optim_state_dict":
-                    self.optimizer.state_dict(),
-                "lr_scheduler_dict":
-                    self.lr_scheduler.state_dict()
-            }
-            cpt_name = "{}.pt.tar".format("best" if best else "last")
-            th.save(cpt, self.checkpoint / cpt_name)
-            self.reporter.log(f"Save checkpoint {self.checkpoint / cpt_name}")
-            if self.save_interval > 0 and epoch % self.save_interval == 0:
-                th.save(cpt, self.checkpoint / f"{epoch}.pt.tar")
+        return {
+            "epoch":
+                epoch,
+            "model_state_dict":
+                self.task.module.nnet.state_dict()
+                if self.distributed else self.task.nnet.state_dict(),
+            "optim_state_dict":
+                self.optimizer.state_dict(),
+            "lr_scheduler_dict":
+                self.lr_scheduler.state_dict()
+        }

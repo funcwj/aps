@@ -9,6 +9,7 @@ gpu="0,1"
 seed=777
 port=10086
 epochs=100
+trainer="ddp"
 distributed="torch"
 tensorboard=false
 batch_size=128
@@ -52,6 +53,7 @@ case $distributed in
       --checkpoint exp/$data/$exp_id \
       --batch-size $batch_size \
       --epochs $epochs \
+      --trainer $trainer \
       > $data.train_am.$exp_id.log 2>&1
     ;;
   "horovod" )
@@ -69,6 +71,7 @@ case $distributed in
       --checkpoint exp/$data/$exp_id \
       --batch-size $batch_size \
       --epochs $epochs \
+      --trainer $trainer \
       > $data.train_ss.$exp_id.log 2>&1
     ;;
   * )
