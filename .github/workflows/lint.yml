@@ -7,7 +7,8 @@ on:
   pull_request:
 
 jobs:
-  flake8_check:
+  script_check:
+    name: Script Check
     runs-on: ubuntu-latest
     steps:
       - name: Get code
@@ -18,6 +19,12 @@ jobs:
         with:
           python-version: 3.7
 
-      - name: Flake8 check
+      - name: Shell check
+        run: |
+          sudo apt-get install -y shellcheck
+          shellcheck -e SC2086,SC2002 -x tests/*.sh utils/subword.sh scripts/*.sh
+          shellcheck -e SC2086,SC2001,SC2002 -x examples/*/*/run.sh
+
+      - name: Python check
         run: |
           pip install flake8 && flake8 --version && flake8

@@ -16,7 +16,7 @@ eval_interval=-1
 save_interval=-1
 prog_interval=100
 
-echo "$0 $@"
+echo "$0 $*"
 
 . ./utils/parse_options.sh || exit 1
 

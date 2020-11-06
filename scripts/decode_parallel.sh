@@ -17,7 +17,7 @@ normalized=true
 lm=""
 lm_weight=0
 
-echo "$0 $@"
+echo "$0 $*"
 
 . ./utils/parse_options.sh || exit 1
 
@@ -64,4 +64,4 @@ cat $log_dir/beam${beam_size}.*.decode | \
 cat $log_dir/beam${beam_size}.*.${nbest}best | \
   sort -k1 > $dec_dir/beam${beam_size}.${nbest}best
 
-echo "$0 $@: Done"
+echo "$0 $*: Done"

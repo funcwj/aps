@@ -18,7 +18,7 @@ lm=""
 lm_weight=0
 log_suffix=""
 
-echo "$0 $@"
+echo "$0 $*"
 
 . ./utils/parse_options.sh || exit 1
 
@@ -74,4 +74,4 @@ else
     > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
 fi
 
-echo "$0 $@: Done"
+echo "$0 $*: Done"

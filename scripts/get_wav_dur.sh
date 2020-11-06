@@ -10,6 +10,8 @@ max_jobs_run=""
 cmd="utils/run.pl"
 output="sample"
 
+echo "$0 $*"
+
 . ./utils/parse_options.sh || exit 1
 
 [ $# -ne 2 ] && echo "Script format error: $0 <data-dir> <log-dir>" && exit 1

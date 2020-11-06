@@ -54,4 +54,4 @@ case $op in
     ;;
 esac
 
-echo "$0 $@ done" >&2
+echo "$0 $* done" >&2
