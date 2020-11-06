@@ -252,15 +252,16 @@ class Trainer(object):
         if resume or init:
             self.cpt_stats, optimizer_dict = self.load_checkpoint(
                 resume if resume else init, "resume" if resume else "init")
+            lr_scheduler_kwargs["state"] = self.cpt_stats["lr_scheduler_dict"]
         else:
             self.cpt_stats, optimizer_dict = None, None
+            lr_scheduler_kwargs["state"] = None
         # make optimizer
         self.optimizer = self.create_optimizer(optimizer,
                                                optimizer_kwargs,
                                                state=optimizer_dict)
 
         # make lr scheduler
-        lr_scheduler_kwargs["state"] = self.cpt_stats["lr_scheduler_dict"]
         if lr_scheduler == "reduce_lr":
             if lr_scheduler_period != "epoch":
                 warnings.warn("For reduce_lr scheduler, lr_scheduler_period " +
