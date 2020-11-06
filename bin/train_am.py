@@ -9,7 +9,6 @@ import argparse
 
 from aps.utils import set_seed
 from aps.opts import BaseTrainParser
-from aps.trainer import DdpTrainer
 from aps.conf import load_am_conf
 from aps.libs import aps_transform, aps_task, aps_dataloader, aps_asr_nnet, aps_trainer
 
@@ -84,8 +83,8 @@ def run(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description=
-        "Command to start ASR model training, configured by yaml files",
+        description="Command to start ASR model training, "
+        "configured by yaml files",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[BaseTrainParser.parser])
     parser.add_argument("--dict",

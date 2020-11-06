@@ -334,7 +334,8 @@ class FSMNEncoder(nn.Module):
 
 class TimeDelayRNNEncoder(nn.Module):
     """
-    TDNN + RNN encoder (Using TDNN for subsampling and RNN for sequence modeling )
+    TDNN + RNN encoder, using TDNN for subsampling and RNN
+    for sequence modeling
     """
 
     def __init__(self,
@@ -390,7 +391,8 @@ class TimeDelayRNNEncoder(nn.Module):
 
 class TimeDelayFSMNEncoder(nn.Module):
     """
-    TDNN + FSMN encoder (Using TDNN for subsampling and FSMN for sequence modeling )
+    TDNN + FSMN encoder, using TDNN for subsampling and FSMN
+    for sequence modeling
     """
 
     def __init__(self,

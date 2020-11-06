@@ -49,7 +49,7 @@ def run(args):
     gmvn[0] = gmvn[0] / num_utts
     gmvn[1] = (gmvn[1] / num_utts - gmvn[0])**0.5
     if th.sum(th.isnan(gmvn)):
-        raise RuntimeError(f"Got NAN in gmvn, please check")
+        raise RuntimeError("Got NAN in gmvn, please check")
     print(f"Global mean/variance:\n{gmvn}")
     print("Save global mean/variance to " +
           f"{args.out_mvn} over {num_utts} utterances")

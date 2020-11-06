@@ -79,7 +79,7 @@ def multiple_objf(inp: List[Any],
         raise ValueError("Size mismatch between #inp and " +
                          f"#ref: {len(inp)} vs {len(ref)}")
     num_tasks = len(inp)
-    if weight == None:
+    if weight is None:
         weight = [1 / num_tasks] * num_tasks
 
     if len(weight) != len(inp):

@@ -6,7 +6,6 @@
 For ASR task
 """
 import math
-import numpy as np
 import torch as th
 import torch.nn as nn
 
@@ -129,7 +128,7 @@ class TransducerTask(Task):
         super(TransducerTask, self).__init__(nnet, description="RNNT for ASR")
         self.blank = blank
         if not rnnt_loss_available:
-            raise ImportError(f"from warp_rnnt import rnnt_loss failed")
+            raise ImportError("\"from warp_rnnt import rnnt_loss\" failed")
 
     def forward(self, egs: Dict, **kwargs) -> Dict:
         """

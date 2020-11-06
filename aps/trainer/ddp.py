@@ -1,13 +1,11 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-import math
-from os import environ
 from pathlib import Path
 
 import torch as th
 from torch.nn.parallel import DistributedDataParallel
-from typing import Optional, Dict, List, Union, Tuple, NoReturn
+from typing import Optional, Dict, List, Union, NoReturn
 
 from aps.trainer.base import Trainer
 import aps.distributed as dist

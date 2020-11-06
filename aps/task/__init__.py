@@ -1,18 +1,17 @@
-from .asr import *
-from .sse import *
 from .unsuper import UnsuperEnhTask
 from .base import Task
+from . import asr, sse
 
 task_cls = {
-    "lm": LmXentTask,
-    "ctc_xent": CtcXentHybridTask,
-    "transducer": TransducerTask,
+    "lm": asr.LmXentTask,
+    "ctc_xent": asr.CtcXentHybridTask,
+    "transducer": asr.TransducerTask,
     "unsuper_enh": UnsuperEnhTask,
-    "sisnr": SisnrTask,
-    "snr": SnrTask,
-    "wa": WaTask,
-    "linear_sa": LinearFreqSaTask,
-    "mel_sa": MelFreqSaTask,
-    "time_linear_sa": LinearTimeSaTask,
-    "time_mel_sa": MelTimeSaTask
+    "sisnr": sse.SisnrTask,
+    "snr": sse.SnrTask,
+    "wa": sse.WaTask,
+    "linear_sa": sse.LinearFreqSaTask,
+    "mel_sa": sse.MelFreqSaTask,
+    "time_linear_sa": sse.LinearTimeSaTask,
+    "time_mel_sa": sse.MelTimeSaTask
 }

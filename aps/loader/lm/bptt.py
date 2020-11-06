@@ -13,7 +13,6 @@ import torch.utils.data as dat
 
 from typing import Iterable, Dict, Optional, NoReturn, Iterator
 from aps.loader.lm.utt import Dataset
-from kaldi_python_io import Reader as BaseReader
 
 
 def DataLoader(text: str = "",

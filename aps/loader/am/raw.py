@@ -5,9 +5,7 @@
 """
 Dataloader for raw waveforms in asr tasks
 """
-import io
 
-import numpy as np
 import torch as th
 import torch.utils.data as dat
 
@@ -118,20 +116,24 @@ def egs_collate(egs: Dict) -> Dict:
         return pad_mat
 
     egs = {
-        "src_pad":  # N x S or N x C x S
+        # N x S or N x C x S
+        "src_pad":
             pad_seq([
                 th.from_numpy(eg["wav"]) for eg in egs if eg["wav"] is not None
             ],
                     value=0),
-        "tgt_pad":  # N x T
+        # N x T
+        "tgt_pad":
             pad_seq([
                 th.as_tensor(eg["tok"]) for eg in egs if eg["tok"] is not None
             ],
                     value=-1),
-        "src_len":  # N, number of the frames
+        # N, number of the frames
+        "src_len":
             th.tensor([eg["dur"] for eg in egs if eg["dur"] is not None],
                       dtype=th.int64),
-        "tgt_len":  # N, length of the tokens
+        # N, length of the tokens
+        "tgt_len":
             th.tensor([eg["len"] for eg in egs if eg["len"] is not None],
                       dtype=th.int64)
     }

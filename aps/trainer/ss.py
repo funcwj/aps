@@ -4,9 +4,6 @@
 Schedule sampling & Learning rate
 """
 
-import torch as th
-from torch.optim import lr_scheduler
-
 
 class SsScheduler(object):
     """

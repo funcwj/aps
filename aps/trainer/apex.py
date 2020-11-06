@@ -11,7 +11,7 @@ import math
 import torch as th
 
 from pathlib import Path
-from typing import Optional, Dict, List, Union, Tuple, NoReturn
+from typing import Optional, Dict, List, Union, NoReturn
 
 from torch.nn.utils import clip_grad_norm_
 from aps.trainer.ddp import Trainer
@@ -74,7 +74,7 @@ class ApexTrainer(Trainer):
             raise ValueError(
                 "ApexTrainer should use torch/none as distributed backend")
         if not apex_available:
-            raise ValueError(f"apex is not installed in current machine")
+            raise ValueError("apex is not installed in current machine")
         self.setup_distributed(opt_level)
 
     def setup_distributed(self, opt_level: str) -> NoReturn:

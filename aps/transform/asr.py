@@ -281,8 +281,8 @@ class SpecAugTransform(nn.Module):
         self.p = p
 
     def extra_repr(self) -> str:
-        return f"max_bands={self.F}, max_frame={self.T}, p={self.p}, " \
-                + f"num_freq_masks={self.fnum}, num_time_masks={self.tnum}"
+        return (f"max_bands={self.F}, max_frame={self.T}, p={self.p}, "
+                f"num_freq_masks={self.fnum}, num_time_masks={self.tnum}")
 
     def forward(self, x: th.Tensor) -> th.Tensor:
         """

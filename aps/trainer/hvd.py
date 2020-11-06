@@ -2,12 +2,11 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import math
-from os import environ
 from pathlib import Path
 
 import torch as th
 from torch.nn.utils import clip_grad_norm_
-from typing import Optional, Dict, List, Union, Tuple, NoReturn
+from typing import Optional, Dict, List, Union, NoReturn
 
 import aps.distributed as dist
 from aps.trainer.base import Trainer, add_gaussian_noise
@@ -67,7 +66,7 @@ class HvdTrainer(Trainer):
             raise ValueError(
                 "HvdTrainer should use horovod as distributed backend")
         if not dist.hvd_available:
-            raise ValueError(f"horovod is not installed in current machine")
+            raise ValueError("horovod is not installed in current machine")
         self.setup_distributed()
 
     def setup_distributed(self) -> NoReturn:

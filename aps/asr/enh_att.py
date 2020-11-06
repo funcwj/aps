@@ -5,17 +5,16 @@
 
 import torch as th
 import torch.nn as nn
-import torch.nn.functional as F
 
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple, List
 from torch_complex import ComplexTensor
-from typing import Optional, Dict, List
 
 from aps.asr.att import AttASR
 from aps.asr.base.encoder import TorchRNNEncoder
 from aps.asr.filter.mvdr import MvdrBeamformer
 from aps.asr.filter.google import CLPFsBeamformer  # same as TimeInvariantFilter
-from aps.asr.filter.conv import TimeInvariantFilter, TimeVariantFilter, TimeInvariantAttFilter
+from aps.asr.filter.conv import (TimeInvariantFilter, TimeVariantFilter,
+                                 TimeInvariantAttFilter)
 
 
 class EnhAttASR(nn.Module):

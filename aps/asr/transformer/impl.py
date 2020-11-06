@@ -8,11 +8,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-try:
-    from torch.nn import TransformerEncoderLayer
-except:
-    raise ImportError("import PyTorch's Transformer module failed")
-
+from torch.nn import TransformerEncoderLayer
 from typing import Optional, Tuple
 
 

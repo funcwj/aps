@@ -9,8 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from queue import PriorityQueue
-from typing import List, Dict, Optional, Union, Tuple, Dict
-from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
+from typing import List, Dict, Optional, Union, Tuple
 
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.transformer.decoder import prep_sub_mask
@@ -18,7 +17,6 @@ from aps.asr.transformer.encoder import ApsTransformerEncoder
 from aps.asr.transformer.impl import TransformerTorchEncoderLayer
 from aps.asr.base.attention import padding_mask
 from aps.asr.base.decoder import OneHotEmbedding
-from aps.const import IGNORE_ID
 
 
 class Node(object):

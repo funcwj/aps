@@ -3,11 +3,7 @@
 
 import torch as th
 import torch.nn as nn
-
-try:
-    from torch.nn import TransformerEncoder, TransformerEncoderLayer
-except:
-    raise ImportError("import Transformer module failed")
+from torch.nn import TransformerEncoder, TransformerEncoderLayer
 
 from typing import Optional, Tuple
 from aps.asr.transformer.embedding import IOEmbedding

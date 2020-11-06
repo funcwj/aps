@@ -1,7 +1,6 @@
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-import importlib
 import torch.nn as nn
 
 from os.path import basename

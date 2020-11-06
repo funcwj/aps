@@ -5,7 +5,6 @@
 """
 for RNNLM (utterance corpus)
 """
-import random
 import warnings
 import torch as th
 

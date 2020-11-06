@@ -4,13 +4,11 @@
 import math
 import warnings
 
-from os import environ
 from pathlib import Path
 from collections import defaultdict
 
 import torch as th
 from torch.nn.utils import clip_grad_norm_
-from torch.nn.parallel import DistributedDataParallel
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from typing import Optional, Dict, List, Union, Tuple, NoReturn, Iterable
@@ -357,13 +355,14 @@ class Trainer(object):
         if manner not in ["resume", "init"]:
             raise ValueError(f"Unsupported manner: {manner}")
         cpt_stats = th.load(cpt_path, map_location="cpu")
-        self.cur_epoch = cpt_stats["epoch"]
         self.task.nnet.load_state_dict(cpt_stats["model_state_dict"])
         optimizer_dict = None
         if manner == "resume":
             self.reporter.log(f"Resume from checkpoint {cpt_path}: " +
                               f"epoch {self.cur_epoch}")
             optimizer_dict = cpt_stats["optim_state_dict"]
+            # set current epoch number
+            self.cur_epoch = cpt_stats["epoch"]
         else:
             self.reporter.log(f"Intialized from checkpoint {cpt_path}: " +
                               f"epoch {self.cur_epoch}")

@@ -14,7 +14,8 @@ import numpy as np
 
 from typing import NoReturn, Tuple, Any, Union, Optional
 
-aps_logger_format = "%(asctime)s [%(pathname)s:%(lineno)s - %(levelname)s ] %(message)s"
+aps_logger_format = ("%(asctime)s [%(pathname)s:%(lineno)s - " +
+                     "%(levelname)s ] %(message)s")
 aps_time_format = "%Y-%m-%d %H:%M:%S"
 
 

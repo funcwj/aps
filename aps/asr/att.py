@@ -6,9 +6,7 @@
 import torch as th
 import torch.nn as nn
 
-import torch.nn.functional as F
-
-from typing import Optional, Dict, Tuple, List, Dict
+from typing import Optional, Dict, Tuple, List
 from aps.asr.base.decoder import TorchDecoder
 from aps.asr.base.encoder import encoder_instance
 from aps.asr.base.attention import att_instance

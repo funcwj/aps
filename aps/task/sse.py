@@ -5,18 +5,15 @@
 """
 For Speech Separation and Enhancement task, using sse.py for abbreviation
 """
-import warnings
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from itertools import permutations
 from typing import List, Dict, Any, Tuple, Callable, Optional
 
 from aps.task.base import Task
 from aps.task.objf import permu_invarint_objf, multiple_objf
 from aps.transform.utils import STFT, init_melfilter
-from aps.const import EPSILON
 
 __all__ = [
     "SisnrTask", "SnrTask", "WaTask", "LinearFreqSaTask", "LinearTimeSaTask",

@@ -5,9 +5,8 @@
 
 import torch as th
 import torch.nn as nn
-import torch.nn.functional as F
 
-from typing import Optional, Dict, Tuple, Union, List
+from typing import Optional, Dict, Tuple, List
 
 from aps.asr.transformer.decoder import TorchTransformerDecoder
 from aps.asr.transformer.encoder import support_xfmr_encoder
