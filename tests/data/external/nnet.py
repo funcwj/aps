@@ -105,7 +105,7 @@ class VoiceFilter(nn.Module):
             e = e / th.norm(e, 2, dim=1, keepdim=True)
 
         # feats: N x T x F
-        feats, stft, _ = self.enh_transform(s, None)
+        feats, stft, _ = self.enh_transform(x, None)
         # N x F x T
         feats = feats.transpose(1, 2)
         N, _, T = feats.shape

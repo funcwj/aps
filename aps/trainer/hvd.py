@@ -2,12 +2,11 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import math
-from os import environ
 from pathlib import Path
 
 import torch as th
 from torch.nn.utils import clip_grad_norm_
-from typing import Optional, Dict, List, Union, Tuple, NoReturn
+from typing import Optional, Dict, List, Union, NoReturn
 
 import aps.distributed as dist
 from aps.trainer.base import Trainer, add_gaussian_noise
@@ -39,7 +38,8 @@ class HvdTrainer(Trainer):
                  tensorboard: bool = False,
                  stop_criterion: str = "loss",
                  no_impr: int = 6,
-                 no_impr_thres: float = 1e-3) -> None:
+                 no_impr_thres: float = 1e-3,
+                 **kwargs) -> None:
         super(HvdTrainer,
               self).__init__(task,
                              rank=rank,
@@ -63,9 +63,10 @@ class HvdTrainer(Trainer):
                              no_impr=no_impr,
                              no_impr_thres=no_impr_thres)
         if dist.get_backend() != "horovod":
-            raise ValueError(f"aps.distributed doesn't use horovod as backend")
+            raise ValueError(
+                "HvdTrainer should use horovod as distributed backend")
         if not dist.hvd_available:
-            raise ValueError(f"horovod is not installed in current environment")
+            raise ValueError("horovod is not installed in current machine")
         self.setup_distributed()
 
     def setup_distributed(self) -> NoReturn:
@@ -77,7 +78,7 @@ class HvdTrainer(Trainer):
             self.optimizer, named_parameters=self.task.named_parameters())
         hvd.broadcast_parameters(self.task.state_dict(), root_rank=0)
         hvd.broadcast_optimizer_state(self.optimizer, root_rank=0)
-        self.reporter.log(f"HVD: using horovod, rank = {self.rank}, " +
+        self.reporter.log(f"Horovod: using horovod, rank = {self.rank}, " +
                           f"world_size={dist.world_size()}")
         self.reporter.log(
             "Horovod: BatchNorm layer will cause different dev loss on "
@@ -132,19 +133,13 @@ class HvdTrainer(Trainer):
             self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
             return False
 
-    def save_checkpoint(self, epoch: int, best: bool = True) -> NoReturn:
+    def checkpoint_states(self, epoch: int) -> Dict:
         """
-        Save checkpoint (epoch, model, optimizer)
+        Return states of the checkpoint to be saved
         """
-        if self.rank in [0, None]:
-            cpt = {
-                "epoch": epoch,
-                "model_state_dict": self.task.nnet.state_dict(),
-                "optim_state_dict": self.optimizer.state_dict(),
-                "lr_scheduler_dict": self.lr_scheduler.state_dict()
-            }
-            cpt_name = "{}.pt.tar".format("best" if best else "last")
-            th.save(cpt, self.checkpoint / cpt_name)
-            self.reporter.log(f"Save checkpoint {self.checkpoint / cpt_name}")
-            if self.save_interval > 0 and epoch % self.save_interval == 0:
-                th.save(cpt, self.checkpoint / f"{epoch}.pt.tar")
+        return {
+            "epoch": epoch,
+            "model_state_dict": self.task.nnet.state_dict(),
+            "optim_state_dict": self.optimizer.state_dict(),
+            "lr_scheduler_dict": self.lr_scheduler.state_dict()
+        }

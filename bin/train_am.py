@@ -9,9 +9,8 @@ import argparse
 
 from aps.utils import set_seed
 from aps.opts import BaseTrainParser
-from aps.trainer import DdpTrainer
 from aps.conf import load_am_conf
-from aps.libs import aps_transform, aps_task, aps_dataloader, aps_asr_nnet
+from aps.libs import aps_transform, aps_task, aps_dataloader, aps_asr_nnet, aps_trainer
 
 
 def run(args):
@@ -57,16 +56,17 @@ def run(args):
         nnet = asr_cls(**conf["nnet_conf"])
 
     task = aps_task(conf["task"], nnet, **conf["task_conf"])
-
-    trainer = DdpTrainer(task,
-                         device_ids=args.device_id,
-                         checkpoint=args.checkpoint,
-                         resume=args.resume,
-                         init=args.init,
-                         save_interval=args.save_interval,
-                         prog_interval=args.prog_interval,
-                         tensorboard=args.tensorboard,
-                         **conf["trainer_conf"])
+    Trainer = aps_trainer(args.trainer, distributed=False)
+    trainer = Trainer(task,
+                      device_ids=args.device_id,
+                      checkpoint=args.checkpoint,
+                      resume=args.resume,
+                      init=args.init,
+                      save_interval=args.save_interval,
+                      prog_interval=args.prog_interval,
+                      tensorboard=args.tensorboard,
+                      opt_level=args.opt_level,
+                      **conf["trainer_conf"])
     # dump configurations
     conf["cmd_args"] = vars(args)
     with open(f"{args.checkpoint}/train.yaml", "w") as f:
@@ -83,8 +83,8 @@ def run(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description=
-        "Command to start ASR model training, configured by yaml files",
+        description="Command to start ASR model training, "
+        "configured by yaml files",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[BaseTrainParser.parser])
     parser.add_argument("--dict",

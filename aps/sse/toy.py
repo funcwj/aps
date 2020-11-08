@@ -7,8 +7,6 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
-
 from typing import Optional, NoReturn, Union, List
 from aps.asr.base.encoder import TorchRNNEncoder
 

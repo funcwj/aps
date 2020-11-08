@@ -39,7 +39,7 @@ lm_weight=0.2
 # NOTE: download Librispeech data first
 if [ $stage -le 1 ]; then
   for x in dev-{clean,other} test-{clean,other} train-clean-{100,360} train-other-500; do
-    ./local/data_prep.sh $data/$x data/librispeech/$(echo $x | sed s/-/_/g)
+    ./local/data_prep.sh $data/$x data/librispeech/"$(echo $x | sed s/-/_/g)"
   done
   ./local/format_data.sh --nj 10 data/librispeech
 fi

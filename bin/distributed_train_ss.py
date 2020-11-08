@@ -9,9 +9,8 @@ import argparse
 
 from aps.utils import set_seed
 from aps.opts import DistributedTrainParser
-from aps.trainer import HvdTrainer, DdpTrainer
 from aps.conf import load_ss_conf
-from aps.libs import aps_transform, aps_task, aps_dataloader, aps_sse_nnet
+from aps.libs import aps_transform, aps_task, aps_dataloader, aps_sse_nnet, aps_trainer
 from aps import distributed
 
 
@@ -23,7 +22,7 @@ def train_worker(task, conf, args):
     distributed.init(args.distributed)
     rank = distributed.rank()
 
-    Trainer = {"torch": DdpTrainer, "horovod": HvdTrainer}[args.distributed]
+    Trainer = aps_trainer(args.trainer)
     trainer = Trainer(task,
                       rank=distributed.rank(),
                       device_ids=args.device_ids,
@@ -33,6 +32,7 @@ def train_worker(task, conf, args):
                       save_interval=args.save_interval,
                       prog_interval=args.prog_interval,
                       tensorboard=args.tensorboard,
+                      opt_level=args.opt_level,
                       **conf["trainer_conf"])
 
     # dump configurations

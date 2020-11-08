@@ -9,9 +9,8 @@ import argparse
 
 from aps.utils import set_seed
 from aps.opts import BaseTrainParser
-from aps.trainer import DdpTrainer
 from aps.conf import load_ss_conf
-from aps.libs import aps_transform, aps_task, aps_dataloader, aps_sse_nnet
+from aps.libs import aps_transform, aps_task, aps_dataloader, aps_sse_nnet, aps_trainer
 
 
 def run(args):
@@ -47,15 +46,17 @@ def run(args):
 
     task = aps_task(conf["task"], nnet, **conf["task_conf"])
 
-    trainer = DdpTrainer(task,
-                         device_ids=args.device_id,
-                         checkpoint=args.checkpoint,
-                         resume=args.resume,
-                         init=args.init,
-                         save_interval=args.save_interval,
-                         prog_interval=args.prog_interval,
-                         tensorboard=args.tensorboard,
-                         **conf["trainer_conf"])
+    Trainer = aps_trainer(args.trainer, distributed=False)
+    trainer = Trainer(task,
+                      device_ids=args.device_id,
+                      checkpoint=args.checkpoint,
+                      resume=args.resume,
+                      init=args.init,
+                      save_interval=args.save_interval,
+                      prog_interval=args.prog_interval,
+                      tensorboard=args.tensorboard,
+                      opt_level=args.opt_level,
+                      **conf["trainer_conf"])
 
     # dump configurations
     conf["cmd_args"] = vars(args)

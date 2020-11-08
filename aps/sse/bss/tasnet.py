@@ -279,7 +279,7 @@ class TimeConvTasNet(nn.Module):
             raise RuntimeError("ConvTasNet expects 1D tensor (inference), " +
                                f"got {mix.dim()} instead")
         if mix.dim() != 2 and training:
-            raise RuntimeError(f"ConvTasNet expects 2D tensor (training), " +
+            raise RuntimeError("ConvTasNet expects 2D tensor (training), " +
                                f"but got {mix.dim()}")
 
     def infer(self,
@@ -386,7 +386,7 @@ class FreqConvTasNet(nn.Module):
 
         if training and mix.dim() not in [2, 3]:
             raise RuntimeError(
-                f"FreqConvTasNet expects 2/3D tensor (training), " +
+                "FreqConvTasNet expects 2/3D tensor (training), " +
                 f"got {mix.dim()} instead")
 
     def _forward(self, mix: th.Tensor,

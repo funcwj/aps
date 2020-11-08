@@ -27,12 +27,13 @@ Trainer module in aps. Now we use `horovod` & `torch.nn.parallel.DistributedData
 
 * `HvdTrainer`: Multi-GPU training using horovod
 * `DdpTrainer`: Single-GPU or multi-GPU training using PyTorch's DistributedDataParallel
+* `ApexTrainer`: Single-GPU or multi-GPU training using Apex's DistributedDataParallel, also aims to mixed precision training
 
 The learning rate and schedule sampling scheduler is defined in `aps.trainer.lr` and `aps.trainer.ss`.
 
 ## `aps.task`
 
-Supported task in aps. The `Task` class is responsible for the computation of an user-specific objective function, which is defined in the `forward` function. The supported task are shown below:
+Supported task in aps. The `Task` class is responsible for the computation of an user-specific objective function, which is defined in the `forward()` function. The supported task are shown below:
 
 * `LmXentTask`: for LM training
 * `CtcXentHybridTask`: for CTC & Attention based AM training

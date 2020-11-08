@@ -52,7 +52,7 @@ def run(args):
             mask = mask.cpu().numpy()
             mask = np.stack([mask, 1 - mask])
         else:
-            mask = np.stack([m.cpu().numpy() for s in mask])
+            mask = np.stack([m.cpu().numpy() for m in mask])
         mask = permu_aligner(mask)
         # save TF-mask
         np.save(sep_dir / f"{key}", mask)

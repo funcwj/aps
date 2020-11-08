@@ -6,14 +6,13 @@
 Dataloader of the raw waveform in enhancement/separation tasks
 """
 import random
-import torch as th
 import numpy as np
 import torch.utils.data as dat
 import aps.distributed as dist
 
 from torch.utils.data.dataloader import default_collate
 from kaldi_python_io import Reader as BaseReader
-from typing import List, Dict, Iterator, NoReturn, Optional, Union, Iterable
+from typing import List, Dict, Iterator, NoReturn, Union, Iterable
 from aps.loader.audio import AudioReader
 
 

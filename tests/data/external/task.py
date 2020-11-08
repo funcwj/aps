@@ -2,7 +2,7 @@
 
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
-# From https://github.com/funcwj/deep-clustering/blob/c42e91944bdbde5653558a96c10d52fc8c366add/trainer.py#L124
+# From https://github.com/funcwj/deep-clustering
 
 import torch as th
 import torch.nn as nn
@@ -38,7 +38,9 @@ class DpclTask(nn.Module):
         net_embed = net_embed * ibm_masks
         tgt_embed = tgt_embed * ibm_masks
 
-        l2_loss = lambda x: th.norm(x, 2)**2
+        def l2_loss(x):
+            return th.norm(x, 2)**2
+
         loss = l2_loss(th.bmm(th.transpose(net_embed, 1, 2), net_embed)) + \
             l2_loss(th.bmm(th.transpose(tgt_embed, 1, 2), tgt_embed)) - \
             l2_loss(th.bmm(th.transpose(net_embed, 1, 2), tgt_embed)) * 2

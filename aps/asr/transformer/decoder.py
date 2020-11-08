@@ -5,19 +5,14 @@
 
 import torch as th
 import torch.nn as nn
-
 import torch.nn.functional as F
 
-try:
-    from torch.nn import TransformerDecoder, TransformerDecoderLayer
-except:
-    raise ImportError("import Transformer module failed")
-
+from torch.nn import TransformerDecoder, TransformerDecoderLayer
 from typing import Union, Optional, List, Dict
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
 from aps.asr.base.decoder import trace_back_hypos
-from aps.const import IGNORE_ID, NEG_INF
+from aps.const import NEG_INF
 
 
 def prep_sub_mask(T: int, device: Union[str, th.device] = "cpu") -> th.Tensor:
@@ -178,7 +173,8 @@ class TorchTransformerDecoder(nn.Module):
                 if lm:
                     if lm_state is not None:
                         if isinstance(lm_state, tuple):
-                            # shape: num_layers * num_directions, batch, hidden_size
+                            # shape in
+                            # num_layers * num_directions, batch, hidden_size
                             h, c = lm_state
                             lm_state = (h[:, point], c[:, point])
                         else:

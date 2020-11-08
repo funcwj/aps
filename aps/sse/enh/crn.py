@@ -91,7 +91,7 @@ class CRNet(nn.Module):
             raise RuntimeError(
                 "Need feature extractor: enh_transform can not be None")
         if enh_transform.feats_dim != num_bins:
-            raise RuntimeError(f"Feature dimention != num_bins (num_bins)")
+            raise RuntimeError("Feature dimention != num_bins (num_bins)")
         if mode not in ["masking", "mapping"]:
             raise RuntimeError(f"Unsupported mode: {mode}")
         num_encoders = 5

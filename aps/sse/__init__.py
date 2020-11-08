@@ -1,19 +1,18 @@
 from .unsupervised_enh import UnsupervisedEnh
-from .enh import DCUNet, CRNet, Phasen
-from .bss import *
 from .toy import ToyRNN
+from . import enh, bss
 
 sse_nnet_cls = {
     "unsupervised_enh": UnsupervisedEnh,
-    "time_tasnet": TimeConvTasNet,
-    "freq_tasnet": FreqConvTasNet,
-    "dcunet": DCUNet,
-    "crn": CRNet,
-    "dccrn": DCCRN,
-    "dense_unet": DenseUnet,
-    "time_dprnn": TimeDPRNN,
-    "freq_dprnn": FreqDPRNN,
+    "time_tasnet": bss.TimeConvTasNet,
+    "freq_tasnet": bss.FreqConvTasNet,
+    "dcunet": enh.DCUNet,
+    "crn": enh.CRNet,
+    "dccrn": bss.DCCRN,
+    "dense_unet": bss.DenseUnet,
+    "time_dprnn": bss.TimeDPRNN,
+    "freq_dprnn": bss.FreqDPRNN,
     "base_rnn": ToyRNN,
-    "phasen": Phasen,
-    "freq_rel_transformer": FreqRelTransformer
+    "phasen": enh.Phasen,
+    "freq_rel_transformer": bss.FreqRelTransformer
 }

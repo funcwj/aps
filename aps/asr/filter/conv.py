@@ -12,6 +12,7 @@ from typing import Optional
 from torch_complex.tensor import ComplexTensor
 
 from aps.transform.utils import init_melfilter
+from aps.asr.base.encoder import TorchRNNEncoder
 
 
 class ComplexConvXd(nn.Module):
@@ -143,9 +144,6 @@ class TimeInvariantFilter(nn.Module):
         # N x T x BD
         f = f.view(N, T, -1)
         return f
-
-
-from aps.asr.base.encoder import TorchRNNEncoder
 
 
 class TimeInvariantAttFilter(nn.Module):

@@ -14,7 +14,6 @@ import scipy.signal as ss
 from kaldi_python_io import Reader as BaseReader
 
 from typing import Optional, IO, Union, Any, NoReturn, Tuple
-from aps.const import MAX_INT16, EPSILON
 
 
 def read_audio(fname: Union[str, IO[Any]],

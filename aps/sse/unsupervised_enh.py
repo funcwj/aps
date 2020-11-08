@@ -6,7 +6,6 @@
 import numpy as np
 import torch as th
 import torch.nn as nn
-import torch.nn.functional as F
 
 from torch_complex import ComplexTensor
 from typing import Union, NoReturn, Optional
@@ -40,7 +39,7 @@ def norm_observation(mat: np.ndarray,
 def permu_aligner(masks: np.ndarray, transpose: bool = False) -> np.ndarray:
     """
     Solve permutation problems for clustering based mask algorithm
-    Reference: "https://raw.githubusercontent.com/fgnt/pb_bss/master/pb_bss/permutation_alignment.py"
+    Reference: "https://github.com/fgnt/pb_bss/tree/master/pb_bss"
     Args:
         masks: K x T x F
     Return:

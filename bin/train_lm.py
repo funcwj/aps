@@ -3,15 +3,13 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import yaml
-import codecs
 import pprint
 import argparse
 
 from aps.utils import set_seed
 from aps.opts import BaseTrainParser
-from aps.trainer import DdpTrainer
 from aps.conf import load_lm_conf
-from aps.libs import aps_task, aps_dataloader, aps_asr_nnet
+from aps.libs import aps_task, aps_dataloader, aps_asr_nnet, aps_trainer
 
 
 def run(args):
@@ -48,14 +46,16 @@ def run(args):
     nnet = aps_asr_nnet(conf["nnet"])(**conf["nnet_conf"])
     task = aps_task(conf["task"], nnet, **conf["task_conf"])
 
-    trainer = DdpTrainer(task,
-                         device_ids=args.device_id,
-                         checkpoint=args.checkpoint,
-                         resume=args.resume,
-                         save_interval=args.save_interval,
-                         prog_interval=args.prog_interval,
-                         tensorboard=args.tensorboard,
-                         **conf["trainer_conf"])
+    Trainer = aps_trainer(args.trainer, distributed=False)
+    trainer = Trainer(task,
+                      device_ids=args.device_id,
+                      checkpoint=args.checkpoint,
+                      resume=args.resume,
+                      save_interval=args.save_interval,
+                      prog_interval=args.prog_interval,
+                      tensorboard=args.tensorboard,
+                      opt_level=args.opt_level,
+                      **conf["trainer_conf"])
     # dump configurations
     conf["cmd_args"] = vars(args)
     with open(f"{args.checkpoint}/train.yaml", "w") as f:

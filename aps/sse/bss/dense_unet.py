@@ -5,7 +5,6 @@
 
 import torch as th
 import torch.nn as nn
-import torch.nn.functional as tf
 
 from typing import Optional, List, Union, NoReturn, Tuple
 from aps.sse.bss.dccrn import LSTMWrapper, parse_1dstr, parse_2dstr

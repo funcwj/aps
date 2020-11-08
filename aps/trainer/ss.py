@@ -4,9 +4,6 @@
 Schedule sampling & Learning rate
 """
 
-import torch as th
-from torch.optim import lr_scheduler
-
 
 class SsScheduler(object):
     """
@@ -18,20 +15,6 @@ class SsScheduler(object):
 
     def step(self, epoch, accu):
         raise NotImplementedError
-
-
-def support_ss_scheduler(scheduler: str, **kwargs) -> SsScheduler:
-    """
-    Return supported ss scheduler
-    """
-    scheduler_templ = {
-        "const": ConstScheduler,
-        "linear": LinearScheduler,
-        "trigger": TriggerScheduler
-    }
-    if scheduler not in scheduler_templ:
-        raise RuntimeError(f"Not supported scheduler: {scheduler}")
-    return scheduler_templ[scheduler](**kwargs)
 
 
 class ConstScheduler(SsScheduler):
@@ -83,3 +66,10 @@ class LinearScheduler(SsScheduler):
         else:
             inv = (epoch - self.beg) // self.interval + 1
             return inv * self.inc
+
+
+ss_scheduler_cls = {
+    "const": ConstScheduler,
+    "linear": LinearScheduler,
+    "trigger": TriggerScheduler
+}

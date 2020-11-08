@@ -8,6 +8,7 @@ set -eu
 gpu=0
 seed=777
 epochs=100
+trainer="ddp"
 tensorboard=false
 batch_size=64
 num_workers=4
@@ -15,7 +16,7 @@ eval_interval=-1
 save_interval=-1
 prog_interval=100
 
-echo "$0 $@"
+echo "$0 $*"
 
 . ./utils/parse_options.sh || exit 1
 
@@ -38,6 +39,7 @@ bin/train_ss.py \
   --batch-size $batch_size \
   --epochs $epochs \
   --device-id $gpu \
+  --trainer $trainer \
   --eval-interval $eval_interval \
   > $data.train_ss.$exp_id.log 2>&1
 

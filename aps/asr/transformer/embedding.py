@@ -15,7 +15,8 @@ from typing import Union, Tuple
 class PositionalEncoding(nn.Module):
     """
     Positional Encoding
-    Reference: https://github.com/pytorch/examples/blob/master/word_language_model/model.py
+    Reference:
+        https://github.com/pytorch/examples/blob/master/word_language_model/model.py
     """
 
     def __init__(self,

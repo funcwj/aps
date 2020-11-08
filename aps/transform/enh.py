@@ -27,9 +27,10 @@ class IpdTransform(nn.Module):
                  cos: bool = True,
                  sin: bool = False) -> None:
         super(IpdTransform, self).__init__()
-        split_index = lambda sstr: [
-            tuple(map(int, p.split(","))) for p in sstr.split(";")
-        ]
+
+        def split_index(sstr):
+            return [tuple(map(int, p.split(","))) for p in sstr.split(";")]
+
         # ipd index
         pair = split_index(ipd_index)
         self.index_l = [t[0] for t in pair]
@@ -98,9 +99,10 @@ class DfTransform(nn.Module):
         self.num_bins = num_bins
         self.num_doas = num_doas
         self.velocity = velocity
-        split_index = lambda sstr: [
-            tuple(map(int, p.split(","))) for p in sstr.split(";")
-        ]
+
+        def split_index(sstr):
+            return [tuple(map(int, p.split(","))) for p in sstr.split(";")]
+
         # ipd index
         pair = split_index(af_index)
         self.index_l = [t[0] for t in pair]

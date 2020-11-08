@@ -11,14 +11,12 @@ from aps.loader import AudioReader
 from aps.metric.reporter import AverageReporter
 from aps.metric.sse import permute_metric
 
-from kaldi_python_io import Reader as BaseReader
-
 
 def run(args):
     splited_est_scps = args.est_scp.split(",")
     splited_ref_scps = args.ref_scp.split(",")
     if len(splited_ref_scps) != len(splited_est_scps):
-        raise RuntimeError(f"Number of the speakers doesn't matched")
+        raise RuntimeError("Number of the speakers doesn't matched")
     single_speaker = len(splited_est_scps) == 1
 
     reporter = AverageReporter(args.spk2class,
@@ -70,8 +68,8 @@ def run(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Command to compute the audio metrics to measure the quality "
-        "of the speech separation & enhancement",
+        description="Command to compute the audio metrics to measure the "
+        "quality of the speech separation & enhancement",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("est_scp",
                         type=str,

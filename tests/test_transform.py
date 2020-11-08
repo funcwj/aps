@@ -30,7 +30,8 @@ def test_forward_inverse_stft(wav, frame_len, frame_hop, window, center):
                        window=window,
                        center=center)
     out = inverse_stft(mid, frame_len, frame_hop, window=window, center=center)
-    th.testing.assert_allclose(out, wav)
+    trunc = min(out.shape[-1], wav.shape[-1])
+    th.testing.assert_allclose(out[..., :trunc], wav[..., :trunc])
 
 
 @pytest.mark.parametrize("wav",

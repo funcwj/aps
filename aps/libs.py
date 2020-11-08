@@ -1,12 +1,12 @@
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-import importlib
 import torch.nn as nn
 
 from os.path import basename
 from importlib.machinery import SourceFileLoader
 from aps.transform import transform_cls
+from aps.trainer import trainer_cls
 from aps.loader import loader_cls
 from aps.task import task_cls
 from aps.asr import asr_nnet_cls
@@ -87,3 +87,15 @@ def aps_sse_nnet(nnet: str) -> nn.Module:
     Return SSE networks supported by aps
     """
     return aps_specific_nnet(nnet, sse_nnet_cls)
+
+
+def aps_trainer(trainer: str, distributed: bool = False) -> Any:
+    """
+    Return aps Trainer class
+    """
+    if not distributed and trainer not in ["ddp", "apex"]:
+        raise ValueError(
+            f"Single-GPU training doesn't support {trainer} Trainer")
+    if trainer not in trainer_cls:
+        raise ValueError(f"Unknown Trainer class: {trainer}")
+    return trainer_cls[trainer]

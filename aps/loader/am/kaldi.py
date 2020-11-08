@@ -5,15 +5,10 @@
 """
 Dataloader for kaldi features
 """
-import random
-
-import numpy as np
 import torch as th
 import torch.utils.data as dat
 
 from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data.dataloader import default_collate
-
 from typing import Dict, Iterable, Optional, NoReturn
 from kaldi_python_io import ScriptReader
 
@@ -95,13 +90,17 @@ def egs_collate(egs: Dict) -> Dict:
         return pad_sequence(olist, batch_first=True, padding_value=value)
 
     return {
-        "src_pad":  # N x S
+        # N x S
+        "src_pad":
             pad_seq([th.from_numpy(eg["feats"].copy()) for eg in egs], value=0),
-        "tgt_pad":  # N x T
+        # N x T
+        "tgt_pad":
             pad_seq([th.as_tensor(eg["token"]) for eg in egs], value=-1),
-        "src_len":  # N, number of the frames
+        # N, number of the frames
+        "src_len":
             th.tensor([int(eg["dur"]) for eg in egs], dtype=th.int64),
-        "tgt_len":  # N, length of the tokens
+        # N, length of the tokens
+        "tgt_len":
             th.tensor([eg["len"] for eg in egs], dtype=th.int64)
     }
 

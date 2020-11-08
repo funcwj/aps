@@ -11,6 +11,8 @@ nj=32
 max_jobs_run=""
 cmd="utils/run.pl"
 
+echo "$0 $*"
+
 . ./utils/parse_options.sh || exit 1
 
 [ $# -ne 2 ] && echo "format error: $0 <data-dir> <ark-dir>" && exit 1

@@ -1,19 +1,27 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-from pathlib import Path
+try:
+    import apex
+    apex_available = True
+except ImportError:
+    apex_available = False
 
+import math
 import torch as th
-from torch.nn.parallel import DistributedDataParallel
+
+from pathlib import Path
 from typing import Optional, Dict, List, Union, NoReturn
 
-from aps.trainer.base import Trainer
+from torch.nn.utils import clip_grad_norm_
+from aps.trainer.ddp import Trainer
+from aps.trainer.base import add_gaussian_noise
 import aps.distributed as dist
 
 
-class DdpTrainer(Trainer):
+class ApexTrainer(Trainer):
     """
-    A PyTorch distributed data parallel (DDP) Trainer
+    Trainer using the NVIDIA's apex (https://github.com/NVIDIA/apex)
     """
 
     def __init__(self,
@@ -36,10 +44,11 @@ class DdpTrainer(Trainer):
                  init: str = "",
                  tensorboard: bool = False,
                  stop_criterion: str = "loss",
+                 opt_level: str = "O0",
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
                  **kwargs) -> None:
-        super(DdpTrainer,
+        super(ApexTrainer,
               self).__init__(task,
                              rank=rank,
                              device_ids=device_ids,
@@ -63,22 +72,77 @@ class DdpTrainer(Trainer):
                              no_impr_thres=no_impr_thres)
         if dist.get_backend() not in ["torch", "none"]:
             raise ValueError(
-                "DdpTrainer should use torch/none as distributed backend")
-        self.setup_distributed()
+                "ApexTrainer should use torch/none as distributed backend")
+        if not apex_available:
+            raise ValueError("apex is not installed in current machine")
+        self.setup_distributed(opt_level)
 
-    def setup_distributed(self) -> NoReturn:
+    def setup_distributed(self, opt_level: str) -> NoReturn:
         """
-        Setup environment for distributed training
+        Setup environment for apex distributed training
         """
+        # using apex synced BN
+        self.task = apex.parallel.convert_syncbn_model(self.task)
+        # O0: FP32 training & O3 FP16 training
+        self.task, self.optimizer = apex.amp.initialize(self.task,
+                                                        self.optimizer,
+                                                        opt_level=opt_level)
+        self.reporter.log(f"Apex: Using opt-level {opt_level}")
         if self.cuda_devices >= 2:
             self.distributed = True
             self.reporter.log(
-                f"DDP: using distributed data parallel (DDP), rank={self.rank}, "
+                f"Apex: using distributed data parallel (DDP), rank={self.rank}, "
                 + f"world_size={dist.world_size()}")
-            self.task = DistributedDataParallel(self.task,
-                                                device_ids=[self.rank])
+            self.task = apex.parallel.DistributedDataParallel(
+                self.task, delay_allreduce=True)
         else:
             self.distributed = False
+        # restore amp stats
+        if self.cpt_stats:
+            apex.amp.load_state_dict(self.cpt_stats["amp_state_dict"])
+
+    def train_one_step(self, egs: Dict) -> bool:
+        """
+        Make one training step for hovorod
+
+        1) Zero optimizer
+        2) Forward & Backword
+        3) Clip Gradient
+        4) Step optimizer
+        """
+        self.optimizer.zero_grad()
+
+        stats = self.task(egs, ssr=self.ssr)
+        loss = stats["loss"].item()
+        # backward if not nan/inf
+        if math.isfinite(loss):
+            with apex.amp.scale_loss(stats["loss"],
+                                     self.optimizer) as scaled_loss:
+                scaled_loss.backward()
+        else:
+            self.reporter.log(f"Invalid loss {loss:.3f}, skip...")
+            return False
+
+        # clip gradient after backward
+        norm = -1
+        if self.clip_gradient:
+            # for apex
+            norm = clip_grad_norm_(apex.amp.master_params(self.optimizer),
+                                   self.clip_gradient)
+        # step optimizer and update statistics
+        if math.isfinite(norm):
+            self.optimizer.step()
+            if self.gaussian_noise_std:
+                add_gaussian_noise(self.task, std=self.gaussian_noise_std)
+            if norm != -1:
+                stats["norm"] = norm
+            stats["rate"] = self.optimizer.param_groups[0]["lr"]
+            self.reporter.update(stats)
+            self.lr_scheduler_step(None, end_at="step")
+            return True
+        else:
+            self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
+            return False
 
     def checkpoint_states(self, epoch: int) -> Dict:
         """
@@ -87,6 +151,8 @@ class DdpTrainer(Trainer):
         return {
             "epoch":
                 epoch,
+            "amp_state_dict":
+                apex.amp.state_dict(),
             "model_state_dict":
                 self.task.module.nnet.state_dict()
                 if self.distributed else self.task.nnet.state_dict(),

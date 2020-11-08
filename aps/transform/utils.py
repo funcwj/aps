@@ -76,7 +76,7 @@ def init_kernel(frame_len: int,
     K = th.transpose(K, 0, 2) * window
     # 2B x 1 x W
     K = th.reshape(K, (B * 2, 1, K.shape[-1]))
-    return K
+    return K, window
 
 
 def init_melfilter(frame_len: int,
@@ -265,14 +265,13 @@ def forward_stft(
     """
     STFT function implementation, equals to STFT layer
     """
-    w = init_window(window, frame_len)
-    K = init_kernel(frame_len,
-                    frame_hop,
-                    w,
-                    round_pow_of_two=round_pow_of_two,
-                    normalized=normalized,
-                    inverse=False,
-                    mode=mode)
+    K, _ = init_kernel(frame_len,
+                       frame_hop,
+                       init_window(window, frame_len),
+                       round_pow_of_two=round_pow_of_two,
+                       normalized=normalized,
+                       inverse=False,
+                       mode=mode)
     return _forward_stft(wav,
                          K.to(wav.device),
                          output=output,
@@ -298,14 +297,13 @@ def inverse_stft(transform: Union[th.Tensor, Tuple[th.Tensor, th.Tensor]],
         device = transform.device
     else:
         device = transform[0].device
-    w = init_window(window, frame_len)
-    K = init_kernel(frame_len,
-                    frame_hop,
-                    w,
-                    round_pow_of_two=round_pow_of_two,
-                    normalized=normalized,
-                    inverse=True,
-                    mode=mode)
+    K, w = init_kernel(frame_len,
+                       frame_hop,
+                       init_window(window, frame_len),
+                       round_pow_of_two=round_pow_of_two,
+                       normalized=normalized,
+                       inverse=True,
+                       mode=mode)
     return _inverse_stft(transform,
                          K.to(device),
                          w.to(device),
@@ -331,14 +329,13 @@ class STFTBase(nn.Module):
                  center: bool = False,
                  mode="librosa") -> None:
         super(STFTBase, self).__init__()
-        w = init_window(window, frame_len)
-        K = init_kernel(frame_len,
-                        frame_hop,
-                        w,
-                        round_pow_of_two=round_pow_of_two,
-                        normalized=normalized,
-                        inverse=inverse,
-                        mode=mode)
+        K, w = init_kernel(frame_len,
+                           frame_hop,
+                           init_window(window, frame_len),
+                           round_pow_of_two=round_pow_of_two,
+                           normalized=normalized,
+                           inverse=inverse,
+                           mode=mode)
         self.K = nn.Parameter(K, requires_grad=False)
         self.w = nn.Parameter(w, requires_grad=False)
         self.frame_len = frame_len
