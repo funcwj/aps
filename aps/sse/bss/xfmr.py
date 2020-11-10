@@ -53,7 +53,8 @@ class FreqRelTransformer(RelTransformerEncoder):
                                   nn.LayerNorm(att_dim),
                                   nn.Dropout(proj_dropout))
         self.mask = nn.Linear(att_dim, num_bins * num_spks)
-        self.non_linear = MaskNonLinear(non_linear)
+        self.non_linear = MaskNonLinear(non_linear,
+                                        enable="positive_wo_softmax")
         self.num_spks = num_spks
 
     def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:

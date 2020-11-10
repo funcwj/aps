@@ -169,7 +169,7 @@ class DCCRN(nn.Module):
         if enh_transform is None:
             raise RuntimeError("Missing configuration for enh_transform")
         self.cplx = cplx
-        self.non_linear = MaskNonLinear(non_linear)
+        self.non_linear = MaskNonLinear(non_linear, enable="all_wo_softmax")
         self.enh_transform = enh_transform
         K = parse_2dstr(K)
         S = parse_2dstr(S)

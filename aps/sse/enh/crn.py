@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Tuple, Optional, NoReturn
+from aps.sse.utils import MaskNonLinear
 
 
 class CRNLayer(nn.Module):
@@ -68,23 +69,15 @@ class CRNet(nn.Module):
         Tan K. and Wang D.L. (2018): A convolutional recurrent neural network for
         real-time speech enhancement. Proceedings of INTERSPEECH-18, pp. 3229-3233.
     """
-    supported_nonlinear = {
-        "softplus": tf.softplus,
-        "relu": th.relu,
-        "sigmoid": th.sigmoid,
-        "tanh": th.tanh
-    }
 
     def __init__(self,
                  num_bins: int = 161,
                  causal_conv: bool = False,
                  mode: str = "masking",
+                 training_mode: str = "freq",
                  output_nonlinear: str = "softplus",
                  enh_transform: Optional[nn.Module] = None) -> None:
         super(CRNet, self).__init__()
-        if output_nonlinear not in self.supported_nonlinear:
-            raise RuntimeError(
-                f"Unsupported output nonlinear function: {output_nonlinear}")
         if num_bins != 161:
             raise RuntimeError(f"Do not support num_bins={num_bins}")
         if not enh_transform:
@@ -98,7 +91,8 @@ class CRNet(nn.Module):
         K = [16, 32, 64, 128, 256]
         P = [0, 1, 0, 0, 0]
         self.enh_transform = enh_transform
-        self.out_nonlinear = self.supported_nonlinear[output_nonlinear]
+        self.out_nonlinear = MaskNonLinear(output_nonlinear,
+                                           enable="positive_wo_softmax")
         self.encoders = nn.ModuleList([
             CRNLayer(1 if i == 0 else K[i - 1],
                      K[i],
@@ -120,6 +114,7 @@ class CRNet(nn.Module):
                             batch_first=True,
                             bidirectional=False)
         self.mode = mode
+        self.training_mode = training_mode
 
     def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
         if not training and mix.dim() != 1:
@@ -129,34 +124,13 @@ class CRNet(nn.Module):
             raise RuntimeError("CRNet expects 2D tensor (training), " +
                                f"got {mix.dim()} instead")
 
-    def infer(self, mix: th.Tensor) -> th.Tensor:
-        """
-        Args:
-            mix: (Tensor): N x S
-        """
-        self.check_args(mix, training=False)
-        with th.no_grad():
-            mix = mix[None, :]
-            # N x F x T
-            _, mix_stft, _ = self.enh_transform(mix, None)
-            # pha: N x F x T
-            pha = mix_stft.angle()
-            # mag: N x F x T
-            mag = self.forward(mix)
-            if self.mode == "masking":
-                mag = mag * mix_stft.abs()
-            # enh: N x S
-            enh = self.enh_transform.inverse_stft((mag, pha), input="polar")
-            return enh[0]
-
-    def forward(self, mix: th.Tensor) -> th.Tensor:
+    def _forward(self, mix: th.Tensor, mode: str = "freq") -> th.Tensor:
         """
         Args:
             mix (Tensor): N x S
         """
-        self.check_args(mix, training=True)
         # N x T x F
-        feats, _, _ = self.enh_transform(mix, None)
+        feats, mix_stft, _ = self.enh_transform(mix, None)
         # N x 1 x T x F
         inp = feats[:, None]
         encoder_out = []
@@ -184,4 +158,32 @@ class CRNet(nn.Module):
         out = self.out_nonlinear(out)
         # N x T x F => N x F x T
         out = th.transpose(out[:, 0], 1, 2)
-        return out
+        if mode == "freq":
+            return out
+        else:
+            decoder = self.enh_transform.inverse_stft
+            if self.mode == "masking":
+                enh = mix_stft * out
+                return decoder((enh.real, enh.imag), input="complex")
+            else:
+                phase = mix_stft.angle()
+                return decoder((out, phase), input="polar")
+
+    def infer(self, mix: th.Tensor, mode: str = "time") -> th.Tensor:
+        """
+        Args:
+            mix (Tensor): S
+        Return:
+            Tensor: S
+        """
+        self.check_args(mix, training=False)
+        with th.no_grad():
+            return self._forward(mix[None, :], mode=mode)[0]
+
+    def forward(self, mix: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            mix (Tensor): N x S
+        """
+        self.check_args(mix, training=True)
+        return self._forward(mix, mode=self.training_mode)

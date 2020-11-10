@@ -84,7 +84,7 @@ def permu_aligner(masks: np.ndarray, transpose: bool = False) -> np.ndarray:
 
 class UnsupervisedEnh(TorchRNNEncoder):
     """
-    A recurrent network for unsupervised training
+    A recurrent network example for unsupervised training
     """
 
     def __init__(self,
@@ -106,9 +106,8 @@ class UnsupervisedEnh(TorchRNNEncoder):
                                               rnn_dropout=rnn_dropout,
                                               rnn_bidir=rnn_bidir,
                                               non_linear="sigmoid")
+        assert enh_transform is not None
         self.enh_transform = enh_transform
-        if enh_transform is None:
-            raise ValueError("enh_transform can not be None")
 
     def check_args(self, noisy: th.Tensor, training: bool = True) -> NoReturn:
         """

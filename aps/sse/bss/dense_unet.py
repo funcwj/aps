@@ -348,8 +348,9 @@ class DenseUnet(nn.Module):
             raise RuntimeError("Missing configuration for enh_transform")
         if non_linear:
             self.non_linear = MaskNonLinear(non_linear,
+                                            enable="all_wo_softmax",
                                             scale=non_linear_scale,
-                                            clip=non_linear_clip)
+                                            value_clip=non_linear_clip)
         else:
             # complex mapping
             self.non_linear = None
