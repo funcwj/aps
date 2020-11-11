@@ -23,6 +23,7 @@ pre-commit install
 * [Overivew](doc/overview.md)
 * [Structure](doc/code.md)
 * [Instruction](doc/instruction.md)
+* [Q & A](doc/QApart.md)
 * [Examples](examples)
 
 ## Acknowledge
