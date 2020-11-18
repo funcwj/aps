@@ -13,6 +13,7 @@ from typing import List, Dict, Any, Tuple, Callable, Optional
 
 from aps.task.base import Task
 from aps.task.objf import permu_invarint_objf, multiple_objf
+from aps.libs import ApsRegisters
 from aps.transform.utils import STFT, init_melfilter
 
 __all__ = [
@@ -182,6 +183,7 @@ class TimeDomainTask(SepTask):
         return {"loss": th.mean(loss)}
 
 
+@ApsRegisters.task.register("sisnr")
 class SisnrTask(TimeDomainTask):
     """
     Time domain sisnr loss function
@@ -211,6 +213,7 @@ class SisnrTask(TimeDomainTask):
             out, ref, zero_mean=self.zero_mean, non_nagetive=self.non_nagetive)
 
 
+@ApsRegisters.task.register("snr")
 class SnrTask(TimeDomainTask):
     """
     Time domain sisnr loss function
@@ -237,6 +240,7 @@ class SnrTask(TimeDomainTask):
         return -snr(out, ref, non_nagetive=self.non_nagetive)
 
 
+@ApsRegisters.task.register("wa")
 class WaTask(TimeDomainTask):
     """
     Time domain waveform approximation loss function
@@ -352,6 +356,7 @@ class FreqSaTask(SepTask):
         return {"loss": th.mean(loss)}
 
 
+@ApsRegisters.task.register("freq_linear_sa")
 class LinearFreqSaTask(FreqSaTask):
     """
     Frequency domain linear spectral approximation (MSA or tPSA) loss function
@@ -395,6 +400,7 @@ class LinearFreqSaTask(FreqSaTask):
         return tensor
 
 
+@ApsRegisters.task.register("freq_mel_sa")
 class MelFreqSaTask(FreqSaTask):
     """
     Spectral approximation on mel-filter domain
@@ -533,6 +539,7 @@ class TimeSaTask(SepTask):
         return {"loss": th.mean(loss)}
 
 
+@ApsRegisters.task.register("time_linear_sa")
 class LinearTimeSaTask(TimeSaTask):
     """
     Time domain linear spectral approximation loss function
@@ -581,6 +588,7 @@ class LinearTimeSaTask(TimeSaTask):
         return tensor
 
 
+@ApsRegisters.task.register("time_mel_sa")
 class MelTimeSaTask(TimeSaTask):
     """
     Time domain mel spectral approximation loss function

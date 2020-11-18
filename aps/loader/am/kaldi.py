@@ -13,8 +13,10 @@ from typing import Dict, Iterable, Optional, NoReturn
 from kaldi_python_io import ScriptReader
 
 from aps.loader.am.utils import process_token, BatchSampler
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.loader.register("am_kaldi")
 def DataLoader(train: bool = True,
                distributed: bool = False,
                feats_scp: str = "",

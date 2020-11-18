@@ -11,6 +11,7 @@ from typing import Optional, List, Union, NoReturn
 
 from aps.sse.bss.tasnet import build_norm
 from aps.sse.utils import MaskNonLinear
+from aps.libs import ApsRegisters
 
 
 class DpB(nn.Module):
@@ -273,6 +274,7 @@ class DPRNN(nn.Module):
             return masks
 
 
+@ApsRegisters.sse.register("time_dprnn")
 class TimeDPRNN(DPRNN):
     """
     Time domain DP (dual-path) RNN
@@ -354,6 +356,7 @@ class TimeDPRNN(DPRNN):
             ]
 
 
+@ApsRegisters.sse.register("freq_dprnn")
 class FreqDPRNN(DPRNN):
     """
     Frequency domain DP (dual-path) RNN

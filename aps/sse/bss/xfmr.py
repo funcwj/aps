@@ -9,8 +9,10 @@ import torch.nn as nn
 from typing import Optional, List, Union, NoReturn
 from aps.asr.transformer.encoder import RelTransformerEncoder
 from aps.sse.utils import MaskNonLinear
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.sse.register("freq_rel_transformer")
 class FreqRelTransformer(RelTransformerEncoder):
     """
     Frequency domain Transformer model

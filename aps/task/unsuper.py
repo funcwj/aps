@@ -9,6 +9,7 @@ from typing import Dict
 from torch_complex import ComplexTensor
 from aps.task.base import Task
 from aps.const import EPSILON
+from aps.libs import ApsRegisters
 
 
 def hermitian_det(Bk: th.Tensor, eps: float = EPSILON) -> th.Tensor:
@@ -60,6 +61,7 @@ def estimate_covar(mask: th.Tensor,
     return Bk
 
 
+@ApsRegisters.task.register("unsuper_enh")
 class UnsuperEnhTask(Task):
     """
     Unsupervised enhancement using ML functions

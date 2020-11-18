@@ -15,6 +15,7 @@ from aps.asr.filter.mvdr import MvdrBeamformer
 from aps.asr.filter.google import CLPFsBeamformer  # same as TimeInvariantFilter
 from aps.asr.filter.conv import (TimeInvariantFilter, TimeVariantFilter,
                                  TimeInvariantAttFilter)
+from aps.libs import ApsRegisters
 
 
 class EnhAttASR(nn.Module):
@@ -121,6 +122,7 @@ class EnhAttASR(nn.Module):
                                             normalized=normalized)
 
 
+@ApsRegisters.asr.register("mvdr_att")
 class MvdrAttASR(EnhAttASR):
     """
     Mvdr beamformer + Att-based ASR model
@@ -197,6 +199,7 @@ class MvdrAttASR(EnhAttASR):
         return mask_s, mask_n, x_len, x_cplx
 
 
+@ApsRegisters.asr.register("beam_att")
 class BeamAttASR(EnhAttASR):
     """
     Beamformer-based front-end + AttASR

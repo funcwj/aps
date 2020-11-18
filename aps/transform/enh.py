@@ -15,6 +15,7 @@ from typing import Union, List, Optional, Tuple
 from aps.transform.utils import STFT, iSTFT
 from aps.transform.asr import LogTransform, AbsTransform, CmvnTransform, SpecAugTransform
 from aps.const import MATH_PI, EPSILON
+from aps.libs import ApsRegisters
 
 
 class IpdTransform(nn.Module):
@@ -300,6 +301,7 @@ class FixedBeamformer(nn.Module):
             return br, bi
 
 
+@ApsRegisters.transform.register("enh")
 class FeatureTransform(nn.Module):
     """
     Feature transform for Enhancement/Separation tasks

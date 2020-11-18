@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from typing import Optional, NoReturn, Union, List
 
 from aps.sse.utils import MaskNonLinear
+from aps.libs import ApsRegisters
 
 
 class ChannelWiseLayerNorm(nn.LayerNorm):
@@ -215,6 +216,7 @@ class Conv1DBlock(nn.Module):
         return x
 
 
+@ApsRegisters.sse.register("time_tasnet")
 class TimeConvTasNet(nn.Module):
     """
     Y. Luo, N. Mesgarani. Conv-tasnet: Surpassing Ideal Time–frequency Magnitude
@@ -326,6 +328,7 @@ class TimeConvTasNet(nn.Module):
         return spk[0] if self.num_spks == 1 else spk
 
 
+@ApsRegisters.sse.register("freq_tasnet")
 class FreqConvTasNet(nn.Module):
     """
     Frequency domain ConvTasNet

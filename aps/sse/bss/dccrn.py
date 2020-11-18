@@ -9,6 +9,7 @@ import torch.nn as nn
 from typing import Optional, Tuple, NoReturn, List
 from aps.sse.enh.dcunet import Encoder, Decoder, parse_1dstr, parse_2dstr
 from aps.sse.utils import MaskNonLinear
+from aps.libs import ApsRegisters
 
 
 class LSTMP(nn.Module):
@@ -134,6 +135,7 @@ class LSTMWrapper(nn.Module):
         return th.einsum("ntcf->ncft", out)
 
 
+@ApsRegisters.sse.register("dccrn")
 class DCCRN(nn.Module):
     """
     Deep Complex Convolutional-RNN networks

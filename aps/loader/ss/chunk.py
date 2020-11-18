@@ -14,8 +14,10 @@ from torch.utils.data.dataloader import default_collate
 from kaldi_python_io import Reader as BaseReader
 from typing import List, Dict, Iterator, NoReturn, Union, Iterable
 from aps.loader.audio import AudioReader
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.loader.register("ss_chunk")
 def DataLoader(train: bool = True,
                sr: int = 16000,
                mix_scp: str = "",

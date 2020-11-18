@@ -14,8 +14,10 @@ from torch.nn.utils.rnn import pad_sequence
 from typing import Dict, Iterable, Optional, NoReturn
 from aps.loader.am.utils import process_token, BatchSampler
 from aps.loader.audio import AudioReader
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.loader.register("am_raw")
 def DataLoader(train: bool = True,
                distributed: bool = False,
                wav_scp: str = "",

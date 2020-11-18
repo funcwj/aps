@@ -11,6 +11,7 @@ from torch_complex import ComplexTensor
 from typing import Union, NoReturn, Optional
 from aps.asr.base.encoder import TorchRNNEncoder
 from aps.const import EPSILON
+from aps.libs import ApsRegisters
 
 from scipy.optimize import linear_sum_assignment
 
@@ -82,6 +83,7 @@ def permu_aligner(masks: np.ndarray, transpose: bool = False) -> np.ndarray:
     return permu_masks
 
 
+@ApsRegisters.sse.register("unsupervised_enh")
 class UnsupervisedEnh(TorchRNNEncoder):
     """
     A recurrent network example for unsupervised training

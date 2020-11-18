@@ -10,8 +10,10 @@ from typing import Optional, Dict, Tuple, List
 from aps.asr.transformer.encoder import support_xfmr_encoder
 from aps.asr.transducer.decoder import TorchTransformerDecoder, TorchRNNDecoder
 from aps.asr.base.encoder import encoder_instance
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.asr.register("common_transducer")
 class TorchTransducerASR(nn.Module):
     """
     Transducer end-to-end ASR (rnn as decoder)
@@ -124,6 +126,7 @@ class TorchTransducerASR(nn.Module):
                                             normalized=normalized)
 
 
+@ApsRegisters.asr.register("transformer_transducer")
 class TransformerTransducerASR(nn.Module):
     """
     Transducer end-to-end ASR (transformer as decoder)

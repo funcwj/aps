@@ -15,6 +15,7 @@ from aps.asr.filter.conv import (TimeInvariantFilter, TimeVariantFilter,
                                  TimeInvariantAttFilter)
 from aps.asr.filter.mvdr import MvdrBeamformer
 from aps.asr.filter.google import CLPFsBeamformer  # same as TimeInvariantEnh
+from aps.libs import ApsRegisters
 
 
 class EnhTransformerASR(nn.Module):
@@ -113,6 +114,7 @@ class EnhTransformerASR(nn.Module):
                                                     normalized=normalized)
 
 
+@ApsRegisters.asr.register("beam_transformer")
 class BeamTransformerASR(EnhTransformerASR):
     """
     Beamformer-based front-end + LAS ASR
@@ -149,6 +151,7 @@ class BeamTransformerASR(EnhTransformerASR):
         return x_enh, x_len
 
 
+@ApsRegisters.asr.register("mvdr_transformer")
 class MvdrTransformerASR(EnhTransformerASR):
     """
     Mvdr beamformer + Transformer-based ASR model

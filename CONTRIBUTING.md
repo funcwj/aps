@@ -1,6 +1,5 @@
 ## Contributing to APS
 
-
 1. Following the `setup` step to set up the python environment and git hooks
 
 2. Create a personal fork of the master branch: `git checkout -b <branch-name>`

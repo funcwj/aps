@@ -12,8 +12,10 @@ from kaldi_python_io import Reader as BaseReader
 from typing import Dict, Iterator, Iterable
 from aps.loader.simu import run_simu, make_argparse
 from aps.loader.ss.chunk import WaveChunkDataLoader
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.loader.register("ss_online")
 def DataLoader(train: bool = True,
                sr: int = 16000,
                simu_cfg: str = "",

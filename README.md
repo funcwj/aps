@@ -5,8 +5,7 @@
 [![Testing](https://github.com/funcwj/aps/workflows/Unit%20Testing/badge.svg)](https://github.com/funcwj/aps/workflows/Unit%20Testing/badge.svg)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 
-
-A workspace for speech related tasks, including single/multi-channel speech enhancement & separation & recognition. The goal is to make it easy and flexible to do experiments, verify ideas, implement and evaluate neural networks based methods.
+A workspace for speech related tasks, including single/multi-channel speech enhancement & separation & recognition. The goal is to make it easy and flexible to conduct experiments, verify ideas, implement and evaluate neural network based methods.
 
 ## Setup
 
@@ -20,10 +19,10 @@ pre-commit install
 
 ## Introduction
 
-* [Overivew](doc/overview.md)
-* [Structure](doc/code.md)
-* [Instruction](doc/instruction.md)
-* [Q & A](doc/QApart.md)
+* [Overivew](docs/overview.md)
+* [Structure](docs/code.md)
+* [Instruction](docs/instruction.md)
+* [Q & A](docs/qa.md)
 * [Examples](examples)
 
 ## Acknowledge

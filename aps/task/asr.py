@@ -24,6 +24,7 @@ from typing import Tuple, Dict
 from aps.task.base import Task
 from aps.task.objf import ce_objf, ls_objf
 from aps.const import IGNORE_ID
+from aps.libs import ApsRegisters
 
 __all__ = ["CtcXentHybridTask", "TransducerTask", "LmXentTask"]
 
@@ -56,6 +57,7 @@ def process_asr_target(tgt_pad: th.Tensor,
     return tgt_v1, tgt_v2
 
 
+@ApsRegisters.task.register("ctc_xent")
 class CtcXentHybridTask(Task):
     """
     CTC & Attention AM
@@ -119,6 +121,7 @@ class CtcXentHybridTask(Task):
         return stats
 
 
+@ApsRegisters.task.register("transducer")
 class TransducerTask(Task):
     """
     For Transducer based AM
@@ -157,6 +160,7 @@ class TransducerTask(Task):
         return {"loss": loss}
 
 
+@ApsRegisters.task.register("lm")
 class LmXentTask(Task):
     """
     For LM

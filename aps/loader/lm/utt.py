@@ -13,8 +13,10 @@ import torch.utils.data as dat
 from torch.nn.utils.rnn import pad_sequence
 from typing import NoReturn, List, Dict, Tuple, Optional, Callable, Iterator, Iterable
 from kaldi_python_io import Reader as BaseReader
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.loader.register("lm_utt")
 def DataLoader(text: str = "",
                vocab_dict: Optional[Dict] = None,
                train: bool = True,

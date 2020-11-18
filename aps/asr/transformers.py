@@ -11,8 +11,10 @@ from typing import Optional, Dict, Tuple, List
 from aps.asr.transformer.decoder import TorchTransformerDecoder
 from aps.asr.transformer.encoder import support_xfmr_encoder
 from aps.asr.base.encoder import encoder_instance
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.asr.register("transformer")
 class TransformerASR(nn.Module):
     """
     Transformer-based end-to-end ASR

@@ -9,6 +9,7 @@ import torch.nn.functional as tf
 
 from typing import Tuple, Optional, NoReturn
 from aps.sse.utils import MaskNonLinear
+from aps.libs import ApsRegisters
 
 
 class CRNLayer(nn.Module):
@@ -63,6 +64,7 @@ class CRNLayer(nn.Module):
             return tf.elu(x)
 
 
+@ApsRegisters.sse.register("crn")
 class CRNet(nn.Module):
     """
     Reference:

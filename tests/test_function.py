@@ -4,8 +4,9 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import pytest
+import importlib
 
-from aps.libs import dynamic_importlib
+from aps.libs import dynamic_importlib, ApsRegisters
 from aps.conf import load_dict
 
 
@@ -20,3 +21,10 @@ def test_import_lib(str_lib):
 def test_load_dict(str_dict):
     load_dict(str_dict)
     load_dict(str_dict, reverse=True)
+
+
+def test_register():
+    for package in ["asr", "sse", "task", "loader", "trainer", "transform"]:
+        importlib.import_module(f"aps.{package}")
+    for c in ApsRegisters.container:
+        print(c)

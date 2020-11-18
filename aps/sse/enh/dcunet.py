@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from typing import Tuple, List, Union, Optional, NoReturn
+from aps.libs import ApsRegisters
 
 
 def parse_1dstr(sstr: str) -> List[int]:
@@ -266,6 +267,7 @@ class Decoder(nn.Module):
         return x
 
 
+@ApsRegisters.sse.register("dcunet")
 class DCUNet(nn.Module):
     """
     Real or Complex UNet for Speech Enhancement

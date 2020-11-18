@@ -8,10 +8,12 @@ import torch as th
 from torch.nn.utils import clip_grad_norm_
 from typing import Optional, Dict, List, Union, NoReturn
 
-import aps.distributed as dist
 from aps.trainer.base import Trainer, add_gaussian_noise
+from aps.libs import ApsRegisters
+import aps.distributed as dist
 
 
+@ApsRegisters.trainer.register("hvd")
 class HvdTrainer(Trainer):
     """
     A Horovod Trainer

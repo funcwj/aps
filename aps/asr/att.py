@@ -10,8 +10,10 @@ from typing import Optional, Dict, Tuple, List
 from aps.asr.base.decoder import TorchDecoder
 from aps.asr.base.encoder import encoder_instance
 from aps.asr.base.attention import att_instance
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.asr.register("att")
 class AttASR(nn.Module):
     """
     Attention-based ASR model
