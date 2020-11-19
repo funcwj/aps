@@ -164,23 +164,12 @@ class AudioReader(BaseReader):
             # wav_ark = open(fname, "rb")
             # seek and read
             wav_ark.seek(offset)
-            try:
-                samps = read_audio(wav_ark, norm=self.norm, sr=self.sr)
-            except RuntimeError:
-                samps = None
-                print(f"Load {fname}:{offset} failed...", flush=True)
+            samps = read_audio(wav_ark, norm=self.norm, sr=self.sr)
         else:
             if fname[-1] == "|":
                 shell, _ = run_command(fname[:-1], wait=True)
                 fname = io.BytesIO(shell)
-            try:
-                samps = read_audio(fname, norm=self.norm, sr=self.sr)
-            except RuntimeError:
-                samps = None
-                print(f"Load {fname} failed...", flush=True)
-        # get one channel
-        if samps is None:
-            return None
+            samps = read_audio(fname, norm=self.norm, sr=self.sr)
         if self.ch >= 0 and samps.ndim == 2:
             samps = samps[self.ch]
         return samps

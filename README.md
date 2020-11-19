@@ -11,7 +11,9 @@ A workspace for speech related tasks, including single/multi-channel speech enha
 
 ```shell
 git clone https://github.com/funcwj/aps
-# set up the python environments or create conda enviroments based on requirements.txt (recommend, see Dockerfile in docker)
+# set up the python environments
+# 1) using "pip install -r requirements.txt" or
+# 2) create conda enviroments based on requirements.txt (see docker/*.Dockerfile)
 cd aps && pip install -r requirements.txt
 # set up the git hook scripts
 pre-commit install
