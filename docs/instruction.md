@@ -118,9 +118,9 @@ The instruction on data format & configuration rules.
 
 Almost all the hyper-parameters are configured in the yaml files. You can check the examples in [conf](../conf). The followings are allowed configuration keys:
 
-* `nnet` and `nnet_conf`: Name of the networks and it's parameters. The supported networks are registered (now is hardcoded) in `asr_nnet_cls` (see [aps/asr](../aps/asr/\_\_init\_\_.py)) and `sse_nnet_cls` (see [aps/sse](../aps/sse/\_\_init\_\_.py)).
+* `nnet` and `nnet_conf`: Name of the networks and it's parameters. The supported networks must be registered using decorator class `ApsRegisters`, e.g., `@ApsRegisters.asr.register("att")` (refer to original code in [aps/asr](../aps/asr) and [aps/sse](../aps/sse)).
 
-* `task` and `task_conf`: Name of the tasks and it's parameters. The supported tasks are registered `task_cls` (see [aps/task](../aps/task/\_\_init\_\_.py)). An example for permutation invariant training using SiSNR objective function:
+* `task` and `task_conf`: Name of the tasks and it's parameters. The supported tasks are decorated using `@ApsRegisters.task.register("...")` (see [aps/task](../aps/task)). An example for permutation invariant training using SiSNR objective function:
     ```yaml
     task: "sisnr"
     task_conf:

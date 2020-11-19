@@ -4,10 +4,12 @@
 
     There are two options. The first one is to modify the code of the aps directly following the steps:
 
-    * Give your implementation of network structure if needed in `aps.asr`, `aps.sse` or `aps.xxx` (may coming in the future) and register it in `asr_nnet_cls` or `sse_nnet_cls`.
-    * Give your implementation of `Task` if needed in `aps.task` and also register it in `task_cls`.
-    * Give your implementation of dataloader if needed in `aps.loader` and also register it in `loader_cls`.
+    * Give your implementation of network structure if needed in `aps.asr`, `aps.sse` or `aps.xxx` (may coming in the future) and decorate it using `@ApsRegisters.xxx.register(...)`.
+    * Give your implementation of `Task` if needed in `aps.task` and also decorate it using `@ApsRegisters.task.register(...)`.
+    * Give your implementation of dataloader if needed in `aps.loader` and also decorate with `@ApsRegisters.loader.register(...)`.
     * Prepare your training & validation & test data & configuration files and train the models using the scripts [scripts/*.sh](../scripts).
+
+        *If new python files are added, remember to update the `ApsModules` class in `aps/libs.py` to make sure your implementation can be imported correctly*.
 
     Another way only requires us to modify the training configurations. Assuming we have `my_nnet.py`, `my_task.py` under `/path/to/my_code`, the `.yaml` configuration like
     ```yaml
