@@ -99,7 +99,7 @@ def test_linear_freq_sa(num_branch, num_spks, permute):
         "num_spks": num_spks,
         "objf": "L2"
     }
-    task = aps_task("linear_sa", nnet, **kwargs)
+    task = aps_task("freq_linear_sa", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
 
@@ -118,7 +118,7 @@ def test_mel_freq_sa(num_branch, num_spks, permute):
         "num_spks": num_spks,
         "num_mels": 80
     }
-    task = aps_task("mel_sa", nnet, **kwargs)
+    task = aps_task("freq_mel_sa", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
 

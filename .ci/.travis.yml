@@ -1,3 +1,5 @@
+# duplicated, we use github workflow now
+
 dist: xenial # ubuntu 16.04
 language: python
 python:
@@ -6,9 +8,7 @@ cache:
   - pip
 
 install:
-  - sudo apt-get install -y libsndfile-dev ffmpeg
-  - cat requirements.txt | grep -v -E "warp_rnnt|horovod|kenlm"  > requirements_cpu.txt && pip install -r requirements_cpu.txt
-  - pip install numba==0.48 && pip freeze
+  - bash .ci/install_test_deps.sh
 
 script:
   - cd tests && pytest && bash check_cmds.sh

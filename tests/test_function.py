@@ -5,7 +5,7 @@
 
 import pytest
 
-from aps.libs import dynamic_importlib
+from aps.libs import dynamic_importlib, ApsRegisters, ApsModules
 from aps.conf import load_dict
 
 
@@ -20,3 +20,12 @@ def test_import_lib(str_lib):
 def test_load_dict(str_dict):
     load_dict(str_dict)
     load_dict(str_dict, reverse=True)
+
+
+@pytest.mark.parametrize(
+    "package", ["asr", "sse", "task", "loader", "trainer", "transform"])
+def test_register(package):
+    attr = getattr(ApsModules, package)
+    attr.import_all()
+    for c in ApsRegisters.container:
+        print(c.keys())

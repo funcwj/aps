@@ -10,8 +10,10 @@ from typing import Optional, Dict, Tuple, List
 from aps.asr.transformer.encoder import support_xfmr_encoder
 from aps.asr.transducer.decoder import TorchTransformerDecoder, TorchRNNDecoder
 from aps.asr.base.encoder import encoder_instance
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.asr.register("common_transducer")
 class TorchTransducerASR(nn.Module):
     """
     Transducer end-to-end ASR (rnn as decoder)
@@ -46,11 +48,10 @@ class TorchTransducerASR(nn.Module):
         self.blank = blank
         self.asr_transform = asr_transform
 
-    def forward(self,
-                x_pad: th.Tensor,
-                x_len: Optional[th.Tensor],
-                y_pad: th.Tensor,
-                ssr: float = 0) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+    def forward(
+            self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
+            y_pad: th.Tensor, y_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -124,6 +125,7 @@ class TorchTransducerASR(nn.Module):
                                             normalized=normalized)
 
 
+@ApsRegisters.asr.register("transformer_transducer")
 class TransformerTransducerASR(nn.Module):
     """
     Transducer end-to-end ASR (transformer as decoder)
@@ -157,12 +159,10 @@ class TransformerTransducerASR(nn.Module):
         self.blank = blank
         self.asr_transform = asr_transform
 
-    def forward(self,
-                x_pad: th.Tensor,
-                x_len: Optional[th.Tensor],
-                y_pad: th.Tensor,
-                y_len: Optional[th.Tensor],
-                ssr: float = 0) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+    def forward(
+            self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
+            y_pad: th.Tensor, y_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x D or N x S

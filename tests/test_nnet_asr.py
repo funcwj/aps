@@ -132,8 +132,8 @@ transformer_rel_xl_encoder_kwargs = {
 
 def gen_egs(vocab_size, batch_size, num_channels=1):
     u = th.randint(10, 20, (1,)).item()
-    x_len = th.randint(16000, 16000 * 5, (batch_size,)).sort(-1,
-                                                             descending=True)[0]
+    x_len = th.randint(16000, 16000 * 5, (batch_size,))
+    x_len = x_len.sort(-1, descending=True)[0]
     S = x_len.max().item()
     if num_channels == 1:
         x = th.rand(batch_size, S)

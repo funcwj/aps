@@ -16,9 +16,11 @@ from typing import Optional, Dict, List, Union, NoReturn
 from torch.nn.utils import clip_grad_norm_
 from aps.trainer.ddp import Trainer
 from aps.trainer.base import add_gaussian_noise
+from aps.libs import ApsRegisters
 import aps.distributed as dist
 
 
+@ApsRegisters.trainer.register("apex")
 class ApexTrainer(Trainer):
     """
     Trainer using the NVIDIA's apex (https://github.com/NVIDIA/apex)
@@ -112,7 +114,7 @@ class ApexTrainer(Trainer):
         """
         self.optimizer.zero_grad()
 
-        stats = self.task(egs, ssr=self.ssr)
+        stats = self.task(egs)
         loss = stats["loss"].item()
         # backward if not nan/inf
         if math.isfinite(loss):

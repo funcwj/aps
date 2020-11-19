@@ -11,6 +11,7 @@ from torch_complex import ComplexTensor
 from typing import Union, NoReturn, Optional
 from aps.asr.base.encoder import TorchRNNEncoder
 from aps.const import EPSILON
+from aps.libs import ApsRegisters
 
 from scipy.optimize import linear_sum_assignment
 
@@ -82,9 +83,10 @@ def permu_aligner(masks: np.ndarray, transpose: bool = False) -> np.ndarray:
     return permu_masks
 
 
+@ApsRegisters.sse.register("unsupervised_enh")
 class UnsupervisedEnh(TorchRNNEncoder):
     """
-    A recurrent network for unsupervised training
+    A recurrent network example for unsupervised training
     """
 
     def __init__(self,
@@ -106,9 +108,8 @@ class UnsupervisedEnh(TorchRNNEncoder):
                                               rnn_dropout=rnn_dropout,
                                               rnn_bidir=rnn_bidir,
                                               non_linear="sigmoid")
+        assert enh_transform is not None
         self.enh_transform = enh_transform
-        if enh_transform is None:
-            raise ValueError("enh_transform can not be None")
 
     def check_args(self, noisy: th.Tensor, training: bool = True) -> NoReturn:
         """

@@ -6,6 +6,7 @@ import torch.nn as nn
 
 from typing import NoReturn, Union, Tuple, Optional
 from aps.asr.base.decoder import OneHotEmbedding
+from aps.libs import ApsRegisters
 
 
 def repackage_hidden(h):
@@ -22,6 +23,7 @@ def repackage_hidden(h):
         raise TypeError(f"Unsupport type: {type(h)}")
 
 
+@ApsRegisters.asr.register("rnn_lm")
 class TorchRNNLM(nn.Module):
     """
     A simple Torch RNN LM

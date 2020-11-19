@@ -13,8 +13,10 @@ import torch.utils.data as dat
 
 from typing import Iterable, Dict, Optional, NoReturn, Iterator
 from aps.loader.lm.utt import Dataset
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.loader.register("lm_bptt")
 def DataLoader(text: str = "",
                vocab_dict: Optional[Dict] = None,
                train: bool = True,

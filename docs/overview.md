@@ -1,10 +1,12 @@
 # Usage overview
 
-The suggested working directory looks like:
+There is no `setup.py` script for installing the package in the repository and actually I don't suggest the reader doing that. The following shows the recommended way to use the aps package.
+
+A typical working directory looks like:
 ```bash
 bin conf data exp scripts utils
 ```
-and it can be initialzied using `scripts/init_workspace.sh`. For example:
+and it can be initialized using `scripts/init_workspace.sh`, e.g.,
 ```bash
 export APS_ROOT=/path/to/aps
 $APS_ROOT/scripts/init_workspace.sh wsj0_2mix
@@ -24,16 +26,16 @@ will make directory current `workspace` like (`APS_ROOT=../aps`):
 └── utils -> ../aps/utils
 ```
 
-Assuming that we've prepared training & test data and experiment configurations under `data` and `conf` directory, the model training can be easily started by running the provided scripts under `scripts`:
+Assuming that we've prepared training & test data and experiment configurations under `data` and `conf` directory (see [Instruction](instruction.md) for details), the model training can be easily started by running the provided scripts under [scripts](../scripts):
 
-* `scripts/train_{am,lm,ss}.py`: Single-GPU training for acoustic model, language model and speech enhancement/separation model, respectively.
-* `scripts/distributed_train_{am,ss}.py`: Distributed training (currently single-node multi-GPU) for acoustic model and speech enhancement/separation model.
+* `scripts/train_{am,lm,ss}.sh`: Single-GPU training for acoustic model, language model and speech enhancement/separation model, respectively.
+* `scripts/distributed_train_{am,ss}.sh`: Distributed training (currently single-node multi-GPU) for acoustic model and speech enhancement/separation model.
 
 E.g., running
 ```bash
 ./scripts/train_am.sh --batch-size 32 --gpu 0 aishell_v1 1a
 ```
-will load .yaml configuration from `conf/aishell_v1/1a.yaml` and create checkpoint directory in `exp/aishell_v1/1a`. After one epoch is done, the directory looks like:
+will load `.yaml` configuration from `conf/aishell_v1/1a.yaml` and create checkpoint directory in `exp/aishell_v1/1a`. After one epoch is done, the directory looks like:
 ```
 .
 ├── bin -> ../aps/bin
@@ -67,4 +69,4 @@ will load .yaml configuration from `conf/aishell_v1/1a.yaml` and create checkpoi
 ```
 (the data directory `data/asr1/{train,dev,tst}` is a typical setup for acoustic model training)
 
-After the end of the model training, we can start task dependent evaluation using the assets under checkpoint directory. Some recipes are available under `aps/egs`.
+After the end of the model training, we can start task dependent evaluation using the assets under checkpoint directory. Some recipes are available under [aps/examples](../examples).

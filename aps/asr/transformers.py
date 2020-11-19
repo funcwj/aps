@@ -11,8 +11,10 @@ from typing import Optional, Dict, Tuple, List
 from aps.asr.transformer.decoder import TorchTransformerDecoder
 from aps.asr.transformer.encoder import support_xfmr_encoder
 from aps.asr.base.encoder import encoder_instance
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.asr.register("transformer")
 class TransformerASR(nn.Module):
     """
     Transformer-based end-to-end ASR
@@ -55,11 +57,7 @@ class TransformerASR(nn.Module):
                              vocab_size) if ctc else None
 
     def forward(
-        self,
-        x_pad: th.Tensor,
-        x_len: Optional[th.Tensor],
-        y_pad: th.Tensor,
-        ssr: float = 0
+        self, x_pad: th.Tensor, x_len: Optional[th.Tensor], y_pad: th.Tensor
     ) -> Tuple[th.Tensor, None, Optional[th.Tensor], Optional[th.Tensor]]:
         """
         Args:
@@ -76,15 +74,15 @@ class TransformerASR(nn.Module):
         enc_out, enc_len = self.encoder(x_pad, x_len)
         # CTC
         if self.ctc:
-            ctc_branch = self.ctc(enc_out)
-            ctc_branch = ctc_branch.transpose(0, 1)
+            enc_ctc = self.ctc(enc_out)
+            enc_ctc = enc_ctc.transpose(0, 1)
         else:
-            ctc_branch = None
+            enc_ctc = None
         # To+1 x N x D
         dec_out = self.decoder(enc_out, enc_len, y_pad, sos=self.sos)
         # N x To+1 x D
         dec_out = dec_out.transpose(0, 1).contiguous()
-        return dec_out, None, ctc_branch, enc_len
+        return dec_out, None, enc_ctc, enc_len
 
     def beam_search(self,
                     x: th.Tensor,

@@ -14,8 +14,10 @@ from torch.nn.utils.rnn import pad_sequence
 from typing import Dict, Iterable, Optional, NoReturn
 from aps.loader.am.utils import process_token, BatchSampler
 from aps.loader.audio import AudioReader
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.loader.register("am_raw")
 def DataLoader(train: bool = True,
                distributed: bool = False,
                wav_scp: str = "",
@@ -85,15 +87,12 @@ class Dataset(dat.Dataset):
         tok = self.token_reader[idx]
         key = tok["key"]
         wav = self.audio_reader[key]
-        if wav is None:
-            return {"dur": None, "len": None, "wav": wav, "tok": None}
-        else:
-            return {
-                "dur": wav.shape[-1],
-                "len": tok["len"],
-                "wav": wav,
-                "tok": tok["tok"]
-            }
+        return {
+            "dur": wav.shape[-1],
+            "len": tok["len"],
+            "wav": wav,
+            "tok": tok["tok"]
+        }
 
     def __len__(self) -> int:
         return len(self.token_reader)
@@ -117,25 +116,13 @@ def egs_collate(egs: Dict) -> Dict:
 
     egs = {
         # N x S or N x C x S
-        "src_pad":
-            pad_seq([
-                th.from_numpy(eg["wav"]) for eg in egs if eg["wav"] is not None
-            ],
-                    value=0),
+        "src_pad": pad_seq([th.from_numpy(eg["wav"]) for eg in egs], value=0),
         # N x T
-        "tgt_pad":
-            pad_seq([
-                th.as_tensor(eg["tok"]) for eg in egs if eg["tok"] is not None
-            ],
-                    value=-1),
+        "tgt_pad": pad_seq([th.as_tensor(eg["tok"]) for eg in egs], value=-1),
         # N, number of the frames
-        "src_len":
-            th.tensor([eg["dur"] for eg in egs if eg["dur"] is not None],
-                      dtype=th.int64),
+        "src_len": th.tensor([eg["dur"] for eg in egs], dtype=th.int64),
         # N, length of the tokens
-        "tgt_len":
-            th.tensor([eg["len"] for eg in egs if eg["len"] is not None],
-                      dtype=th.int64)
+        "tgt_len": th.tensor([eg["len"] for eg in egs], dtype=th.int64)
     }
     return egs
 

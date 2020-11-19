@@ -9,6 +9,7 @@ import torch.nn as nn
 from typing import Optional, List, Union, NoReturn, Tuple
 from aps.sse.bss.dccrn import LSTMWrapper, parse_1dstr, parse_2dstr
 from aps.sse.utils import MaskNonLinear
+from aps.libs import ApsRegisters
 """
 UNet used in Wang's paper
 """
@@ -315,6 +316,7 @@ class Decoder(nn.Module):
         return x
 
 
+@ApsRegisters.sse.register("dense_unet")
 class DenseUnet(nn.Module):
     """
     Boosted Unet proposed by Wang
@@ -348,8 +350,9 @@ class DenseUnet(nn.Module):
             raise RuntimeError("Missing configuration for enh_transform")
         if non_linear:
             self.non_linear = MaskNonLinear(non_linear,
+                                            enable="all_wo_softmax",
                                             scale=non_linear_scale,
-                                            clip=non_linear_clip)
+                                            value_clip=non_linear_clip)
         else:
             # complex mapping
             self.non_linear = None

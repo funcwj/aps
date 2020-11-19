@@ -38,11 +38,14 @@ ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/lib:$LD_LIBRARY_PATH
 # install python dependency
 RUN conda install -y python=$PYTHON_VERSION
 RUN conda install -y pytorch==$PYTORCH_VERSION torchvision cudatoolkit=$CUDA_VERSION -c pytorch
-RUN conda install -y pyyaml matplotlib tqdm scipy h5py pybind11
-RUN conda install -y -c conda-forge tensorboard pysoundfile librosa && conda clean -ya
-RUN pip install torch_complex kaldi_python_io editdistance \
-    museval pystoi pypesq warp_rnnt && python -m warp_rnnt.test
-
+RUN conda install -y pyyaml matplotlib tqdm scipy h5py pybind11 yapf
+RUN conda install -y -c conda-forge tensorboard pysoundfile librosa pre-commit && conda clean -ya
+RUN pip install torch_complex kaldi_python_io editdistance museval pystoi pypesq pytest flake8
+RUN pip install warp_rnnt && python -m warp_rnnt.test
+RUN pip install https://github.com/kpu/kenlm/archive/master.zip
+# another RNNT implementation
+RUN git clone https://github.com/HawkAaron/warp-transducer.git && cd warp-transducer && \
+    mkdir build && cd build && cmake .. && make && cd ../pytorch_binding && python setup.py install
 # install hovorod
 RUN ldconfig /usr/local/cuda/targets/x86_64-linux/lib/stubs && \
     HOROVOD_GPU_ALLREDUCE=NCCL HOROVOD_WITH_PYTORCH=1 pip install --no-cache-dir horovod && \

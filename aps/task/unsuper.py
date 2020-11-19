@@ -9,6 +9,7 @@ from typing import Dict
 from torch_complex import ComplexTensor
 from aps.task.base import Task
 from aps.const import EPSILON
+from aps.libs import ApsRegisters
 
 
 def hermitian_det(Bk: th.Tensor, eps: float = EPSILON) -> th.Tensor:
@@ -60,6 +61,7 @@ def estimate_covar(mask: th.Tensor,
     return Bk
 
 
+@ApsRegisters.task.register("unsuper_enh")
 class UnsuperEnhTask(Task):
     """
     Unsupervised enhancement using ML functions
@@ -97,7 +99,7 @@ class UnsuperEnhTask(Task):
         # N x F x T
         return log_pdf
 
-    def forward(self, egs: Dict, **kwargs) -> Dict:
+    def forward(self, egs: Dict) -> Dict:
         """
         Compute ML loss, egs contains (without reference data)
             mix (Tensor): N x C x S

@@ -11,19 +11,25 @@ import torch.nn as nn
 
 import torch.nn.functional as tf
 
+# for RNNT loss, two options:
 # https://github.com/HawkAaron/warp-transducer
 # https://github.com/1ytic/warp-rnnt
 try:
-    from warp_rnnt import rnnt_loss
-    # from warprnnt_pytorch import rnnt_loss
-    rnnt_loss_available = True
+    from warp_rnnt import rnnt_loss as rnnt_loss_v1
+    warp_rnnt_available = True
 except ImportError:
-    rnnt_loss_available = False
+    warp_rnnt_available = False
+try:
+    from warprnnt_pytorch import rnnt_loss as rnnt_loss_v2
+    warprnnt_pytorch_available = True
+except ImportError:
+    warprnnt_pytorch_available = False
 
 from typing import Tuple, Dict
 from aps.task.base import Task
 from aps.task.objf import ce_objf, ls_objf
 from aps.const import IGNORE_ID
+from aps.libs import ApsRegisters
 
 __all__ = ["CtcXentHybridTask", "TransducerTask", "LmXentTask"]
 
@@ -41,9 +47,9 @@ def compute_accu(outs: th.Tensor, tgts: th.Tensor) -> float:
     return (ncorr / total).item()
 
 
-def process_asr_target(tgt_pad: th.Tensor,
-                       tgt_len: th.Tensor,
-                       eos: int = 0) -> Tuple[th.Tensor, th.Tensor]:
+def prep_asr_target(tgt_pad: th.Tensor,
+                    tgt_len: th.Tensor,
+                    eos: int = 0) -> Tuple[th.Tensor, th.Tensor]:
     """
     Process asr targets for inference and loss computation
     """
@@ -56,6 +62,7 @@ def process_asr_target(tgt_pad: th.Tensor,
     return tgt_v1, tgt_v2
 
 
+@ApsRegisters.task.register("ctc_xent")
 class CtcXentHybridTask(Task):
     """
     CTC & Attention AM
@@ -67,30 +74,36 @@ class CtcXentHybridTask(Task):
                  ctc_weight: float = 0,
                  blank: int = 0) -> None:
         super(CtcXentHybridTask, self).__init__(
-            nnet, description="multi-task training for ASR (CTC + Xent)")
+            nnet, description="CTC + Xent multi-task training for ASR")
         self.ctc_blank = blank
         self.ctc_weight = ctc_weight
         self.lsm_factor = lsm_factor
 
-    def forward(self, egs: Dict, ssr: int = 0, **kwargs) -> Dict:
+    def forward(self, egs: Dict) -> Dict:
         """
         Compute CTC & Attention loss, egs contains:
             src_pad (Tensor): N x Ti x F
             src_len (Tensor): N
             tgt_pad (Tensor): N x To
             tgt_len (Tensor): N
+            ssr (float): const if needed
         """
         # tgt_pad: N x To (replace ignore_id with eos)
         # tgts: N x To+1 (add eos)
-        tgt_pad, tgts = process_asr_target(egs["tgt_pad"],
-                                           egs["tgt_len"],
-                                           eos=self.nnet.eos)
+        tgt_pad, tgts = prep_asr_target(egs["tgt_pad"],
+                                        egs["tgt_len"],
+                                        eos=self.nnet.eos)
         # outs: N x (To+1) x V
         # alis: N x (To+1) x Ti
-        outs, _, ctc_branch, enc_len = self.nnet(egs["src_pad"],
-                                                 egs["src_len"],
-                                                 tgt_pad,
-                                                 ssr=ssr)
+        if "ssr" in egs:
+            # with schedule sampling
+            outs, _, ctc_enc, enc_len = self.nnet(egs["src_pad"],
+                                                  egs["src_len"],
+                                                  tgt_pad,
+                                                  ssr=egs["ssr"])
+        else:
+            outs, _, ctc_enc, enc_len = self.nnet(egs["src_pad"],
+                                                  egs["src_len"], tgt_pad)
         # compute loss
         if self.lsm_factor > 0:
             loss = ls_objf(outs, tgts, lsm_factor=self.lsm_factor)
@@ -100,7 +113,7 @@ class CtcXentHybridTask(Task):
         stats = {}
         if self.ctc_weight > 0:
             # add log-softmax, N x T x V => T x N x V
-            log_prob = tf.log_softmax(ctc_branch, dim=-1).transpose(0, 1)
+            log_prob = tf.log_softmax(ctc_enc, dim=-1).transpose(0, 1)
             # CTC loss
             ctc_loss = tf.ctc_loss(log_prob,
                                    tgt_pad,
@@ -119,18 +132,30 @@ class CtcXentHybridTask(Task):
         return stats
 
 
+@ApsRegisters.task.register("transducer")
 class TransducerTask(Task):
     """
     For Transducer based AM
     """
 
-    def __init__(self, nnet: nn.Module, blank: int = 0) -> None:
-        super(TransducerTask, self).__init__(nnet, description="RNNT for ASR")
+    def __init__(self,
+                 nnet: nn.Module,
+                 interface: str = "warp_rnnt",
+                 blank: int = 0) -> None:
+        super(TransducerTask,
+              self).__init__(nnet,
+                             description="RNNT objective function for ASR")
+        if interface not in ["warp_rnnt", "warprnnt_pytorch"]:
+            raise ValueError(f"Unsupported RNNT interface: {interface}")
         self.blank = blank
-        if not rnnt_loss_available:
+        self.interface = interface
+        if interface == "warp_rnnt" and not warp_rnnt_available:
             raise ImportError("\"from warp_rnnt import rnnt_loss\" failed")
+        if interface == "warprnnt_pytorch" and not warprnnt_pytorch_available:
+            raise ImportError(
+                "\"from warprnnt_pytorch import rnnt_loss\" failed")
 
-    def forward(self, egs: Dict, **kwargs) -> Dict:
+    def forward(self, egs: Dict) -> Dict:
         """
         Compute transducer loss, egs contains:
             src_pad (Tensor): N x Ti x F
@@ -145,21 +170,30 @@ class TransducerTask(Task):
         outs, enc_len = self.nnet(egs["src_pad"], egs["src_len"], tgt_pad,
                                   egs["tgt_len"])
         # add log_softmax if use https://github.com/1ytic/warp-rnnt
-        outs = tf.log_softmax(outs, -1)
-        # compute loss
-        loss = rnnt_loss(outs,
-                         tgt_pad.to(th.int32),
-                         enc_len.to(th.int32),
-                         egs["tgt_len"].to(th.int32),
-                         blank=self.blank,
-                         reduction="mean",
-                         gather=True)
+        if self.interface == "warp_rnnt":
+            outs = tf.log_softmax(outs, -1)
+            # compute loss
+            loss = rnnt_loss_v1(outs,
+                                tgt_pad.to(th.int32),
+                                enc_len.to(th.int32),
+                                egs["tgt_len"].to(th.int32),
+                                blank=self.blank,
+                                reduction="mean",
+                                gather=True)
+        else:
+            loss = rnnt_loss_v2(outs,
+                                tgt_pad.to(th.int32),
+                                enc_len.to(th.int32),
+                                egs["tgt_len"].to(th.int32),
+                                blank=self.blank,
+                                reduction="mean")
         return {"loss": loss}
 
 
+@ApsRegisters.task.register("lm")
 class LmXentTask(Task):
     """
-    For LM
+    For LM training
     """
 
     def __init__(self, nnet: nn.Module, repackage_hidden: bool = False) -> None:
@@ -168,7 +202,7 @@ class LmXentTask(Task):
         self.hidden = None
         self.repackage_hidden = repackage_hidden
 
-    def forward(self, egs: Dict, **kwargs) -> Dict:
+    def forward(self, egs: Dict) -> Dict:
         """
         Compute CE loss, egs contains
             src (Tensor): N x T+1

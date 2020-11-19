@@ -10,8 +10,10 @@ from typing import Optional, Dict, Tuple, List
 from aps.asr.base.decoder import TorchDecoder
 from aps.asr.base.encoder import encoder_instance
 from aps.asr.base.attention import att_instance
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.asr.register("att")
 class AttASR(nn.Module):
     """
     Attention-based ASR model
@@ -51,7 +53,7 @@ class AttASR(nn.Module):
         x_pad: th.Tensor,
         x_len: Optional[th.Tensor],
         y_pad: th.Tensor,
-        ssr: int = 0
+        ssr: float = 0
     ) -> Tuple[th.Tensor, th.Tensor, Optional[th.Tensor], Optional[th.Tensor]]:
         """
         Args:
@@ -74,8 +76,8 @@ class AttASR(nn.Module):
                                   y_pad,
                                   sos=self.sos,
                                   schedule_sampling=ssr)
-        ctc_branch = self.ctc(enc_out) if self.ctc else None
-        return outs, alis, ctc_branch, enc_len
+        enc_ctc = self.ctc(enc_out) if self.ctc else None
+        return outs, alis, enc_ctc, enc_len
 
     def beam_search(self,
                     x: th.Tensor,

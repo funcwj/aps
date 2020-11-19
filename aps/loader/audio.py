@@ -23,12 +23,12 @@ def read_audio(fname: Union[str, IO[Any]],
                sr: int = 16000) -> np.ndarray:
     """
     Read audio files using soundfile (support multi-channel & chunk)
-    args:
+    Args:
         fname: file name or object
         beg, end: begin and end index for chunk-level reading
         norm: normalized samples between -1 and 1
         sr: sample rate of the audio
-    return:
+    Return:
         samps: in shape C x N
         sr: sample rate
     """
@@ -56,10 +56,14 @@ def write_audio(fname: Union[str, IO[Any]],
                 norm: bool = True) -> NoReturn:
     """
     Write audio files, support single/multi-channel
+    Args:
+        fname: IO object or str
+        samps: np.ndarray, C x S or S
+        sr: sample rate
+        norm: keep same as the one in read_audio
     """
     samps = samps.astype("float32" if norm else "int16")
-    # scipy.io.wavfile/soundfile could write single/multi-channel files
-    # for multi-channel, accept ndarray [Nsamples, Nchannels]
+    # for multi-channel, accept ndarray N x C
     if samps.ndim != 1 and samps.shape[0] < samps.shape[1]:
         samps = np.transpose(samps)
         samps = np.squeeze(samps)
@@ -68,9 +72,6 @@ def write_audio(fname: Union[str, IO[Any]],
         fdir = os.path.dirname(fname)
         if fdir and not os.path.exists(fdir):
             os.makedirs(fdir)
-    # NOTE: librosa 0.6.0 seems could not write non-float narray
-    #       so use scipy.io.wavfile/soundfile instead
-    # wf.write(fname, sr, samps_int16)
     sf.write(fname, samps, sr)
 
 
@@ -163,23 +164,12 @@ class AudioReader(BaseReader):
             # wav_ark = open(fname, "rb")
             # seek and read
             wav_ark.seek(offset)
-            try:
-                samps = read_audio(wav_ark, norm=self.norm, sr=self.sr)
-            except RuntimeError:
-                samps = None
-                print(f"Load {fname}:{offset} failed...", flush=True)
+            samps = read_audio(wav_ark, norm=self.norm, sr=self.sr)
         else:
             if fname[-1] == "|":
                 shell, _ = run_command(fname[:-1], wait=True)
                 fname = io.BytesIO(shell)
-            try:
-                samps = read_audio(fname, norm=self.norm, sr=self.sr)
-            except RuntimeError:
-                samps = None
-                print(f"Load {fname} failed...", flush=True)
-        # get one channel
-        if samps is None:
-            return None
+            samps = read_audio(fname, norm=self.norm, sr=self.sr)
         if self.ch >= 0 and samps.ndim == 2:
             samps = samps[self.ch]
         return samps

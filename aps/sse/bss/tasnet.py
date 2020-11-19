@@ -8,6 +8,9 @@ import torch.nn.functional as F
 
 from typing import Optional, NoReturn, Union, List
 
+from aps.sse.utils import MaskNonLinear
+from aps.libs import ApsRegisters
+
 
 class ChannelWiseLayerNorm(nn.LayerNorm):
     """
@@ -213,6 +216,7 @@ class Conv1DBlock(nn.Module):
         return x
 
 
+@ApsRegisters.sse.register("time_tasnet")
 class TimeConvTasNet(nn.Module):
     """
     Y. Luo, N. Mesgarani. Conv-tasnet: Surpassing Ideal Time–frequency Magnitude
@@ -235,15 +239,9 @@ class TimeConvTasNet(nn.Module):
                  block_residual: bool = False,
                  causal: bool = False) -> None:
         super(TimeConvTasNet, self).__init__()
-        supported_nonlinear = {
-            "relu": F.relu,
-            "sigmoid": th.sigmoid,
-            "softmax": F.softmax
-        }
-        if non_linear not in supported_nonlinear:
-            raise RuntimeError(f"Unsupported non-linear function: {non_linear}")
         self.non_linear_type = non_linear
-        self.non_linear = supported_nonlinear[non_linear]
+        self.non_linear = MaskNonLinear(non_linear,
+                                        enable="positive_wo_softplus")
         # n x S => n x N x T, S = 4s*8000 = 32000
         self.encoder = Conv1D(1, N, L, stride=L // 2, padding=0)
         # before repeat blocks, always cLN
@@ -330,6 +328,7 @@ class TimeConvTasNet(nn.Module):
         return spk[0] if self.num_spks == 1 else spk
 
 
+@ApsRegisters.sse.register("freq_tasnet")
 class FreqConvTasNet(nn.Module):
     """
     Frequency domain ConvTasNet
@@ -351,16 +350,13 @@ class FreqConvTasNet(nn.Module):
                  block_residual: bool = False,
                  training_mode: str = "freq") -> None:
         super(FreqConvTasNet, self).__init__()
-        supported_nonlinear = {"relu": F.relu, "sigmoid": th.sigmoid}
-        if non_linear not in supported_nonlinear:
-            raise RuntimeError(f"Unsupported non-linear function: {non_linear}")
         if enh_transform is None:
             raise RuntimeError(
                 "FreqConvTasNet: missing configuration for enh_transform")
         if training_mode not in ["time", "freq"]:
             raise ValueError(f"Unsupported mode: {training_mode}")
         self.enh_transform = enh_transform
-        self.non_linear = supported_nonlinear[non_linear]
+        self.non_linear = MaskNonLinear(non_linear, enable="common")
         self.proj = Conv1D(in_features, proj_channels, 1)
         # n x B x T => n x B x T
         self.conv = build_blocks(N,

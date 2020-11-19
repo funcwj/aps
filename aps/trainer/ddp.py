@@ -8,9 +8,12 @@ from torch.nn.parallel import DistributedDataParallel
 from typing import Optional, Dict, List, Union, NoReturn
 
 from aps.trainer.base import Trainer
+from aps.libs import ApsRegisters
+
 import aps.distributed as dist
 
 
+@ApsRegisters.trainer.register("ddp")
 class DdpTrainer(Trainer):
     """
     A PyTorch distributed data parallel (DDP) Trainer

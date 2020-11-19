@@ -8,7 +8,10 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Optional, List, Union, NoReturn
+
 from aps.sse.bss.tasnet import build_norm
+from aps.sse.utils import MaskNonLinear
+from aps.libs import ApsRegisters
 
 
 class DpB(nn.Module):
@@ -208,14 +211,11 @@ class DPRNN(nn.Module):
                  dprnn_block: str = "dp",
                  output_non_linear: str = "sigmoid") -> None:
         super(DPRNN, self).__init__()
-        supported_nonlinear = {"relu": tf.relu, "sigmoid": th.sigmoid, "": None}
-        if output_non_linear not in supported_nonlinear:
-            raise RuntimeError(
-                f"Unsupported non-linear function: {output_non_linear}")
         if dprnn_block not in ["dp", "mc"]:
             raise RuntimeError(f"Unsupported DPRNN block: {dprnn_block}")
         BLOCK = {"dp": DpB, "mc": McB}[dprnn_block]
-        self.non_linear = supported_nonlinear[output_non_linear]
+        self.non_linear = MaskNonLinear(
+            output_non_linear, enable="common") if output_non_linear else None
         self.dprnn = nn.Sequential(*[
             BLOCK(proj_filters, dprnn_hidden, bi_inter=dprnn_bi_inter)
             for _ in range(dprnn_layers)
@@ -274,6 +274,7 @@ class DPRNN(nn.Module):
             return masks
 
 
+@ApsRegisters.sse.register("time_dprnn")
 class TimeDPRNN(DPRNN):
     """
     Time domain DP (dual-path) RNN
@@ -355,6 +356,7 @@ class TimeDPRNN(DPRNN):
             ]
 
 
+@ApsRegisters.sse.register("freq_dprnn")
 class FreqDPRNN(DPRNN):
     """
     Frequency domain DP (dual-path) RNN

@@ -9,6 +9,7 @@ import torch.nn.functional as tf
 
 from typing import Optional, Union, Tuple, NoReturn
 from aps.const import EPSILON
+from aps.libs import ApsRegisters
 
 batchnorm_non_linear = {
     "relu": tf.relu,
@@ -214,6 +215,7 @@ class TSBlock(nn.Module):
         return (amp, pha)
 
 
+@ApsRegisters.sse.register("phasen")
 class Phasen(nn.Module):
     """
     PHASEN: A Phase-and-Harmonics-Aware Speech Enhancement Network

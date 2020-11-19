@@ -9,8 +9,10 @@ from typing import Optional, Tuple
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.transformer.decoder import prep_sub_mask
 from aps.asr.base.attention import padding_mask
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.asr.register("transformer_lm")
 class TorchTransformerLM(nn.Module):
     """
     Torch Transformer LM

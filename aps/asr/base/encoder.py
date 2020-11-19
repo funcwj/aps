@@ -50,7 +50,7 @@ class TorchRNNEncoder(nn.Module):
         super(TorchRNNEncoder, self).__init__()
         RNN = rnn.upper()
         supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
-        support_non_linear = {
+        supported_non_linear = {
             "relu": tf.relu,
             "sigmoid": th.sigmoid,
             "tanh": th.tanh,
@@ -58,7 +58,7 @@ class TorchRNNEncoder(nn.Module):
         }
         if RNN not in supported_rnn:
             raise RuntimeError(f"Unknown RNN type: {RNN}")
-        if non_linear not in support_non_linear:
+        if non_linear not in supported_non_linear:
             raise ValueError(
                 f"Unsupported output non-linear function: {non_linear}")
         if input_project:
@@ -74,7 +74,7 @@ class TorchRNNEncoder(nn.Module):
             bidirectional=rnn_bidir)
         self.outp = nn.Linear(rnn_hidden if not rnn_bidir else rnn_hidden * 2,
                               output_size)
-        self.non_linear = support_non_linear[non_linear]
+        self.non_linear = supported_non_linear[non_linear]
 
     def flat(self):
         self.rnn.flatten_parameters()

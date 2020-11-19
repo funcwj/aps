@@ -15,6 +15,7 @@ from aps.asr.filter.conv import (TimeInvariantFilter, TimeVariantFilter,
                                  TimeInvariantAttFilter)
 from aps.asr.filter.mvdr import MvdrBeamformer
 from aps.asr.filter.google import CLPFsBeamformer  # same as TimeInvariantEnh
+from aps.libs import ApsRegisters
 
 
 class EnhTransformerASR(nn.Module):
@@ -65,18 +66,13 @@ class EnhTransformerASR(nn.Module):
         raise NotImplementedError
 
     def forward(
-        self,
-        x_pad: th.Tensor,
-        x_len: Optional[th.Tensor],
-        y_pad: th.Tensor,
-        ssr: float = 0
+        self, x_pad: th.Tensor, x_len: Optional[th.Tensor], y_pad: th.Tensor
     ) -> Tuple[th.Tensor, None, Optional[th.Tensor], Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
             y_pad: N x To
-            ssr: schedule sampling rate
         Return:
             outs: N x (To+1) x V
             ...
@@ -84,7 +80,7 @@ class EnhTransformerASR(nn.Module):
         # mvdr beamforming: N x Ti x F
         x_enh, x_len = self._enhance(x_pad, x_len)
         # outs, alis, ctc_branch, ...
-        return self.transformer_asr(x_enh, x_len, y_pad, ssr=ssr)
+        return self.transformer_asr(x_enh, x_len, y_pad)
 
     def beam_search(self,
                     x: th.Tensor,
@@ -113,6 +109,7 @@ class EnhTransformerASR(nn.Module):
                                                     normalized=normalized)
 
 
+@ApsRegisters.asr.register("beam_transformer")
 class BeamTransformerASR(EnhTransformerASR):
     """
     Beamformer-based front-end + LAS ASR
@@ -149,6 +146,7 @@ class BeamTransformerASR(EnhTransformerASR):
         return x_enh, x_len
 
 
+@ApsRegisters.asr.register("mvdr_transformer")
 class MvdrTransformerASR(EnhTransformerASR):
     """
     Mvdr beamformer + Transformer-based ASR model

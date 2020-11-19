@@ -9,8 +9,10 @@ import torch.nn as nn
 from typing import Optional, List, Union, NoReturn
 from aps.asr.transformer.encoder import RelTransformerEncoder
 from aps.sse.utils import MaskNonLinear
+from aps.libs import ApsRegisters
 
 
+@ApsRegisters.sse.register("freq_rel_transformer")
 class FreqRelTransformer(RelTransformerEncoder):
     """
     Frequency domain Transformer model
@@ -53,7 +55,8 @@ class FreqRelTransformer(RelTransformerEncoder):
                                   nn.LayerNorm(att_dim),
                                   nn.Dropout(proj_dropout))
         self.mask = nn.Linear(att_dim, num_bins * num_spks)
-        self.non_linear = MaskNonLinear(non_linear)
+        self.non_linear = MaskNonLinear(non_linear,
+                                        enable="positive_wo_softmax")
         self.num_spks = num_spks
 
     def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:

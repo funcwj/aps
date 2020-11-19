@@ -21,6 +21,7 @@ from typing import Optional, Union
 from aps.transform.utils import STFT, init_melfilter, init_dct
 from aps.transform.augment import tf_mask
 from aps.const import EPSILON
+from aps.libs import ApsRegisters
 
 
 class SpectrogramTransform(STFT):
@@ -390,6 +391,7 @@ class DeltaTransform(nn.Module):
         return th.cat(delta, -1)
 
 
+@ApsRegisters.transform.register("asr")
 class FeatureTransform(nn.Module):
     """
     Feature transform for ASR tasks
