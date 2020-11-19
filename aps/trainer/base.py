@@ -388,7 +388,7 @@ class Trainer(object):
 
     def train_one_step(self, egs: Dict) -> bool:
         """
-        Make one training step
+        Make one training step (return true if no error exists)
 
         1) Zero optimizer
         2) Forward & Backword
@@ -441,17 +441,23 @@ class Trainer(object):
             else:
                 self.lr_scheduler.step()
 
-    def train(self, data_loader: Iterable[Dict]) -> NoReturn:
+    def train_epoch(self, data_loader: Iterable[Dict]) -> NoReturn:
+        """
+        Run one training epoch
+        """
         self.task.train()
         self.reporter.train()
         # for idx, egs in enumerate(data_loader):
         for egs in data_loader:
             # load to gpu
-            egs = load_obj(egs, self.default_device)
+            egs = self._prep_egs(egs)
             # make one training step
             self.train_one_step(egs)
 
-    def eval(self, data_loader: Iterable[Dict]) -> NoReturn:
+    def valid_epoch(self, data_loader: Iterable[Dict]) -> NoReturn:
+        """
+        Run one validation epoch
+        """
         self.task.eval()
         self.reporter.eval()
 
@@ -459,18 +465,27 @@ class Trainer(object):
             # for idx, egs in enumerate(data_loader):
             for egs in data_loader:
                 # load to gpu
-                egs = load_obj(egs, self.default_device)
-                # ssr = 0, use ground truth
-                stats = self.task(egs, ssr=0)
+                egs = self._prep_egs(egs)
+                stats = self.task(egs)
                 # update statistics
                 self.reporter.update(stats)
 
-    def _prep_train(self, dev_loader: Iterable[Dict]) -> int:
+    def _prep_egs(self, egs: Dict) -> Dict:
+        """
+        Prepare training egs
+        """
+        egs = load_obj(egs, self.default_device)
+        # use ssr = 0 when in eval mode
+        if self.ss_scheduler:
+            egs["ssr"] = self.ssr if self.task.training else 0
+        return egs
+
+    def _prep_run(self, dev_loader: Iterable[Dict]) -> int:
         """
         Prepare for training
         """
-        # eval
-        self.eval(dev_loader)
+        # valid
+        self.valid_epoch(dev_loader)
         e = self.cur_epoch
         best_loss, best_accu, _ = self.reporter.report(e, 0)
         if self.ss_scheduler:
@@ -493,22 +508,22 @@ class Trainer(object):
             dev_loader: Iterable[Dict],
             num_epochs: int = 50) -> NoReturn:
         """
-        Run on whole training set and evaluate
+        Treat whole training set as one training epoch
         """
         self.reporter.log(
             f"Number of batches: {len(trn_loader)}/{len(dev_loader)}")
-        e = self._prep_train(dev_loader)
+        e = self._prep_run(dev_loader)
         while e < num_epochs:
             trn_loader.set_epoch(e)
             e += 1
             cur_lr = self.optimizer.param_groups[0]["lr"]
             # >> train
-            self.train(trn_loader)
+            self.train_epoch(trn_loader)
             _, _, sstr = self.reporter.report(e, cur_lr)
             self.reporter.log(sstr)
             # << train
-            # >> eval
-            self.eval(dev_loader)
+            # >> valid
+            self.valid_epoch(dev_loader)
             cv_loss, cv_accu, sstr = self.reporter.report(e, cur_lr)
             # schedule sampling for eval
             if self.ss_scheduler:
@@ -523,7 +538,7 @@ class Trainer(object):
                 sstr += f"best = {self.stop_criterion.best:.4f}"
 
             self.reporter.log(sstr)
-            # << eval
+            # << valid
             # lr schedule here
             self.lr_scheduler_step(update_value, end_at="epoch")
             if self.ss_scheduler:
@@ -543,11 +558,11 @@ class Trainer(object):
                             num_epochs: int = 100,
                             eval_interval: int = 4000) -> NoReturn:
         """
-        Run on several batches and evaluate
+        For large training set, validate model after several batches
         """
         self.reporter.log(
             f"Number of batches: {len(trn_loader)}/{len(dev_loader)}")
-        e = self._prep_train(dev_loader)
+        e = self._prep_run(dev_loader)
         stop = False
         trained_batches = 0
         # set train mode
@@ -558,7 +573,7 @@ class Trainer(object):
             # for idx, egs in enumerate(trn_loader):
             for egs in trn_loader:
                 # update per-batch
-                egs = load_obj(egs, self.default_device)
+                egs = self._prep_egs(egs)
                 if self.train_one_step(egs):
                     trained_batches = (trained_batches + 1) % eval_interval
 
@@ -569,7 +584,7 @@ class Trainer(object):
                     _, _, sstr = self.reporter.report(e, cur_lr)
                     self.reporter.log(sstr)
 
-                    self.eval(dev_loader)
+                    self.valid_epoch(dev_loader)
                     cv_loss, cv_accu, sstr = self.reporter.report(e, cur_lr)
                     # schedule sampling for eval
                     if self.ss_scheduler:

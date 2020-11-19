@@ -59,7 +59,13 @@ def test_ctc_xent():
     y_len = th.randint(U // 2, U, (batch_size,)).sort(-1, descending=True)[0]
     for n in range(batch_size):
         y[n, y_len[n].item():] = -1
-    egs = {"src_len": x_len, "src_pad": x, "tgt_len": y_len, "tgt_pad": y}
+    egs = {
+        "src_len": x_len,
+        "src_pad": x,
+        "tgt_len": y_len,
+        "tgt_pad": y,
+        "ssr": 0.1
+    }
     stats = task(egs)
     assert not th.isnan(stats["loss"])
 

@@ -160,7 +160,7 @@ class TimeDomainTask(SepTask):
         self.num_spks = num_spks
         self.permute = permute  # use pit or not
 
-    def forward(self, egs: Dict, **kwargs) -> Dict:
+    def forward(self, egs: Dict) -> Dict:
         """
         egs contains:
             mix (Tensor): N x (C) x S
@@ -314,7 +314,7 @@ class FreqSaTask(SepTask):
             ref_mag = th.min(ref_mag, self.truncated * mix_mag)
         return ref_mag
 
-    def forward(self, egs: Dict, **kwargs) -> Dict:
+    def forward(self, egs: Dict) -> Dict:
         """
         Return chunk-level loss
         egs contains:
@@ -505,7 +505,7 @@ class TimeSaTask(SepTask):
         mag, _ = self.ctx(wav, output="polar")
         return mag
 
-    def forward(self, egs: Dict, **kwargs) -> Dict:
+    def forward(self, egs: Dict) -> Dict:
         """
         Return chunk-level loss
         egs contains:
@@ -698,7 +698,7 @@ class ComplexMappingTask(SepTask):
         loss = th.sum(loss.mean(-1), -1)
         return loss
 
-    def forward(self, egs: Dict, **kwargs) -> Dict:
+    def forward(self, egs: Dict) -> Dict:
         """
         Return chunk-level loss
         egs contains:

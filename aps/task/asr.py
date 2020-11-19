@@ -74,13 +74,14 @@ class CtcXentHybridTask(Task):
         self.ctc_weight = ctc_weight
         self.lsm_factor = lsm_factor
 
-    def forward(self, egs: Dict, ssr: int = 0, **kwargs) -> Dict:
+    def forward(self, egs: Dict) -> Dict:
         """
         Compute CTC & Attention loss, egs contains:
             src_pad (Tensor): N x Ti x F
             src_len (Tensor): N
             tgt_pad (Tensor): N x To
             tgt_len (Tensor): N
+            ssr (float): const
         """
         # tgt_pad: N x To (replace ignore_id with eos)
         # tgts: N x To+1 (add eos)
@@ -92,7 +93,7 @@ class CtcXentHybridTask(Task):
         outs, _, ctc_branch, enc_len = self.nnet(egs["src_pad"],
                                                  egs["src_len"],
                                                  tgt_pad,
-                                                 ssr=ssr)
+                                                 ssr=egs["ssr"])
         # compute loss
         if self.lsm_factor > 0:
             loss = ls_objf(outs, tgts, lsm_factor=self.lsm_factor)
@@ -133,7 +134,7 @@ class TransducerTask(Task):
         if not rnnt_loss_available:
             raise ImportError("\"from warp_rnnt import rnnt_loss\" failed")
 
-    def forward(self, egs: Dict, **kwargs) -> Dict:
+    def forward(self, egs: Dict) -> Dict:
         """
         Compute transducer loss, egs contains:
             src_pad (Tensor): N x Ti x F
@@ -172,7 +173,7 @@ class LmXentTask(Task):
         self.hidden = None
         self.repackage_hidden = repackage_hidden
 
-    def forward(self, egs: Dict, **kwargs) -> Dict:
+    def forward(self, egs: Dict) -> Dict:
         """
         Compute CE loss, egs contains
             src (Tensor): N x T+1

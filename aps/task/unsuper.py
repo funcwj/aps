@@ -99,7 +99,7 @@ class UnsuperEnhTask(Task):
         # N x F x T
         return log_pdf
 
-    def forward(self, egs: Dict, **kwargs) -> Dict:
+    def forward(self, egs: Dict) -> Dict:
         """
         Compute ML loss, egs contains (without reference data)
             mix (Tensor): N x C x S
