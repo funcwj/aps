@@ -11,14 +11,19 @@ import torch.nn as nn
 
 import torch.nn.functional as tf
 
+# for RNNT loss, two options:
 # https://github.com/HawkAaron/warp-transducer
 # https://github.com/1ytic/warp-rnnt
 try:
-    from warp_rnnt import rnnt_loss
-    # from warprnnt_pytorch import rnnt_loss
-    rnnt_loss_available = True
+    from warp_rnnt import rnnt_loss as rnnt_loss_v1
+    warp_rnnt_available = True
 except ImportError:
-    rnnt_loss_available = False
+    warp_rnnt_available = False
+try:
+    from warprnnt_pytorch import rnnt_loss as rnnt_loss_v2
+    warprnnt_pytorch_available = True
+except ImportError:
+    warprnnt_pytorch_available = False
 
 from typing import Tuple, Dict
 from aps.task.base import Task
@@ -133,13 +138,22 @@ class TransducerTask(Task):
     For Transducer based AM
     """
 
-    def __init__(self, nnet: nn.Module, blank: int = 0) -> None:
+    def __init__(self,
+                 nnet: nn.Module,
+                 interface: str = "warp_rnnt",
+                 blank: int = 0) -> None:
         super(TransducerTask,
               self).__init__(nnet,
                              description="RNNT objective function for ASR")
+        if interface not in ["warp_rnnt", "warprnnt_pytorch"]:
+            raise ValueError(f"Unsupported RNNT interface: {interface}")
         self.blank = blank
-        if not rnnt_loss_available:
+        self.interface = interface
+        if interface == "warp_rnnt" and not warp_rnnt_available:
             raise ImportError("\"from warp_rnnt import rnnt_loss\" failed")
+        if interface == "warprnnt_pytorch" and not warprnnt_pytorch_available:
+            raise ImportError(
+                "\"from warprnnt_pytorch import rnnt_loss\" failed")
 
     def forward(self, egs: Dict) -> Dict:
         """
@@ -156,15 +170,23 @@ class TransducerTask(Task):
         outs, enc_len = self.nnet(egs["src_pad"], egs["src_len"], tgt_pad,
                                   egs["tgt_len"])
         # add log_softmax if use https://github.com/1ytic/warp-rnnt
-        outs = tf.log_softmax(outs, -1)
-        # compute loss
-        loss = rnnt_loss(outs,
-                         tgt_pad.to(th.int32),
-                         enc_len.to(th.int32),
-                         egs["tgt_len"].to(th.int32),
-                         blank=self.blank,
-                         reduction="mean",
-                         gather=True)
+        if self.interface == "warp_rnnt":
+            outs = tf.log_softmax(outs, -1)
+            # compute loss
+            loss = rnnt_loss_v1(outs,
+                                tgt_pad.to(th.int32),
+                                enc_len.to(th.int32),
+                                egs["tgt_len"].to(th.int32),
+                                blank=self.blank,
+                                reduction="mean",
+                                gather=True)
+        else:
+            loss = rnnt_loss_v2(outs,
+                                tgt_pad.to(th.int32),
+                                enc_len.to(th.int32),
+                                egs["tgt_len"].to(th.int32),
+                                blank=self.blank,
+                                reduction="mean")
         return {"loss": loss}
 
 

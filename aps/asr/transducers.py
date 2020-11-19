@@ -48,8 +48,10 @@ class TorchTransducerASR(nn.Module):
         self.blank = blank
         self.asr_transform = asr_transform
 
-    def forward(self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
-                y_pad: th.Tensor) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+    def forward(
+            self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
+            y_pad: th.Tensor, y_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -157,12 +159,10 @@ class TransformerTransducerASR(nn.Module):
         self.blank = blank
         self.asr_transform = asr_transform
 
-    def forward(self,
-                x_pad: th.Tensor,
-                x_len: Optional[th.Tensor],
-                y_pad: th.Tensor,
-                y_len: Optional[th.Tensor],
-                ssr: float = 0) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+    def forward(
+            self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
+            y_pad: th.Tensor, y_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
         Args:
             x_pad: N x Ti x D or N x S

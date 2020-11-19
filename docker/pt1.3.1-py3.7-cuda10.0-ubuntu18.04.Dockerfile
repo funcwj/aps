@@ -43,7 +43,9 @@ RUN conda install -y -c conda-forge tensorboard pysoundfile librosa pre-commit &
 RUN pip install torch_complex kaldi_python_io editdistance museval pystoi pypesq pytest flake8
 RUN pip install warp_rnnt && python -m warp_rnnt.test
 RUN pip install https://github.com/kpu/kenlm/archive/master.zip
-
+# another RNNT implementation
+RUN git clone https://github.com/HawkAaron/warp-transducer.git && cd warp-transducer && \
+    mkdir build && cd build && cmake .. && make && cd ../pytorch_binding && python setup.py install
 # install hovorod
 RUN ldconfig /usr/local/cuda/targets/x86_64-linux/lib/stubs && \
     HOROVOD_GPU_ALLREDUCE=NCCL HOROVOD_WITH_PYTORCH=1 pip install --no-cache-dir horovod && \

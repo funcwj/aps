@@ -114,7 +114,7 @@ class ApexTrainer(Trainer):
         """
         self.optimizer.zero_grad()
 
-        stats = self.task(egs, ssr=self.ssr)
+        stats = self.task(egs)
         loss = stats["loss"].item()
         # backward if not nan/inf
         if math.isfinite(loss):
