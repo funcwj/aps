@@ -9,14 +9,18 @@ from collections import defaultdict
 
 import torch as th
 from torch.nn.utils import clip_grad_norm_
-from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from typing import Optional, Dict, List, Union, Tuple, NoReturn, Iterable
 from aps.trainer.ss import ss_scheduler_cls
 from aps.trainer.lr import lr_scheduler_cls
-
 from aps.utils import load_obj, get_device_ids, get_logger, SimpleTimer
 from aps.task import Task
+
+try:
+    from torch.utils.tensorboard import SummaryWriter
+    tensorboard_available = True
+except ImportError:
+    tensorboard_available = False
 
 
 def add_gaussian_noise(nnet: th.nn.Module, std: float = 0.075) -> NoReturn:
@@ -50,6 +54,8 @@ class ProgressReporter(object):
         self.logger = get_logger(logger_loc, file=True)
         # only for rank-0
         if tensorboard and rank in [0, None]:
+            if not tensorboard_available:
+                warnings.warn("tensorboard not installed thus disable it...")
             self.board_writer = SummaryWriter(checkpoint)
         else:
             self.board_writer = None
