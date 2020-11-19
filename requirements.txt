@@ -7,7 +7,7 @@ museval==0.3.1
 pystoi==0.3.3
 SoundFile==0.10.2
 tqdm==4.50.2
-pytest==0.0.0
+pytest==6.1.1
 matplotlib==3.3.1
 librosa==0.8.0
 pypesq==1.2.4
