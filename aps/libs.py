@@ -7,19 +7,19 @@ import torch.nn as nn
 
 from os.path import basename
 from importlib.machinery import SourceFileLoader
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, List, Iterable
 
 
 class Register(dict):
     """
-    Register class
+    A decorator class (see function register)
     """
 
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         super(Register, self).__init__()
         self.name = name
 
-    def register(self, alias):
+    def register(self, alias: str):
 
         def add(alias, obj):
             if alias in self.keys():
@@ -29,6 +29,23 @@ class Register(dict):
             return obj
 
         return lambda obj: add(alias, obj)
+
+
+class Module(object):
+    """
+    Module class
+    """
+
+    def __init__(self, base: str, module: List[str]) -> None:
+        self.base = base
+        self.module = module
+
+    def import_all(self):
+        """
+        Import all the modules
+        """
+        for sub_module in self.module:
+            importlib.import_module(".".join([self.base, sub_module]))
 
 
 class ApsRegisters(object):
@@ -42,6 +59,29 @@ class ApsRegisters(object):
     trainer = Register("trainer")
     transform = Register("transform")
     container = [asr, sse, task, loader, trainer, transform]
+
+
+class ApsModules(object):
+    """
+    Maintain modules in aps package
+    """
+    asr_submodules = [
+        "att", "enh_att", "transformers", "transducers", "enh_transformers",
+        "lm.rnn", "lm.transformer"
+    ]
+    sse_submodules = [
+        "toy", "unsupervised_enh", "enh.crn", "enh.phasen", "enh.dcunet",
+        "bss.dccrn", "bss.dprnn", "bss.tasnet", "bss.xfmr", "bss.dense_unet"
+    ]
+    loader_submodules = [
+        "am.kaldi", "am.raw", "ss.chunk", "ss.online", "lm.utt", "lm.bptt"
+    ]
+    asr = Module("aps.asr", asr_submodules)
+    sse = Module("aps.sse", sse_submodules)
+    task = Module("aps.task", ["asr", "sse", "unsuper"])
+    loader = Module("aps.loader", loader_submodules)
+    trainer = Module("aps.trainer", ["ddp", "hvd", "apex"])
+    transform = Module("aps.transform", ["asr", "enh"])
 
 
 def dynamic_importlib(sstr: str) -> Any:
@@ -62,7 +102,7 @@ def aps_dataloader(fmt: str = "am_raw", **kwargs) -> Iterable[Dict]:
     """
     Return DataLoader class supported by aps
     """
-    importlib.import_module("loader", package="aps")
+    ApsModules.loader.import_all()
     if fmt in ApsRegisters.loader:
         loader_impl = ApsRegisters.loader[fmt]
     elif ":" in fmt:
@@ -76,7 +116,7 @@ def aps_task(task: str, nnet: nn.Module, **kwargs) -> nn.Module:
     """
     Return Task class supported by aps
     """
-    importlib.import_module("task", package="aps")
+    ApsModules.task.import_all()
     if task in ApsRegisters.task:
         task_impl = ApsRegisters.task[task]
     elif ":" in task:
@@ -103,6 +143,7 @@ def aps_transform(name: str) -> nn.Module:
     """
     Return Transform networks supported by aps
     """
+    ApsModules.transform.import_all()
     return aps_specific_nnet(name, ApsRegisters.transform)
 
 
@@ -110,7 +151,7 @@ def aps_asr_nnet(nnet: str) -> nn.Module:
     """
     Return ASR networks supported by aps
     """
-    importlib.import_module("asr", package="aps")
+    ApsModules.asr.import_all()
     return aps_specific_nnet(nnet, ApsRegisters.asr)
 
 
@@ -118,7 +159,7 @@ def aps_sse_nnet(nnet: str) -> nn.Module:
     """
     Return SSE networks supported by aps
     """
-    importlib.import_module("sse", package="aps")
+    ApsModules.sse.import_all()
     return aps_specific_nnet(nnet, ApsRegisters.sse)
 
 
@@ -129,7 +170,7 @@ def aps_trainer(trainer: str, distributed: bool = False) -> Any:
     if not distributed and trainer not in ["ddp", "apex"]:
         raise ValueError(
             f"Single-GPU training doesn't support {trainer} Trainer")
-    importlib.import_module("trainer", package="aps")
+    ApsModules.trainer.import_all()
     if trainer not in ApsRegisters.trainer:
         raise ValueError(f"Unknown Trainer class: {trainer}")
     return ApsRegisters.trainer[trainer]
