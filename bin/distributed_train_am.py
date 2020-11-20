@@ -35,7 +35,6 @@ def train_worker(task, conf, vocab_dict, args):
                       save_interval=args.save_interval,
                       prog_interval=args.prog_interval,
                       tensorboard=args.tensorboard,
-                      opt_level=args.opt_level,
                       **conf["trainer_conf"])
 
     # dump configurations
@@ -68,13 +67,10 @@ def train_worker(task, conf, vocab_dict, args):
                                 args.dev_batch_factor,
                                 num_workers=args.num_workers // num_process,
                                 **data_conf["loader"])
-    if args.eval_interval > 0:
-        trainer.run_batch_per_epoch(trn_loader,
-                                    dev_loader,
-                                    num_epochs=args.epochs,
-                                    eval_interval=args.eval_interval)
-    else:
-        trainer.run(trn_loader, dev_loader, num_epochs=args.epochs)
+    trainer.run(trn_loader,
+                dev_loader,
+                num_epochs=args.epochs,
+                eval_interval=args.eval_interval)
 
 
 def run(args):

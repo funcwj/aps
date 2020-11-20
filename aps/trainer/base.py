@@ -456,7 +456,7 @@ class Trainer(object):
         # for idx, egs in enumerate(data_loader):
         for egs in data_loader:
             # load to gpu
-            egs = self._prep_egs(egs)
+            egs = self.prep_egs(egs)
             # make one training step
             self.train_one_step(egs)
 
@@ -468,15 +468,14 @@ class Trainer(object):
         self.reporter.eval()
 
         with th.no_grad():
-            # for idx, egs in enumerate(data_loader):
             for egs in data_loader:
                 # load to gpu
-                egs = self._prep_egs(egs)
+                egs = self.prep_egs(egs)
                 stats = self.task(egs)
                 # update statistics
                 self.reporter.update(stats)
 
-    def _prep_egs(self, egs: Dict) -> Dict:
+    def prep_egs(self, egs: Dict) -> Dict:
         """
         Prepare training egs
         """
@@ -486,7 +485,7 @@ class Trainer(object):
             egs["ssr"] = self.ssr if self.task.training else 0
         return egs
 
-    def _prep_run(self, dev_loader: Iterable[Dict]) -> int:
+    def prep_run(self, dev_loader: Iterable[Dict]) -> int:
         """
         Prepare for training
         """
@@ -509,123 +508,126 @@ class Trainer(object):
         self.reporter.log(sstr)
         return e
 
-    def run(self,
-            trn_loader: Iterable[Dict],
-            dev_loader: Iterable[Dict],
-            num_epochs: int = 50) -> NoReturn:
+    def stop_detect(self, dev_loader: Iterable[Dict], epoch: int,
+                    lr: float) -> bool:
         """
-        Treat whole training set as one training epoch
+        Run valid epoch and schedule training progress:
+
+        1) schedule learning/sampling rate
+        2) save checkpoint
+        3) early stop detection
         """
-        self.reporter.log(
-            f"Number of batches: {len(trn_loader)}/{len(dev_loader)}")
-        e = self._prep_run(dev_loader)
-        while e < num_epochs:
-            trn_loader.set_epoch(e)
-            e += 1
+        self.valid_epoch(dev_loader)
+        cv_loss, cv_accu, sstr = self.reporter.report(epoch, lr)
+        # schedule sampling for eval
+        if self.ss_scheduler:
+            sstr += f" | ssr = {self.ssr:.3f}"
+
+        update_value = cv_loss if self.stop_on == "loss" else cv_accu
+        better = self.stop_criterion.step(update_value)
+        if better:
+            self.save_checkpoint(epoch, best=True)
+        else:
+            sstr += f" | no impr: {self.stop_criterion.no_impr:d}, "
+            sstr += f"best = {self.stop_criterion.best:.4f}"
+
+        self.reporter.log(sstr)
+        # << valid
+        # lr schedule here
+        self.lr_scheduler_step(update_value, end_at="epoch")
+        if self.ss_scheduler:
+            self.ssr = self.ss_scheduler.step(epoch, cv_accu)
+        # save last checkpoint
+        self.save_checkpoint(epoch, best=False)
+        # early stop
+        if self.stop_criterion.stop():
+            self.reporter.log("Stop training cause no impr for " +
+                              f"{self.no_impr} epochs")
+            return True
+        return False
+
+    def _run_in_epoch(self,
+                      trn_loader: Iterable[Dict],
+                      dev_loader: Iterable[Dict],
+                      cur_epoch: int = 0,
+                      num_epochs: int = 50) -> int:
+        """
+        Running in epoch mode: treat whole training set as one training epoch
+        """
+        while cur_epoch < num_epochs:
+            trn_loader.set_epoch(cur_epoch)
+            cur_epoch += 1
             cur_lr = self.optimizer.param_groups[0]["lr"]
             # >> train
             self.train_epoch(trn_loader)
-            _, _, sstr = self.reporter.report(e, cur_lr)
+            _, _, sstr = self.reporter.report(cur_epoch, cur_lr)
             self.reporter.log(sstr)
             # << train
-            # >> valid
-            self.valid_epoch(dev_loader)
-            cv_loss, cv_accu, sstr = self.reporter.report(e, cur_lr)
-            # schedule sampling for eval
-            if self.ss_scheduler:
-                sstr += f" | ssr = {self.ssr:.3f}"
-
-            update_value = cv_loss if self.stop_on == "loss" else cv_accu
-            better = self.stop_criterion.step(update_value)
-            if better:
-                self.save_checkpoint(e, best=True)
-            else:
-                sstr += f" | no impr: {self.stop_criterion.no_impr:d}, "
-                sstr += f"best = {self.stop_criterion.best:.4f}"
-
-            self.reporter.log(sstr)
-            # << valid
-            # lr schedule here
-            self.lr_scheduler_step(update_value, end_at="epoch")
-            if self.ss_scheduler:
-                self.ssr = self.ss_scheduler.step(e, cv_accu)
-            # save last checkpoint
-            self.save_checkpoint(e, best=False)
-            # early stop
-            if self.stop_criterion.stop():
-                self.reporter.log("Stop training cause no impr for " +
-                                  f"{self.no_impr} epochs")
+            if self.stop_detect(dev_loader, cur_epoch, cur_lr):
                 break
-        self.reporter.log(f"Training for {e:d}/{num_epochs:d} epochs done!")
+        return cur_epoch
 
-    def run_batch_per_epoch(self,
-                            trn_loader: Iterable[Dict],
-                            dev_loader: Iterable[Dict],
-                            num_epochs: int = 100,
-                            eval_interval: int = 4000) -> NoReturn:
+    def _run_in_batch(self,
+                      trn_loader: Iterable[Dict],
+                      dev_loader: Iterable[Dict],
+                      cur_epoch: int = 0,
+                      num_epochs: int = 100,
+                      eval_interval: int = 3000) -> int:
         """
-        For large training set, validate model after several batches
+        Running in batch mode: for large training set, treat several batches as one training epoch
+        """
+        cur_epoch = self.prep_run(dev_loader)
+        stop = False
+        trained_batches = 0
+        while True:
+            # trained on several batches
+            for egs in trn_loader:
+                # enable train mode
+                if trained_batches == 0:
+                    self.task.train()
+                    self.reporter.train()
+                    trn_loader.set_epoch(cur_epoch)
+                # update per-batch
+                egs = self.prep_egs(egs)
+                succ = self.train_one_step(egs)
+                if succ:
+                    trained_batches = (trained_batches + 1) % eval_interval
+                # if trained on batches done, start evaluation
+                if trained_batches == 0 and succ:
+                    cur_epoch += 1
+                    cur_lr = self.optimizer.param_groups[0]["lr"]
+                    _, _, sstr = self.reporter.report(cur_epoch, cur_lr)
+                    self.reporter.log(sstr)
+                    end = self.stop_detect(dev_loader, cur_epoch, cur_lr)
+                    if end or cur_epoch == num_epochs:
+                        stop = True
+                        break
+            if stop:
+                break
+            self.reporter.log("Finished one epoch on training set")
+        return cur_epoch
+
+    def run(self,
+            trn_loader: Iterable[Dict],
+            dev_loader: Iterable[Dict],
+            num_epochs: int = 100,
+            eval_interval: int = -1) -> NoReturn:
+        """
+        Entry of the Trainer class
         """
         self.reporter.log(
             f"Number of batches: {len(trn_loader)}/{len(dev_loader)}")
-        e = self._prep_run(dev_loader)
-        stop = False
-        trained_batches = 0
-        # set train mode
-        self.task.train()
-        self.reporter.train()
-        while True:
-            # trained on several batches
-            # for idx, egs in enumerate(trn_loader):
-            for egs in trn_loader:
-                # update per-batch
-                egs = self._prep_egs(egs)
-                if self.train_one_step(egs):
-                    trained_batches = (trained_batches + 1) % eval_interval
-
-                # if trained on batches done, start evaluation
-                if trained_batches == 0:
-                    e += 1
-                    cur_lr = self.optimizer.param_groups[0]["lr"]
-                    _, _, sstr = self.reporter.report(e, cur_lr)
-                    self.reporter.log(sstr)
-
-                    self.valid_epoch(dev_loader)
-                    cv_loss, cv_accu, sstr = self.reporter.report(e, cur_lr)
-                    # schedule sampling for eval
-                    if self.ss_scheduler:
-                        sstr += f" | ssr = {self.ssr:.3f}"
-
-                    update_value = cv_loss if self.stop_on == "loss" else cv_accu
-                    better = self.stop_criterion.step(update_value)
-                    if better:
-                        self.save_checkpoint(e, best=True)
-                    else:
-                        sstr += f" | no impr {self.stop_criterion.no_impr:d}, "
-                        sstr += f"best = {self.stop_criterion.best:.4f}"
-                    self.reporter.log(sstr)
-                    # lr schedule here
-                    self.lr_scheduler_step(update_value, end_at="epoch")
-                    if self.ss_scheduler:
-                        self.ssr = self.ss_scheduler.step(e, cv_accu)
-                    # save last checkpoint
-                    self.save_checkpoint(e, best=False)
-                    # reset reporter
-                    self.reporter.reset()
-                    # early stop or not
-                    if self.stop_criterion.stop():
-                        self.reporter.log("Stop training cause no impr for " +
-                                          f"{self.no_impr} epochs")
-                        stop = True
-                        break
-                    if e == num_epochs:
-                        stop = True
-                        break
-                    # enable train mode
-                    self.reporter.log("Set train mode...")
-                    self.task.train()
-                    self.reporter.train()
-            self.reporter.log("Finished one epoch on training set")
-            if stop:
-                break
-        self.reporter.log(f"Training for {e:d}/{num_epochs:d} epochs done!")
+        cur_epoch = self.prep_run(dev_loader)
+        if eval_interval > 0:
+            done_epoch = self._run_in_batch(trn_loader,
+                                            dev_loader,
+                                            cur_epoch=cur_epoch,
+                                            num_epochs=num_epochs,
+                                            eval_interval=eval_interval)
+        else:
+            done_epoch = self._run_in_epoch(trn_loader,
+                                            dev_loader,
+                                            cur_epoch=cur_epoch,
+                                            num_epochs=num_epochs)
+        self.reporter.log(
+            f"Training for {done_epoch:d}/{num_epochs:d} epochs done!")

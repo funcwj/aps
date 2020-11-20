@@ -32,7 +32,6 @@ def train_worker(task, conf, args):
                       save_interval=args.save_interval,
                       prog_interval=args.prog_interval,
                       tensorboard=args.tensorboard,
-                      opt_level=args.opt_level,
                       **conf["trainer_conf"])
 
     # dump configurations
@@ -66,10 +65,10 @@ def train_worker(task, conf, args):
     if args.eval_interval <= 0:
         raise RuntimeError("For distributed training of SE/SS model, "
                            "--eval-interval must be larger than 0")
-    trainer.run_batch_per_epoch(trn_loader,
-                                dev_loader,
-                                num_epochs=args.epochs,
-                                eval_interval=args.eval_interval)
+    trainer.run(trn_loader,
+                dev_loader,
+                num_epochs=args.epochs,
+                eval_interval=args.eval_interval)
 
 
 def run(args):
