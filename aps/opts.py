@@ -50,7 +50,7 @@ def get_aps_parser():
                         "each process gets batch-size/num-process")
     parser.add_argument("--eval-interval",
                         type=int,
-                        default=4000,
+                        default=3000,
                         help="Number of batches trained per epoch "
                         "(for larger training dataset & "
                         "distributed training)")
@@ -75,11 +75,6 @@ def get_aps_parser():
                         type=str,
                         default="777",
                         help="Random seed used for random package")
-    parser.add_argument("--opt-level",
-                        type=str,
-                        default="O0",
-                        choices=["O0", "O1", "O2", "O3"],
-                        help="The opt_level options for apex package")
     parser.add_argument("--trainer",
                         type=str,
                         default="ddp",

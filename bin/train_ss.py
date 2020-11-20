@@ -55,7 +55,6 @@ def run(args):
                       save_interval=args.save_interval,
                       prog_interval=args.prog_interval,
                       tensorboard=args.tensorboard,
-                      opt_level=args.opt_level,
                       **conf["trainer_conf"])
 
     # dump configurations
@@ -63,13 +62,10 @@ def run(args):
     with open(f"{args.checkpoint}/train.yaml", "w") as f:
         yaml.dump(conf, f)
 
-    if args.eval_interval > 0:
-        trainer.run_batch_per_epoch(trn_loader,
-                                    dev_loader,
-                                    num_epochs=args.epochs,
-                                    eval_interval=args.eval_interval)
-    else:
-        trainer.run(trn_loader, dev_loader, num_epochs=args.epochs)
+    trainer.run(trn_loader,
+                dev_loader,
+                num_epochs=args.epochs,
+                eval_interval=args.eval_interval)
 
 
 if __name__ == "__main__":
