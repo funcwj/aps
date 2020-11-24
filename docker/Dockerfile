@@ -1,20 +1,23 @@
-FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04
+ARG CUDA_VERSION=10.2
+ARG CUDNN=7
+ARG PYTHON_VERSION=3.8
+ARG PYTORCH_VERSION=1.6.0
+
+# see https://gitlab.com/nvidia/container-images/cuda/blob/master/doc/supported-tags.md
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn{CUDNN}-devel-ubuntu18.04
 
 LABEL description="Dockerfile for APS toolkit"
-LABEL tag="pt1.6.0-py3.8-cuda10.2-hvd-ubuntu18.04"
+LABEL tag="pt${PYTORCH_VERSION}-py{PYTHON_VERSION}-cuda{CUDA_VERSION}-hvd-ubuntu18.04"
 LABEL creator="funcwj"
 LABEL time="2020/09/04"
 
-ENV CUDA_VERSION=10.2
-ENV PYTHON_VERSION=3.8
-ENV PYTORCH_VERSION=1.6.0
 # https://download.open-mpi.org/release/open-mpi/v4.0/openmpi-4.0.5.tar.gz
 ENV OPENMPI=v4.0 OPENMPI_VERSION=4.0.5
 
 # install tools
 RUN apt-get update && apt-get install -y --no-install-recommends --allow-downgrades \
     --allow-change-held-packages vim git curl locales htop wget zip unzip sox libsndfile1 \
-    cmake g++ gcc make ca-certificates libnccl2 libnccl-dev && \
+    cmake g++ gcc make openssh-server ca-certificates libnccl2 libnccl-dev && \
     locale-gen en_US.UTF-8 && rm -rf /var/lib/apt/lists/*
 
 # install openmpi (for horovod)
