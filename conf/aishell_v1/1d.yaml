@@ -4,15 +4,15 @@ nnet: "common_transducer"
 
 nnet_conf:
   input_size: 80
-  encoder_type: "concat"
-  encoder_proj: 512
-  encoder_kwargs:
-    tdnn:
+  enc_type: "concat"
+  enc_proj: 512
+  enc_kwargs:
+    conv1d:
       out_features: 512
       dim: 512
       num_layers: 3
-      stride: "2,2,2"
-      dilation: "1,1,2"
+      stride: [2, 2, 2]
+      dilation: [1, 1, 2]
     variant_rnn:
       rnn: "lstm"
       num_layers: 3
@@ -21,7 +21,7 @@ nnet_conf:
       project: 512
       hidden: 512
       layernorm: true
-  decoder_kwargs:
+  dec_kwargs:
     embed_size: 512
     jot_dim: 512
     dec_rnn: "lstm"

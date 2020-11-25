@@ -8,6 +8,7 @@ import torch as th
 
 from aps.libs import aps_asr_nnet
 from aps.transform import AsrTransform, EnhTransform
+from aps.asr.base.encoder import TDNNEncoder, Conv2dEncoder
 
 default_rnn_dec_kwargs = {
     "dec_rnn": "lstm",
@@ -56,12 +57,30 @@ tdnn_enc_kwargs = {
 
 fsmn_enc_kwargs = {
     "project": 512,
-    "num_layers": 45,
+    "num_layers": 4,
     "residual": True,
     "lctx": 10,
     "rctx": 10,
     "norm": "BN",
     "dropout": 0.2
+}
+
+conv2d_rnn_enc_kwargs = {
+    "conv2d": {
+        "out_features": -1,
+        "channel": 32,
+        "num_layers": 2,
+        "stride": 2,
+        "padding": 1,
+        "kernel_size": 3,
+    },
+    "vanilla_rnn": {
+        "rnn": "lstm",
+        "num_layers": 3,
+        "bidirectional": True,
+        "dropout": 0.2,
+        "hidden": 320
+    }
 }
 
 tdnn_rnn_enc_kwargs = {
@@ -151,6 +170,38 @@ def gen_egs(vocab_size, batch_size, num_channels=1):
         x = th.rand(batch_size, num_channels, S)
     y = th.randint(0, vocab_size - 1, (batch_size, u))
     return x, x_len, y, u
+
+
+@pytest.mark.parametrize("num_layers", [2, 3])
+@pytest.mark.parametrize("inp_len", [100, 102])
+@pytest.mark.parametrize("dilation", [1, 2])
+def test_conv1d_encoder(inp_len, num_layers, dilation):
+    conv1d_encoder = TDNNEncoder(80,
+                                 512,
+                                 num_layers=num_layers,
+                                 stride=2,
+                                 dilation=dilation)
+    batch_size = 4
+    inp = th.rand(batch_size, inp_len, 80)
+    out, out_len = conv1d_encoder(inp, th.LongTensor([inp_len] * batch_size))
+    assert out.shape[1] == out_len[0]
+
+
+@pytest.mark.parametrize("num_layers", [2, 3])
+@pytest.mark.parametrize("inp_len", [100, 102])
+@pytest.mark.parametrize("kernel_size", [3, 5])
+def test_conv2d_encoder(inp_len, num_layers, kernel_size):
+    conv1d_encoder = Conv2dEncoder(80,
+                                   -1,
+                                   channel=[32] * num_layers,
+                                   kernel_size=kernel_size,
+                                   stride=2,
+                                   num_layers=num_layers,
+                                   padding=(kernel_size - 1) // 2)
+    batch_size = 4
+    inp = th.rand(batch_size, inp_len, 80)
+    out, out_len = conv1d_encoder(inp, th.LongTensor([inp_len] * batch_size))
+    assert out.shape[1] == out_len[0]
 
 
 @pytest.mark.parametrize("att_type,att_kwargs", [
@@ -318,7 +369,8 @@ def test_beam_att(mode, enh_kwargs):
     pytest.param("tdnn", tdnn_enc_kwargs),
     pytest.param("fsmn", fsmn_enc_kwargs),
     pytest.param("concat", tdnn_rnn_enc_kwargs),
-    pytest.param("concat", tdnn_fsmn_enc_kwargs)
+    pytest.param("concat", tdnn_fsmn_enc_kwargs),
+    pytest.param("concat", conv2d_rnn_enc_kwargs)
 ])
 def test_common_encoder(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("att")
@@ -352,6 +404,7 @@ def test_common_encoder(enc_type, enc_kwargs):
     pytest.param("fsmn", fsmn_enc_kwargs),
     pytest.param("concat", tdnn_rnn_enc_kwargs),
     pytest.param("concat", tdnn_fsmn_enc_kwargs),
+    pytest.param("concat", conv2d_rnn_enc_kwargs),
     pytest.param("transformer", transformer_enc_kwargs),
     pytest.param("transformer_rel", transformer_rel_enc_kwargs),
     pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs)

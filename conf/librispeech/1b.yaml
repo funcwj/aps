@@ -1,5 +1,3 @@
-# common encoder-decoder structure
-
 nnet: "att"
 
 nnet_conf:
@@ -7,12 +5,13 @@ nnet_conf:
   enc_type: "concat"
   enc_proj: 512
   enc_kwargs:
-    conv1d:
-      out_features: 512
-      dim: 512
-      num_layers: 3
-      stride: [2, 2, 2]
-      dilation: [1, 1, 2]
+    conv2d:
+      out_features: -1
+      channel: 32
+      num_layers: 2
+      stride: 2
+      padding: 1
+      kernel_size: 3
     vanilla_rnn:
       rnn: "lstm"
       num_layers: 3
@@ -24,9 +23,9 @@ nnet_conf:
     dec_rnn: "lstm"
     rnn_layers: 2
     rnn_hidden: 512  # must eq decoder_dim
-    rnn_dropout: 0
-    input_feeding: True
-    vocab_embeded: True
+    rnn_dropout: 0.2
+    input_feeding: true
+    vocab_embeded: true
   att_type: "ctx"
   att_kwargs:
     att_dim: 512
@@ -47,7 +46,7 @@ asr_transform:
   num_mels: 80
   norm_mean: True
   norm_var: True
-  aug_prob: 0.5
+  aug_prob: 0.3
 
 trainer_conf:
   optimizer: "adam"
@@ -61,27 +60,27 @@ trainer_conf:
   ss_scheduler: "linear"
   ss_scheduler_kwargs:
     ssr: 0.2
-    epoch_beg: 10
-    epoch_end: 26
+    epoch_beg: 8
+    epoch_end: 24
     update_interval: 4
   no_impr: 6
-  no_impr_thres: 0.2
-  clip_gradient: 5
+  no_impr_thres: 0.1
+  clip_gradient: 10
   stop_criterion: "accu"
 
 data_conf:
-  fmt: "am_raw"
+  fmt: am_raw
   loader:
-    max_token_num: 400
+    adapt_dur: 10
     adapt_token_num: 150
-    max_dur: 30 # (s)
-    min_dur: 0.4 # (s)
-    adapt_dur: 10 # (s)
+    max_dur: 30
+    max_token_num: 400
+    min_dur: 0.4
   train:
-    wav_scp: "data/aishell_v1/train/wav.scp"
-    utt2dur: "data/aishell_v1/train/utt2dur"
-    text: "data/aishell_v1/train/text"
+    text: data/librispeech/train/wp6k
+    utt2dur: data/librispeech/train/utt2dur
+    wav_scp: data/librispeech/train/wav.scp
   valid:
-    wav_scp: "data/aishell_v1/dev/wav.scp"
-    utt2dur: "data/aishell_v1/dev/utt2dur"
-    text: "data/aishell_v1/dev/text"
+    text: data/librispeech/dev/wp6k
+    utt2dur: data/librispeech/dev/utt2dur
+    wav_scp: data/librispeech/dev/wav.scp

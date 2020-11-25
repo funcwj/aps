@@ -2,8 +2,8 @@ nnet: "transformer"
 
 nnet_conf:
   input_size: 80
-  encoder_type: "transformer"
-  encoder_kwargs:
+  enc_type: "transformer"
+  enc_kwargs:
     input_embed: "conv2d"
     att_dim: 512
     nhead: 8
@@ -11,7 +11,7 @@ nnet_conf:
     pos_dropout: 0.2
     att_dropout: 0.2
     num_layers: 8
-  decoder_kwargs:
+  dec_kwargs:
     att_dim: 512
     nhead: 8
     feedforward_dim: 1024

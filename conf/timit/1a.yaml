@@ -2,9 +2,9 @@ nnet: "att"
 
 nnet_conf:
   input_size: 240
-  encoder_type: "variant_rnn"
-  encoder_proj: 512
-  encoder_kwargs:
+  enc_type: "variant_rnn"
+  enc_proj: 512
+  enc_kwargs:
     rnn: "lstm"
     num_layers: 4
     bidirectional: true
@@ -12,8 +12,8 @@ nnet_conf:
     hidden: 320
     project: 512
     layernorm: true
-  decoder_dim: 256
-  decoder_kwargs:
+  dec_dim: 256
+  dec_kwargs:
     dec_rnn: "lstm"
     rnn_layers: 2
     rnn_hidden: 256  # must eq decoder_dim

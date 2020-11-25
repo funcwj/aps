@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union, NoReturn
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 
@@ -22,10 +22,13 @@ class Normalize1d(nn.Module):
         if name not in ["BN", "LN"]:
             raise ValueError(f"Unknown type of Normalize1d: {name}")
         if name == "BN":
-            self.norm = nn.BatchNorm1d(inp_features, momentum=0)
+            self.norm = nn.BatchNorm1d(inp_features)
         else:
             self.norm = nn.LayerNorm(inp_features)
         self.name = name
+
+    def __repr__(self) -> str:
+        return str(self.norm)
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
@@ -44,9 +47,9 @@ class Normalize1d(nn.Module):
         return out
 
 
-class TDNN(nn.Module):
+class Conv1d(nn.Module):
     """
-    Implement a time delay neural network (TDNN) layer using conv1d operations
+    Time delay neural network (TDNN) layer using conv1d operations
     """
 
     def __init__(self,
@@ -56,18 +59,36 @@ class TDNN(nn.Module):
                  stride: int = 2,
                  dilation: int = 1,
                  norm: str = "BN",
-                 dropout: float = 0,
-                 subsampling: bool = True):
-        super(TDNN, self).__init__()
+                 dropout: float = 0):
+        super(Conv1d, self).__init__()
+        padding = (dilation * (kernel_size - 1)) // 2
         self.conv1d = nn.Conv1d(inp_features,
                                 out_features,
                                 kernel_size,
                                 stride=stride,
                                 dilation=dilation,
-                                padding=(dilation * (kernel_size - 1)) // 2)
+                                padding=padding)
         self.norm = Normalize1d(norm, out_features)
-        self.dropout = nn.Dropout(p=dropout) if dropout > 0 else None
-        self.subsampling_factor = stride if subsampling else 1
+        self.dropout = nn.Dropout(p=dropout)
+        self.stride = stride
+        self.kernel_size = kernel_size
+        self.dilation = dilation
+        self.padding = padding
+
+    def compute_outp_dim(self, dim: th.Tensor) -> th.Tensor:
+        """
+        Compute output dimention
+        """
+        return (dim + 2 * self.padding - self.dilation *
+                (self.kernel_size - 1) - 1) // self.stride + 1
+
+    def check_args(self, inp: th.Tensor) -> NoReturn:
+        """
+        Check args
+        """
+        if inp.dim() != 3:
+            raise RuntimeError(
+                f"TDNN expects 3D tensor, got {inp.dim()} instead")
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
@@ -76,24 +97,68 @@ class TDNN(nn.Module):
         Return:
             out (Tensor): N x T x O, output of the layer
         """
-        if inp.dim() not in [2, 3]:
-            raise RuntimeError(
-                f"TDNNLayer accepts 2/3D tensor, got {inp.dim()} instead")
-        if inp.dim() == 2:
-            inp = inp[None, ...]
-        _, T, _ = inp.shape
+        self.check_args(inp)
         # N x T x F => N x F x T
         inp = inp.transpose(1, 2)
-        # conv
-        out = self.conv1d(inp)
-        out = out[..., :T // self.subsampling_factor]
-        # BN or LN
-        out = self.norm(out)
-        # ReLU
-        out = tf.relu(out)
-        if self.dropout:
-            out = self.dropout(out)
+        # conv & norm
+        out = self.norm(self.conv1d(inp))
+        # ReLU & dropout
+        out = self.dropout(tf.relu(out))
         return out
+
+
+class Conv2d(nn.Module):
+    """
+    A wrapper for conv2d layer, with batchnorm & ReLU
+    """
+
+    def __init__(self,
+                 in_channels: int,
+                 out_channels: int,
+                 kernel_size: Union[int, Tuple[int]] = 3,
+                 stride: Union[int, Tuple[int]] = 2,
+                 padding: Union[int, Tuple[int]] = 0):
+        super(Conv2d, self).__init__()
+        self.conv = nn.Conv2d(in_channels,
+                              out_channels,
+                              kernel_size,
+                              stride=stride,
+                              padding=padding,
+                              bias=True)
+        self.norm = nn.BatchNorm2d(out_channels)
+
+        def int2tuple(inp):
+            return (inp, inp) if isinstance(inp, int) else inp
+
+        self.kernel_size = int2tuple(kernel_size)
+        self.stride = int2tuple(stride)
+        self.padding = int2tuple(padding)
+
+    def compute_outp_dim(self, dim: th.Tensor, axis: int) -> th.Tensor:
+        """
+        Compute output dimention
+        """
+        return (dim + 2 * self.padding[axis] -
+                self.kernel_size[axis]) // self.stride[axis] + 1
+
+    def check_args(self, inp: th.Tensor) -> NoReturn:
+        """
+        Check args
+        """
+        if inp.dim() not in [3, 4]:
+            raise RuntimeError(
+                f"Conv2d expects 3/4D tensor, got {inp.dim()} instead")
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp (Tensor): N x C x T x F
+        Return:
+            out (Tensor): N x C' x T' x F'
+        """
+        self.check_args(inp)
+        out = self.norm(self.conv(inp[:, None] if inp.dim() == 3 else inp))
+        return tf.relu(out)
 
 
 class FSMN(nn.Module):
@@ -125,7 +190,14 @@ class FSMN(nn.Module):
             self.norm = Normalize1d(norm, out_features)
         else:
             self.norm = None
-        self.out_drop = nn.Dropout(p=dropout) if dropout > 0 else None
+        self.out_drop = nn.Dropout(p=dropout)
+
+    def check_args(self, inp: th.Tensor) -> NoReturn:
+        """
+        Check args
+        """
+        if inp.dim() not in [2, 3]:
+            raise RuntimeError(f"FSMN expects 2/3D input, got {inp.dim()}")
 
     def forward(
             self,
@@ -139,12 +211,9 @@ class FSMN(nn.Module):
             out (Tensor): N x T x O, output of the layer
             proj (Tensor): N x T x P, new memory block
         """
-        if inp.dim() not in [2, 3]:
-            raise RuntimeError(f"FSMNLayer expect 2/3D input, got {inp.dim()}")
-        if inp.dim() == 2:
-            inp = inp[None, ...]
+        self.check_args(inp)
         # N x T x P
-        proj = self.inp_proj(inp)
+        proj = self.inp_proj(inp[None, ...] if inp.dim() == 2 else inp)
         # N x T x P => N x P x T => N x T x P
         proj = proj.transpose(1, 2)
         # add context
@@ -159,9 +228,7 @@ class FSMN(nn.Module):
         out = out.transpose(1, 2)
         if self.norm:
             out = self.norm(out)
-        out = tf.relu(out)
-        if self.out_drop:
-            out = self.out_drop(out)
+        out = self.out_drop(tf.relu(out))
         # N x T x O
         return out, proj
 
@@ -215,7 +282,6 @@ class VariantRNN(nn.Module):
                                            inp_len,
                                            batch_first=True,
                                            enforce_sorted=False)
-        # extend dim when inference
         else:
             if inp_pad.dim() not in [2, 3]:
                 raise RuntimeError("VariantRNN expect input dim as 2 or 3, " +

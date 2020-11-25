@@ -4,7 +4,7 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 from typing import Tuple, List, Optional
-from torch.optim import lr, Optimizer
+from torch.optim import lr_scheduler as lr, Optimizer
 
 
 class CustomMultiStepLR(lr.MultiStepLR):

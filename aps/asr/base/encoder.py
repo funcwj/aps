@@ -11,7 +11,7 @@ import torch.nn.functional as tf
 from typing import Optional, Tuple, Union, List, Dict
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
-from aps.asr.base.layers import VariantRNN, FSMN, TDNN
+from aps.asr.base.layers import VariantRNN, FSMN, Conv1d, Conv2d
 
 
 def encoder_instance(enc_type: str, inp_features: int, out_features: int,
@@ -22,8 +22,10 @@ def encoder_instance(enc_type: str, inp_features: int, out_features: int,
     supported_encoder = {
         "vanilla_rnn": VanillaRNNEncoder,
         "variant_rnn": VariantRNNEncoder,
-        "tdnn": TDNNEncoder,
-        "fsmn": FSMNEncoder
+        "fsmn": FSMNEncoder,
+        # can be used for subsamping:
+        "conv1d": Conv1dEncoder,
+        "conv2d": Conv2dEncoder
     }
 
     def encoder(enc_type, inp_features, **kwargs):
@@ -42,7 +44,7 @@ def encoder_instance(enc_type: str, inp_features: int, out_features: int,
         num_enc_layers = len(enc_kwargs)
         if num_enc_layers <= 1:
             raise ValueError(
-                f"Please use >=2 encoders for \'concat\' type encoder")
+                "Please use >=2 encoders for \'concat\' type encoder")
         for i, (name, kwargs) in enumerate(enc_kwargs.items()):
             if i != num_enc_layers - 1:
                 enc_layer = encoder(
@@ -155,13 +157,12 @@ class VanillaRNNEncoder(EncoderBase):
             out (Tensor): (N) x Ti x F
             inp_len (Tensor): (N) x Ti
         """
-        self.rnns.flatten_parameters()
+        self.flat()
         if inp_len is not None:
             inp = pack_padded_sequence(inp,
                                        inp_len,
                                        batch_first=True,
                                        enforce_sorted=False)
-        # extend dim when inference
         else:
             if inp.dim() not in [2, 3]:
                 raise RuntimeError("VanillaRNNEncoder expects 2/3D Tensor, " +
@@ -220,7 +221,7 @@ class VariantRNNEncoder(EncoderBase):
                     in_size = in_size * 2
             return in_size
 
-        self.rnns = nn.ModuleList([
+        self.enc_layers = nn.ModuleList([
             VariantRNN(
                 derive_in_size(i),
                 hidden_size=hidden,
@@ -261,17 +262,18 @@ class VariantRNNEncoder(EncoderBase):
             out_pad (Tensor): (N) x To x F
             out_len (Tensor or None): (N) x To
         """
-        for i, layer in enumerate(self.rnns):
+        for i, layer in enumerate(self.enc_layers):
             if i != 0 and self.use_pyramid:
                 inp, inp_len = self._subsample_concat(inp, inp_len)
             inp = layer(inp, inp_len)
         return inp, inp_len
 
 
-class TDNNEncoder(EncoderBase):
+class Conv1dEncoder(EncoderBase):
     """
     The stack of TDNN (conv1d) layers with optional time reduction
     """
+    Conv1dParam = Union[List[int], int]
 
     def __init__(self,
                  inp_features: int,
@@ -279,25 +281,25 @@ class TDNNEncoder(EncoderBase):
                  dim: int = 512,
                  norm: str = "BN",
                  num_layers: int = 3,
-                 stride: Union[List[int], int] = 2,
-                 dilation: Union[List[int], int] = 1,
+                 stride: Conv1dParam = 2,
+                 dilation: Conv1dParam = 1,
                  dropout: float = 0):
-        super(TDNNEncoder, self).__init__(inp_features, out_features)
-        if isinstance(stride, int):
-            stride = [stride] * num_layers
-        if isinstance(dilation, int):
-            dilation = [dilation] * num_layers
-        self.encs = nn.Sequential(*[
-            TDNN(inp_features if i == 0 else dim,
-                 dim if i != num_layers - 1 else out_features,
-                 kernel_size=3,
-                 norm=norm,
-                 stride=stride[i],
-                 dilation=dilation[i],
-                 dropout=dropout,
-                 subsampling=True) for i in range(num_layers)
+        super(Conv1dEncoder, self).__init__(inp_features, out_features)
+
+        def int2list(param, repeat):
+            return [param] * repeat if isinstance(param, int) else param
+
+        stride = int2list(stride, num_layers)
+        dilation = int2list(dilation, num_layers)
+        self.enc_layers = nn.ModuleList([
+            Conv1d(inp_features if i == 0 else dim,
+                   dim if i != num_layers - 1 else out_features,
+                   kernel_size=3,
+                   norm=norm,
+                   stride=stride[i],
+                   dilation=dilation[i],
+                   dropout=dropout) for i in range(num_layers)
         ])
-        self.subsampling_factor = np.prod(stride)
 
     def forward(
             self, inp: th.Tensor, inp_len: Optional[th.Tensor]
@@ -310,11 +312,84 @@ class TDNNEncoder(EncoderBase):
             out (Tensor): N x To x O
             out_len (Tensor or None)
         """
-        out = self.encs(inp)
-        if inp_len is None:
-            return out, None
-        else:
-            return out, inp_len // self.subsampling_factor
+        for enc_layer in self.enc_layers:
+            inp = enc_layer(inp)
+            if inp_len is not None:
+                inp_len = enc_layer.compute_outp_dim(inp_len)
+        return inp, inp_len
+
+
+class Conv2dEncoder(EncoderBase):
+    """
+    The stack of conv2d layers with optional time reduction
+    """
+    Conv2dParam = Union[List[int], int, List[Tuple[int]]]
+
+    def __init__(self,
+                 inp_features: int,
+                 out_features: int,
+                 channel: Union[int, List[int]] = 32,
+                 num_layers: int = 3,
+                 kernel_size: Conv2dParam = 3,
+                 padding: Conv2dParam = 0,
+                 stride: Conv2dParam = 2):
+        super(Conv2dEncoder, self).__init__(inp_features, out_features)
+
+        def param2need(param, num_layers):
+            if isinstance(param, int):
+                return [(param, param)] * num_layers
+            else:
+                if isinstance(param[0], int):
+                    return [(p, p) for p in param]
+                else:
+                    return param
+
+        if isinstance(channel, int):
+            channel = [channel] * num_layers
+        kernel_size = param2need(kernel_size, num_layers)
+        padding = param2need(padding, num_layers)
+        stride = param2need(stride, num_layers)
+
+        self.enc_layers = nn.ModuleList([
+            Conv2d(1 if i == 0 else channel[i - 1],
+                   channel[i],
+                   kernel_size=kernel_size[i],
+                   stride=stride[i],
+                   padding=padding[i]) for i in range(num_layers)
+        ])
+
+        freq_dim = inp_features
+        for enc_layer in self.enc_layers:
+            # freq axis
+            freq_dim = enc_layer.compute_outp_dim(freq_dim, 1)
+        self.out_features = freq_dim * channel[-1]
+
+    def forward(
+            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+        """
+        Args:
+            inp (Tensor): N x T x F, input
+            inp_len (Tensor or None)
+        Return:
+            out (Tensor): N x F x O
+            out_len (Tensor or None)
+        """
+        for enc_layer in self.enc_layers:
+            # N x C x T x F
+            inp = enc_layer(inp)
+            if inp_len is not None:
+                # time axis
+                inp_len = enc_layer.compute_outp_dim(inp_len, 0)
+        N, C, T, F = inp.shape
+        if C * F != self.out_features:
+            raise ValueError(
+                f"Got out_features = {C * F}, but self.out_features " +
+                f"= {self.out_features} ")
+        # N x T x C x F
+        inp = inp.transpose(1, 2).contiguous()
+        inp = inp.view(N, T, -1)
+        return inp, inp_len
 
 
 class FSMNEncoder(EncoderBase):
@@ -336,7 +411,7 @@ class FSMNEncoder(EncoderBase):
         super(FSMNEncoder, self).__init__(inp_features, out_features)
         if isinstance(dilation, int):
             dilation = [dilation] * num_layers
-        self.layers = nn.ModuleList([
+        self.enc_layers = nn.ModuleList([
             FSMN(inp_features if i == 0 else out_features,
                  out_features,
                  project,
@@ -359,13 +434,8 @@ class FSMNEncoder(EncoderBase):
             out (Tensor): N x F x O
             out_len (Tensor or None)
         """
-        if inp.dim() not in [2, 3]:
-            raise RuntimeError(
-                f"FSMNEncoder expect 2/3D input, got {inp.dim()}")
-        if inp.dim() == 2:
-            inp = inp[None, ...]
         memory = None
-        for fsmn in self.layers:
+        for fsmn in self.enc_layers:
             if self.residual:
                 inp, memory = fsmn(inp, memory=memory)
             else:
