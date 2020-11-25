@@ -2,15 +2,15 @@ nnet: "att"
 
 nnet_conf:
   input_size: 240
-  encoder_type: "custom_rnn"
+  encoder_type: "variant_rnn"
   encoder_proj: 512
   encoder_kwargs:
     rnn: "lstm"
-    rnn_layers: 4
-    rnn_bidir: true
-    rnn_dropout: 0.2
-    rnn_hidden: 320
-    rnn_project: 512
+    num_layers: 4
+    bidirectional: true
+    dropout: 0.2
+    hidden: 320
+    project: 512
     layernorm: true
   decoder_dim: 256
   decoder_kwargs:

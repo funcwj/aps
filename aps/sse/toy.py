@@ -7,13 +7,13 @@ import torch as th
 import torch.nn as nn
 
 from typing import Optional, NoReturn, Union, List
-from aps.asr.base.encoder import TorchRNNEncoder
+from aps.asr.base.encoder import VanillaRNNEncoder
 from aps.sse.utils import MaskNonLinear
 from aps.libs import ApsRegisters
 
 
 @ApsRegisters.sse.register("base_rnn")
-class ToyRNN(TorchRNNEncoder):
+class ToyRNN(VanillaRNNEncoder):
     """
     Toy RNN structure for separation & enhancement
     """
@@ -25,20 +25,20 @@ class ToyRNN(TorchRNNEncoder):
                  num_spks: int = 2,
                  enh_transform: Optional[nn.Module] = None,
                  rnn: str = "lstm",
-                 rnn_layers: int = 3,
-                 rnn_hidden: int = 512,
-                 rnn_dropout: float = 0.2,
-                 rnn_bidir: bool = False,
+                 num_layers: int = 3,
+                 hidden: int = 512,
+                 dropout: float = 0.2,
+                 bidirectional: bool = False,
                  output_nonlinear: str = "sigmoid",
                  training_mode: str = "freq") -> None:
         super(ToyRNN, self).__init__(input_size,
                                      num_bins * num_spks,
                                      input_project=input_project,
                                      rnn=rnn,
-                                     rnn_layers=rnn_layers,
-                                     rnn_hidden=rnn_hidden,
-                                     rnn_dropout=rnn_dropout,
-                                     rnn_bidir=rnn_bidir,
+                                     num_layers=num_layers,
+                                     hidden=hidden,
+                                     dropout=dropout,
+                                     bidirectional=bidirectional,
                                      non_linear="")
         if enh_transform is None:
             raise ValueError("enh_transform can not be None")

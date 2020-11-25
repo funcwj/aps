@@ -3,51 +3,113 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
+import numpy as np
 import torch as th
 import torch.nn as nn
-
 import torch.nn.functional as tf
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, List, Dict
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
-from aps.asr.base.layers import CustomRNNLayer, FSMNLayer, TDNNLayer
+from aps.asr.base.layers import VariantRNN, FSMN, TDNN
 
 
-def encoder_instance(encoder_type: str, input_size: int, output_size: int,
-                     **kwargs) -> nn.Module:
+def encoder_instance(enc_type: str, inp_features: int, out_features: int,
+                     enc_kwargs: Dict) -> nn.Module:
     """
     Return encoder instance
     """
     supported_encoder = {
-        "common_rnn": TorchRNNEncoder,
-        "custom_rnn": CustomRNNEncoder,
+        "vanilla_rnn": VanillaRNNEncoder,
+        "variant_rnn": VariantRNNEncoder,
         "tdnn": TDNNEncoder,
-        "fsmn": FSMNEncoder,
-        "tdnn_rnn": TimeDelayRNNEncoder,
-        "tdnn_fsmn": TimeDelayFSMNEncoder
+        "fsmn": FSMNEncoder
     }
-    if encoder_type not in supported_encoder:
-        raise RuntimeError(f"Unknown encoder type: {encoder_type}")
-    return supported_encoder[encoder_type](input_size, output_size, **kwargs)
+
+    def encoder(enc_type, inp_features, **kwargs):
+        if enc_type not in supported_encoder:
+            raise RuntimeError(f"Unknown encoder type: {enc_type}")
+        enc_cls = supported_encoder[enc_type]
+        return enc_cls(inp_features, **kwargs)
+
+    if enc_type != "concat":
+        return encoder(enc_type,
+                       inp_features,
+                       out_features=out_features,
+                       **enc_kwargs)
+    else:
+        enc_layers = []
+        num_enc_layers = len(enc_kwargs)
+        if num_enc_layers <= 1:
+            raise ValueError(
+                f"Please use >=2 encoders for \'concat\' type encoder")
+        for i, (name, kwargs) in enumerate(enc_kwargs.items()):
+            if i != num_enc_layers - 1:
+                enc_layer = encoder(
+                    name,
+                    inp_features if i == 0 else enc_layers[-1].out_features,
+                    **kwargs)
+            else:
+                enc_layer = encoder(name,
+                                    enc_layers[-1].out_features,
+                                    out_features=out_features,
+                                    **kwargs)
+            enc_layers.append(enc_layer)
+        return ConcatEncoder(enc_layers)
 
 
-class TorchRNNEncoder(nn.Module):
+class ConcatEncoder(nn.Module):
+    """
+    Concatenation of the encoders
+    """
+
+    def __init__(self, enc_list: List[nn.Module]) -> None:
+        super(ConcatEncoder, self).__init__()
+        self.enc_list = nn.ModuleList(enc_list)
+
+    def forward(
+            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+        """
+        Args:
+            inp (Tensor): N x Ti x F
+            inp_len (Tensor or None): N
+        Return:
+            out_pad (Tensor): N x To x O
+            out_len (Tensor or None): N
+        """
+        for enc in self.enc_list:
+            inp, inp_len = enc(inp, inp_len)
+        return inp, inp_len
+
+
+class EncoderBase(nn.Module):
+    """
+    Base class for encoders
+    """
+
+    def __init__(self, inp_features, out_features):
+        super(EncoderBase, self).__init__()
+        self.inp_features = inp_features
+        self.out_features = out_features
+
+
+class VanillaRNNEncoder(EncoderBase):
     """
     PyTorch's RNN encoder
     """
 
     def __init__(self,
-                 input_size: int,
-                 output_size: int,
+                 inp_features: int,
+                 out_features: int,
                  input_project: Optional[int] = None,
                  rnn: str = "lstm",
-                 rnn_layers: int = 3,
-                 rnn_hidden: int = 512,
-                 rnn_dropout: int = 0.2,
-                 rnn_bidir: bool = False,
+                 num_layers: int = 3,
+                 hidden: int = 512,
+                 dropout: int = 0.2,
+                 bidirectional: bool = False,
                  non_linear: str = ""):
-        super(TorchRNNEncoder, self).__init__()
+        super(VanillaRNNEncoder, self).__init__(inp_features, out_features)
         RNN = rnn.upper()
         supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
         supported_non_linear = {
@@ -62,18 +124,18 @@ class TorchRNNEncoder(nn.Module):
             raise ValueError(
                 f"Unsupported output non-linear function: {non_linear}")
         if input_project:
-            self.proj = nn.Linear(input_size, input_project)
+            self.proj = nn.Linear(inp_features, input_project)
         else:
             self.proj = None
         self.rnns = supported_rnn[RNN](
-            input_size if input_project is None else input_project,
-            rnn_hidden,
-            rnn_layers,
+            inp_features if input_project is None else input_project,
+            hidden,
+            num_layers=num_layers,
             batch_first=True,
-            dropout=rnn_dropout,
-            bidirectional=rnn_bidir)
-        self.outp = nn.Linear(rnn_hidden if not rnn_bidir else rnn_hidden * 2,
-                              output_size)
+            dropout=dropout,
+            bidirectional=bidirectional)
+        self.outp = nn.Linear(hidden if not bidirectional else hidden * 2,
+                              out_features)
         self.non_linear = supported_non_linear[non_linear]
 
     def flat(self):
@@ -102,7 +164,7 @@ class TorchRNNEncoder(nn.Module):
         # extend dim when inference
         else:
             if inp.dim() not in [2, 3]:
-                raise RuntimeError("TorchRNNEncoder expects 2/3D Tensor, " +
+                raise RuntimeError("VanillaRNNEncoder expects 2/3D Tensor, " +
                                    f"got {inp.dim():d}")
             if inp.dim() != 3:
                 inp = th.unsqueeze(inp, 0)
@@ -122,62 +184,61 @@ class TorchRNNEncoder(nn.Module):
         return out, inp_len
 
 
-class CustomRNNEncoder(nn.Module):
+class VariantRNNEncoder(EncoderBase):
     """
-    Customized RNN layer (egs: PyramidEncoder)
+    Variant RNN layer (e.g., with pyramid stack, layernrom, projection layer, .etc)
     """
 
     def __init__(self,
-                 input_size: int,
-                 output_size: int,
+                 inp_features: int,
+                 out_features: int,
                  rnn: str = "lstm",
-                 rnn_layers: int = 3,
-                 rnn_bidir: bool = True,
-                 rnn_dropout: float = 0.0,
-                 rnn_hidden: int = 512,
-                 rnn_project: Optional[int] = None,
+                 num_layers: int = 3,
+                 bidirectional: bool = True,
+                 dropout: float = 0.0,
+                 hidden: int = 512,
+                 project: Optional[int] = None,
                  layernorm: bool = False,
                  use_pyramid: bool = False,
                  add_forward_backward: bool = False):
-        super(CustomRNNEncoder, self).__init__()
+        super(VariantRNNEncoder, self).__init__(inp_features, out_features)
 
         def derive_in_size(layer_idx):
             """
             Compute input size of layer-i
             """
             if layer_idx == 0:
-                in_size = input_size
+                in_size = inp_features
             else:
-                if rnn_project:
-                    return rnn_project
+                if project:
+                    return project
                 else:
-                    in_size = rnn_hidden
-                    if rnn_bidir and not add_forward_backward:
+                    in_size = hidden
+                    if bidirectional and not add_forward_backward:
                         in_size = in_size * 2
                 if use_pyramid:
                     in_size = in_size * 2
             return in_size
 
-        rnn_list = []
-        for i in range(rnn_layers):
-            rnn_list.append(
-                CustomRNNLayer(derive_in_size(i),
-                               hidden_size=rnn_hidden,
-                               rnn=rnn,
-                               project_size=rnn_project
-                               if i != rnn_layers - 1 else output_size,
-                               layernorm=layernorm,
-                               dropout=rnn_dropout,
-                               bidirectional=rnn_bidir,
-                               add_forward_backward=add_forward_backward))
-        self.rnns = nn.ModuleList(rnn_list)
+        self.rnns = nn.ModuleList([
+            VariantRNN(
+                derive_in_size(i),
+                hidden_size=hidden,
+                rnn=rnn,
+                project_size=project if i != num_layers - 1 else out_features,
+                layernorm=layernorm,
+                dropout=dropout,
+                bidirectional=bidirectional,
+                add_forward_backward=add_forward_backward)
+            for i in range(num_layers)
+        ])
         self.use_pyramid = use_pyramid
 
-    def _downsample_concat(
+    def _subsample_concat(
             self, inp: th.Tensor, inp_len: Optional[th.Tensor]
     ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
         """
-        Do downsampling for RNN output
+        Do subsampling for RNN output
         """
         _, T, _ = inp.shape
         # concat
@@ -202,60 +263,41 @@ class CustomRNNEncoder(nn.Module):
         """
         for i, layer in enumerate(self.rnns):
             if i != 0 and self.use_pyramid:
-                inp, inp_len = self._downsample_concat(inp, inp_len)
+                inp, inp_len = self._subsample_concat(inp, inp_len)
             inp = layer(inp, inp_len)
         return inp, inp_len
 
 
-def parse_str_int(str_or_int: Union[str, int], num_layers: int):
+class TDNNEncoder(EncoderBase):
     """
-    Parse string or int, egs:
-        1,1,2 => [1, 1, 2]
-        2     => [2, 2, 2]
-    """
-    if isinstance(str_or_int, str):
-        values = [int(t) for t in str_or_int.split(",")]
-        if len(values) != num_layers:
-            raise ValueError(f"Number of the layers: {num_layers} " +
-                             f"do not match {str_or_int}")
-    else:
-        values = [str_or_int] * num_layers
-    return values
-
-
-class TDNNEncoder(nn.Module):
-    """
-    Stack of TDNNLayers
+    The stack of TDNN (conv1d) layers with optional time reduction
     """
 
     def __init__(self,
-                 input_size: int,
-                 output_size: int,
+                 inp_features: int,
+                 out_features: int,
                  dim: int = 512,
                  norm: str = "BN",
                  num_layers: int = 3,
-                 stride: str = "2,2,2",
-                 dilation: str = "1,1,1",
+                 stride: Union[List[int], int] = 2,
+                 dilation: Union[List[int], int] = 1,
                  dropout: float = 0):
-        super(TDNNEncoder, self).__init__()
-        stride_conf = parse_str_int(stride, num_layers)
-        dilation_conf = parse_str_int(dilation, num_layers)
-        tdnns = [
-            TDNNLayer(input_size if i == 0 else dim,
-                      dim,
-                      kernel_size=3,
-                      norm=norm,
-                      stride=stride_conf[i],
-                      dilation=dilation_conf[i],
-                      dropout=dropout) for i in range(num_layers)
-        ]
-        self.tdnn_enc = nn.Sequential(*tdnns)
-        self.proj_out = None if output_size is None else nn.Linear(
-            dim, output_size)
-        sub_sampling = 1
-        for s in stride_conf:
-            sub_sampling *= s
-        self.sub_sampling = sub_sampling
+        super(TDNNEncoder, self).__init__(inp_features, out_features)
+        if isinstance(stride, int):
+            stride = [stride] * num_layers
+        if isinstance(dilation, int):
+            dilation = [dilation] * num_layers
+        self.encs = nn.Sequential(*[
+            TDNN(inp_features if i == 0 else dim,
+                 dim if i != num_layers - 1 else out_features,
+                 kernel_size=3,
+                 norm=norm,
+                 stride=stride[i],
+                 dilation=dilation[i],
+                 dropout=dropout,
+                 subsampling=True) for i in range(num_layers)
+        ])
+        self.subsampling_factor = np.prod(stride)
 
     def forward(
             self, inp: th.Tensor, inp_len: Optional[th.Tensor]
@@ -268,43 +310,43 @@ class TDNNEncoder(nn.Module):
             out (Tensor): N x To x O
             out_len (Tensor or None)
         """
-        out = self.tdnn_enc(inp)
-        if inp_len is not None:
-            inp_len = inp_len // self.sub_sampling
-        if self.proj_out:
-            out = self.proj_out(out)
-        return out, inp_len
+        out = self.encs(inp)
+        if inp_len is None:
+            return out, None
+        else:
+            return out, inp_len // self.subsampling_factor
 
 
-class FSMNEncoder(nn.Module):
+class FSMNEncoder(EncoderBase):
     """
-    Stack of FsmnLayers, with optional residual connection
+    Stack of FSMN layers, with optional residual connection
     """
 
     def __init__(self,
-                 input_size: int,
-                 output_size: int,
-                 project_size: int = 512,
+                 inp_features: int,
+                 out_features: int,
+                 project: int = 512,
                  num_layers: int = 4,
                  residual: bool = True,
                  lctx: int = 3,
                  rctx: int = 3,
                  norm: str = "BN",
-                 dilation: int = 1,
+                 dilation: Union[List[int], int] = 1,
                  dropout: float = 0):
-        super(FSMNEncoder, self).__init__()
-        dilations = parse_str_int(dilation, num_layers)
+        super(FSMNEncoder, self).__init__(inp_features, out_features)
+        if isinstance(dilation, int):
+            dilation = [dilation] * num_layers
         self.layers = nn.ModuleList([
-            FSMNLayer(input_size if i == 0 else output_size,
-                      output_size,
-                      project_size,
-                      lctx=lctx,
-                      rctx=rctx,
-                      norm="" if i == num_layers - 1 else norm,
-                      dilation=dilations[i],
-                      dropout=dropout) for i in range(num_layers)
+            FSMN(inp_features if i == 0 else out_features,
+                 out_features,
+                 project,
+                 lctx=lctx,
+                 rctx=rctx,
+                 norm="" if i == num_layers - 1 else norm,
+                 dilation=dilation[i],
+                 dropout=dropout) for i in range(num_layers)
         ])
-        self.res = residual
+        self.residual = residual
 
     def forward(
             self, inp: th.Tensor, inp_len: Optional[th.Tensor]
@@ -324,124 +366,9 @@ class FSMNEncoder(nn.Module):
             inp = inp[None, ...]
         memory = None
         for fsmn in self.layers:
-            if self.res:
+            if self.residual:
                 inp, memory = fsmn(inp, memory=memory)
             else:
                 inp, _ = fsmn(inp, memory=memory)
         inp = inp.transpose(1, 2)
         return inp, inp_len
-
-
-class TimeDelayRNNEncoder(nn.Module):
-    """
-    TDNN + RNN encoder, using TDNN for subsampling and RNN
-    for sequence modeling
-    """
-
-    def __init__(self,
-                 input_size: int,
-                 output_size: int,
-                 tdnn_dim: int = 512,
-                 tdnn_norm: str = "BN",
-                 tdnn_layers: int = 2,
-                 tdnn_stride: str = "2,2",
-                 tdnn_dilation: str = "1,1",
-                 tdnn_dropout: float = 0,
-                 rnn: str = "lstm",
-                 rnn_layers: int = 3,
-                 rnn_bidir: bool = True,
-                 rnn_dropout: float = 0.2,
-                 rnn_project: Optional[int] = None,
-                 rnn_layernorm: bool = False,
-                 rnn_hidden: int = 512):
-        super(TimeDelayRNNEncoder, self).__init__()
-        self.tdnn_enc = TDNNEncoder(input_size,
-                                    None,
-                                    dim=tdnn_dim,
-                                    norm=tdnn_norm,
-                                    num_layers=tdnn_layers,
-                                    stride=tdnn_stride,
-                                    dilation=tdnn_dilation,
-                                    dropout=tdnn_dropout)
-        self.rnns_enc = CustomRNNEncoder(tdnn_dim,
-                                         output_size,
-                                         rnn=rnn,
-                                         layernorm=rnn_layernorm,
-                                         rnn_layers=rnn_layers,
-                                         rnn_bidir=rnn_bidir,
-                                         rnn_dropout=rnn_dropout,
-                                         rnn_project=rnn_project,
-                                         rnn_hidden=rnn_hidden)
-
-    def forward(
-            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
-        """
-        Args:
-            inp (Tensor): N x Ti x F
-            inp_len (Tensor or None): N
-        Return:
-            out_pad (Tensor): N x To x O
-            out_len (Tensor or None): N
-        """
-        out_pad, out_len = self.tdnn_enc(inp, inp_len)
-        # print(f"inp: {inp_len}, out: {out_len}", flush=True)
-        return self.rnns_enc(out_pad, out_len)
-
-
-class TimeDelayFSMNEncoder(nn.Module):
-    """
-    TDNN + FSMN encoder, using TDNN for subsampling and FSMN
-    for sequence modeling
-    """
-
-    def __init__(self,
-                 input_size: int,
-                 output_size: int,
-                 tdnn_dim: int = 512,
-                 tdnn_norm: str = "BN",
-                 tdnn_layers: int = 2,
-                 tdnn_stride: str = "2,2",
-                 tdnn_dilation: str = "1,1",
-                 tdnn_dropout: float = 0.2,
-                 fsmn_layers: int = 4,
-                 fsmn_lctx: int = 10,
-                 fsmn_rctx: int = 10,
-                 fsmn_norm: str = "LN",
-                 fsmn_residual: bool = True,
-                 fsmn_dilation: int = 1,
-                 fsmn_project: int = 512,
-                 fsmn_dropout: float = 0.2):
-        super(TimeDelayFSMNEncoder, self).__init__()
-        self.tdnn_enc = TDNNEncoder(input_size,
-                                    None,
-                                    dim=tdnn_dim,
-                                    norm=tdnn_norm,
-                                    num_layers=tdnn_layers,
-                                    stride=tdnn_stride,
-                                    dilation=tdnn_dilation,
-                                    dropout=tdnn_dropout)
-        self.fsmn_enc = FSMNEncoder(tdnn_dim,
-                                    output_size,
-                                    project_size=fsmn_project,
-                                    lctx=fsmn_lctx,
-                                    rctx=fsmn_rctx,
-                                    norm=fsmn_norm,
-                                    dilation=fsmn_dilation,
-                                    residual=fsmn_residual,
-                                    num_layers=fsmn_layers,
-                                    dropout=fsmn_dropout)
-
-    def forward(
-            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
-        """
-        Args:
-            inp (Tensor): N x Ti x F
-            inp_len (Tensor or None): N
-        Return:
-            out_pad (Tensor): N x To x O
-            out_len (Tensor or None): N
-        """
-        out_pad, out_len = self.tdnn_enc(inp, inp_len)
-        return self.fsmn_enc(out_pad, out_len)

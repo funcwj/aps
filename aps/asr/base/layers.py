@@ -16,15 +16,15 @@ class Normalize1d(nn.Module):
     Wrapper for BatchNorm1d & LayerNorm
     """
 
-    def __init__(self, name: str, in_features: int):
+    def __init__(self, name: str, inp_features: int):
         super(Normalize1d, self).__init__()
         name = name.upper()
         if name not in ["BN", "LN"]:
             raise ValueError(f"Unknown type of Normalize1d: {name}")
         if name == "BN":
-            self.norm = nn.BatchNorm1d(in_features, momentum=0)
+            self.norm = nn.BatchNorm1d(inp_features, momentum=0)
         else:
-            self.norm = nn.LayerNorm(in_features)
+            self.norm = nn.LayerNorm(inp_features)
         self.name = name
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
@@ -44,29 +44,30 @@ class Normalize1d(nn.Module):
         return out
 
 
-class TDNNLayer(nn.Module):
+class TDNN(nn.Module):
     """
     Implement a time delay neural network (TDNN) layer using conv1d operations
     """
 
     def __init__(self,
-                 input_size: int,
-                 output_size: int,
+                 inp_features: int,
+                 out_features: int,
                  kernel_size: int = 3,
                  stride: int = 2,
                  dilation: int = 1,
                  norm: str = "BN",
-                 dropout: float = 0):
-        super(TDNNLayer, self).__init__()
-        self.conv1d = nn.Conv1d(input_size,
-                                output_size,
+                 dropout: float = 0,
+                 subsampling: bool = True):
+        super(TDNN, self).__init__()
+        self.conv1d = nn.Conv1d(inp_features,
+                                out_features,
                                 kernel_size,
                                 stride=stride,
                                 dilation=dilation,
                                 padding=(dilation * (kernel_size - 1)) // 2)
-        self.norm = Normalize1d(norm, output_size)
+        self.norm = Normalize1d(norm, out_features)
         self.dropout = nn.Dropout(p=dropout) if dropout > 0 else None
-        self.down_sampling = stride
+        self.subsampling_factor = stride if subsampling else 1
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
@@ -77,49 +78,51 @@ class TDNNLayer(nn.Module):
         """
         if inp.dim() not in [2, 3]:
             raise RuntimeError(
-                f"TimeDelayLayer accepts 2/3D tensor, got {inp.dim()} instead")
+                f"TDNNLayer accepts 2/3D tensor, got {inp.dim()} instead")
         if inp.dim() == 2:
             inp = inp[None, ...]
         _, T, _ = inp.shape
         # N x T x F => N x F x T
         inp = inp.transpose(1, 2)
-        # conv & bn
+        # conv
         out = self.conv1d(inp)
-        out = out[..., :T // self.down_sampling]
-        out = tf.relu(out)
+        out = out[..., :T // self.subsampling_factor]
+        # BN or LN
         out = self.norm(out)
+        # ReLU
+        out = tf.relu(out)
         if self.dropout:
             out = self.dropout(out)
         return out
 
 
-class FSMNLayer(nn.Module):
+class FSMN(nn.Module):
     """
     Implement layer of feedforward sequential memory networks (FSMN)
     """
 
     def __init__(self,
-                 input_size: int,
-                 output_size: int,
-                 project_size: int,
+                 inp_features: int,
+                 out_features: int,
+                 proj_features: int,
                  lctx: int = 3,
                  rctx: int = 3,
                  norm: int = "BN",
                  dilation: int = 0,
                  dropout: float = 0):
-        super(FSMNLayer, self).__init__()
-        self.inp_proj = nn.Linear(input_size, project_size, bias=False)
+        super(FSMN, self).__init__()
+        self.inp_proj = nn.Linear(inp_features, proj_features, bias=False)
         self.ctx_size = lctx + rctx + 1
-        self.ctx_conv = nn.Conv1d(project_size,
-                                  project_size,
+        self.ctx_conv = nn.Conv1d(proj_features,
+                                  proj_features,
                                   kernel_size=self.ctx_size,
                                   dilation=dilation,
-                                  groups=project_size,
+                                  groups=proj_features,
                                   padding=(self.ctx_size - 1) // 2,
                                   bias=False)
-        self.out_proj = nn.Linear(project_size, output_size)
+        self.out_proj = nn.Linear(proj_features, out_features)
         if norm:
-            self.norm = Normalize1d(norm, output_size)
+            self.norm = Normalize1d(norm, out_features)
         else:
             self.norm = None
         self.out_drop = nn.Dropout(p=dropout) if dropout > 0 else None
@@ -151,18 +154,19 @@ class FSMNLayer(nn.Module):
         if memory is not None:
             proj = proj + memory
         # N x T x O
-        out = tf.relu(self.out_proj(proj))
+        out = self.out_proj(proj)
         # N x O x T
         out = out.transpose(1, 2)
         if self.norm:
             out = self.norm(out)
+        out = tf.relu(out)
         if self.out_drop:
             out = self.out_drop(out)
         # N x T x O
         return out, proj
 
 
-class CustomRNNLayer(nn.Module):
+class VariantRNN(nn.Module):
     """
     A custom rnn layer for PyramidEncoder
     """
@@ -176,7 +180,7 @@ class CustomRNNLayer(nn.Module):
                  dropout: float = 0.0,
                  bidirectional: bool = False,
                  add_forward_backward: bool = False):
-        super(CustomRNNLayer, self).__init__()
+        super(VariantRNN, self).__init__()
         RNN = rnn.upper()
         supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
         if RNN not in supported_rnn:
@@ -186,11 +190,11 @@ class CustomRNNLayer(nn.Module):
                                       1,
                                       batch_first=True,
                                       bidirectional=bidirectional)
-        self.add = add_forward_backward and bidirectional
+        self.add_forward_backward = add_forward_backward and bidirectional
         self.dropout = nn.Dropout(dropout) if dropout != 0 else None
         if not add_forward_backward and bidirectional:
             hidden_size *= 2
-        self.layernorm = nn.LayerNorm(hidden_size) if layernorm else None
+        self.norm = nn.LayerNorm(hidden_size) if layernorm else None
         self.proj = nn.Linear(hidden_size,
                               project_size) if project_size else None
 
@@ -206,7 +210,6 @@ class CustomRNNLayer(nn.Module):
         Return:
             out_pad (Tensor): N x Ti x O
         """
-        mainp_len = inp_pad.size(1)
         if inp_len is not None:
             inp_pad = pack_padded_sequence(inp_pad,
                                            inp_len,
@@ -215,26 +218,24 @@ class CustomRNNLayer(nn.Module):
         # extend dim when inference
         else:
             if inp_pad.dim() not in [2, 3]:
-                raise RuntimeError("RNN expect input dim as 2 or 3, " +
+                raise RuntimeError("VariantRNN expect input dim as 2 or 3, " +
                                    f"got {inp_pad.dim()}")
             if inp_pad.dim() != 3:
                 inp_pad = th.unsqueeze(inp_pad, 0)
         y, _ = self.rnn(inp_pad)
-        # x: NxTxD
+        # N x T x D
         if inp_len is not None:
-            y, _ = pad_packed_sequence(y,
-                                       batch_first=True,
-                                       total_length=mainp_len)
+            y, _ = pad_packed_sequence(y, batch_first=True)
         # add forward & backward
-        if self.add:
+        if self.add_forward_backward:
             f, b = th.chunk(y, 2, dim=-1)
             y = f + b
+        # add ln
+        if self.norm:
+            y = self.norm(y)
         # dropout
         if self.dropout:
             y = self.dropout(y)
-        # add ln
-        if self.layernorm:
-            y = self.layernorm(y)
         # proj
         if self.proj:
             y = self.proj(y)

@@ -9,7 +9,7 @@ import torch.nn as nn
 
 from torch_complex import ComplexTensor
 from typing import Union, NoReturn, Optional
-from aps.asr.base.encoder import TorchRNNEncoder
+from aps.asr.base.encoder import VanillaRNNEncoder
 from aps.const import EPSILON
 from aps.libs import ApsRegisters
 
@@ -84,7 +84,7 @@ def permu_aligner(masks: np.ndarray, transpose: bool = False) -> np.ndarray:
 
 
 @ApsRegisters.sse.register("unsupervised_enh")
-class UnsupervisedEnh(TorchRNNEncoder):
+class UnsupervisedEnh(VanillaRNNEncoder):
     """
     A recurrent network example for unsupervised training
     """
@@ -95,18 +95,18 @@ class UnsupervisedEnh(TorchRNNEncoder):
                  input_project=None,
                  enh_transform: Optional[nn.Module] = None,
                  rnn: str = "lstm",
-                 rnn_layers: int = 3,
-                 rnn_hidden: int = 512,
-                 rnn_dropout: float = 0.2,
-                 rnn_bidir: bool = False) -> None:
+                 num_layers: int = 3,
+                 hidden: int = 512,
+                 dropout: float = 0.2,
+                 bidirectional: bool = False) -> None:
         super(UnsupervisedEnh, self).__init__(input_size,
                                               num_bins,
                                               rnn=rnn,
                                               input_project=input_project,
-                                              rnn_layers=rnn_layers,
-                                              rnn_hidden=rnn_hidden,
-                                              rnn_dropout=rnn_dropout,
-                                              rnn_bidir=rnn_bidir,
+                                              num_layers=num_layers,
+                                              hidden=hidden,
+                                              dropout=dropout,
+                                              bidirectional=bidirectional,
                                               non_linear="sigmoid")
         assert enh_transform is not None
         self.enh_transform = enh_transform

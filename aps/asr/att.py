@@ -27,25 +27,25 @@ class AttASR(nn.Module):
                  ctc: bool = False,
                  asr_transform: Optional[nn.Module] = None,
                  att_type: str = "ctx",
-                 att_kwargs: Optional[Dict] = None,
-                 encoder_type: str = "common",
-                 encoder_proj: int = 256,
-                 encoder_kwargs: Optional[Dict] = None,
-                 decoder_dim: int = 512,
-                 decoder_kwargs: Optional[Dict] = None) -> None:
+                 att_kwargs: Dict = {},
+                 enc_type: str = "common",
+                 enc_proj: int = 256,
+                 enc_kwargs: Dict = {},
+                 dec_dim: int = 512,
+                 dec_kwargs: Dict = {}) -> None:
         super(AttASR, self).__init__()
-        self.encoder = encoder_instance(encoder_type, input_size, encoder_proj,
-                                        **encoder_kwargs)
-        att = att_instance(att_type, encoder_proj, decoder_dim, **att_kwargs)
-        self.decoder = TorchDecoder(encoder_proj,
+        self.encoder = encoder_instance(enc_type, input_size, enc_proj,
+                                        enc_kwargs)
+        att = att_instance(att_type, enc_proj, dec_dim, **att_kwargs)
+        self.decoder = TorchDecoder(enc_proj,
                                     vocab_size - 1 if ctc else vocab_size,
                                     attention=att,
-                                    **decoder_kwargs)
+                                    **dec_kwargs)
         if eos < 0 or sos < 0:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         self.sos = sos
         self.eos = eos
-        self.ctc = nn.Linear(encoder_proj, vocab_size) if ctc else None
+        self.ctc = nn.Linear(enc_proj, vocab_size) if ctc else None
         self.asr_transform = asr_transform
 
     def forward(

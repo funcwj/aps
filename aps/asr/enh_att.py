@@ -10,7 +10,7 @@ from typing import Optional, Dict, Tuple, List
 from torch_complex import ComplexTensor
 
 from aps.asr.att import AttASR
-from aps.asr.base.encoder import TorchRNNEncoder
+from aps.asr.base.encoder import VanillaRNNEncoder
 from aps.asr.filter.mvdr import MvdrBeamformer
 from aps.asr.filter.google import CLPFsBeamformer  # same as TimeInvariantFilter
 from aps.asr.filter.conv import (TimeInvariantFilter, TimeVariantFilter,
@@ -35,14 +35,14 @@ class EnhAttASR(nn.Module):
             ctc: bool = False,
             # attention
             att_type: str = "ctx",
-            att_kwargs: Optional[Dict] = None,
+            att_kwargs: Dict = {},
             # encoder
-            encoder_type: str = "common",
-            encoder_proj: int = 256,
-            encoder_kwargs: Optional[Dict] = None,
+            enc_type: str = "common",
+            enc_proj: int = 256,
+            enc_kwargs: Dict = {},
             # decoder
-            decoder_dim: int = 512,
-            decoder_kwargs: Optional[Dict] = None) -> None:
+            dec_dim: int = 512,
+            dec_kwargs: Dict = {}) -> None:
         super(EnhAttASR, self).__init__()
         # Back-end feature transform
         self.asr_transform = asr_transform
@@ -55,11 +55,11 @@ class EnhAttASR(nn.Module):
                               asr_transform=None,
                               att_type=att_type,
                               att_kwargs=att_kwargs,
-                              encoder_type=encoder_type,
-                              encoder_proj=encoder_proj,
-                              encoder_kwargs=encoder_kwargs,
-                              decoder_dim=decoder_dim,
-                              decoder_kwargs=decoder_kwargs)
+                              enc_type=enc_type,
+                              enc_proj=enc_proj,
+                              enc_kwargs=enc_kwargs,
+                              dec_dim=dec_dim,
+                              dec_kwargs=dec_kwargs)
         if asr_cpt:
             las_cpt = th.load(asr_cpt, map_location="cpu")
             self.las_asr.load_state_dict(las_cpt, strict=False)
@@ -144,7 +144,7 @@ class MvdrAttASR(EnhAttASR):
         # Front-end feature extraction
         self.enh_transform = enh_transform
         # TF-mask estimation network
-        self.mask_net = TorchRNNEncoder(
+        self.mask_net = VanillaRNNEncoder(
             enh_input_size, num_bins * 2 if mask_net_noise else num_bins,
             **mask_net_kwargs)
         self.mask_net_noise = mask_net_noise

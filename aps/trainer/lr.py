@@ -4,10 +4,10 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 from typing import Tuple, List, Optional
-from torch.optim import lr_scheduler, Optimizer
+from torch.optim import lr, Optimizer
 
 
-class CustomMultiStepLR(lr_scheduler.MultiStepLR):
+class CustomMultiStepLR(lr.MultiStepLR):
     """
     Using lr_conf to set milestones & gamma, e.g., 0.1@10,20,40
     """
@@ -31,7 +31,7 @@ class CustomMultiStepLR(lr_scheduler.MultiStepLR):
         return gamma, milestones
 
 
-class NoamLR(lr_scheduler._LRScheduler):
+class NoamLR(lr._LRScheduler):
     """
     Lr schuduler for Transformer
     """
@@ -68,9 +68,9 @@ class NoamLR(lr_scheduler._LRScheduler):
 
 
 lr_scheduler_cls = {
-    "reduce_lr": lr_scheduler.ReduceLROnPlateau,
-    "step_lr": lr_scheduler.StepLR,
+    "reduce_lr": lr.ReduceLROnPlateau,
+    "step_lr": lr.StepLR,
     "multi_step_lr": CustomMultiStepLR,
-    "exponential_lr": lr_scheduler.ExponentialLR,
+    "exponential_lr": lr.ExponentialLR,
     "noam_lr": NoamLR
 }

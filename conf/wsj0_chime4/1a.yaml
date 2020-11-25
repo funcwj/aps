@@ -2,19 +2,21 @@ nnet: "att"
 
 nnet_conf:
   input_size: 80
-  encoder_type: "tdnn_rnn"
+  encoder_type: "concat"
   encoder_proj: 512
   encoder_kwargs:
-    tdnn_dim: 512
-    tdnn_layers: 2
-    tdnn_stride: "2,2"
-    tdnn_dilation: "1,1"
-    tdnn_dropout: 0.2
-    rnn: "lstm"
-    rnn_layers: 3
-    rnn_bidir: True
-    rnn_dropout: 0.2
-    rnn_hidden: 320
+    tdnn:
+      out_features: 512
+      dim: 512
+      num_layers: 3
+      stride: "2,2,2"
+      dilation: "1,1,2"
+    vanilla_rnn:
+      rnn: "lstm"
+      num_layers: 3
+      bidirectional: true
+      dropout: 0.2
+      hidden: 320
   decoder_dim: 512
   decoder_kwargs:
     dec_rnn: "lstm"

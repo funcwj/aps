@@ -5,10 +5,10 @@ nnet_conf:
   input_project: 512
   num_bins: 257
   rnn: "lstm"
-  rnn_dropout: 0.2
-  rnn_bidir: True
-  rnn_hidden: 512
-  rnn_layers: 3
+  dropout: 0.2
+  bidirectional: true
+  hidden: 512
+  num_layers: 3
 
 task: "unsuper_enh"
 
