@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from typing import List, Dict, Optional, Tuple, Union
+from aps.asr.base.layers import OneHotEmbedding
 from aps.const import NEG_INF
 
 
@@ -40,37 +41,11 @@ def trace_back_hypos(point: th.Tensor,
     return hypos
 
 
-class OneHotEmbedding(nn.Module):
-    """
-    Onehot encode
-    """
-
-    def __init__(self, vocab_size: int):
-        super(OneHotEmbedding, self).__init__()
-        self.vocab_size = vocab_size
-
-    def extra_repr(self):
-        return f"vocab_size={self.vocab_size}"
-
-    def forward(self, x: th.Tensor) -> th.Tensor:
-        """
-        args:
-            x: ...
-        return
-            e: ... x V
-        """
-        S = list(x.shape) + [self.vocab_size]
-        # ... x V
-        H = th.zeros(S, dtype=th.float32, device=x.device)
-        # set one
-        H = H.scatter(-1, x[..., None], 1)
-        return H
-
-
 class VanillaRNNDecoder(nn.Module):
     """
     PyTorch's RNN decoder
     """
+    HiddenType = Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]
 
     def __init__(self,
                  enc_proj: int,
@@ -104,11 +79,11 @@ class VanillaRNNDecoder(nn.Module):
         self.vocab_size = vocab_size
 
     def _step_decoder(
-        self,
-        emb_pre: th.Tensor,
-        att_ctx: th.Tensor,
-        dec_hid: Union[th.Tensor, Tuple[th.Tensor, th.Tensor], None] = None
-    ) -> Tuple[th.Tensor, Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]]:
+            self,
+            emb_pre: th.Tensor,
+            att_ctx: th.Tensor,
+            dec_hid: Optional[HiddenType] = None
+    ) -> Tuple[th.Tensor, HiddenType]:
         """
         Args
             emb_pre: N x D_emb
@@ -127,12 +102,11 @@ class VanillaRNNDecoder(nn.Module):
         out_pre: th.Tensor,
         enc_out: th.Tensor,
         att_ctx: th.Tensor,
-        dec_hid: Union[th.Tensor, Tuple[th.Tensor, th.Tensor], None] = None,
+        dec_hid: Optional[HiddenType] = None,
         att_ali: Optional[th.Tensor] = None,
         enc_len: Optional[th.Tensor] = None,
         proj: Optional[th.Tensor] = None
-    ) -> Tuple[th.Tensor, th.Tensor, Union[th.Tensor, Tuple[
-            th.Tensor, th.Tensor]], th.Tensor, th.Tensor]:
+    ) -> Tuple[th.Tensor, th.Tensor, HiddenType, th.Tensor, th.Tensor]:
         """
         Make a prediction step
         """

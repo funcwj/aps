@@ -8,7 +8,7 @@ import torch as th
 from torch.nn.utils import clip_grad_norm_
 from typing import Optional, Dict, List, Union, NoReturn
 
-from aps.trainer.base import Trainer, add_gaussian_noise
+from aps.trainer.base import Trainer
 from aps.libs import ApsRegisters
 import aps.distributed as dist
 
@@ -123,8 +123,8 @@ class HvdTrainer(Trainer):
             else:
                 self.optimizer.step()
 
-            if self.gaussian_noise_std:
-                add_gaussian_noise(self.task, std=self.gaussian_noise_std)
+            if self.weight_noise_adder:
+                self.weight_noise_adder(self.task)
             if norm != -1:
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]

@@ -46,12 +46,13 @@ Supported task in aps. The `Task` class is responsible for the computation of an
 * `MelFreqSaTask`: mel domain spectral approximation loss for frequency domain enhancement/separation model
 * `LinearFreqSaTask`: spectral approximation loss for time domain enhancement/separation model
 * `MelTimeSaTask`: mel domain spectral approximation loss for time domain enhancement/separation model
+* `ComplexMappingTask`: frequency domain complex mapping objective function
 
 ## `aps.loader`
 
 Supported data loader in aps. For acoustic model training, we have two options
 
-* `am_wav`: Raw waveform data loader which do not need us to prepare acoustic features beforehead (recommended).
+* `am_raw`: Raw waveform data loader which do not need us to prepare acoustic features beforehead (recommended).
 * `am_kaldi`: Data loader that supports feature format in Kaldi toolkit.
 
 For enhancement/separation model, we also have two options
@@ -76,12 +77,11 @@ The submodule for language model & acoustic model. Currently the implemented AM 
 
 The transformer implementation is kept similar style with `torch.nn` package and each network should have function `beam_search()` for decoding. Variants of encoder are provided in `aps.asr.base.encoder`:
 
-* `TorchRNNEncoder`: stack of RNNs as encoder
-* `CustomRNNEncoder`: RNNs with customized features
-* `TDNNEncoder`: stack of TDNN as encoder
+* `VanillaRNNEncoder`: stack of vanilla RNNs as encoder
+* `VariantRNNEncoder`: RNNs with customized features
 * `FSMNEncoder`: stack of FSMN as encoder
-* `TimeDelayRNNEncoder`: TDNN (for sub-sampling) + RNNs as encoder
-* `TimeDelayFSMNEncoder`: TDNN (for sub-sampling) + FSMN as encoder
+* `Conv1dEncoder`: stack of TDNN (conv1d) layers as encoder (can also be used for subsampling, following with other encoders).
+* `Conv2dEncoder`: stack of conv2d layers (used for subsampling, following with other encoders)
 
 and attention type:
 * `DotAttention`: dot attention and its multi-head version `MHDotAttention`

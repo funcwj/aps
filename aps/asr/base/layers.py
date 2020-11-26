@@ -11,6 +11,33 @@ from typing import Optional, Tuple, Union, NoReturn
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 
+class OneHotEmbedding(nn.Module):
+    """
+    Onehot embedding layer
+    """
+
+    def __init__(self, vocab_size: int):
+        super(OneHotEmbedding, self).__init__()
+        self.vocab_size = vocab_size
+
+    def extra_repr(self) -> str:
+        return f"vocab_size={self.vocab_size}"
+
+    def forward(self, x: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            x (Tensor): ...
+        Return
+            e (Tensor): ... x V
+        """
+        S = list(x.shape) + [self.vocab_size]
+        # ... x V
+        H = th.zeros(S, dtype=th.float32, device=x.device)
+        # set one
+        H = H.scatter(-1, x[..., None], 1)
+        return H
+
+
 class Normalize1d(nn.Module):
     """
     Wrapper for BatchNorm1d & LayerNorm

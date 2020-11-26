@@ -23,13 +23,18 @@ except ImportError:
     tensorboard_available = False
 
 
-def add_gaussian_noise(nnet: th.nn.Module, std: float = 0.075) -> NoReturn:
+class WeightNoiseAdder(object):
     """
     Add gaussian noise to updated weights
     """
-    for p in nnet.parameters():
-        if p.requires_grad:
-            p.data += th.randn(p.data.shape, device=nnet.device) * std
+
+    def __init__(self, std: float = 0.075) -> None:
+        self.std = std
+
+    def __call__(self, nnet: th.nn.Module) -> NoReturn:
+        for p in nnet.parameters():
+            if p.requires_grad:
+                p.data += th.randn(p.data.shape, device=nnet.device) * self.std
 
 
 class ProgressReporter(object):
@@ -184,7 +189,7 @@ class Trainer(object):
                  ss_scheduler: str = "const",
                  ss_scheduler_kwargs: Optional[Dict] = None,
                  clip_gradient: Optional[float] = None,
-                 gaussian_noise_std: Optional[float] = None,
+                 weight_noise_std: Optional[float] = None,
                  prog_interval: int = 100,
                  save_interval: int = -1,
                  resume: str = "",
@@ -232,9 +237,12 @@ class Trainer(object):
                                          rank=rank,
                                          period=prog_interval,
                                          tensorboard=tensorboard)
+        if weight_noise_std is None:
+            self.weight_noise_adder = None
+        else:
+            self.weight_noise_adder = WeightNoiseAdder(weight_noise_std)
 
         self.clip_gradient = clip_gradient
-        self.gaussian_noise_std = gaussian_noise_std
         self.cur_epoch = 0  # zero based
         self.save_interval = save_interval
         self.ssr = 0
@@ -271,12 +279,12 @@ class Trainer(object):
                 warnings.warn("For reduce_lr scheduler, lr_scheduler_period " +
                               "shoule be \'epoch\'")
                 lr_scheduler_period = "epoch"
-                reduce_lr_kwargs = {
-                    "mode": mode,
-                    "threshold_mode": "abs",
-                    "threshold": no_impr_thres
-                }
-                lr_scheduler_kwargs.update(reduce_lr_kwargs)
+            reduce_lr_kwargs = {
+                "mode": mode,
+                "threshold_mode": "abs",
+                "threshold": no_impr_thres
+            }
+            lr_scheduler_kwargs.update(reduce_lr_kwargs)
         self.lr_scheduler = self.create_scheduler(lr_scheduler, self.optimizer,
                                                   **lr_scheduler_kwargs)
         self.lr_scheduler_period = lr_scheduler_period
@@ -304,9 +312,9 @@ class Trainer(object):
         if clip_gradient:
             self.reporter.log(
                 f"Gradient clipping if over {clip_gradient} L2 norm")
-        if gaussian_noise_std:
+        if weight_noise_std:
             self.reporter.log("Add gaussian noise to weights, with " +
-                              f"std = {gaussian_noise_std}")
+                              f"std = {weight_noise_std}")
 
     def create_optimizer(self,
                          optimizer: str,
@@ -420,8 +428,8 @@ class Trainer(object):
         # step optimizer and update statistics
         if math.isfinite(norm):
             self.optimizer.step()
-            if self.gaussian_noise_std:
-                add_gaussian_noise(self.task, std=self.gaussian_noise_std)
+            if self.weight_noise_adder:
+                self.weight_noise_adder(self.task)
             if norm != -1:
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
