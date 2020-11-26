@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 
 from typing import Optional, Dict, Tuple, List
-from aps.asr.base.decoder import TorchDecoder
+from aps.asr.base.decoder import VanillaRNNDecoder
 from aps.asr.base.encoder import encoder_instance
 from aps.asr.base.attention import att_instance
 from aps.libs import ApsRegisters
@@ -36,11 +36,10 @@ class AttASR(nn.Module):
         super(AttASR, self).__init__()
         self.encoder = encoder_instance(enc_type, input_size, enc_proj,
                                         enc_kwargs)
-        att = att_instance(att_type, enc_proj, dec_dim, **att_kwargs)
-        self.decoder = TorchDecoder(enc_proj,
-                                    vocab_size - 1 if ctc else vocab_size,
-                                    attention=att,
-                                    **dec_kwargs)
+        self.decoder = VanillaRNNDecoder(enc_proj,
+                                         vocab_size - 1 if ctc else vocab_size,
+                                         **dec_kwargs)
+        self.att_net = att_instance(att_type, enc_proj, dec_dim, **att_kwargs)
         if eos < 0 or sos < 0:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         self.sos = sos
@@ -70,8 +69,11 @@ class AttASR(nn.Module):
             x_pad, x_len = self.asr_transform(x_pad, x_len)
         # N x Ti x D
         enc_out, enc_len = self.encoder(x_pad, x_len)
+        # clear status
+        self.att_net.clear()
         # N x (To+1), pad SOS
-        outs, alis = self.decoder(enc_out,
+        outs, alis = self.decoder(self.att_net,
+                                  enc_out,
                                   enc_len,
                                   y_pad,
                                   sos=self.sos,
@@ -107,8 +109,11 @@ class AttASR(nn.Module):
                 inp_len = x.shape[0]
                 enc_out, _ = self.encoder(x[None, ...], None)
             max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
+            # clear status
+            self.att_net.clear()
             if vectorized:
                 return self.decoder.beam_search_vectorized(
+                    self.att_net,
                     enc_out,
                     beam=beam,
                     lm=lm,
@@ -119,7 +124,8 @@ class AttASR(nn.Module):
                     eos=self.eos,
                     normalized=normalized)
             else:
-                return self.decoder.beam_search(enc_out,
+                return self.decoder.beam_search(self.att_net,
+                                                enc_out,
                                                 beam=beam,
                                                 nbest=nbest,
                                                 max_len=max_len,
@@ -154,7 +160,10 @@ class AttASR(nn.Module):
                 inp_len = x.shape[1]
                 enc_out, enc_len = self.encoder(x, x_len)
             max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
-            return self.decoder.beam_search_batch(enc_out,
+            # clear status
+            self.att_net.clear()
+            return self.decoder.beam_search_batch(self.att_net,
+                                                  enc_out,
                                                   enc_len,
                                                   beam=beam,
                                                   nbest=nbest,

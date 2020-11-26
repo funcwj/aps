@@ -3,7 +3,6 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-import numpy as np
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
@@ -141,7 +140,7 @@ class VanillaRNNEncoder(EncoderBase):
         self.non_linear = supported_non_linear[non_linear]
 
     def flat(self):
-        self.rnn.flatten_parameters()
+        self.rnns.flatten_parameters()
 
     def forward(
             self,
