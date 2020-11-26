@@ -15,14 +15,13 @@ vocab_size=6000
 
 [ $# -ne 2 ] && echo "$0: format error: <text> <exp-dir>" && exit 1
 
-cmd="spm_train"
 text=$1
 exp_dir=$2
 
 [ ! -f $text ] && echo "$0: missing $text" && exit 1
 
 if ! command -v $cmd >/dev/null 2>&1; then
-  echo "$0: compile https://github.com/google/sentencepiece please" && exit 1
+  echo "$0: install https://github.com/google/sentencepiece please" && exit 1
 fi
 
 case $op in
@@ -30,7 +29,7 @@ case $op in
     echo "$0: Training model using $text ..." && mkdir -p $exp_dir
     cat $text | cut -d" " -f 2- > $exp_dir/trn.text && cd $exp_dir
     # keep sos/eos/unk same as asr
-    $cmd --bos_id 1 --bos_piece "<sos>" --eos_id 2 --eos_piece "<eos>" \
+    spm_train --bos_id 1 --bos_piece "<sos>" --eos_id 2 --eos_piece "<eos>" \
       --unk_id 0 --unk_piece "<unk>" --unk_surface "<unk>" \
       --input="trn.text" --vocab_size=$vocab_size --model_type=$mode --model_prefix=$mode
     sort -k 1 $mode.vocab | awk '{printf("%s %d\n", $1, NR - 1)}' > dict && rm trn.text

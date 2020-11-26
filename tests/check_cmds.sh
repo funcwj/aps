@@ -28,3 +28,9 @@ done
 ../utils/wav_duration.py --output sample data/dataloader/ss/wav.1.scp -
 ../utils/archive_wav.py data/dataloader/ss/wav.1.scp /dev/null
 head data/metric/asr/ref.text | ../utils/tokenizer.pl --space "<space>" -
+../utils/tokenizer.py --space "<space>" --unit char --dump-vocab dict \
+  --text-format kaldi data/metric/asr/ref.text /dev/null
+../utils/tokenizer.py --unit word --dump-vocab dict --add-units "<sos>,<eos>,<unk>" \
+  --text-format kaldi data/metric/asr/ref.text /dev/null
+../utils/tokenizer.py --spm data/mdl/en.libri.unigram.spm.model --unit subword \
+  --text-format kaldi data/metric/asr/ref.text -

@@ -15,7 +15,6 @@ from typing import Optional, Dict, List, Union, NoReturn
 
 from torch.nn.utils import clip_grad_norm_
 from aps.trainer.ddp import Trainer
-from aps.trainer.base import add_gaussian_noise
 from aps.libs import ApsRegisters
 import aps.distributed as dist
 
@@ -39,7 +38,7 @@ class ApexTrainer(Trainer):
                  ss_scheduler: str = "const",
                  ss_scheduler_kwargs: Optional[Dict] = None,
                  clip_gradient: Optional[float] = None,
-                 gaussian_noise_std: Optional[float] = None,
+                 weight_noise_std: Optional[float] = None,
                  prog_interval: int = 100,
                  save_interval: int = -1,
                  resume: str = "",
@@ -63,7 +62,7 @@ class ApexTrainer(Trainer):
                              ss_scheduler=ss_scheduler,
                              ss_scheduler_kwargs=ss_scheduler_kwargs,
                              clip_gradient=clip_gradient,
-                             gaussian_noise_std=gaussian_noise_std,
+                             weight_noise_std=weight_noise_std,
                              prog_interval=prog_interval,
                              save_interval=save_interval,
                              resume=resume,
@@ -134,12 +133,12 @@ class ApexTrainer(Trainer):
         # step optimizer and update statistics
         if math.isfinite(norm):
             self.optimizer.step()
-            if self.gaussian_noise_std:
-                add_gaussian_noise(self.task, std=self.gaussian_noise_std)
             if norm != -1:
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
             self.reporter.update(stats)
+            if self.weight_noise_adder:
+                self.weight_noise_adder(self.task)
             self.lr_scheduler_step(None, end_at="step")
             return True
         else:

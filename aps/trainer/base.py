@@ -29,12 +29,14 @@ class WeightNoiseAdder(object):
     """
 
     def __init__(self, std: float = 0.075) -> None:
-        self.std = std
+        # D(cX) = c^2 * D(X)
+        self.factor = std**2
 
     def __call__(self, nnet: th.nn.Module) -> NoReturn:
         for p in nnet.parameters():
             if p.requires_grad:
-                p.data += th.randn(p.data.shape, device=nnet.device) * self.std
+                p.data += th.randn(p.data.shape,
+                                   device=p.data.device) * self.factor
 
 
 class ProgressReporter(object):
@@ -203,8 +205,10 @@ class Trainer(object):
             raise TypeError(
                 f"Trainer accepts Task object, but got {type(task)}")
         if lr_scheduler_period not in ["epoch", "step"]:
-            raise TypeError(
+            raise ValueError(
                 f"Unsupported lr_scheduler_period: {lr_scheduler_period}")
+        if stop_criterion not in ["accu", "loss"]:
+            raise ValueError(f"Unsupported stop_criterion: {stop_criterion}")
         if rank is not None and rank < 0:
             raise ValueError(f"Got invalid rank value: {rank}")
         if not isinstance(device_ids, tuple):
@@ -428,12 +432,13 @@ class Trainer(object):
         # step optimizer and update statistics
         if math.isfinite(norm):
             self.optimizer.step()
-            if self.weight_noise_adder:
-                self.weight_noise_adder(self.task)
             if norm != -1:
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
             self.reporter.update(stats)
+            # add noise if needed
+            if self.weight_noise_adder:
+                self.weight_noise_adder(self.task)
             # schedule lr if needed
             self.lr_scheduler_step(None, end_at="step")
             return True
@@ -565,9 +570,9 @@ class Trainer(object):
         while cur_epoch < num_epochs:
             trn_loader.set_epoch(cur_epoch)
             cur_epoch += 1
-            cur_lr = self.optimizer.param_groups[0]["lr"]
             # >> train
             self.train_epoch(trn_loader)
+            cur_lr = self.optimizer.param_groups[0]["lr"]
             _, _, sstr = self.reporter.report(cur_epoch, cur_lr)
             self.reporter.log(sstr)
             # << train

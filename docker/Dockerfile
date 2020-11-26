@@ -60,3 +60,7 @@ RUN git clone https://github.com/HawkAaron/warp-transducer.git && cd warp-transd
 RUN git clone https://github.com/NVIDIA/apex && cd apex && \
     pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./ && \
     cd .. && rm -rf apex
+
+# install sentencepiece
+RUN git clone https://github.com/google/sentencepiece.git && cd sentencepiece && mkdir build && cd build \
+    cmake .. && make -j $(nproc) && make install && ldconfig -v && cd ../../ && rm -rf sentencepiece
