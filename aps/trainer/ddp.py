@@ -41,6 +41,7 @@ class DdpTrainer(Trainer):
                  stop_criterion: str = "loss",
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
+                 report_metrics: List[str] = ["loss"],
                  **kwargs) -> None:
         super(DdpTrainer,
               self).__init__(task,
@@ -63,7 +64,8 @@ class DdpTrainer(Trainer):
                              tensorboard=tensorboard,
                              stop_criterion=stop_criterion,
                              no_impr=no_impr,
-                             no_impr_thres=no_impr_thres)
+                             no_impr_thres=no_impr_thres,
+                             report_metrics=report_metrics)
         if dist.get_backend() not in ["torch", "none"]:
             raise ValueError(
                 "DdpTrainer should use torch/none as distributed backend")
@@ -83,18 +85,12 @@ class DdpTrainer(Trainer):
         else:
             self.distributed = False
 
-    def checkpoint_states(self, epoch: int) -> Dict:
+    def model_states(self) -> Dict:
         """
-        Return states of the checkpoint to be saved
+        Return model states which will be saved in the checkpoint
         """
         return {
-            "epoch":
-                epoch,
             "model_state_dict":
                 self.task.module.nnet.state_dict()
-                if self.distributed else self.task.nnet.state_dict(),
-            "optim_state_dict":
-                self.optimizer.state_dict(),
-            "lr_scheduler_dict":
-                self.lr_scheduler.state_dict()
+                if self.distributed else self.task.nnet.state_dict()
         }

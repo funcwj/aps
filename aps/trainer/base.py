@@ -41,16 +41,19 @@ class WeightNoiseAdder(object):
 
 class ProgressReporter(object):
     """
-    A simple progress reporter
+    A simple training progress reporter
     """
 
     def __init__(self,
                  checkpoint: Path,
+                 metrics: List[str],
                  period: int = 100,
                  tensorboard: bool = True,
                  rank: Optional[int] = None) -> None:
         self.period = period
         self.rank = rank
+        # mkdir
+        checkpoint.mkdir(parents=True, exist_ok=True)
         if rank is None:
             logger_loc = (checkpoint / "trainer.log").as_posix()
             self.header = "Trainer"
@@ -63,29 +66,47 @@ class ProgressReporter(object):
         if tensorboard and rank in [0, None]:
             if not tensorboard_available:
                 warnings.warn("tensorboard not installed thus disable it...")
-            self.board_writer = SummaryWriter(checkpoint)
+                self.board_writer = None
+            else:
+                self.board_writer = SummaryWriter(checkpoint)
         else:
             self.board_writer = None
+        self.metrics = metrics
         self.reset()
 
     def log(self, sstr: str) -> NoReturn:
+        """
+        Log messages
+        """
         self.logger.info(f"{self.header}: {sstr}")
 
     def eval(self) -> NoReturn:
+        """
+        Reset to eval mode
+        """
         self.log(">> Set eval mode ...")
         self.mode = "valid"
         self.reset()
 
     def train(self) -> NoReturn:
+        """
+        Reset to training mode
+        """
         self.log(">> Set train mode ...")
         self.mode = "train"
         self.reset()
 
     def reset(self) -> NoReturn:
+        """
+        Clear the status
+        """
         self.stats = defaultdict(list)
         self.timer = SimpleTimer()
 
     def update(self, dict_obj: Dict) -> NoReturn:
+        """
+        Track the recording items (multiple)
+        """
         if dict_obj is None:
             return
         for key, value in dict_obj.items():
@@ -94,6 +115,9 @@ class ProgressReporter(object):
             self.add(key, value)
 
     def add(self, key: str, value: float) -> NoReturn:
+        """
+        Track one recording item
+        """
         self.stats[key].append(value)
         N = len(self.stats[key])
         if not N % self.period:
@@ -104,7 +128,27 @@ class ProgressReporter(object):
                 avg = sum(self.stats[key][-self.period:]) / self.period
                 self.log(f"Processed {N:.2e} batches ({key} = {avg:+.2f}) ...")
 
-    def report(self, epoch: int, lr: float) -> Tuple[float, float, str]:
+    def report_metrics(self):
+        """
+        Report the tracked metrics (used for logging & scheduling)
+        """
+        reports = {}
+        for metric in self.metrics:
+            if metric not in self.stats:
+                raise RuntimeError(
+                    f"Metric {metric} is not tracked by the reporter")
+            if metric == "accu":
+                reports["accu"] = sum(self.stats["accu"]) * 100 / len(
+                    self.stats["accu"])
+            else:
+                reports[metric] = sum(self.stats[metric]) / len(
+                    self.stats[metric])
+        return reports
+
+    def report(self, epoch: int, lr: float) -> Tuple[Dict, str]:
+        """
+        Return the reports and log messages
+        """
         N = len(self.stats["loss"])
         if self.mode == "valid":
             sstr = ",".join(
@@ -113,26 +157,24 @@ class ProgressReporter(object):
 
         if N == 0:
             raise RuntimeError("No statistics to report")
-        loss = sum(self.stats["loss"]) / N
-        accu = sum(
-            self.stats["accu"]) * 100 / N if "accu" in self.stats else None
+        # Got reports
+        reports = self.report_metrics()
+        # Write tensorboard if needed
         if self.board_writer:
-            self.board_writer.add_scalar(f"loss/{self.mode}", loss, epoch)
-            if accu is not None:
-                self.board_writer.add_scalar(f"accu/{self.mode}", accu, epoch)
+            for name, value in reports.items():
+                self.board_writer.add_scalar(f"loss/{self.mode}", name, value)
         cost = self.timer.elapsed()
-        if accu is not None:
-            hstr = f"Loss/Accu(time/#batch, lr={lr:.3e}) - Epoch {epoch:2d}: "
-            cstr = f"{self.mode} = {loss:.4f}/{accu:.2f}({cost:.2f}m/{N:d})"
-        else:
-            hstr = f"Loss(time/#batch, lr={lr:.3e}) - Epoch {epoch:2d}: "
-            cstr = f"{self.mode} = {loss:.4f}({cost:.2f}m/{N:d})"
-        return loss, accu, hstr + cstr
+
+        header = "/".join(self.metrics)
+        values = "/".join([f"{reports[metric]:.4f}" for metric in self.metrics])
+        logstr = (f"Epoch {epoch:02d} ({self.mode}): {header}(time/#batch, " +
+                  f"lr={lr:.3e}) = {values}({cost:.2f}m/{N:d})")
+        return reports, logstr
 
 
 class StopCriterion(object):
     """
-    Early stop of the training
+    Manage the early stop of the training
     """
 
     def __init__(self,
@@ -147,16 +189,28 @@ class StopCriterion(object):
         self.best_criterion = init_criterion
 
     def reset(self, update_value: float) -> NoReturn:
+        """
+        Reset the best criterion number
+        """
         self.best_criterion = update_value
 
     def stop(self) -> bool:
+        """
+        Stop training or not
+        """
         return self.no_impr == self.max_no_impr
 
     @property
     def best(self) -> float:
+        """
+        Return the tracked best criterion number
+        """
         return self.best_criterion
 
     def step(self, update_value: float) -> bool:
+        """
+        Make one step
+        """
         is_better = True
         # loss
         if self.mode == "min":
@@ -200,6 +254,7 @@ class Trainer(object):
                  stop_criterion: str = "loss",
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
+                 report_metrics: List[str] = ["loss"],
                  **kwargs) -> None:
         if not isinstance(task, Task):
             raise TypeError(
@@ -207,8 +262,9 @@ class Trainer(object):
         if lr_scheduler_period not in ["epoch", "step"]:
             raise ValueError(
                 f"Unsupported lr_scheduler_period: {lr_scheduler_period}")
-        if stop_criterion not in ["accu", "loss"]:
-            raise ValueError(f"Unsupported stop_criterion: {stop_criterion}")
+        if stop_criterion not in report_metrics:
+            raise ValueError("stop_criterion is not included in " +
+                             f"report_metrics: {stop_criterion}")
         if rank is not None and rank < 0:
             raise ValueError(f"Got invalid rank value: {rank}")
         if not isinstance(device_ids, tuple):
@@ -236,8 +292,8 @@ class Trainer(object):
         if last_checkpoint.exists():
             resume = last_checkpoint.as_posix()
 
-        self.checkpoint.mkdir(parents=True, exist_ok=True)
         self.reporter = ProgressReporter(self.checkpoint,
+                                         report_metrics,
                                          rank=rank,
                                          period=prog_interval,
                                          tensorboard=tensorboard)
@@ -248,6 +304,7 @@ class Trainer(object):
 
         self.clip_gradient = clip_gradient
         self.cur_epoch = 0  # zero based
+        self.cur_step = 0
         self.save_interval = save_interval
         self.ssr = 0
         self.no_impr = no_impr
@@ -297,6 +354,9 @@ class Trainer(object):
         if ss_scheduler_kwargs:
             if ss_scheduler not in ss_scheduler_cls:
                 raise ValueError(f"Unsupported ss scheduler: {ss_scheduler}")
+            if "accu" not in report_metrics:
+                raise ValueError("When using schedule sampling, accu need to "
+                                 "be tracked in report_metrics")
             self.ss_scheduler = ss_scheduler_cls[ss_scheduler](
                 **ss_scheduler_kwargs)
             self.reporter.log(f"Using schedule sampling: {ss_scheduler}")
@@ -312,6 +372,7 @@ class Trainer(object):
                 f"Loading model to GPU-{rank}/{self.cuda_devices}, " +
                 f"#param: {self.num_params:.2f}M")
 
+        self.reporter.log(f"Track the metrics: {report_metrics}")
         self.reporter.log(f"Stop criterion: {self.stop_on}")
         if clip_gradient:
             self.reporter.log(
@@ -373,36 +434,42 @@ class Trainer(object):
         if manner not in ["resume", "init"]:
             raise ValueError(f"Unsupported manner: {manner}")
         cpt_stats = th.load(cpt_path, map_location="cpu")
+        cpt_epoch = cpt_stats["epoch"]
+        cpt_loss = cpt_stats["loss"]
+        cpt_step = cpt_stats["step"]
         self.task.nnet.load_state_dict(cpt_stats["model_state_dict"])
         optimizer_dict = None
         if manner == "resume":
             self.reporter.log(f"Resume from checkpoint {cpt_path}: " +
-                              f"epoch {self.cur_epoch}")
+                              f"epoch/step {cpt_epoch}/{cpt_step}")
             optimizer_dict = cpt_stats["optim_state_dict"]
-            # set current epoch number
-            self.cur_epoch = cpt_stats["epoch"]
+            # set current epoch/step number
+            self.cur_epoch = cpt_epoch
+            self.cur_step = cpt_step
         else:
-            self.reporter.log(f"Intialized from checkpoint {cpt_path}: " +
-                              f"epoch {self.cur_epoch}")
+            self.reporter.log(f"Intialize from checkpoint {cpt_path}: " +
+                              f"epoch/step {cpt_epoch}/{cpt_step}")
+        self.reporter.log(f"Loss tracked in the checkpoint: {cpt_loss:.3f}")
         return cpt_stats, optimizer_dict
 
-    def checkpoint_states(self, epoch: int) -> Dict:
+    def model_states(self) -> Dict:
         """
-        Return states of the checkpoint to be saved
+        Return model states which will be saved in the checkpoint
         """
         raise NotImplementedError
 
-    def save_checkpoint(self, epoch: int, best: bool = True) -> NoReturn:
+    def save_checkpoint(self, states: Dict, best: bool = True) -> NoReturn:
         """
         Save checkpoint (epoch, model, optimizer, ...)
         """
         if self.rank in [0, None]:
-            cpt = self.checkpoint_states(epoch)
+            cpt = self.model_states()
+            cpt.update(states)
             cpt_name = "{}.pt.tar".format("best" if best else "last")
             th.save(cpt, self.checkpoint / cpt_name)
             self.reporter.log(f"Save checkpoint {self.checkpoint / cpt_name}")
-            if self.save_interval > 0 and epoch % self.save_interval == 0:
-                th.save(cpt, self.checkpoint / f"{epoch}.pt.tar")
+            if self.save_interval > 0 and self.cur_epoch % self.save_interval == 0:
+                th.save(cpt, self.checkpoint / f"{self.cur_epoch}.pt.tar")
 
     def train_one_step(self, egs: Dict) -> bool:
         """
@@ -471,7 +538,8 @@ class Trainer(object):
             # load to gpu
             egs = self.prep_egs(egs)
             # make one training step
-            self.train_one_step(egs)
+            if self.train_one_step(egs):
+                self.cur_step += 1
 
     def valid_epoch(self, data_loader: Iterable[Dict]) -> NoReturn:
         """
@@ -487,6 +555,51 @@ class Trainer(object):
                 stats = self.task(egs)
                 # update statistics
                 self.reporter.update(stats)
+
+    def stop_detect(self, dev_loader: Iterable[Dict], lr: float) -> bool:
+        """
+        Run valid epoch and schedule training progress:
+
+        1) schedule learning/sampling rate
+        2) save checkpoint
+        3) early stop detection
+        """
+        self.valid_epoch(dev_loader)
+        reports, logstr = self.reporter.report(self.cur_epoch, lr)
+        # schedule sampling for eval
+        if self.ss_scheduler:
+            logstr += f" | ssr = {self.ssr:.3f}"
+
+        update_value = reports[self.stop_on]
+        better = self.stop_criterion.step(update_value)
+
+        status = {
+            "step": self.cur_step,
+            "epoch": self.cur_epoch,
+            "optim_state_dict": self.optimizer.state_dict(),
+            "lr_scheduler_dict": self.lr_scheduler.state_dict()
+        }
+        status.update(reports)
+        if better:
+            self.save_checkpoint(status, best=True)
+        else:
+            logstr += f" | no impr: {self.stop_criterion.no_impr:d}, "
+            logstr += f"best = {self.stop_criterion.best:.4f}"
+
+        self.reporter.log(logstr)
+        # << valid
+        # lr schedule here
+        self.lr_scheduler_step(update_value, end_at="epoch")
+        if self.ss_scheduler:
+            self.ssr = self.ss_scheduler.step(self.cur_epoch, reports["accu"])
+        # save last checkpoint
+        self.save_checkpoint(status, best=False)
+        # early stop
+        if self.stop_criterion.stop():
+            self.reporter.log("Stop training cause no impr for " +
+                              f"{self.no_impr} epochs")
+            return True
+        return False
 
     def prep_egs(self, egs: Dict) -> Dict:
         """
@@ -504,121 +617,74 @@ class Trainer(object):
         """
         # valid
         self.valid_epoch(dev_loader)
-        e = self.cur_epoch
-        best_loss, best_accu, _ = self.reporter.report(e, 0)
+        cur_lr = self.optimizer.param_groups[0]["lr"]
+        reports, logstr = self.reporter.report(self.cur_epoch, cur_lr)
+        self.reporter.log(logstr)
         if self.ss_scheduler:
-            self.ssr = self.ss_scheduler.step(e, best_accu)
+            self.ssr = self.ss_scheduler.step(self.cur_epoch, reports["accu"])
         # make sure not inf
-        best_value = best_loss if self.stop_on == "loss" else best_accu
+        best_value = reports[self.stop_on]
         # for ReduceLROnPlateau
         if hasattr(self.lr_scheduler, "best"):
             self.lr_scheduler.best = best_value
         self.stop_criterion.reset(best_value)
-        # log here
-        sstr = f"Epoch {e:d}, loss = {best_loss:.4f}"
-        if best_accu is not None:
-            sstr += f", accu = {best_accu:.2f}"
-        self.reporter.log(sstr)
-        return e
 
-    def stop_detect(self, dev_loader: Iterable[Dict], epoch: int,
-                    lr: float) -> bool:
-        """
-        Run valid epoch and schedule training progress:
-
-        1) schedule learning/sampling rate
-        2) save checkpoint
-        3) early stop detection
-        """
-        self.valid_epoch(dev_loader)
-        cv_loss, cv_accu, sstr = self.reporter.report(epoch, lr)
-        # schedule sampling for eval
-        if self.ss_scheduler:
-            sstr += f" | ssr = {self.ssr:.3f}"
-
-        update_value = cv_loss if self.stop_on == "loss" else cv_accu
-        better = self.stop_criterion.step(update_value)
-        if better:
-            self.save_checkpoint(epoch, best=True)
-        else:
-            sstr += f" | no impr: {self.stop_criterion.no_impr:d}, "
-            sstr += f"best = {self.stop_criterion.best:.4f}"
-
-        self.reporter.log(sstr)
-        # << valid
-        # lr schedule here
-        self.lr_scheduler_step(update_value, end_at="epoch")
-        if self.ss_scheduler:
-            self.ssr = self.ss_scheduler.step(epoch, cv_accu)
-        # save last checkpoint
-        self.save_checkpoint(epoch, best=False)
-        # early stop
-        if self.stop_criterion.stop():
-            self.reporter.log("Stop training cause no impr for " +
-                              f"{self.no_impr} epochs")
-            return True
-        return False
-
-    def _run_in_epoch(self,
-                      trn_loader: Iterable[Dict],
-                      dev_loader: Iterable[Dict],
-                      cur_epoch: int = 0,
-                      num_epochs: int = 50) -> int:
+    def run_in_epoch(self,
+                     trn_loader: Iterable[Dict],
+                     dev_loader: Iterable[Dict],
+                     num_epochs: int = 50) -> int:
         """
         Running in epoch mode: treat whole training set as one training epoch
         """
-        while cur_epoch < num_epochs:
-            trn_loader.set_epoch(cur_epoch)
-            cur_epoch += 1
+        while self.cur_epoch < num_epochs:
+            trn_loader.set_epoch(self.cur_epoch)
+            self.cur_epoch += 1
             # >> train
             self.train_epoch(trn_loader)
             cur_lr = self.optimizer.param_groups[0]["lr"]
-            _, _, sstr = self.reporter.report(cur_epoch, cur_lr)
-            self.reporter.log(sstr)
+            _, logstr = self.reporter.report(self.cur_epoch, cur_lr)
+            self.reporter.log(logstr)
             # << train
-            if self.stop_detect(dev_loader, cur_epoch, cur_lr):
+            if self.stop_detect(dev_loader, cur_lr):
                 break
-        return cur_epoch
+        return self.cur_epoch
 
-    def _run_in_batch(self,
-                      trn_loader: Iterable[Dict],
-                      dev_loader: Iterable[Dict],
-                      cur_epoch: int = 0,
-                      num_epochs: int = 100,
-                      eval_interval: int = 3000) -> int:
+    def run_in_batch(self,
+                     trn_loader: Iterable[Dict],
+                     dev_loader: Iterable[Dict],
+                     num_epochs: int = 100,
+                     eval_interval: int = 3000) -> int:
         """
         Running in batch mode: for large training set, treat several batches as one training epoch
         """
-        cur_epoch = self.prep_run(dev_loader)
         stop = False
-        trained_batches = 0
         while True:
             # trained on several batches
             for egs in trn_loader:
                 # enable train mode
-                if trained_batches == 0:
+                if self.cur_step % eval_interval == 0:
                     self.task.train()
                     self.reporter.train()
-                    trn_loader.set_epoch(cur_epoch)
+                    trn_loader.set_epoch(self.cur_epoch)
                 # update per-batch
                 egs = self.prep_egs(egs)
                 succ = self.train_one_step(egs)
                 if succ:
-                    trained_batches = (trained_batches + 1) % eval_interval
+                    self.cur_step = (self.cur_step + 1) % eval_interval
                 # if trained on batches done, start evaluation
-                if trained_batches == 0 and succ:
-                    cur_epoch += 1
+                if self.cur_step % eval_interval == 0 and succ:
+                    self.cur_epoch += 1
                     cur_lr = self.optimizer.param_groups[0]["lr"]
-                    _, _, sstr = self.reporter.report(cur_epoch, cur_lr)
-                    self.reporter.log(sstr)
-                    end = self.stop_detect(dev_loader, cur_epoch, cur_lr)
-                    if end or cur_epoch == num_epochs:
+                    _, logstr = self.reporter.report(self.cur_epoch, cur_lr)
+                    self.reporter.log(logstr)
+                    end = self.stop_detect(dev_loader, cur_lr)
+                    if end or self.cur_epoch == num_epochs:
                         stop = True
                         break
             if stop:
                 break
             self.reporter.log("Finished one epoch on training set")
-        return cur_epoch
+        return self.cur_epoch
 
     def run(self,
             trn_loader: Iterable[Dict],
@@ -630,17 +696,15 @@ class Trainer(object):
         """
         self.reporter.log(
             f"Number of batches: {len(trn_loader)}/{len(dev_loader)}")
-        cur_epoch = self.prep_run(dev_loader)
+        self.prep_run(dev_loader)
         if eval_interval > 0:
-            done_epoch = self._run_in_batch(trn_loader,
-                                            dev_loader,
-                                            cur_epoch=cur_epoch,
-                                            num_epochs=num_epochs,
-                                            eval_interval=eval_interval)
+            done_epoch = self.run_in_batch(trn_loader,
+                                           dev_loader,
+                                           num_epochs=num_epochs,
+                                           eval_interval=eval_interval)
         else:
-            done_epoch = self._run_in_epoch(trn_loader,
-                                            dev_loader,
-                                            cur_epoch=cur_epoch,
-                                            num_epochs=num_epochs)
+            done_epoch = self.run_in_epoch(trn_loader,
+                                           dev_loader,
+                                           num_epochs=num_epochs)
         self.reporter.log(
             f"Training for {done_epoch:d}/{num_epochs:d} epochs done!")

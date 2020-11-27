@@ -48,6 +48,7 @@ class ApexTrainer(Trainer):
                  opt_level: str = "O0",
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
+                 report_metrics: List[str] = ["loss"],
                  **kwargs) -> None:
         super(ApexTrainer,
               self).__init__(task,
@@ -70,7 +71,8 @@ class ApexTrainer(Trainer):
                              tensorboard=tensorboard,
                              stop_criterion=stop_criterion,
                              no_impr=no_impr,
-                             no_impr_thres=no_impr_thres)
+                             no_impr_thres=no_impr_thres,
+                             report_metrics=report_metrics)
         if dist.get_backend() not in ["torch", "none"]:
             raise ValueError(
                 "ApexTrainer should use torch/none as distributed backend")
@@ -130,6 +132,7 @@ class ApexTrainer(Trainer):
             # for apex
             norm = clip_grad_norm_(apex.amp.master_params(self.optimizer),
                                    self.clip_gradient)
+
         # step optimizer and update statistics
         if math.isfinite(norm):
             self.optimizer.step()
@@ -137,6 +140,7 @@ class ApexTrainer(Trainer):
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
             self.reporter.update(stats)
+            # add noise if needed
             if self.weight_noise_adder:
                 self.weight_noise_adder(self.task)
             self.lr_scheduler_step(None, end_at="step")
@@ -145,20 +149,14 @@ class ApexTrainer(Trainer):
             self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
             return False
 
-    def checkpoint_states(self, epoch: int) -> Dict:
+    def model_states(self) -> Dict:
         """
-        Return states of the checkpoint to be saved
+        Return model states which will be saved in the checkpoint
         """
         return {
-            "epoch":
-                epoch,
             "amp_state_dict":
                 apex.amp.state_dict(),
             "model_state_dict":
                 self.task.module.nnet.state_dict()
-                if self.distributed else self.task.nnet.state_dict(),
-            "optim_state_dict":
-                self.optimizer.state_dict(),
-            "lr_scheduler_dict":
-                self.lr_scheduler.state_dict()
+                if self.distributed else self.task.nnet.state_dict()
         }

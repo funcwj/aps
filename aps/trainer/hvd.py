@@ -41,6 +41,7 @@ class HvdTrainer(Trainer):
                  stop_criterion: str = "loss",
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
+                 report_metrics: List[str] = ["loss"],
                  **kwargs) -> None:
         super(HvdTrainer,
               self).__init__(task,
@@ -63,7 +64,8 @@ class HvdTrainer(Trainer):
                              tensorboard=tensorboard,
                              stop_criterion=stop_criterion,
                              no_impr=no_impr,
-                             no_impr_thres=no_impr_thres)
+                             no_impr_thres=no_impr_thres,
+                             report_metrics=report_metrics)
         if dist.get_backend() != "horovod":
             raise ValueError(
                 "HvdTrainer should use horovod as distributed backend")
@@ -114,6 +116,10 @@ class HvdTrainer(Trainer):
             self.optimizer.synchronize()
             norm = clip_grad_norm_(self.task.parameters(), self.clip_gradient)
 
+        # add noise if needed
+        if self.weight_noise_adder:
+            self.weight_noise_adder(self.task)
+
         # step optimizer and update statistics
         if math.isfinite(norm):
             # for horovod
@@ -126,21 +132,14 @@ class HvdTrainer(Trainer):
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
             self.reporter.update(stats)
-            if self.weight_noise_adder:
-                self.weight_noise_adder(self.task)
             self.lr_scheduler_step(None, end_at="step")
             return True
         else:
             self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
             return False
 
-    def checkpoint_states(self, epoch: int) -> Dict:
+    def model_states(self) -> Dict:
         """
-        Return states of the checkpoint to be saved
+        Return model states which will be saved in the checkpoint
         """
-        return {
-            "epoch": epoch,
-            "model_state_dict": self.task.nnet.state_dict(),
-            "optim_state_dict": self.optimizer.state_dict(),
-            "lr_scheduler_dict": self.lr_scheduler.state_dict()
-        }
+        return {"model_state_dict": self.task.nnet.state_dict()}

@@ -30,39 +30,39 @@ def get_aps_parser():
     parser.add_argument("--epochs",
                         type=int,
                         default=50,
-                        help="Number of training epochs")
+                        help="Number of the training epochs")
     parser.add_argument("--checkpoint",
                         type=str,
                         required=True,
-                        help="Directory to save models")
+                        help="The directory to save the checkpoints")
     parser.add_argument("--resume",
                         type=str,
                         default="",
-                        help="Exist model to resume training from")
+                        help="Resume training from the existed checkpoint")
     parser.add_argument("--init",
                         type=str,
                         default="",
-                        help="Exist model to initialize model training")
+                        help="Initialize the model using existed checkpoint")
     parser.add_argument("--batch-size",
                         type=int,
                         default=32,
-                        help="Total batch-size. If multi-process, "
-                        "each process gets batch-size/num-process")
+                        help="Number of the batch-size. If distributed "
+                        "training is used, "
+                        "each process gets #batch_size/#num_process")
     parser.add_argument("--eval-interval",
                         type=int,
                         default=3000,
-                        help="Number of batches trained per epoch "
-                        "(for larger training dataset & "
-                        "distributed training)")
+                        help="Number of the batches trained per epoch "
+                        "(for larger training dataset & distributed training)")
     parser.add_argument("--save-interval",
                         type=int,
                         default=-1,
-                        help="Interval to save the checkpoint")
+                        help="We save the checkpoint per #save_interval epochs")
     parser.add_argument("--prog-interval",
                         type=int,
                         default=100,
-                        help="Interval to report the "
-                        "progress of the training")
+                        help="Report the progress of the training "
+                        "per #prog_interval batches")
     parser.add_argument("--num-workers",
                         type=int,
                         default=4,
@@ -103,9 +103,9 @@ class DistributedTrainParser(BaseTrainParser):
                         type=str,
                         default="torch",
                         choices=["torch", "horovod"],
-                        help="Which distributed backend to use")
+                        help="The distributed backend to use")
     parser.add_argument("--dev-batch-factor",
                         type=int,
                         default=2,
-                        help="Use batch_size/dev_batch_factor "
-                        "for validation batch size")
+                        help="We will use #batch_size/#dev_batch_factor "
+                        "as the batch-size for validation epoch")
