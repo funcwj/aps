@@ -32,7 +32,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          bash .ci/install_test_deps.sh
+          git lfs install && bash .ci/install_test_deps.sh
 
       - name: Run testing cases (cmd)
         run: |
