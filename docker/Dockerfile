@@ -54,8 +54,8 @@ RUN ldconfig /usr/local/cuda/targets/x86_64-linux/lib/stubs && \
 # another RNNT implementation
 ENV CFLAGS="-I $CUDA_HOME/include $CFLAGS"
 RUN git clone https://github.com/HawkAaron/warp-transducer.git && cd warp-transducer && \
-    mkdir build && cd build && cmake .. && make && cd ../pytorch_binding && python setup.py install && \
-    cd ../../ && rm -rf warp-transducer
+    mkdir build && cd build && cmake .. && make -j $(nproc) && make install && ldconfig -v && \
+    cd ../pytorch_binding && python setup.py install && cd ../../ && rm -rf warp-transducer
 
 # install apex
 RUN git clone https://github.com/NVIDIA/apex && cd apex && \
@@ -63,5 +63,9 @@ RUN git clone https://github.com/NVIDIA/apex && cd apex && \
     cd .. && rm -rf apex
 
 # install sentencepiece
-RUN git clone https://github.com/google/sentencepiece.git && cd sentencepiece && mkdir build && cd build \
+RUN git clone https://github.com/google/sentencepiece.git && cd sentencepiece && mkdir build && cd build && \
     cmake .. && make -j $(nproc) && make install && ldconfig -v && cd ../../ && rm -rf sentencepiece
+
+# test
+RUN python -m warp_rnnt.test
+RUN python -c "from warprnnt_pytorch import rnnt_loss"
