@@ -47,7 +47,8 @@ trainer_conf:
   no_impr: 6
   no_impr_thres: 0.002
   clip_gradient: 10
-  stop_criterion: "loss"
+  report_metrics: ["loss"]
+  stop_criterion: "accu"
 
 data_conf:
   fmt: "am_raw"

@@ -7,12 +7,13 @@ nnet_conf:
   enc_type: "concat"
   enc_proj: 512
   enc_kwargs:
-    conv1d:
-      out_features: 512
-      dim: 512
-      num_layers: 3
-      stride: [2, 2, 2]
-      dilation: [1, 1, 2]
+    conv2d:
+      out_features: -1
+      channel: 32
+      num_layers: 2
+      stride: 2
+      padding: 1
+      kernel_size: 3
     variant_rnn:
       rnn: "lstm"
       num_layers: 3
@@ -36,6 +37,7 @@ asr_transform:
   frame_len: 400
   frame_hop: 160
   window: "hamm"
+  pre_emphasis: 0.96
   round_pow_of_two: True
   sr: 16000
   num_mels: 80
@@ -55,7 +57,8 @@ trainer_conf:
   no_impr: 6
   no_impr_thres: 0.3
   clip_gradient: 50
-  stop_criterion: "loss"
+  report_metrics: ["loss"]
+  stop_criterion: "accu"
 
 data_conf:
   fmt: "am_raw"

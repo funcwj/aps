@@ -1,0 +1,110 @@
+asr_transform:
+  aug_prob: 0.5
+  feats: fbank-log-cmvn-aug
+  frame_hop: 160
+  frame_len: 400
+  norm_mean: true
+  norm_var: true
+  num_mels: 80
+  round_pow_of_two: true
+  sr: 16000
+  window: hamm
+cmd_args:
+  batch_size: 64
+  checkpoint: exp/aishell_v1/1a
+  conf: conf/aishell_v1/1a.yaml
+  device_id: '0'
+  dict: data/aishell_v1/dict
+  epochs: 100
+  eval_interval: -1
+  init: ''
+  num_workers: 4
+  prog_interval: 100
+  resume: ''
+  save_interval: -1
+  seed: '777'
+  tensorboard: false
+  trainer: ddp
+data_conf:
+  fmt: am_raw
+  loader:
+    adapt_dur: 10
+    adapt_token_num: 150
+    max_dur: 30
+    max_token_num: 400
+    min_dur: 0.4
+  train:
+    text: data/aishell_v1/train/text
+    utt2dur: data/aishell_v1/train/utt2dur
+    wav_scp: data/aishell_v1/train/wav.scp
+  valid:
+    text: data/aishell_v1/dev/text
+    utt2dur: data/aishell_v1/dev/utt2dur
+    wav_scp: data/aishell_v1/dev/wav.scp
+nnet: att
+nnet_conf:
+  att_kwargs:
+    att_dim: 512
+  att_type: ctx
+  ctc: true
+  dec_dim: 512
+  dec_kwargs:
+    dec_rnn: lstm
+    input_feeding: true
+    rnn_dropout: 0
+    rnn_hidden: 512
+    rnn_layers: 2
+    vocab_embeded: true
+  enc_kwargs:
+    conv1d:
+      dilation:
+      - 1
+      - 1
+      - 2
+      dim: 512
+      num_layers: 3
+      out_features: 512
+      stride:
+      - 2
+      - 2
+      - 2
+    vanilla_rnn:
+      bidirectional: true
+      dropout: 0.2
+      hidden: 320
+      num_layers: 3
+      rnn: lstm
+  enc_proj: 512
+  enc_type: concat
+  eos: 1
+  input_size: 80
+  sos: 0
+  vocab_size: 4234
+task: ctc_xent
+task_conf:
+  blank: 4233
+  ctc_weight: 0.2
+  lsm_factor: 0.1
+trainer_conf:
+  clip_gradient: 5
+  lr_scheduler_kwargs:
+    factor: 0.5
+    min_lr: 1.0e-08
+    mode: max
+    patience: 1
+    state: null
+    threshold: 0.2
+    threshold_mode: abs
+  no_impr: 6
+  no_impr_thres: 0.2
+  optimizer: adam
+  optimizer_kwargs:
+    lr: 0.001
+    weight_decay: 1.0e-05
+  ss_scheduler: linear
+  ss_scheduler_kwargs:
+    epoch_beg: 10
+    epoch_end: 26
+    ssr: 0.2
+    update_interval: 4
+  stop_criterion: accu

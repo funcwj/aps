@@ -14,5 +14,5 @@ mkdir build && cd build && cmake .. && make -j $(nproc)
 cd ../pytorch_binding && python setup.py install && cd ../../ && rm -rf warp-transducer
 # sentencepiece
 RUN git clone https://github.com/google/sentencepiece.git && cd sentencepiece
-mkdir build && cd build cmake .. && make -j $(nproc)
+mkdir build && cd build && cmake .. && make -j $(nproc)
 make install && ldconfig -v && cd ../../ && rm -rf sentencepiece

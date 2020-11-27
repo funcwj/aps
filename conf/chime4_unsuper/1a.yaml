@@ -32,7 +32,8 @@ trainer_conf:
   no_impr: 3
   no_impr_thres: 0.01
   clip_gradient: 10
-  stop_criterion: "loss"
+  report_metrics: ["loss"]
+  stop_criterion: "accu"
 
 data_conf:
   fmt: "ss_chunk"

@@ -67,6 +67,7 @@ trainer_conf:
   no_impr: 6
   no_impr_thres: 0.2
   clip_gradient: 5
+  report_metrics: ["loss", "accu", "@ctc"]
   stop_criterion: "accu"
 
 data_conf:
