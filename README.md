@@ -9,14 +9,20 @@ A workspace for speech related tasks, including single/multi-channel speech enha
 
 ## Setup
 
+As we use Git LFS (Large File Storage) to track the PyTorch checkpoints for testing, please install the `git-lfs` first (see [link](https://github.com/git-lfs/git-lfs/wiki/Installation) as the reference).
 ```shell
 git clone https://github.com/funcwj/aps
 # set up the python environments
 # 1) using "pip install -r requirements.txt" or
 # 2) create conda enviroments based on requirements.txt (see docker/*.Dockerfile)
 cd aps && pip install -r requirements.txt
+# following lines are for developers only
 # set up the git hook scripts
 pre-commit install
+# set up git-lfs
+git lfs install
+# make sure the http version used by git is v1.1 or the pushing of the code may fail
+git config http.version HTTP/1.1
 ```
 
 ## Introduction

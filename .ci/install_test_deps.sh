@@ -16,4 +16,4 @@ cd ../pytorch_binding && python setup.py install && cd $work_dir && rm -rf warp-
 # sentencepiece
 RUN git clone https://github.com/google/sentencepiece.git && cd sentencepiece
 mkdir build && cd build && cmake .. && make -j $(nproc)
-make install && ldconfig -v && cd $work_dir && rm -rf sentencepiece
+sudo make install && sudo ldconfig -v && cd $work_dir && rm -rf sentencepiece

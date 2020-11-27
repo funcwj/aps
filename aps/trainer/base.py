@@ -167,7 +167,7 @@ class ProgressReporter(object):
 
         header = "/".join(self.metrics)
         values = "/".join([f"{reports[metric]:.4f}" for metric in self.metrics])
-        logstr = (f"Epoch {epoch:02d} ({self.mode}): {header}(time/#batch, " +
+        logstr = (f"Epoch {epoch:02d}/{self.mode}: {header}(time/#batch, " +
                   f"lr={lr:.3e}) = {values}({cost:.2f}m/{N:d})")
         return reports, logstr
 
