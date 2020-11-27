@@ -83,8 +83,8 @@ def permu_aligner(masks: np.ndarray, transpose: bool = False) -> np.ndarray:
     return permu_masks
 
 
-@ApsRegisters.sse.register("unsupervised_enh")
-class UnsupervisedEnh(VanillaRNNEncoder):
+@ApsRegisters.sse.register("unsuper_rnn_enh")
+class UnsupervisedRNNEnh(VanillaRNNEncoder):
     """
     A recurrent network example for unsupervised training
     """
@@ -99,15 +99,15 @@ class UnsupervisedEnh(VanillaRNNEncoder):
                  hidden: int = 512,
                  dropout: float = 0.2,
                  bidirectional: bool = False) -> None:
-        super(UnsupervisedEnh, self).__init__(input_size,
-                                              num_bins,
-                                              rnn=rnn,
-                                              input_project=input_project,
-                                              num_layers=num_layers,
-                                              hidden=hidden,
-                                              dropout=dropout,
-                                              bidirectional=bidirectional,
-                                              non_linear="sigmoid")
+        super(UnsupervisedRNNEnh, self).__init__(input_size,
+                                                 num_bins,
+                                                 rnn=rnn,
+                                                 input_project=input_project,
+                                                 num_layers=num_layers,
+                                                 hidden=hidden,
+                                                 dropout=dropout,
+                                                 bidirectional=bidirectional,
+                                                 non_linear="sigmoid")
         assert enh_transform is not None
         self.enh_transform = enh_transform
 

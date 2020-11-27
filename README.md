@@ -19,7 +19,6 @@ cd aps && pip install -r requirements.txt
 ```
 For developers (who want to make commits or PRs), contiune running
 ```shell
-# following lines are for developers only
 # set up the git hook scripts
 pre-commit install
 # set up git-lfs

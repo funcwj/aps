@@ -1,4 +1,4 @@
-nnet: "unsupervised_enh"
+nnet: "unsuper_rnn_enh"
 
 nnet_conf:
   input_size: 1285
@@ -33,7 +33,7 @@ trainer_conf:
   no_impr_thres: 0.01
   clip_gradient: 10
   report_metrics: ["loss"]
-  stop_criterion: "accu"
+  stop_criterion: "loss"
 
 data_conf:
   fmt: "ss_chunk"

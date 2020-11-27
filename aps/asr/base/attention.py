@@ -9,6 +9,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from typing import Optional, Tuple
+from aps.libs import Register
+
+AsrAtt = Register("asr_att")
 
 
 def padding_mask(vec: th.Tensor, device: th.device = None) -> th.Tensor:
@@ -37,18 +40,9 @@ def att_instance(att_type: str, enc_dim: int, dec_dim: int,
     """
     Return attention instance
     """
-    supported_att = {
-        "dot": DotAttention,
-        "loc": LocAttention,
-        "ctx": CtxAttention,
-        "mhdot": MHDotAttention,
-        "mhctx": MHCtxAttention,
-        "mhloc": MHLocAttention
-        # ...
-    }
-    if att_type not in supported_att:
+    if att_type not in AsrAtt:
         raise RuntimeError(f"Unknown attention type: {att_type}")
-    return supported_att[att_type](enc_dim, dec_dim, **kwargs)
+    return AsrAtt[att_type](enc_dim, dec_dim, **kwargs)
 
 
 class Conv1D(nn.Conv1d):
@@ -83,6 +77,7 @@ class Attention(nn.Module):
         raise NotImplementedError
 
 
+@AsrAtt.register("loc")
 class LocAttention(Attention):
     """
     Location aware attention described in "Attention-Based Models for Speech Recognition"
@@ -167,6 +162,7 @@ class LocAttention(Attention):
         return ali, ctx
 
 
+@AsrAtt.register("ctx")
 class CtxAttention(Attention):
     """
     Context attention described in
@@ -220,6 +216,7 @@ class CtxAttention(Attention):
         return ali, ctx
 
 
+@AsrAtt.register("dot")
 class DotAttention(Attention):
     """
     Dot attention described in
@@ -274,6 +271,7 @@ class DotAttention(Attention):
         return ali, ctx
 
 
+@AsrAtt.register("mhctx")
 class MHCtxAttention(Attention):
     """
     Multi-head context attention
@@ -365,6 +363,7 @@ class MHCtxAttention(Attention):
         return ali, ctx
 
 
+@AsrAtt.register("mhdot")
 class MHDotAttention(Attention):
     """
     Multi-head dot attention
@@ -443,6 +442,7 @@ class MHDotAttention(Attention):
         return ali, ctx
 
 
+@AsrAtt.register("mhloc")
 class MHLocAttention(Attention):
     """
     Multi-head location aware attention

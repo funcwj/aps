@@ -11,6 +11,9 @@ from typing import Optional, Tuple, Union, List, Dict
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 from aps.asr.base.layers import VariantRNN, FSMN, Conv1d, Conv2d
+from aps.libs import Register
+
+AsrEncoder = Register("asr_encoder")
 
 
 def encoder_instance(enc_type: str, inp_features: int, out_features: int,
@@ -18,19 +21,11 @@ def encoder_instance(enc_type: str, inp_features: int, out_features: int,
     """
     Return encoder instance
     """
-    supported_encoder = {
-        "vanilla_rnn": VanillaRNNEncoder,
-        "variant_rnn": VariantRNNEncoder,
-        "fsmn": FSMNEncoder,
-        # can be used for subsamping:
-        "conv1d": Conv1dEncoder,
-        "conv2d": Conv2dEncoder
-    }
 
     def encoder(enc_type, inp_features, **kwargs):
-        if enc_type not in supported_encoder:
+        if enc_type not in AsrEncoder:
             raise RuntimeError(f"Unknown encoder type: {enc_type}")
-        enc_cls = supported_encoder[enc_type]
+        enc_cls = AsrEncoder[enc_type]
         return enc_cls(inp_features, **kwargs)
 
     if enc_type != "concat":
@@ -95,6 +90,7 @@ class EncoderBase(nn.Module):
         self.out_features = out_features
 
 
+@AsrEncoder.register("vanilla_rnn")
 class VanillaRNNEncoder(EncoderBase):
     """
     PyTorch's RNN encoder
@@ -184,6 +180,7 @@ class VanillaRNNEncoder(EncoderBase):
         return out, inp_len
 
 
+@AsrEncoder.register("variant_rnn")
 class VariantRNNEncoder(EncoderBase):
     """
     Variant RNN layer (e.g., with pyramid stack, layernrom, projection layer, .etc)
@@ -268,6 +265,7 @@ class VariantRNNEncoder(EncoderBase):
         return inp, inp_len
 
 
+@AsrEncoder.register("conv1d")
 class Conv1dEncoder(EncoderBase):
     """
     The stack of TDNN (conv1d) layers with optional time reduction
@@ -318,6 +316,7 @@ class Conv1dEncoder(EncoderBase):
         return inp, inp_len
 
 
+@AsrEncoder.register("conv2d")
 class Conv2dEncoder(EncoderBase):
     """
     The stack of conv2d layers with optional time reduction
@@ -391,6 +390,7 @@ class Conv2dEncoder(EncoderBase):
         return inp, inp_len
 
 
+@AsrEncoder.register("fsmn")
 class FSMNEncoder(EncoderBase):
     """
     Stack of FSMN layers, with optional residual connection

@@ -70,7 +70,7 @@ class ApsModules(object):
         "lm.rnn", "lm.transformer"
     ]
     sse_submodules = [
-        "toy", "unsupervised_enh", "enh.crn", "enh.phasen", "enh.dcunet",
+        "toy", "unsuper.rnn", "enh.crn", "enh.phasen", "enh.dcunet",
         "bss.dccrn", "bss.dprnn", "bss.tasnet", "bss.xfmr", "bss.dense_unet"
     ]
     loader_submodules = [

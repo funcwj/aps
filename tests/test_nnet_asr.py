@@ -8,7 +8,7 @@ import torch as th
 
 from aps.libs import aps_asr_nnet
 from aps.transform import AsrTransform, EnhTransform
-from aps.asr.base.encoder import TDNNEncoder, Conv2dEncoder
+from aps.asr.base.encoder import Conv1dEncoder, Conv2dEncoder
 
 default_rnn_dec_kwargs = {
     "dec_rnn": "lstm",
@@ -46,7 +46,7 @@ custom_rnn_enc_kwargs = {
     "layernorm": True
 }
 
-tdnn_enc_kwargs = {
+conv1d_enc_kwargs = {
     "dim": 512,
     "norm": "BN",
     "num_layers": 5,
@@ -83,8 +83,8 @@ conv2d_rnn_enc_kwargs = {
     }
 }
 
-tdnn_rnn_enc_kwargs = {
-    "tdnn": {
+conv1d_rnn_enc_kwargs = {
+    "conv1d": {
         "out_features": 512,
         "dim": 512,
         "num_layers": 3,
@@ -100,8 +100,8 @@ tdnn_rnn_enc_kwargs = {
     }
 }
 
-tdnn_fsmn_enc_kwargs = {
-    "tdnn": {
+conv1d_fsmn_enc_kwargs = {
+    "conv1d": {
         "out_features": 512,
         "dim": 512,
         "num_layers": 3,
@@ -176,11 +176,11 @@ def gen_egs(vocab_size, batch_size, num_channels=1):
 @pytest.mark.parametrize("inp_len", [100, 102])
 @pytest.mark.parametrize("dilation", [1, 2])
 def test_conv1d_encoder(inp_len, num_layers, dilation):
-    conv1d_encoder = TDNNEncoder(80,
-                                 512,
-                                 num_layers=num_layers,
-                                 stride=2,
-                                 dilation=dilation)
+    conv1d_encoder = Conv1dEncoder(80,
+                                   512,
+                                   num_layers=num_layers,
+                                   stride=2,
+                                   dilation=dilation)
     batch_size = 4
     inp = th.rand(batch_size, inp_len, 80)
     out, out_len = conv1d_encoder(inp, th.LongTensor([inp_len] * batch_size))
@@ -366,10 +366,10 @@ def test_beam_att(mode, enh_kwargs):
 
 @pytest.mark.parametrize("enc_type,enc_kwargs", [
     pytest.param("variant_rnn", custom_rnn_enc_kwargs),
-    pytest.param("tdnn", tdnn_enc_kwargs),
+    pytest.param("conv1d", conv1d_enc_kwargs),
     pytest.param("fsmn", fsmn_enc_kwargs),
-    pytest.param("concat", tdnn_rnn_enc_kwargs),
-    pytest.param("concat", tdnn_fsmn_enc_kwargs),
+    pytest.param("concat", conv1d_rnn_enc_kwargs),
+    pytest.param("concat", conv1d_fsmn_enc_kwargs),
     pytest.param("concat", conv2d_rnn_enc_kwargs)
 ])
 def test_common_encoder(enc_type, enc_kwargs):
@@ -400,10 +400,10 @@ def test_common_encoder(enc_type, enc_kwargs):
 
 @pytest.mark.parametrize("enc_type,enc_kwargs", [
     pytest.param("variant_rnn", custom_rnn_enc_kwargs),
-    pytest.param("tdnn", tdnn_enc_kwargs),
+    pytest.param("conv1d", conv1d_enc_kwargs),
     pytest.param("fsmn", fsmn_enc_kwargs),
-    pytest.param("concat", tdnn_rnn_enc_kwargs),
-    pytest.param("concat", tdnn_fsmn_enc_kwargs),
+    pytest.param("concat", conv1d_rnn_enc_kwargs),
+    pytest.param("concat", conv1d_fsmn_enc_kwargs),
     pytest.param("concat", conv2d_rnn_enc_kwargs),
     pytest.param("transformer", transformer_enc_kwargs),
     pytest.param("transformer_rel", transformer_rel_enc_kwargs),
@@ -435,10 +435,10 @@ def test_transformer_encoder(enc_type, enc_kwargs):
 
 @pytest.mark.parametrize("enc_type,enc_kwargs", [
     pytest.param("variant_rnn", custom_rnn_enc_kwargs),
-    pytest.param("tdnn", tdnn_enc_kwargs),
+    pytest.param("conv1d", conv1d_enc_kwargs),
     pytest.param("fsmn", fsmn_enc_kwargs),
-    pytest.param("concat", tdnn_rnn_enc_kwargs),
-    pytest.param("concat", tdnn_fsmn_enc_kwargs),
+    pytest.param("concat", conv1d_rnn_enc_kwargs),
+    pytest.param("concat", conv1d_fsmn_enc_kwargs),
     pytest.param("transformer", transformer_enc_kwargs),
     pytest.param("transformer_rel", transformer_rel_enc_kwargs),
     pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs)
@@ -476,10 +476,10 @@ def test_common_transducer(enc_type, enc_kwargs):
 
 @pytest.mark.parametrize("enc_type,enc_kwargs", [
     pytest.param("variant_rnn", custom_rnn_enc_kwargs),
-    pytest.param("tdnn", tdnn_enc_kwargs),
+    pytest.param("conv1d", conv1d_enc_kwargs),
     pytest.param("fsmn", fsmn_enc_kwargs),
-    pytest.param("concat", tdnn_rnn_enc_kwargs),
-    pytest.param("concat", tdnn_fsmn_enc_kwargs),
+    pytest.param("concat", conv1d_rnn_enc_kwargs),
+    pytest.param("concat", conv1d_fsmn_enc_kwargs),
     pytest.param("transformer", transformer_enc_kwargs),
     pytest.param("transformer_rel", transformer_rel_enc_kwargs),
     pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs)
