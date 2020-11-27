@@ -16,6 +16,10 @@ jobs:
       matrix:
         python-version: [3.7, 3.8]
     steps:
+      - name: Set up Git LFS
+        run: |
+          bash .ci/install_git_lfs.sh
+
       - name: Get aps code
         uses: actions/checkout@v2
 
@@ -28,10 +32,10 @@ jobs:
         run: |
           bash .ci/install_test_deps.sh
 
-      - name: Run testing cases (lib)
-        run: |
-          cd tests && pytest
-
       - name: Run testing cases (cmd)
         run: |
           cd tests && bash check_cmds.sh
+
+      - name: Run testing cases (lib)
+        run: |
+          cd tests && pytest
