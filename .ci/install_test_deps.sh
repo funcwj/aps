@@ -14,6 +14,6 @@ git clone https://github.com/HawkAaron/warp-transducer.git && cd warp-transducer
 mkdir build && cd build && cmake .. && make -j $(nproc)
 cd ../pytorch_binding && python setup.py install && cd $work_dir && rm -rf warp-transducer
 # sentencepiece
-RUN git clone https://github.com/google/sentencepiece.git && cd sentencepiece
+git clone https://github.com/google/sentencepiece.git && cd sentencepiece
 mkdir build && cd build && cmake .. && make -j $(nproc)
 sudo make install && sudo ldconfig -v && cd $work_dir && rm -rf sentencepiece

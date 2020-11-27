@@ -16,6 +16,9 @@ git clone https://github.com/funcwj/aps
 # 1) using "pip install -r requirements.txt" or
 # 2) create conda enviroments based on requirements.txt (see docker/*.Dockerfile)
 cd aps && pip install -r requirements.txt
+```
+For developers (who want to make commits or PRs), contiune running
+```shell
 # following lines are for developers only
 # set up the git hook scripts
 pre-commit install
@@ -24,6 +27,7 @@ git lfs install
 # make sure the http version used by git is v1.1 or the pushing of the code may fail
 git config http.version HTTP/1.1
 ```
+to setup the development environments.
 
 ## Introduction
 
