@@ -5,7 +5,7 @@
 
 # 1) 1a.yaml
 #	WER(%) Report:
-# 	Total CER: 8.98%, 7176 utterances
+# 	Total CER: 9.94%, 7176 utterances
 
 set -eu
 
@@ -32,38 +32,38 @@ nbest=8
 . ./utils/parse_options.sh || exit 1
 
 if [ $stage -le 1 ]; then
-    for name in data_aishell resource_aishell; do
-        local/download_and_untar.sh $data $data_url $name
-    done
-    local/aishell_data_prep.sh $data/data_aishell/wav \
-        $data/data_aishell/transcript data/$dataset
+  for name in data_aishell resource_aishell; do
+    local/download_and_untar.sh $data $data_url $name
+  done
+  local/aishell_data_prep.sh $data/data_aishell/wav \
+    $data/data_aishell/transcript data/$dataset
 fi
 
 if [ $stage -le 2 ]; then
-	./scripts/train_am.sh \
-		--seed $seed \
-		--gpu $gpu \
-		--epochs $epochs \
-		--num-workers $num_workers \
-		--batch-size $batch_size \
-		--tensorboard $tensorboard \
-		--prog-interval $prog_interval \
-		$dataset $exp
+  ./scripts/train_am.sh \
+    --seed $seed \
+    --gpu $gpu \
+    --epochs $epochs \
+    --num-workers $num_workers \
+    --batch-size $batch_size \
+    --tensorboard $tensorboard \
+    --prog-interval $prog_interval \
+    $dataset $exp
 fi
 
 if [ $stage -le 3 ]; then
-    # decoding
-    ./scripts/decode.sh \
-        --gpu $gpu \
-		--beam-size $beam_size \
-       	--nbest $nbest \
-		--max-len 50 \
-		--dict data/$dataset/dict \
-		$dataset $exp \
-		data/$dataset/test/wav.scp \
-		exp/$dataset/$exp/dec
-    # wer
-    ./bin/compute_wer.py \
-        exp/$dataset/$exp/dec/beam${beam_size}.decode \
-		data/$dataset/test/text
+  # decoding
+  ./scripts/decode.sh \
+    --gpu $gpu \
+    --beam-size $beam_size \
+    --nbest $nbest \
+    --max-len 50 \
+    --dict data/$dataset/dict \
+    $dataset $exp \
+    data/$dataset/test/wav.scp \
+    exp/$dataset/$exp/dec
+  # wer
+  ./bin/compute_wer.py \
+    exp/$dataset/$exp/dec/beam${beam_size}.decode \
+    data/$dataset/test/text
 fi

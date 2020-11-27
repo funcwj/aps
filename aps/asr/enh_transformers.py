@@ -10,7 +10,7 @@ from typing import Optional, Dict, Tuple, List
 from torch_complex import ComplexTensor
 
 from aps.asr.transformers import TransformerASR
-from aps.asr.base.encoder import TorchRNNEncoder
+from aps.asr.base.encoder import VanillaRNNEncoder
 from aps.asr.filter.conv import (TimeInvariantFilter, TimeVariantFilter,
                                  TimeInvariantAttFilter)
 from aps.asr.filter.mvdr import MvdrBeamformer
@@ -33,11 +33,11 @@ class EnhTransformerASR(nn.Module):
             asr_transform: Optional[nn.Module] = None,
             asr_cpt: str = "",
             ctc: bool = False,
-            encoder_type: str = "transformer",
-            encoder_proj: Optional[int] = None,
-            encoder_kwargs: Optional[Dict] = None,
-            decoder_type: str = "transformer",
-            decoder_kwargs: Optional[Dict] = None) -> None:
+            enc_type: str = "transformer",
+            enc_proj: Optional[int] = None,
+            enc_kwargs: Dict = {},
+            dec_type: str = "transformer",
+            dec_kwargs: Dict = {}) -> None:
         super(EnhTransformerASR, self).__init__()
         # Back-end feature transform
         self.asr_transform = asr_transform
@@ -48,11 +48,11 @@ class EnhTransformerASR(nn.Module):
                                               eos=eos,
                                               ctc=ctc,
                                               asr_transform=None,
-                                              encoder_type=encoder_type,
-                                              encoder_proj=encoder_proj,
-                                              encoder_kwargs=encoder_kwargs,
-                                              decoder_type=decoder_type,
-                                              decoder_kwargs=decoder_kwargs)
+                                              enc_type=enc_type,
+                                              enc_proj=enc_proj,
+                                              enc_kwargs=enc_kwargs,
+                                              dec_type=dec_type,
+                                              dec_kwargs=dec_kwargs)
         if asr_cpt:
             transformer_cpt = th.load(asr_cpt, map_location="cpu")
             self.transformer_asr.load_state_dict(transformer_cpt, strict=False)
@@ -168,7 +168,7 @@ class MvdrTransformerASR(EnhTransformerASR):
         # Front-end feature extraction
         self.enh_transform = enh_transform
         # TF-mask estimation network
-        self.mask_net = TorchRNNEncoder(
+        self.mask_net = VanillaRNNEncoder(
             enh_input_size, num_bins * 2 if mask_net_noise else num_bins,
             **mask_net_kwargs)
         self.mask_net_noise = mask_net_noise

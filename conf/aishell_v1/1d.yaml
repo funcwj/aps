@@ -4,19 +4,25 @@ nnet: "common_transducer"
 
 nnet_conf:
   input_size: 80
-  encoder_type: "tdnn_rnn"
-  encoder_proj: 512
-  encoder_kwargs:
-    tdnn_dim: 512
-    tdnn_layers: 3
-    tdnn_stride: "2,2,2"
-    tdnn_dilation: "1,1,2"
-    rnn_layers: 3
-    rnn_hidden: 512
-    rnn_dropout: 0.2
-    rnn_project: 512
-    rnn_layernorm: True
-  decoder_kwargs:
+  enc_type: "concat"
+  enc_proj: 512
+  enc_kwargs:
+    conv2d:
+      out_features: -1
+      channel: 32
+      num_layers: 2
+      stride: 2
+      padding: 1
+      kernel_size: 3
+    variant_rnn:
+      rnn: "lstm"
+      num_layers: 3
+      bidirectional: true
+      dropout: 0.2
+      project: 512
+      hidden: 512
+      layernorm: true
+  dec_kwargs:
     embed_size: 512
     jot_dim: 512
     dec_rnn: "lstm"
@@ -31,6 +37,7 @@ asr_transform:
   frame_len: 400
   frame_hop: 160
   window: "hamm"
+  pre_emphasis: 0.96
   round_pow_of_two: True
   sr: 16000
   num_mels: 80
@@ -50,6 +57,7 @@ trainer_conf:
   no_impr: 6
   no_impr_thres: 0.3
   clip_gradient: 50
+  report_metrics: ["loss"]
   stop_criterion: "loss"
 
 data_conf:

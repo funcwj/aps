@@ -3,35 +3,12 @@
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-from typing import Tuple, List, Optional
-from torch.optim import lr_scheduler, Optimizer
+import math
+from typing import List, Optional
+from torch.optim import lr_scheduler as lr, Optimizer
 
 
-class CustomMultiStepLR(lr_scheduler.MultiStepLR):
-    """
-    Using lr_conf to set milestones & gamma, e.g., 0.1@10,20,40
-    """
-
-    def __init__(self,
-                 optimizer: Optimizer,
-                 lr_conf: str = "0.5@10,20,30,40",
-                 last_epoch: int = -1) -> None:
-        gamma, milestones = self._parse_args(lr_conf)
-        super(CustomMultiStepLR, self).__init__(optimizer,
-                                                milestones,
-                                                gamma=gamma,
-                                                last_epoch=last_epoch)
-
-    def _parse_args(self, lr_conf: str) -> Tuple[float, List[int]]:
-        lr_str = lr_conf.split("@")
-        if len(lr_str) != 2:
-            raise RuntimeError(f"Wrong format for lr_conf={lr_conf}")
-        gamma = float(lr_str[0])
-        milestones = list(map(int, lr_str[0].split(",")))
-        return gamma, milestones
-
-
-class NoamLR(lr_scheduler._LRScheduler):
+class NoamLR(lr._LRScheduler):
     """
     Lr schuduler for Transformer
     """
@@ -67,10 +44,43 @@ class NoamLR(lr_scheduler._LRScheduler):
         ]
 
 
+class ExponentialLR(lr._LRScheduler):
+    """
+    Exponential scheduler proposed in SpecAugment paper
+    """
+
+    def __init__(self,
+                 optimizer: Optimizer,
+                 time_stamps: List[int] = [1000, 4000, 16000],
+                 peak_lr: float = 1e-3,
+                 stop_lr: float = 1e-5,
+                 last_epoch: int = -1) -> None:
+        self.peak_lr = peak_lr
+        self.sr, self.si, self.sf = time_stamps
+        self.gamma = math.log(stop_lr / peak_lr) / (self.sf - self.si)
+        super(ExponentialLR, self).__init__(optimizer, last_epoch=last_epoch)
+
+    def get_lr(self, step: Optional[int] = None) -> List[float]:
+        """
+        1) 0 < cur_step <= sr: ramp up (use sr == 0 can skip this stage)
+        2) sr < cur_step <= si: hold on
+        2) si < cur_step <= sf: exponential decay
+        3) cur_step > sf: hold on
+        """
+        if step is None:
+            step = self._step_count
+        if step <= self.si:
+            cur_lr = min(self.sr, step) * 1.0 * self.peak_lr / self.sr
+        else:
+            cur_lr = self.peak_lr * math.exp(self.gamma *
+                                             (min(step, self.sf) - self.si))
+        return [cur_lr for _ in self.optimizer.param_groups]
+
+
 lr_scheduler_cls = {
-    "reduce_lr": lr_scheduler.ReduceLROnPlateau,
-    "step_lr": lr_scheduler.StepLR,
-    "multi_step_lr": CustomMultiStepLR,
-    "exponential_lr": lr_scheduler.ExponentialLR,
+    "reduce_lr": lr.ReduceLROnPlateau,
+    "step_lr": lr.StepLR,
+    "multi_step_lr": lr.MultiStepLR,
+    "exp_lr": ExponentialLR,
     "noam_lr": NoamLR
 }

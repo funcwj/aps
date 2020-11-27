@@ -5,7 +5,7 @@ import torch as th
 import torch.nn as nn
 
 from typing import NoReturn, Union, Tuple, Optional
-from aps.asr.base.decoder import OneHotEmbedding
+from aps.asr.base.layers import OneHotEmbedding
 from aps.libs import ApsRegisters
 
 

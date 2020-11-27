@@ -24,9 +24,9 @@ def test_base_rnn(num_spks, nonlinear):
                         num_bins=257,
                         input_size=257,
                         input_project=512,
-                        rnn_layers=2,
+                        num_layers=2,
+                        hidden=512,
                         num_spks=num_spks,
-                        rnn_hidden=512,
                         output_nonlinear=nonlinear)
     inp = th.rand(2, 64000)
     x = base_rnn(inp)
@@ -252,7 +252,7 @@ def test_dccrn(num_spks, cplx):
 
 
 def test_unsuper_enh():
-    nnet_cls = aps_sse_nnet("unsupervised_enh")
+    nnet_cls = aps_sse_nnet("unsuper_rnn_enh")
     transform = EnhTransform(feats="spectrogram-log-cmvn-ipd",
                              frame_len=512,
                              frame_hop=256,
@@ -261,8 +261,8 @@ def test_unsuper_enh():
                            num_bins=257,
                            input_size=1285,
                            input_project=512,
-                           rnn_layers=2,
-                           rnn_hidden=512)
+                           num_layers=2,
+                           hidden=512)
     inp = th.rand(2, 5, 64000)
     x, y = unsuper_enh(inp)
     assert x.shape == th.Size([2, 5, 257, 249])

@@ -27,34 +27,33 @@ class TransformerASR(nn.Module):
                  eos: int = -1,
                  ctc: bool = False,
                  asr_transform: Optional[nn.Module] = None,
-                 encoder_type: str = "transformer",
-                 encoder_proj: Optional[int] = None,
-                 encoder_kwargs: Optional[Dict] = None,
-                 decoder_type: str = "transformer",
-                 decoder_kwargs: Optional[Dict] = None) -> None:
+                 enc_type: str = "transformer",
+                 enc_proj: Optional[int] = None,
+                 enc_kwargs: Dict = {},
+                 dec_type: str = "transformer",
+                 dec_kwargs: Dict = {}) -> None:
         super(TransformerASR, self).__init__()
         if eos < 0 or sos < 0:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
-        xfmr_encoder_cls = support_xfmr_encoder(encoder_type)
+        xfmr_encoder_cls = support_xfmr_encoder(enc_type)
         if xfmr_encoder_cls:
-            self.encoder = xfmr_encoder_cls(input_size, **encoder_kwargs)
+            self.encoder = xfmr_encoder_cls(input_size, **enc_kwargs)
         else:
-            if encoder_proj is None:
+            if enc_proj is None:
                 raise ValueError("For non-transformer encoder, "
                                  "encoder_proj can not be None")
-            self.encoder = encoder_instance(encoder_type, input_size,
-                                            encoder_proj, **encoder_kwargs)
-        if decoder_type != "transformer":
+            self.encoder = encoder_instance(enc_type, input_size, enc_proj,
+                                            enc_kwargs)
+        if dec_type != "transformer":
             raise ValueError("TransformerASR: decoder must be transformer")
         self.decoder = TorchTransformerDecoder(vocab_size -
                                                1 if ctc else vocab_size,
-                                               enc_dim=encoder_proj,
-                                               **decoder_kwargs)
+                                               enc_dim=enc_proj,
+                                               **dec_kwargs)
         self.sos = sos
         self.eos = eos
         self.asr_transform = asr_transform
-        self.ctc = nn.Linear(decoder_kwargs["att_dim"],
-                             vocab_size) if ctc else None
+        self.ctc = nn.Linear(dec_kwargs["att_dim"], vocab_size) if ctc else None
 
     def forward(
         self, x_pad: th.Tensor, x_len: Optional[th.Tensor], y_pad: th.Tensor

@@ -9,6 +9,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from typing import Optional, Tuple
+from aps.libs import Register
+
+AsrAtt = Register("asr_att")
 
 
 def padding_mask(vec: th.Tensor, device: th.device = None) -> th.Tensor:
@@ -37,18 +40,9 @@ def att_instance(att_type: str, enc_dim: int, dec_dim: int,
     """
     Return attention instance
     """
-    supported_att = {
-        "dot": DotAttention,
-        "loc": LocAttention,
-        "ctx": CtxAttention,
-        "mhdot": MHDotAttention,
-        "mhctx": MHCtxAttention,
-        "mhloc": MHLocAttention
-        # ...
-    }
-    if att_type not in supported_att:
+    if att_type not in AsrAtt:
         raise RuntimeError(f"Unknown attention type: {att_type}")
-    return supported_att[att_type](enc_dim, dec_dim, **kwargs)
+    return AsrAtt[att_type](enc_dim, dec_dim, **kwargs)
 
 
 class Conv1D(nn.Conv1d):
@@ -64,18 +58,29 @@ class Conv1D(nn.Conv1d):
         x: N x L or N x C x L
         """
         if x.dim() not in [2, 3]:
-            raise RuntimeError("{} accept 2/3D tensor as input".format(
-                self.__name__))
+            raise RuntimeError("Conv1D accepts 2/3D tensor as input")
         x = super().forward(x if x.dim() == 3 else th.unsqueeze(x, 1))
         if squeeze:
             x = th.squeeze(x)
         return x
 
 
-class LocAttention(nn.Module):
+class Attention(nn.Module):
     """
-    Location aware attention described in
-        "Attention-Based Models for Speech Recognition"
+    Base module for attention
+    """
+
+    def __init__(self):
+        super(Attention, self).__init__()
+
+    def clear(self):
+        raise NotImplementedError
+
+
+@AsrAtt.register("loc")
+class LocAttention(Attention):
+    """
+    Location aware attention described in "Attention-Based Models for Speech Recognition"
     """
 
     def __init__(self,
@@ -96,10 +101,10 @@ class LocAttention(nn.Module):
                         stride=1,
                         padding=(att_kernel - 1) // 2)
         self.w = nn.Linear(att_dim, 1, bias=False)
-        # reset variables
-        self.reset()
+        # clear variables
+        self.clear()
 
-    def reset(self):
+    def clear(self):
         self.enc_part = None
         self.pad_mask = None
 
@@ -157,7 +162,8 @@ class LocAttention(nn.Module):
         return ali, ctx
 
 
-class CtxAttention(nn.Module):
+@AsrAtt.register("ctx")
+class CtxAttention(Attention):
     """
     Context attention described in
         "Neural Machine Translation by Jointly Learning to Align and Translate"
@@ -169,9 +175,9 @@ class CtxAttention(nn.Module):
         self.dec_proj = nn.Linear(dec_dim, att_dim, bias=False)
         self.w = nn.Linear(att_dim, 1, bias=False)
         # self.dec_dim = dec_dim
-        self.reset()
+        self.clear()
 
-    def reset(self):
+    def clear(self):
         self.enc_part = None
         self.pad_mask = None
 
@@ -210,7 +216,8 @@ class CtxAttention(nn.Module):
         return ali, ctx
 
 
-class DotAttention(nn.Module):
+@AsrAtt.register("dot")
+class DotAttention(Attention):
     """
     Dot attention described in
         "Listen, Attend and Spell: A Neural Network for Large "
@@ -223,9 +230,9 @@ class DotAttention(nn.Module):
         self.enc_proj = nn.Linear(enc_dim, att_dim)
         self.dec_proj = nn.Linear(dec_dim, att_dim)
         self.att_dim = att_dim
-        self.reset()
+        self.clear()
 
-    def reset(self):
+    def clear(self):
         self.enc_part = None
         self.pad_mask = None
 
@@ -264,7 +271,8 @@ class DotAttention(nn.Module):
         return ali, ctx
 
 
-class MHCtxAttention(nn.Module):
+@AsrAtt.register("mhctx")
+class MHCtxAttention(Attention):
     """
     Multi-head context attention
     """
@@ -290,9 +298,9 @@ class MHCtxAttention(nn.Module):
                         bias=False)
         self.att_dim = att_dim
         self.att_head = att_head
-        self.reset()
+        self.clear()
 
-    def reset(self):
+    def clear(self):
         self.enc_part = None
         self.key_part = None
         self.pad_mask = None
@@ -355,7 +363,8 @@ class MHCtxAttention(nn.Module):
         return ali, ctx
 
 
-class MHDotAttention(nn.Module):
+@AsrAtt.register("mhdot")
+class MHDotAttention(Attention):
     """
     Multi-head dot attention
     """
@@ -374,9 +383,9 @@ class MHDotAttention(nn.Module):
         self.ctx_proj = nn.Linear(att_dim * att_head, enc_dim)
         self.att_dim = att_dim
         self.att_head = att_head
-        self.reset()
+        self.clear()
 
-    def reset(self):
+    def clear(self):
         self.enc_part = None
         self.key_part = None
         self.pad_mask = None
@@ -433,7 +442,8 @@ class MHDotAttention(nn.Module):
         return ali, ctx
 
 
-class MHLocAttention(nn.Module):
+@AsrAtt.register("mhloc")
+class MHLocAttention(Attention):
     """
     Multi-head location aware attention
     """
@@ -471,10 +481,10 @@ class MHLocAttention(nn.Module):
         self.ctx_proj = nn.Linear(att_dim * att_head, enc_dim)
         self.att_dim = att_dim
         self.att_head = att_head
-        # reset variables
-        self.reset()
+        # clear variables
+        self.clear()
 
-    def reset(self):
+    def clear(self):
         self.enc_part = None
         self.key_part = None
         self.pad_mask = None

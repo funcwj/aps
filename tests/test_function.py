@@ -16,7 +16,7 @@ def test_import_lib(str_lib):
     dynamic_importlib(str_lib)
 
 
-@pytest.mark.parametrize("str_dict", ["data/dataloader/am/dict"])
+@pytest.mark.parametrize("str_dict", ["data/checkpoint/aishell_att_1a/dict"])
 def test_load_dict(str_dict):
     load_dict(str_dict)
     load_dict(str_dict, reverse=True)

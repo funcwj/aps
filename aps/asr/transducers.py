@@ -24,27 +24,27 @@ class TorchTransducerASR(nn.Module):
                  vocab_size: int = 40,
                  blank: int = -1,
                  asr_transform: Optional[nn.Module] = None,
-                 encoder_type: str = "transformer",
-                 encoder_proj: Optional[int] = None,
-                 encoder_kwargs: Optional[Dict] = None,
-                 decoder_kwargs: Optional[Dict] = None) -> None:
+                 enc_type: str = "transformer",
+                 enc_proj: Optional[int] = None,
+                 enc_kwargs: Dict = {},
+                 dec_kwargs: Dict = {}) -> None:
         super(TorchTransducerASR, self).__init__()
         if blank < 0:
             raise RuntimeError(f"Unsupported blank value: {blank}")
-        xfmr_encoder_cls = support_xfmr_encoder(encoder_type)
+        xfmr_encoder_cls = support_xfmr_encoder(enc_type)
         if xfmr_encoder_cls:
             self.is_xfmr_encoder = True
-            self.encoder = xfmr_encoder_cls(input_size, **encoder_kwargs)
-            decoder_kwargs["enc_dim"] = encoder_kwargs["att_dim"]
+            self.encoder = xfmr_encoder_cls(input_size, **enc_kwargs)
+            dec_kwargs["enc_dim"] = enc_kwargs["att_dim"]
         else:
             self.is_xfmr_encoder = False
-            if encoder_proj is None:
+            if enc_proj is None:
                 raise ValueError("For non-transformer encoder, "
-                                 "encoder_proj can not be None")
-            self.encoder = encoder_instance(encoder_type, input_size,
-                                            encoder_proj, **encoder_kwargs)
-            decoder_kwargs["enc_dim"] = encoder_proj
-        self.decoder = TorchRNNDecoder(vocab_size, **decoder_kwargs)
+                                 "enc_proj can not be None")
+            self.encoder = encoder_instance(enc_type, input_size, enc_proj,
+                                            enc_kwargs)
+            dec_kwargs["enc_dim"] = enc_proj
+        self.decoder = TorchRNNDecoder(vocab_size, **dec_kwargs)
         self.blank = blank
         self.asr_transform = asr_transform
 
@@ -132,30 +132,30 @@ class TransformerTransducerASR(nn.Module):
     """
 
     def __init__(self,
-                 input_size=80,
-                 vocab_size=40,
-                 blank=-1,
-                 asr_transform=None,
-                 encoder_type="transformer",
-                 encoder_proj=None,
-                 encoder_kwargs=None,
-                 decoder_kwargs=None):
+                 input_size: int = 80,
+                 vocab_size: int = 40,
+                 blank: int = -1,
+                 asr_transform: Optional[nn.Module] = None,
+                 enc_type: str = "transformer",
+                 enc_proj: Optional[int] = None,
+                 enc_kwargs: Dict = {},
+                 dec_kwargs: Dict = {}) -> None:
         super(TransformerTransducerASR, self).__init__()
         if blank < 0:
             raise RuntimeError(f"Unsupported blank value: {blank}")
-        xfmr_encoder_cls = support_xfmr_encoder(encoder_type)
+        xfmr_encoder_cls = support_xfmr_encoder(enc_type)
         if xfmr_encoder_cls:
             self.is_xfmr_encoder = True
-            self.encoder = xfmr_encoder_cls(input_size, **encoder_kwargs)
+            self.encoder = xfmr_encoder_cls(input_size, **enc_kwargs)
         else:
             self.is_xfmr_encoder = False
-            if encoder_proj is None:
+            if enc_proj is None:
                 raise ValueError("For non-transformer encoder, "
                                  "encoder_proj can not be None")
-            self.encoder = encoder_instance(encoder_type, input_size,
-                                            encoder_proj, **encoder_kwargs)
-        decoder_kwargs["enc_dim"] = encoder_proj
-        self.decoder = TorchTransformerDecoder(vocab_size, **decoder_kwargs)
+            self.encoder = encoder_instance(enc_type, input_size, enc_proj,
+                                            enc_kwargs)
+        dec_kwargs["enc_dim"] = enc_proj
+        self.decoder = TorchTransformerDecoder(vocab_size, **dec_kwargs)
         self.blank = blank
         self.asr_transform = asr_transform
 

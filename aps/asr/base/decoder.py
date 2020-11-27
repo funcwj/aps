@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from typing import List, Dict, Optional, Tuple, Union
+from aps.asr.base.layers import OneHotEmbedding
 from aps.const import NEG_INF
 
 
@@ -40,37 +41,11 @@ def trace_back_hypos(point: th.Tensor,
     return hypos
 
 
-class OneHotEmbedding(nn.Module):
-    """
-    Onehot encode
-    """
-
-    def __init__(self, vocab_size: int):
-        super(OneHotEmbedding, self).__init__()
-        self.vocab_size = vocab_size
-
-    def extra_repr(self):
-        return f"vocab_size={self.vocab_size}"
-
-    def forward(self, x: th.Tensor) -> th.Tensor:
-        """
-        args:
-            x: ...
-        return
-            e: ... x V
-        """
-        S = list(x.shape) + [self.vocab_size]
-        # ... x V
-        H = th.zeros(S, dtype=th.float32, device=x.device)
-        # set one
-        H = H.scatter(-1, x[..., None], 1)
-        return H
-
-
-class TorchDecoder(nn.Module):
+class VanillaRNNDecoder(nn.Module):
     """
     PyTorch's RNN decoder
     """
+    HiddenType = Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]
 
     def __init__(self,
                  enc_proj: int,
@@ -79,10 +54,9 @@ class TorchDecoder(nn.Module):
                  rnn_layers: int = 3,
                  rnn_hidden: int = 512,
                  rnn_dropout: float = 0.0,
-                 attention: Optional[nn.Module] = None,
                  input_feeding: bool = False,
                  vocab_embeded: bool = True) -> None:
-        super(TorchDecoder, self).__init__()
+        super(VanillaRNNDecoder, self).__init__()
         RNN = dec_rnn.upper()
         supported_rnn = {"RNN": nn.RNN, "GRU": nn.GRU, "LSTM": nn.LSTM}
         if RNN not in supported_rnn:
@@ -99,18 +73,17 @@ class TorchDecoder(nn.Module):
                                           batch_first=True,
                                           dropout=rnn_dropout,
                                           bidirectional=False)
-        self.attend = attention
         self.proj = nn.Linear(rnn_hidden + enc_proj, enc_proj)
         self.pred = nn.Linear(enc_proj, vocab_size)
         self.input_feeding = input_feeding
         self.vocab_size = vocab_size
 
     def _step_decoder(
-        self,
-        emb_pre: th.Tensor,
-        att_ctx: th.Tensor,
-        dec_hid: Union[th.Tensor, Tuple[th.Tensor, th.Tensor], None] = None
-    ) -> Tuple[th.Tensor, Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]]:
+            self,
+            emb_pre: th.Tensor,
+            att_ctx: th.Tensor,
+            dec_hid: Optional[HiddenType] = None
+    ) -> Tuple[th.Tensor, HiddenType]:
         """
         Args
             emb_pre: N x D_emb
@@ -125,15 +98,15 @@ class TorchDecoder(nn.Module):
 
     def _step(
         self,
+        att_net: nn.Module,
         out_pre: th.Tensor,
         enc_out: th.Tensor,
         att_ctx: th.Tensor,
-        dec_hid: Union[th.Tensor, Tuple[th.Tensor, th.Tensor], None] = None,
+        dec_hid: Optional[HiddenType] = None,
         att_ali: Optional[th.Tensor] = None,
         enc_len: Optional[th.Tensor] = None,
         proj: Optional[th.Tensor] = None
-    ) -> Tuple[th.Tensor, th.Tensor, Union[th.Tensor, Tuple[
-            th.Tensor, th.Tensor]], th.Tensor, th.Tensor]:
+    ) -> Tuple[th.Tensor, th.Tensor, HiddenType, th.Tensor, th.Tensor]:
         """
         Make a prediction step
         """
@@ -143,7 +116,7 @@ class TorchDecoder(nn.Module):
         dec_out, dec_hid = self._step_decoder(
             emb_pre, proj if self.input_feeding else att_ctx, dec_hid=dec_hid)
         # att_ali: N x Ti, att_ctx: N x D_enc
-        att_ali, att_ctx = self.attend(enc_out, enc_len, dec_out, att_ali)
+        att_ali, att_ctx = att_net(enc_out, enc_len, dec_out, att_ali)
         # proj: N x D_enc
         proj = self.proj(th.cat([dec_out, att_ctx], dim=-1))
         # pred: N x V
@@ -151,6 +124,7 @@ class TorchDecoder(nn.Module):
         return att_ali, att_ctx, dec_hid, proj, pred
 
     def forward(self,
+                att_net: nn.Module,
                 enc_pad: th.Tensor,
                 enc_len: Optional[th.Tensor],
                 tgt_pad: th.Tensor,
@@ -168,8 +142,6 @@ class TorchDecoder(nn.Module):
             outs: N x To x V
             alis: N x To x T
         """
-        # reset flags
-        self.attend.reset()
         N, _, D_enc = enc_pad.shape
         outs = []  # collect prediction
         att_ali = None  # attention alignments
@@ -194,7 +166,8 @@ class TorchDecoder(nn.Module):
                 else:
                     out_pre = tgt_pad[:, t - 1]
             # step forward
-            att_ali, att_ctx, dec_hid, proj, pred = self._step(out_pre,
+            att_ali, att_ctx, dec_hid, proj, pred = self._step(att_net,
+                                                               out_pre,
                                                                enc_pad,
                                                                att_ctx,
                                                                dec_hid=dec_hid,
@@ -210,6 +183,7 @@ class TorchDecoder(nn.Module):
         return outs, alis
 
     def beam_search(self,
+                    att_net: nn.Module,
                     enc_out: th.Tensor,
                     beam: int = 8,
                     nbest: int = 1,
@@ -222,9 +196,6 @@ class TorchDecoder(nn.Module):
         Args
             enc_out: 1 x T x F
         """
-        # reset flags
-        self.attend.reset()
-
         if sos < 0 or eos < 0:
             raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
         if max_len <= 0:
@@ -260,6 +231,7 @@ class TorchDecoder(nn.Module):
                 out = th.tensor([n["trans"][-1]], dtype=th.int64, device=dev)
                 # step forward
                 att_ali, att_ctx, dec_hid, proj, pred = self._step(
+                    att_net,
                     out,
                     enc_out,
                     n["att_ctx"],
@@ -320,6 +292,7 @@ class TorchDecoder(nn.Module):
         } for n in nbest_hypos[:nbest]]
 
     def beam_search_vectorized(self,
+                               att_net: nn.Module,
                                enc_out: th.Tensor,
                                lm: Optional[nn.Module] = None,
                                lm_weight: float = 0,
@@ -334,9 +307,6 @@ class TorchDecoder(nn.Module):
         Args
             enc_out: 1 x T x F
         """
-        # reset flags
-        self.attend.reset()
-
         if sos < 0 or eos < 0:
             raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
         if max_len <= 0:
@@ -386,7 +356,8 @@ class TorchDecoder(nn.Module):
                 att_ali = att_ali[point]
 
             # step forward
-            att_ali, att_ctx, dec_hid, proj, pred = self._step(out,
+            att_ali, att_ctx, dec_hid, proj, pred = self._step(att_net,
+                                                               out,
                                                                enc_out,
                                                                att_ctx[point],
                                                                dec_hid=dec_hid,
@@ -476,6 +447,7 @@ class TorchDecoder(nn.Module):
         return nbest_hypos[:nbest]
 
     def beam_search_batch(self,
+                          att_net: nn.Module,
                           enc_out: th.Tensor,
                           enc_len: th.Tensor,
                           beam: int = 8,
@@ -490,9 +462,6 @@ class TorchDecoder(nn.Module):
             enc_out: N x T x F
             enc_len: N
         """
-        # reset flags
-        self.attend.reset()
-
         if sos < 0 or eos < 0:
             raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
         if max_len <= 0:
@@ -562,7 +531,8 @@ class TorchDecoder(nn.Module):
                 att_ali = att_ali[point]
 
             # step forward
-            att_ali, att_ctx, dec_hid, proj, pred = self._step(out,
+            att_ali, att_ctx, dec_hid, proj, pred = self._step(att_net,
+                                                               out,
                                                                enc_out,
                                                                att_ctx[point],
                                                                enc_len=enc_len,

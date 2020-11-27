@@ -17,15 +17,15 @@ asr_transform = AsrTransform(feats="fbank-log-cmvn",
                              pre_emphasis=0.96,
                              center=False)
 
-att_encoder_kwargs = {
+att_enc_kwargs = {
     "rnn": "lstm",
-    "rnn_layers": 2,
-    "rnn_hidden": 512,
-    "rnn_dropout": 0.2,
-    "rnn_bidir": False
+    "num_layers": 2,
+    "hidden": 512,
+    "dropout": 0.2,
+    "bidirectional": False
 }
 
-att_decoder_kwargs = {
+att_dec_kwargs = {
     "dec_rnn": "lstm",
     "rnn_layers": 2,
     "rnn_hidden": 512,
@@ -34,7 +34,7 @@ att_decoder_kwargs = {
     "vocab_embeded": True
 }
 
-rnnt_decoder_kwargs = {
+rnnt_dec_kwargs = {
     "embed_size": 512,
     "jot_dim": 512,
     "dec_rnn": "lstm",
@@ -72,11 +72,11 @@ def test_ctc_xent():
                        asr_transform=asr_transform,
                        att_type="ctx",
                        att_kwargs={"att_dim": 512},
-                       encoder_type="common_rnn",
-                       encoder_proj=256,
-                       encoder_kwargs=att_encoder_kwargs,
-                       decoder_dim=512,
-                       decoder_kwargs=att_decoder_kwargs)
+                       enc_type="vanilla_rnn",
+                       enc_proj=256,
+                       enc_kwargs=att_enc_kwargs,
+                       dec_dim=512,
+                       dec_kwargs=att_dec_kwargs)
     task = aps_task("ctc_xent",
                     att_asr,
                     lsm_factor=0.1,
@@ -96,10 +96,10 @@ def test_rnnt():
                         vocab_size=vocab_size,
                         asr_transform=asr_transform,
                         blank=vocab_size - 1,
-                        encoder_type="common_rnn",
-                        encoder_kwargs=att_encoder_kwargs,
-                        encoder_proj=512,
-                        decoder_kwargs=rnnt_decoder_kwargs)
+                        enc_type="vanilla_rnn",
+                        enc_kwargs=att_enc_kwargs,
+                        enc_proj=512,
+                        dec_kwargs=rnnt_dec_kwargs)
     task = aps_task("transducer",
                     rnnt_asr,
                     blank=vocab_size - 1,

@@ -1,14 +1,14 @@
-nnet: "unsupervised_enh"
+nnet: "unsuper_rnn_enh"
 
 nnet_conf:
   input_size: 1285
   input_project: 512
   num_bins: 257
   rnn: "lstm"
-  rnn_dropout: 0.2
-  rnn_bidir: True
-  rnn_hidden: 512
-  rnn_layers: 3
+  dropout: 0.2
+  bidirectional: true
+  hidden: 512
+  num_layers: 3
 
 task: "unsuper_enh"
 
@@ -32,6 +32,7 @@ trainer_conf:
   no_impr: 3
   no_impr_thres: 0.01
   clip_gradient: 10
+  report_metrics: ["loss"]
   stop_criterion: "loss"
 
 data_conf:

@@ -19,9 +19,9 @@ def toy_rnn(mode, num_spks):
     return aps_sse_nnet("base_rnn")(enh_transform=transform,
                                     num_bins=257,
                                     input_size=257,
-                                    rnn_layers=2,
+                                    num_layers=2,
                                     num_spks=num_spks,
-                                    rnn_hidden=256,
+                                    hidden=256,
                                     training_mode=mode)
 
 

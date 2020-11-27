@@ -8,8 +8,9 @@ import torch as th
 
 from aps.libs import aps_asr_nnet
 from aps.transform import AsrTransform, EnhTransform
+from aps.asr.base.encoder import Conv1dEncoder, Conv2dEncoder
 
-default_rnn_decoder_kwargs = {
+default_rnn_dec_kwargs = {
     "dec_rnn": "lstm",
     "rnn_layers": 2,
     "rnn_hidden": 512,
@@ -18,7 +19,7 @@ default_rnn_decoder_kwargs = {
     "vocab_embeded": True
 }
 
-default_xfmr_decoder_kwargs = {
+default_xfmr_dec_kwargs = {
     "att_dim": 512,
     "nhead": 8,
     "feedforward_dim": 2048,
@@ -27,36 +28,36 @@ default_xfmr_decoder_kwargs = {
     "num_layers": 2
 }
 
-default_rnn_encoder_kwargs = {
+default_rnn_enc_kwargs = {
     "rnn": "lstm",
-    "rnn_layers": 3,
-    "rnn_hidden": 512,
-    "rnn_dropout": 0.2,
-    "rnn_bidir": False
+    "num_layers": 3,
+    "hidden": 512,
+    "dropout": 0.2,
+    "bidirectional": False
 }
 
-custom_rnn_encoder_kwargs = {
+custom_rnn_enc_kwargs = {
     "rnn": "lstm",
-    "rnn_layers": 2,
-    "rnn_bidir": True,
-    "rnn_dropout": 0.2,
-    "rnn_hidden": 512,
-    "rnn_project": 512,
+    "num_layers": 2,
+    "bidirectional": True,
+    "dropout": 0.2,
+    "hidden": 512,
+    "project": 512,
     "layernorm": True
 }
 
-tdnn_encoder_kwargs = {
+conv1d_enc_kwargs = {
     "dim": 512,
     "norm": "BN",
     "num_layers": 5,
-    "stride": "2,2,2,1,1",
-    "dilation": "1,1,1,1,1",
+    "stride": [2, 2, 2, 1, 1],
+    "dilation": [1, 1, 1, 1, 1],
     "dropout": 0.2
 }
 
-fsmn_encoder_kwargs = {
-    "project_size": 512,
-    "num_layers": 45,
+fsmn_enc_kwargs = {
+    "project": 512,
+    "num_layers": 4,
     "residual": True,
     "lctx": 10,
     "rctx": 10,
@@ -64,34 +65,62 @@ fsmn_encoder_kwargs = {
     "dropout": 0.2
 }
 
-tdnn_rnn_encoder_kwargs = {
-    "tdnn_dim": 512,
-    "tdnn_layers": 3,
-    "tdnn_stride": "2,2,2",
-    "tdnn_dilation": "1,1,2",
-    "rnn": "lstm",
-    "rnn_layers": 3,
-    "rnn_bidir": True,
-    "rnn_dropout": 0.2,
-    "rnn_hidden": 320,
+conv2d_rnn_enc_kwargs = {
+    "conv2d": {
+        "out_features": -1,
+        "channel": 32,
+        "num_layers": 2,
+        "stride": 2,
+        "padding": 1,
+        "kernel_size": 3,
+    },
+    "vanilla_rnn": {
+        "rnn": "lstm",
+        "num_layers": 3,
+        "bidirectional": True,
+        "dropout": 0.2,
+        "hidden": 320
+    }
 }
 
-tdnn_fsmn_encoder_kwargs = {
-    "tdnn_dim": 512,
-    "tdnn_layers": 3,
-    "tdnn_stride": "2,2,2",
-    "tdnn_dilation": "1,1,2",
-    "fsmn_layers": 3,
-    "fsmn_lctx": 10,
-    "fsmn_rctx": 10,
-    "fsmn_norm": "LN",
-    "fsmn_residual": False,
-    "fsmn_dilation": 1,
-    "fsmn_project": 512,
-    "fsmn_dropout": 0.2
+conv1d_rnn_enc_kwargs = {
+    "conv1d": {
+        "out_features": 512,
+        "dim": 512,
+        "num_layers": 3,
+        "stride": [2, 2, 2],
+        "dilation": [1, 1, 2],
+    },
+    "vanilla_rnn": {
+        "rnn": "lstm",
+        "num_layers": 3,
+        "bidirectional": True,
+        "dropout": 0.2,
+        "hidden": 320
+    }
 }
 
-transformer_encoder_kwargs = {
+conv1d_fsmn_enc_kwargs = {
+    "conv1d": {
+        "out_features": 512,
+        "dim": 512,
+        "num_layers": 3,
+        "stride": [2, 2, 2],
+        "dilation": [1, 1, 2],
+    },
+    "fsmn": {
+        "num_layers": 3,
+        "lctx": 10,
+        "rctx": 10,
+        "norm": "LN",
+        "residual": False,
+        "dilation": 1,
+        "project": 512,
+        "dropout": 0.2
+    }
+}
+
+transformer_enc_kwargs = {
     "input_embed": "conv2d",
     "embed_other_opts": -1,
     "att_dim": 512,
@@ -103,7 +132,7 @@ transformer_encoder_kwargs = {
     "num_layers": 2
 }
 
-transformer_rel_encoder_kwargs = {
+transformer_rel_enc_kwargs = {
     "input_embed": "conv2d",
     "embed_other_opts": -1,
     "att_dim": 512,
@@ -117,7 +146,7 @@ transformer_rel_encoder_kwargs = {
     "add_value_rel": True
 }
 
-transformer_rel_xl_encoder_kwargs = {
+transformer_rel_xl_enc_kwargs = {
     "input_embed": "conv2d",
     "embed_other_opts": -1,
     "att_dim": 512,
@@ -141,6 +170,38 @@ def gen_egs(vocab_size, batch_size, num_channels=1):
         x = th.rand(batch_size, num_channels, S)
     y = th.randint(0, vocab_size - 1, (batch_size, u))
     return x, x_len, y, u
+
+
+@pytest.mark.parametrize("num_layers", [2, 3])
+@pytest.mark.parametrize("inp_len", [100, 102])
+@pytest.mark.parametrize("dilation", [1, 2])
+def test_conv1d_encoder(inp_len, num_layers, dilation):
+    conv1d_encoder = Conv1dEncoder(80,
+                                   512,
+                                   num_layers=num_layers,
+                                   stride=2,
+                                   dilation=dilation)
+    batch_size = 4
+    inp = th.rand(batch_size, inp_len, 80)
+    out, out_len = conv1d_encoder(inp, th.LongTensor([inp_len] * batch_size))
+    assert out.shape[1] == out_len[0]
+
+
+@pytest.mark.parametrize("num_layers", [2, 3])
+@pytest.mark.parametrize("inp_len", [100, 102])
+@pytest.mark.parametrize("kernel_size", [3, 5])
+def test_conv2d_encoder(inp_len, num_layers, kernel_size):
+    conv1d_encoder = Conv2dEncoder(80,
+                                   -1,
+                                   channel=[32] * num_layers,
+                                   kernel_size=kernel_size,
+                                   stride=2,
+                                   num_layers=num_layers,
+                                   padding=(kernel_size - 1) // 2)
+    batch_size = 4
+    inp = th.rand(batch_size, inp_len, 80)
+    out, out_len = conv1d_encoder(inp, th.LongTensor([inp_len] * batch_size))
+    assert out.shape[1] == out_len[0]
 
 
 @pytest.mark.parametrize("att_type,att_kwargs", [
@@ -182,11 +243,11 @@ def test_att(att_type, att_kwargs):
                        asr_transform=asr_transform,
                        att_type=att_type,
                        att_kwargs=att_kwargs,
-                       encoder_type="common_rnn",
-                       encoder_proj=256,
-                       encoder_kwargs=default_rnn_encoder_kwargs,
-                       decoder_dim=512,
-                       decoder_kwargs=default_rnn_decoder_kwargs)
+                       enc_type="vanilla_rnn",
+                       enc_proj=256,
+                       enc_kwargs=default_rnn_enc_kwargs,
+                       dec_dim=512,
+                       dec_kwargs=default_rnn_dec_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size)
     z, _, _, _ = att_asr(x, x_len, y)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
@@ -206,10 +267,10 @@ def test_mvdr_att(att_type, att_kwargs):
     num_channels = 4
     mask_net_kwargs = {
         "rnn": "lstm",
-        "rnn_layers": 2,
-        "rnn_hidden": 512,
-        "rnn_dropout": 0.2,
-        "rnn_bidir": False,
+        "num_layers": 2,
+        "hidden": 512,
+        "dropout": 0.2,
+        "bidirectional": False,
         "non_linear": "sigmoid"
     }
     mvdr_kwargs = {"att_dim": 512, "mask_norm": True, "eps": 1e-5}
@@ -234,11 +295,11 @@ def test_mvdr_att(att_type, att_kwargs):
                             enh_transform=enh_transform,
                             att_type=att_type,
                             att_kwargs=att_kwargs,
-                            encoder_type="common_rnn",
-                            encoder_proj=256,
-                            encoder_kwargs=default_rnn_encoder_kwargs,
-                            decoder_dim=512,
-                            decoder_kwargs=default_rnn_decoder_kwargs)
+                            enc_type="vanilla_rnn",
+                            enc_proj=256,
+                            enc_kwargs=default_rnn_enc_kwargs,
+                            dec_dim=512,
+                            dec_kwargs=default_rnn_dec_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size, num_channels=num_channels)
     z, _, _, _ = mvdr_att_asr(x, x_len, y)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
@@ -293,22 +354,23 @@ def test_beam_att(mode, enh_kwargs):
                             enh_transform=enh_transform,
                             att_type="dot",
                             att_kwargs={"att_dim": 512},
-                            encoder_type="common_rnn",
-                            encoder_proj=256,
-                            encoder_kwargs=default_rnn_encoder_kwargs,
-                            decoder_dim=512,
-                            decoder_kwargs=default_rnn_decoder_kwargs)
+                            enc_type="vanilla_rnn",
+                            enc_proj=256,
+                            enc_kwargs=default_rnn_enc_kwargs,
+                            dec_dim=512,
+                            dec_kwargs=default_rnn_dec_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size, num_channels=num_channels)
     z, _, _, _ = beam_att_asr(x, x_len, y)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
 @pytest.mark.parametrize("enc_type,enc_kwargs", [
-    pytest.param("custom_rnn", custom_rnn_encoder_kwargs),
-    pytest.param("tdnn", tdnn_encoder_kwargs),
-    pytest.param("fsmn", fsmn_encoder_kwargs),
-    pytest.param("tdnn_rnn", tdnn_rnn_encoder_kwargs),
-    pytest.param("tdnn_fsmn", tdnn_fsmn_encoder_kwargs)
+    pytest.param("variant_rnn", custom_rnn_enc_kwargs),
+    pytest.param("conv1d", conv1d_enc_kwargs),
+    pytest.param("fsmn", fsmn_enc_kwargs),
+    pytest.param("concat", conv1d_rnn_enc_kwargs),
+    pytest.param("concat", conv1d_fsmn_enc_kwargs),
+    pytest.param("concat", conv2d_rnn_enc_kwargs)
 ])
 def test_common_encoder(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("att")
@@ -326,25 +388,26 @@ def test_common_encoder(enc_type, enc_kwargs):
                        asr_transform=asr_transform,
                        att_type="ctx",
                        att_kwargs={"att_dim": 512},
-                       encoder_type=enc_type,
-                       encoder_proj=256,
-                       encoder_kwargs=enc_kwargs,
-                       decoder_dim=512,
-                       decoder_kwargs=default_rnn_decoder_kwargs)
+                       enc_type=enc_type,
+                       enc_proj=256,
+                       enc_kwargs=enc_kwargs,
+                       dec_dim=512,
+                       dec_kwargs=default_rnn_dec_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size)
     z, _, _, _ = att_asr(x, x_len, y)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
 @pytest.mark.parametrize("enc_type,enc_kwargs", [
-    pytest.param("custom_rnn", custom_rnn_encoder_kwargs),
-    pytest.param("tdnn", tdnn_encoder_kwargs),
-    pytest.param("fsmn", fsmn_encoder_kwargs),
-    pytest.param("tdnn_rnn", tdnn_rnn_encoder_kwargs),
-    pytest.param("tdnn_fsmn", tdnn_fsmn_encoder_kwargs),
-    pytest.param("transformer", transformer_encoder_kwargs),
-    pytest.param("transformer_rel", transformer_rel_encoder_kwargs),
-    pytest.param("transformer_rel_xl", transformer_rel_xl_encoder_kwargs)
+    pytest.param("variant_rnn", custom_rnn_enc_kwargs),
+    pytest.param("conv1d", conv1d_enc_kwargs),
+    pytest.param("fsmn", fsmn_enc_kwargs),
+    pytest.param("concat", conv1d_rnn_enc_kwargs),
+    pytest.param("concat", conv1d_fsmn_enc_kwargs),
+    pytest.param("concat", conv2d_rnn_enc_kwargs),
+    pytest.param("transformer", transformer_enc_kwargs),
+    pytest.param("transformer_rel", transformer_rel_enc_kwargs),
+    pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs)
 ])
 def test_transformer_encoder(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("transformer")
@@ -354,38 +417,37 @@ def test_transformer_encoder(enc_type, enc_kwargs):
                                  frame_len=400,
                                  frame_hop=160,
                                  window="hamm")
-    xfmr_asr = nnet_cls(
-        input_size=80,
-        vocab_size=vocab_size,
-        sos=0,
-        eos=1,
-        ctc=True,
-        asr_transform=asr_transform,
-        encoder_type=enc_type,
-        encoder_proj=512 if "transformer" not in enc_type else None,
-        encoder_kwargs=enc_kwargs,
-        decoder_type="transformer",
-        decoder_kwargs=default_xfmr_decoder_kwargs)
+    xfmr_asr = nnet_cls(input_size=80,
+                        vocab_size=vocab_size,
+                        sos=0,
+                        eos=1,
+                        ctc=True,
+                        asr_transform=asr_transform,
+                        enc_type=enc_type,
+                        enc_proj=512 if "transformer" not in enc_type else None,
+                        enc_kwargs=enc_kwargs,
+                        dec_type="transformer",
+                        dec_kwargs=default_xfmr_dec_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size)
     z, _, _, _ = xfmr_asr(x, x_len, y)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
 @pytest.mark.parametrize("enc_type,enc_kwargs", [
-    pytest.param("custom_rnn", custom_rnn_encoder_kwargs),
-    pytest.param("tdnn", tdnn_encoder_kwargs),
-    pytest.param("fsmn", fsmn_encoder_kwargs),
-    pytest.param("tdnn_rnn", tdnn_rnn_encoder_kwargs),
-    pytest.param("tdnn_fsmn", tdnn_fsmn_encoder_kwargs),
-    pytest.param("transformer", transformer_encoder_kwargs),
-    pytest.param("transformer_rel", transformer_rel_encoder_kwargs),
-    pytest.param("transformer_rel_xl", transformer_rel_xl_encoder_kwargs)
+    pytest.param("variant_rnn", custom_rnn_enc_kwargs),
+    pytest.param("conv1d", conv1d_enc_kwargs),
+    pytest.param("fsmn", fsmn_enc_kwargs),
+    pytest.param("concat", conv1d_rnn_enc_kwargs),
+    pytest.param("concat", conv1d_fsmn_enc_kwargs),
+    pytest.param("transformer", transformer_enc_kwargs),
+    pytest.param("transformer_rel", transformer_rel_enc_kwargs),
+    pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs)
 ])
 def test_common_transducer(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("common_transducer")
     vocab_size = 100
     batch_size = 4
-    decoder_kwargs = {
+    dec_kwargs = {
         "embed_size": 512,
         "enc_dim": 512,
         "jot_dim": 512,
@@ -402,10 +464,10 @@ def test_common_transducer(enc_type, enc_kwargs):
                     vocab_size=vocab_size,
                     blank=vocab_size - 1,
                     asr_transform=asr_transform,
-                    encoder_type=enc_type,
-                    encoder_proj=None if "transformer" in enc_type else 512,
-                    encoder_kwargs=enc_kwargs,
-                    decoder_kwargs=decoder_kwargs)
+                    enc_type=enc_type,
+                    enc_proj=None if "transformer" in enc_type else 512,
+                    enc_kwargs=enc_kwargs,
+                    dec_kwargs=dec_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size)
     y_len = th.randint(u // 2, u, (batch_size,))
     z, _ = rnnt(x, x_len, y, y_len)
@@ -413,20 +475,20 @@ def test_common_transducer(enc_type, enc_kwargs):
 
 
 @pytest.mark.parametrize("enc_type,enc_kwargs", [
-    pytest.param("custom_rnn", custom_rnn_encoder_kwargs),
-    pytest.param("tdnn", tdnn_encoder_kwargs),
-    pytest.param("fsmn", fsmn_encoder_kwargs),
-    pytest.param("tdnn_rnn", tdnn_rnn_encoder_kwargs),
-    pytest.param("tdnn_fsmn", tdnn_fsmn_encoder_kwargs),
-    pytest.param("transformer", transformer_encoder_kwargs),
-    pytest.param("transformer_rel", transformer_rel_encoder_kwargs),
-    pytest.param("transformer_rel_xl", transformer_rel_xl_encoder_kwargs)
+    pytest.param("variant_rnn", custom_rnn_enc_kwargs),
+    pytest.param("conv1d", conv1d_enc_kwargs),
+    pytest.param("fsmn", fsmn_enc_kwargs),
+    pytest.param("concat", conv1d_rnn_enc_kwargs),
+    pytest.param("concat", conv1d_fsmn_enc_kwargs),
+    pytest.param("transformer", transformer_enc_kwargs),
+    pytest.param("transformer_rel", transformer_rel_enc_kwargs),
+    pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs)
 ])
 def test_transformer_transducer(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("transformer_transducer")
     vocab_size = 100
     batch_size = 4
-    decoder_kwargs = {
+    dec_kwargs = {
         "jot_dim": 512,
         "att_dim": 512,
         "nhead": 8,
@@ -443,10 +505,10 @@ def test_transformer_transducer(enc_type, enc_kwargs):
                          vocab_size=vocab_size,
                          blank=vocab_size - 1,
                          asr_transform=asr_transform,
-                         encoder_type=enc_type,
-                         encoder_proj=512,
-                         encoder_kwargs=enc_kwargs,
-                         decoder_kwargs=decoder_kwargs)
+                         enc_type=enc_type,
+                         enc_proj=512,
+                         enc_kwargs=enc_kwargs,
+                         dec_kwargs=dec_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size)
     y_len = th.randint(u // 2, u, (batch_size,))
     y_len[0] = u

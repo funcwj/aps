@@ -2,18 +2,18 @@ nnet: "att"
 
 nnet_conf:
   input_size: 240
-  encoder_type: "custom_rnn"
-  encoder_proj: 512
-  encoder_kwargs:
+  enc_type: "variant_rnn"
+  enc_proj: 512
+  enc_kwargs:
     rnn: "lstm"
-    rnn_layers: 4
-    rnn_bidir: true
-    rnn_dropout: 0.2
-    rnn_hidden: 320
-    rnn_project: 512
+    num_layers: 4
+    bidirectional: true
+    dropout: 0.2
+    hidden: 320
+    project: 512
     layernorm: true
-  decoder_dim: 256
-  decoder_kwargs:
+  dec_dim: 256
+  dec_kwargs:
     dec_rnn: "lstm"
     rnn_layers: 2
     rnn_hidden: 256  # must eq decoder_dim
@@ -55,6 +55,7 @@ trainer_conf:
   no_impr: 6
   no_impr_thres: 0.1
   clip_gradient: 0.25
+  report_metrics: ["loss", "accu", "@ctc"]
   stop_criterion: "accu"
 
 data_conf:

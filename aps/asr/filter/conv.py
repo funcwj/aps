@@ -12,7 +12,7 @@ from typing import Optional
 from torch_complex.tensor import ComplexTensor
 
 from aps.transform.utils import init_melfilter
-from aps.asr.base.encoder import TorchRNNEncoder
+from aps.asr.base.encoder import VanillaRNNEncoder
 
 
 class ComplexConvXd(nn.Module):
@@ -176,10 +176,10 @@ class TimeInvariantAttFilter(nn.Module):
                                  bias=False)
 
         if query_type == "rnn":
-            self.pred_q = TorchRNNEncoder(num_bins,
-                                          num_bins,
-                                          rnn_dropout=0.2,
-                                          rnn_hidden=512)
+            self.pred_q = VanillaRNNEncoder(num_bins,
+                                            num_bins,
+                                            dropout=0.2,
+                                            hidden=512)
         else:
             self.pred_q = beamformer(1)
         self.conv_k = beamformer(spatial_filters)

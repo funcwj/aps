@@ -1,19 +1,20 @@
-ARG CUDA_VERSION=10.2
+ARG CUDA=10.2
 ARG CUDNN=7
-ARG PYTHON_VERSION=3.8
-ARG PYTORCH_VERSION=1.6.0
 
 # see https://gitlab.com/nvidia/container-images/cuda/blob/master/doc/supported-tags.md
-FROM nvidia/cuda:${CUDA_VERSION}-cudnn{CUDNN}-devel-ubuntu18.04
+FROM nvidia/cuda:${CUDA}-cudnn${CUDNN}-devel-ubuntu18.04
+
+ARG PYTHON_VERSION=3.8
+ARG PYTORCH_VERSION=1.6.0
+ARG OPENMPI=v4.0
+ARG OPENMPI_VERSION=4.0.5
 
 LABEL description="Dockerfile for APS toolkit"
-LABEL tag="pt${PYTORCH_VERSION}-py{PYTHON_VERSION}-cuda{CUDA_VERSION}-hvd-ubuntu18.04"
+LABEL tag="pt${PYTORCH_VERSION}-py${PYTHON_VERSION}-cuda${CUDA}-ubuntu18.04"
 LABEL creator="funcwj"
 LABEL time="2020/09/04"
 
 # https://download.open-mpi.org/release/open-mpi/v4.0/openmpi-4.0.5.tar.gz
-ENV OPENMPI=v4.0 OPENMPI_VERSION=4.0.5
-
 # install tools
 RUN apt-get update && apt-get install -y --no-install-recommends --allow-downgrades \
     --allow-change-held-packages vim git curl locales htop wget zip unzip sox libsndfile1 \
@@ -38,11 +39,11 @@ ENV PATH=$CUDA_HOME/bin:/opt/conda/bin:$PATH
 ENV LD_LIBRARY_PATH=$CUDA_HOME/lib64:/usr/local/lib:$LD_LIBRARY_PATH
 
 # install python dependency
-RUN conda install -y python=$PYTHON_VERSION
-RUN conda install -y pytorch==$PYTORCH_VERSION torchvision cudatoolkit=$CUDA_VERSION -c pytorch
+RUN conda install -y python=${PYTHON_VERSION}
+RUN conda install -y pytorch==${PYTORCH_VERSION} torchvision cudatoolkit=${CUDA_VERSION} -c pytorch
 RUN conda install -y pyyaml matplotlib tqdm scipy h5py pybind11 yapf
 RUN conda install -y -c conda-forge tensorboard pysoundfile librosa pre-commit && conda clean -ya
-RUN pip install torch_complex kaldi_python_io editdistance museval pystoi pypesq pytest flake8 warp_rnnt
+RUN pip install torch_complex kaldi_python_io editdistance museval sentencepiece pystoi pypesq pytest flake8 warp_rnnt
 RUN pip install https://github.com/kpu/kenlm/archive/master.zip
 
 # install hovorod
@@ -53,10 +54,18 @@ RUN ldconfig /usr/local/cuda/targets/x86_64-linux/lib/stubs && \
 # another RNNT implementation
 ENV CFLAGS="-I $CUDA_HOME/include $CFLAGS"
 RUN git clone https://github.com/HawkAaron/warp-transducer.git && cd warp-transducer && \
-    mkdir build && cd build && cmake .. && make && cd ../pytorch_binding && python setup.py install && \
-    cd ../../ && rm -rf warp-transducer
+    mkdir build && cd build && cmake .. && make -j $(nproc) && make install && ldconfig -v && \
+    cd ../pytorch_binding && python setup.py install && cd ../../ && rm -rf warp-transducer
 
 # install apex
 RUN git clone https://github.com/NVIDIA/apex && cd apex && \
     pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./ && \
     cd .. && rm -rf apex
+
+# install sentencepiece
+RUN git clone https://github.com/google/sentencepiece.git && cd sentencepiece && mkdir build && cd build && \
+    cmake .. && make -j $(nproc) && make install && ldconfig -v && cd ../../ && rm -rf sentencepiece
+
+# test
+RUN python -m warp_rnnt.test
+RUN python -c "from warprnnt_pytorch import rnnt_loss"

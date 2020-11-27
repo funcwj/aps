@@ -2,8 +2,8 @@ nnet: "transformer_transducer"
 
 nnet_conf:
   input_size: 80
-  encoder_type: "transformer"
-  encoder_kwargs:
+  enc_type: "transformer"
+  enc_kwargs:
     input_embed: "conv2d"
     att_dim: 256
     nhead: 4
@@ -11,7 +11,7 @@ nnet_conf:
     pos_dropout: 0.1
     att_dropout: 0.2
     num_layers: 8
-  decoder_kwargs:
+  dec_kwargs:
     att_dim: 256
     nhead: 4
     feedforward_dim: 512
@@ -47,6 +47,7 @@ trainer_conf:
   no_impr: 6
   no_impr_thres: 0.002
   clip_gradient: 10
+  report_metrics: ["loss"]
   stop_criterion: "loss"
 
 data_conf:

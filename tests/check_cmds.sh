@@ -12,8 +12,10 @@ for x in separate_blind decode decode_batch; do python ../bin/$x.py -h; done
 
 # 5.12% & 2.70%
 for cer in true false; do
-  ../bin/compute_wer.py --cer $cer data/metric/asr/hyp.text \
-    data/metric/asr/ref.text
+  ../bin/compute_wer.py --cer $cer data/metric/asr/hyp.en.text \
+    data/metric/asr/ref.en.text
+  ../bin/compute_wer.py --cer $cer data/metric/asr/hyp.zh.text \
+    data/metric/asr/ref.zh.text
 done
 
 for metric in sdr pesq stoi sisnr; do
@@ -23,8 +25,27 @@ for metric in sdr pesq stoi sisnr; do
 done
 
 ../bin/compute_gmvn.py --transform asr --sr 16000 \
-  data/dataloader/ss/wav.1.scp data/gmvn/transform.yaml data/gmvn/gmvn.pt
+  data/dataloader/ss/wav.1.scp data/transform/transform.yaml /dev/null
+
+# test decoding for att
+cpt_dir=data/checkpoint/aishell_att_1a
+../bin/decode.py $cpt_dir/egs.scp - \
+    --beam-size 24 \
+    --checkpoint $cpt_dir \
+    --device-id -1 \
+    --channel -1 \
+    --dict $cpt_dir/dict \
+    --max-len 50 \
+    --normalized true \
+    --vectorized true \
 
 ../utils/wav_duration.py --output sample data/dataloader/ss/wav.1.scp -
 ../utils/archive_wav.py data/dataloader/ss/wav.1.scp /dev/null
-head data/metric/asr/ref.text | ../utils/tokenizer.pl --space "<space>" -
+
+head data/metric/asr/ref.en.text | ../utils/tokenizer.pl --space "<space>" -
+../utils/tokenizer.py --space "<space>" --unit char --dump-vocab - \
+  --text-format kaldi data/metric/asr/ref.en.text /dev/null
+../utils/tokenizer.py --unit word --dump-vocab /dev/null --add-units "<sos>,<eos>,<unk>" \
+  --text-format kaldi data/metric/asr/ref.zh.text -
+../utils/tokenizer.py --spm data/checkpoint/en.libri.unigram.spm.model --unit subword \
+  --text-format kaldi data/metric/asr/ref.en.text -
