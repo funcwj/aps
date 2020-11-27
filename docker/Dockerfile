@@ -1,8 +1,8 @@
-ARG CUDA_VERSION=10.2
+ARG CUDA=10.2
 ARG CUDNN=7
 
 # see https://gitlab.com/nvidia/container-images/cuda/blob/master/doc/supported-tags.md
-FROM nvidia/cuda:${CUDA_VERSION}-cudnn${CUDNN}-devel-ubuntu18.04
+FROM nvidia/cuda:${CUDA}-cudnn${CUDNN}-devel-ubuntu18.04
 
 ARG PYTHON_VERSION=3.8
 ARG PYTORCH_VERSION=1.6.0
@@ -10,7 +10,7 @@ ARG OPENMPI=v4.0
 ARG OPENMPI_VERSION=4.0.5
 
 LABEL description="Dockerfile for APS toolkit"
-LABEL tag="pt${PYTORCH_VERSION}-py${PYTHON_VERSION}-cuda${CUDA_VERSION}-ubuntu18.04"
+LABEL tag="pt${PYTORCH_VERSION}-py${PYTHON_VERSION}-cuda${CUDA}-ubuntu18.04"
 LABEL creator="funcwj"
 LABEL time="2020/09/04"
 

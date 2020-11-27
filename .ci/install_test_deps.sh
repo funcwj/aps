@@ -4,9 +4,12 @@ set -eu
 
 nj=$(nproc)
 work_dir=$PWD
-# Pyhon dependencies
 sudo apt-get update
-sudo apt-get install -y libsndfile-dev ffmpeg
+sudo apt-get install -y libsndfile-dev ffmpeg curl
+# git-lfs
+curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash
+sudo apt-get install git-lfs
+# python dependencies
 pip install --upgrade pip wheel
 cat < requirements.txt | grep -v -E "warp_rnnt|horovod|kenlm" > requirements_cpu.txt && pip install -r requirements_cpu.txt
 pip install numba==0.48
