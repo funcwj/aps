@@ -4,8 +4,12 @@
 Schedule sampling & Learning rate
 """
 
+from aps.libs import Register
 
-class SsScheduler(object):
+SsScheduler = Register("ss_scheduler")
+
+
+class BaseScheduler(object):
     """
     Basic class for schedule sampling
     """
@@ -17,7 +21,8 @@ class SsScheduler(object):
         raise NotImplementedError
 
 
-class ConstScheduler(SsScheduler):
+@SsScheduler.register("const")
+class ConstScheduler(BaseScheduler):
     """
     Use const schedule sampling rate
     """
@@ -29,7 +34,8 @@ class ConstScheduler(SsScheduler):
         return self.ssr
 
 
-class TriggerScheduler(SsScheduler):
+@SsScheduler.register("trigger")
+class TriggerScheduler(BaseScheduler):
     """
     Use schedule sampling rate when metrics triggered
     """
@@ -42,7 +48,8 @@ class TriggerScheduler(SsScheduler):
         return 0 if accu < self.trigger else self.ssr
 
 
-class LinearScheduler(SsScheduler):
+@SsScheduler.register("linear")
+class LinearScheduler(BaseScheduler):
     """
     Use linear schedule sampling rate
     """
@@ -66,10 +73,3 @@ class LinearScheduler(SsScheduler):
         else:
             inv = (epoch - self.beg) // self.interval + 1
             return inv * self.inc
-
-
-ss_scheduler_cls = {
-    "const": ConstScheduler,
-    "linear": LinearScheduler,
-    "trigger": TriggerScheduler
-}

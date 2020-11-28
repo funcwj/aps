@@ -20,7 +20,7 @@ exp_dir=$2
 
 [ ! -f $text ] && echo "$0: missing $text" && exit 1
 
-if ! command -v $cmd >/dev/null 2>&1; then
+if ! command -v spm_train >/dev/null 2>&1; then
   echo "$0: install https://github.com/google/sentencepiece please" && exit 1
 fi
 

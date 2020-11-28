@@ -444,7 +444,7 @@ def test_transformer_encoder(enc_type, enc_kwargs):
     pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs)
 ])
 def test_common_transducer(enc_type, enc_kwargs):
-    nnet_cls = aps_asr_nnet("common_transducer")
+    nnet_cls = aps_asr_nnet("transducer")
     vocab_size = 100
     batch_size = 4
     dec_kwargs = {

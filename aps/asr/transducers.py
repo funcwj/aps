@@ -13,7 +13,7 @@ from aps.asr.base.encoder import encoder_instance
 from aps.libs import ApsRegisters
 
 
-@ApsRegisters.asr.register("common_transducer")
+@ApsRegisters.asr.register("transducer")
 class TorchTransducerASR(nn.Module):
     """
     Transducer end-to-end ASR (rnn as decoder)

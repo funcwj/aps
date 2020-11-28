@@ -11,23 +11,22 @@ from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
 from aps.asr.transformer.impl import TransformerTorchEncoderLayer, TransformerRelEncoderLayer, TransformerXLEncoderLayer
 from aps.asr.transformer.impl import ApsTransformerEncoder
+from aps.libs import Register
+
+TransformerEncoders = Register("xfmr_encoder")
 
 
 def support_xfmr_encoder(encoder_name):
     """
     Return transformer decoder
     """
-    supported_encoder = {
-        "transformer": TorchTransformerEncoder,
-        "transformer_rel": RelTransformerEncoder,
-        "transformer_rel_xl": RelXLTransformerEncoder
-    }
-    if encoder_name in supported_encoder:
-        return supported_encoder[encoder_name]
+    if encoder_name in TransformerEncoders:
+        return TransformerEncoders[encoder_name]
     else:
         return None
 
 
+@TransformerEncoders.register("transformer")
 class TorchTransformerEncoder(nn.Module):
     """
     Wrapper for pytorch's Transformer Decoder
@@ -90,6 +89,7 @@ class TorchTransformerEncoder(nn.Module):
         return enc_out, x_len
 
 
+@TransformerEncoders.register("transformer_rel")
 class RelTransformerEncoder(nn.Module):
     """
     Using relative position encoding
@@ -190,6 +190,7 @@ class RelTransformerEncoder(nn.Module):
         return enc_out, x_len
 
 
+@TransformerEncoders.register("transformer_rel_xl")
 class RelXLTransformerEncoder(nn.Module):
     """
     Using relative position encoding in Transformer-XL

@@ -60,7 +60,9 @@ def run(args):
         vocab = load_dict(args.dict, reverse=True)
     else:
         vocab = None
-    decoder = FasterDecoder(args.checkpoint, device_id=args.device_id)
+    decoder = FasterDecoder(args.checkpoint,
+                            function=args.function,
+                            device_id=args.device_id)
     if decoder.accept_raw:
         src_reader = AudioReader(args.feats_or_wav_scp,
                                  sr=16000,

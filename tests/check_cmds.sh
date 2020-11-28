@@ -38,6 +38,24 @@ cpt_dir=data/checkpoint/aishell_att_1a
     --max-len 50 \
     --normalized true \
     --vectorized true \
+# test decoding for rnnt
+cpt_dir=data/checkpoint/timit_rnnt_1a
+../bin/decode.py $cpt_dir/egs.scp - \
+    --beam-size 4 \
+    --checkpoint $cpt_dir \
+    --device-id -1 \
+    --channel -1 \
+    --dict $cpt_dir/dict \
+    --max-len 50 \
+    --normalized true
+../bin/decode.py $cpt_dir/egs.scp - \
+    --function "greedy_search" \
+    --checkpoint $cpt_dir \
+    --device-id -1 \
+    --channel -1 \
+    --dict $cpt_dir/dict \
+    --max-len 50 \
+    --normalized true
 
 ../utils/wav_duration.py --output sample data/dataloader/ss/wav.1.scp -
 ../utils/archive_wav.py data/dataloader/ss/wav.1.scp /dev/null

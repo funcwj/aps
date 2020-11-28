@@ -6,8 +6,42 @@
 import math
 from typing import List, Optional
 from torch.optim import lr_scheduler as lr, Optimizer
+from aps.libs import Register
+
+LrScheduler = Register("lr_scheduler")
 
 
+@LrScheduler.register("reduce_lr")
+class ReduceLROnPlateau(lr.ReduceLROnPlateau):
+    """
+    Wrapper for lr.ReduceLROnPlateau
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(ReduceLROnPlateau, self).__init__(*args, **kwargs)
+
+
+@LrScheduler.register("step_lr")
+class StepLR(lr.StepLR):
+    """
+    Wrapper for lr.StepLR
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(StepLR, self).__init__(*args, **kwargs)
+
+
+@LrScheduler.register("multi_step_lr")
+class MultiStepLR(lr.MultiStepLR):
+    """
+    Wrapper for lr.MultiStepLR
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(MultiStepLR, self).__init__(*args, **kwargs)
+
+
+@LrScheduler.register("noam_lr")
 class NoamLR(lr._LRScheduler):
     """
     Lr schuduler for Transformer
@@ -44,6 +78,7 @@ class NoamLR(lr._LRScheduler):
         ]
 
 
+@LrScheduler.register("exp_lr")
 class ExponentialLR(lr._LRScheduler):
     """
     Exponential scheduler proposed in SpecAugment paper
@@ -75,12 +110,3 @@ class ExponentialLR(lr._LRScheduler):
             cur_lr = self.peak_lr * math.exp(self.gamma *
                                              (min(step, self.sf) - self.si))
         return [cur_lr for _ in self.optimizer.param_groups]
-
-
-lr_scheduler_cls = {
-    "reduce_lr": lr.ReduceLROnPlateau,
-    "step_lr": lr.StepLR,
-    "multi_step_lr": lr.MultiStepLR,
-    "exp_lr": ExponentialLR,
-    "noam_lr": NoamLR
-}

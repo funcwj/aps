@@ -90,11 +90,8 @@ trainer_conf:
   lr_scheduler_kwargs:
     factor: 0.5
     min_lr: 1.0e-08
-    mode: max
     patience: 1
-    state: null
     threshold: 0.2
-    threshold_mode: abs
   no_impr: 6
   no_impr_thres: 0.2
   optimizer: adam

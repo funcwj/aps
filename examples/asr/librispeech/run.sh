@@ -53,7 +53,7 @@ if [ $stage -le 2 ]; then
   for data in dev train; do
     ./utils/subword.sh --op "encode" --encode "piece" \
       data/librispeech/$data/text exp/librispeech/$wp_name \
-      > data/librispeech/$data/wp6k
+      > data/librispeech/$data/token
   done
 fi
 

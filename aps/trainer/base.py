@@ -11,8 +11,8 @@ import torch as th
 from torch.nn.utils import clip_grad_norm_
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from typing import Optional, Dict, List, Union, Tuple, NoReturn, Iterable
-from aps.trainer.ss import ss_scheduler_cls
-from aps.trainer.lr import lr_scheduler_cls
+from aps.trainer.ss import SsScheduler
+from aps.trainer.lr import LrScheduler
 from aps.utils import load_obj, get_device_ids, get_logger, SimpleTimer
 from aps.task import Task
 
@@ -322,13 +322,14 @@ class Trainer(object):
             self.reporter.log(f"Model summary:\n{task.nnet}")
         self.task.to(self.default_device)
 
+        _lr_scheduler_kwargs = lr_scheduler_kwargs.copy()
         if resume or init:
             self.cpt_stats, optimizer_dict = self.load_checkpoint(
                 resume if resume else init, "resume" if resume else "init")
-            lr_scheduler_kwargs["state"] = self.cpt_stats["lr_scheduler_dict"]
+            _lr_scheduler_kwargs["state"] = self.cpt_stats["lr_scheduler_dict"]
         else:
             self.cpt_stats, optimizer_dict = None, None
-            lr_scheduler_kwargs["state"] = None
+            _lr_scheduler_kwargs["state"] = None
         # make optimizer
         self.optimizer = self.create_optimizer(optimizer,
                                                optimizer_kwargs,
@@ -345,20 +346,19 @@ class Trainer(object):
                 "threshold_mode": "abs",
                 "threshold": no_impr_thres
             }
-            lr_scheduler_kwargs.update(reduce_lr_kwargs)
+            _lr_scheduler_kwargs.update(reduce_lr_kwargs)
         self.lr_scheduler = self.create_scheduler(lr_scheduler, self.optimizer,
-                                                  **lr_scheduler_kwargs)
+                                                  **_lr_scheduler_kwargs)
         self.lr_scheduler_period = lr_scheduler_period
 
         # make ss scheduler
         if ss_scheduler_kwargs:
-            if ss_scheduler not in ss_scheduler_cls:
+            if ss_scheduler not in SsScheduler:
                 raise ValueError(f"Unsupported ss scheduler: {ss_scheduler}")
             if "accu" not in report_metrics:
                 raise ValueError("When using schedule sampling, accu need to "
                                  "be tracked in report_metrics")
-            self.ss_scheduler = ss_scheduler_cls[ss_scheduler](
-                **ss_scheduler_kwargs)
+            self.ss_scheduler = SsScheduler[ss_scheduler](**ss_scheduler_kwargs)
             self.reporter.log(f"Using schedule sampling: {ss_scheduler}")
         else:
             self.ss_scheduler = None
@@ -415,9 +415,9 @@ class Trainer(object):
         """
         Return a learning rate scheduler
         """
-        if scheduler not in lr_scheduler_cls:
+        if scheduler not in LrScheduler:
             raise ValueError(f"Unsupported lr scheduler: {scheduler}")
-        lr_scheduler = lr_scheduler_cls[scheduler](optimizer, **kwargs)
+        lr_scheduler = LrScheduler[scheduler](optimizer, **kwargs)
         self.reporter.log(f"Create scheduler {scheduler}: {kwargs}")
         if state is not None:
             lr_scheduler.load_state_dict(state)

@@ -6,6 +6,9 @@
 # 1a.yaml
 #   WER(%) Report:
 #   Total WER: 26.13%, 192 utterances
+# 1b.yaml (beam-size/4)
+#   WER(%) Report:
+#   Total WER: 25.68%, 192 utterances
 
 set -eu
 

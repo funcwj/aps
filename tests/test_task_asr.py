@@ -89,7 +89,7 @@ def test_ctc_xent():
 
 
 def test_rnnt():
-    nnet_cls = aps_asr_nnet("common_transducer")
+    nnet_cls = aps_asr_nnet("transducer")
     vocab_size = 100
     batch_size = 4
     rnnt_asr = nnet_cls(input_size=80,

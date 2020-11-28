@@ -64,10 +64,10 @@ data_conf:
     max_token_num: 400
     min_dur: 0.4
   train:
-    text: data/librispeech/train/wp6k
+    text: data/librispeech/train/token
     utt2dur: data/librispeech/train/utt2dur
     wav_scp: data/librispeech/train/wav.scp
   valid:
-    text: data/librispeech/dev/wp6k
+    text: data/librispeech/dev/token
     utt2dur: data/librispeech/dev/utt2dur
     wav_scp: data/librispeech/dev/wav.scp
