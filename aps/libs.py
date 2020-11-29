@@ -74,7 +74,7 @@ class ApsModules(object):
         "bss.dccrn", "bss.dprnn", "bss.tasnet", "bss.xfmr", "bss.dense_unet"
     ]
     loader_submodules = [
-        "am.kaldi", "am.raw", "ss.chunk", "ss.online", "lm.utt", "lm.bptt"
+        "am.kaldi", "am.raw", "ss.chunk", "ss.online", "lm.utt"
     ]
     asr = Module("aps.asr", asr_submodules)
     sse = Module("aps.sse", sse_submodules)

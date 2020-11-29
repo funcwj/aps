@@ -27,7 +27,7 @@ def DataLoader(train: bool = True,
     """
     Return a online simulation dataloader for enhancement/separation tasks
     """
-    dataset = SimuOptsDataset(simu_cfg=simu_cfg, noise=noise_label)
+    dataset = SimuOptsDataset(simu_cfg, noise=noise_label)
     return WaveChunkDataLoader(dataset,
                                train=train,
                                chunk_size=chunk_size,
@@ -41,7 +41,7 @@ class SimuOptsDataset(dat.Dataset):
     Dataset configured by the simulation command options
     """
 
-    def __init__(self, simu_cfg: str = "", noise: bool = False) -> None:
+    def __init__(self, simu_cfg, noise: bool = False) -> None:
         self.simu_cfg = BaseReader(simu_cfg, num_tokens=-1)
         self.noise = noise
         self.parser = make_argparse()

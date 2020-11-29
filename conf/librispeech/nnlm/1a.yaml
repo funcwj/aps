@@ -31,7 +31,8 @@ data_conf:
     min_token_num: 6
     min_batch_size: 8
     adapt_token_num: 300
+    chunk_size_for_sort: 48000
   train:
-    text: "data/librispeech/lm/train.wp6k"
+    text: "data/librispeech/lm/train.token"
   valid:
-    text: "data/librispeech/lm/dev.wp6k"
+    text: "data/librispeech/lm/dev.token"

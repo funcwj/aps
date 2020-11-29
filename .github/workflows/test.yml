@@ -16,12 +16,6 @@ jobs:
       matrix:
         python-version: [3.7, 3.8]
     steps:
-      - name: Set up Git LFS
-        run: |
-          sudo apt-get install -y curl
-          curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash
-          sudo apt-get install git-lfs
-
       - name: Get aps code
         uses: actions/checkout@v2
 
@@ -30,9 +24,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Set up Git LFS
+        run: |
+          bash .ci/install_git_lfs.sh && git lfs install && git lfs pull
+
       - name: Install dependencies
         run: |
-          git lfs install && git lfs pull && bash .ci/install_test_deps.sh
+          bash .ci/install_test_deps.sh
 
       - name: Run testing cases (cmd)
         run: |

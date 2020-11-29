@@ -26,22 +26,17 @@ def run(args):
     conf["nnet_conf"]["vocab_size"] = len(vocab)
 
     data_conf = conf["data_conf"]
-    trn_loader = aps_dataloader(**data_conf["train"],
-                                fmt=data_conf["fmt"],
-                                train=True,
-                                vocab_dict=vocab,
-                                batch_size=args.batch_size,
-                                num_workers=args.num_workers,
-                                sos=sos,
-                                eos=eos)
-    dev_loader = aps_dataloader(**data_conf["valid"],
-                                train=False,
-                                fmt=data_conf["fmt"],
-                                vocab_dict=vocab,
-                                batch_size=args.batch_size,
-                                num_workers=args.num_workers,
-                                sos=sos,
-                                eos=eos)
+    load_conf = {
+        "vocab_dict": vocab,
+        "batch_size": args.batch_size,
+        "num_workers": args.num_workers,
+        "sos": sos,
+        "eos": eos,
+        "fmt": data_conf["fmt"]
+    }
+    load_conf.update(data_conf["loader"])
+    trn_loader = aps_dataloader(train=True, **data_conf["train"], **load_conf)
+    dev_loader = aps_dataloader(train=False, **data_conf["valid"], **load_conf)
 
     nnet = aps_asr_nnet(conf["nnet"])(**conf["nnet_conf"])
     task = aps_task(conf["task"], nnet, **conf["task_conf"])
@@ -71,10 +66,7 @@ if __name__ == "__main__":
         description="Command to start LM training, configured by yaml files",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[BaseTrainParser.parser])
-    parser.add_argument("--dict",
-                        type=str,
-                        required=True,
-                        help="Dictionary file")
+    parser.add_argument("--dict", type=str, default="", help="Dictionary file")
     parser.add_argument("--device-id",
                         type=str,
                         default="0",

@@ -90,11 +90,12 @@ if [ $stage -le 4 ]; then
     ./utils/subword.sh \
       --op "decode" \
       --decode piece \
-      exp/librispeech/$am_exp/$data/beam16.decode \
-      exp/librispeech/$wp_name > exp/librispeech/$am_exp/$data/beam16.decode.final
+      exp/librispeech/$am_exp/$data/beam$beam_size.decode \
+      exp/librispeech/$wp_name \
+      > exp/librispeech/$am_exp/$data/beam$beam_size.decode.final
     # WER
     ./bin/compute_wer.py \
-      exp/librispeech/$am_exp/$data/beam16.decode.final \
+      exp/librispeech/$am_exp/$data/beam$beam_size.decode.final \
       data/librispeech/$data/text
   done
 fi
@@ -105,11 +106,11 @@ if [ $stage -le 5 ]; then
   mkdir $data/lm && cd $data/lm && wget http://www.openslr.org/resources/11/librispeech-lm-norm.txt.gz && \
     gunzip librispeech-lm-norm.txt.gz && cd -
   mkdir -p data/librispeech/lm
-  cat data/librispeech/{train,dev}/wp6k | sort -k1 > data/librispeech/lm/dev.wp6k
+  cat data/librispeech/{train,dev}/token | sort -k1 > data/librispeech/lm/dev.token
   awk '{printf("utt-%d %s\n", NR, $0)}' $data/lm/librispeech-lm-norm.txt > data/librispeech/lm/train.text
   ./utils/subword.sh --op "encode" --encode "piece" \
     data/librispeech/lm/train.text exp/librispeech/$wp_name \
-    > data/librispeech/lm/train.wp6k
+    > data/librispeech/lm/train.token
 fi
 
 if [ $stage -le 6 ]; then
@@ -141,16 +142,17 @@ if [ $stage -le 7 ]; then
   done
   wait
   for name in test_clean test_other; do
+    subdir=$am_exp/${name}_${dec_name}
     # wp decoding
     ./utils/subword.sh \
       --op "decode" \
       --decode piece \
-      exp/librispeech/$am_exp/${name}_${dec_name}/beam16.decode \
-      exp/librispeech/$wp_name \
-      > exp/librispeech/$am_exp/${name}_${dec_name}/beam16.decode.final
+      exp/librispeech//beam$beam_size.decode \
+      exp/librispeech/$subdir/$wp_name \
+      > exp/librispeech/$subdir/beam$beam_size.decode.final
     # WER
     ./bin/compute_wer.py \
-      exp/librispeech/$am_exp/${name}_${dec_name}/beam16.decode.final \
+      exp/librispeech/$subdir/beam$beam_size.decode.final \
       data/librispeech/$name/text
   done
 fi

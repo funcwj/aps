@@ -50,13 +50,14 @@ def train_worker(task, conf, vocab_dict, args):
             f"Number of process != world size: {num_process} vs {distributed.world_size()}"
         )
     data_conf = conf["data_conf"]
+    num_workers = args.num_workers // num_process
     trn_loader = aps_dataloader(**data_conf["train"],
                                 train=True,
                                 distributed=True,
                                 fmt=data_conf["fmt"],
                                 vocab_dict=vocab_dict,
                                 batch_size=args.batch_size // num_process,
-                                num_workers=args.num_workers // num_process,
+                                num_workers=num_workers,
                                 **data_conf["loader"])
     dev_loader = aps_dataloader(**data_conf["valid"],
                                 train=False,
@@ -65,7 +66,7 @@ def train_worker(task, conf, vocab_dict, args):
                                 vocab_dict=vocab_dict,
                                 batch_size=args.batch_size //
                                 args.dev_batch_factor,
-                                num_workers=args.num_workers // num_process,
+                                num_workers=num_workers,
                                 **data_conf["loader"])
     trainer.run(trn_loader,
                 dev_loader,

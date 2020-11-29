@@ -6,6 +6,7 @@
 for RNNLM (utterance corpus)
 """
 import warnings
+import numpy as np
 import torch as th
 
 import torch.utils.data as dat
@@ -15,6 +16,8 @@ from typing import NoReturn, List, Dict, Tuple, Optional, Callable, Iterator, It
 from kaldi_python_io import Reader as BaseReader
 from aps.libs import ApsRegisters
 
+UNK = "<unk>"
+
 
 @ApsRegisters.loader.register("lm_utt")
 def DataLoader(text: str = "",
@@ -22,26 +25,56 @@ def DataLoader(text: str = "",
                train: bool = True,
                sos: int = -1,
                eos: int = -1,
-               faster: bool = False,
+               kaldi_format: bool = True,
+               chunk_size_for_sort: int = 10000,
                min_token_num: int = 2,
                max_token_num: int = 2000,
                adapt_token_num: int = 400,
                min_batch_size: int = 8,
                batch_size: int = 64,
                num_workers: int = 0) -> Iterable[Dict]:
-    dataset = Dataset(text,
-                      vocab_dict,
-                      faster=faster,
-                      min_token_num=min_token_num,
-                      max_token_num=max_token_num)
-    return UttDataLoader(dataset,
+    return UttDataLoader(Dataset(text, vocab_dict, kaldi_format=kaldi_format),
                          sos=sos,
                          eos=eos,
                          shuffle=train,
                          batch_size=batch_size,
                          num_workers=num_workers,
+                         min_token_num=min_token_num,
+                         max_token_num=max_token_num,
                          min_batch_size=min_batch_size,
-                         adapt_token_num=adapt_token_num)
+                         adapt_token_num=adapt_token_num,
+                         chunk_size_for_sort=chunk_size_for_sort)
+
+
+class Dataset(dat.Dataset):
+    """
+    Dataset for text corpus
+    """
+
+    def __init__(self,
+                 text: str,
+                 vocab_dict: Optional[Dict],
+                 kaldi_format=True) -> None:
+        self.vocab = vocab_dict
+        # for larger file, it's faster
+        with open(text, "r") as txtf:
+            self.token = txtf.readlines()
+        self.kaldi_format = kaldi_format
+
+    def __getitem__(self, index: int) -> List[int]:
+        str_toks = self.token[index]
+        # remove the first token (key)
+        if self.kaldi_format:
+            str_toks = str_toks[1:]
+        if self.vocab:
+            int_toks = [(self.vocab[t] if t in self.vocab else self.vocab[UNK])
+                        for t in str_toks]
+        else:
+            int_toks = list(map(int, str_toks))
+        return int_toks
+
+    def __len__(self) -> int:
+        return len(self.token)
 
 
 class BatchSampler(dat.Sampler):
@@ -50,34 +83,53 @@ class BatchSampler(dat.Sampler):
     """
 
     def __init__(self,
-                 token_set: List[List[int]],
+                 dataset: dat.Dataset,
                  batch_size: int,
+                 chunk_size_for_sort: int = 10000,
+                 min_token_num: int = 2,
+                 max_token_num: int = 2000,
                  min_batch_size: int = 8,
                  adapt_token_num: int = 400,
                  shuffle: bool = False) -> None:
         self.min_batch_size = min_batch_size
         self.adapt_token_num = adapt_token_num
+        self.min_token_num = min_token_num
+        self.max_token_num = max_token_num
         self.genfunc = th.randperm if shuffle else th.arange
         self.batches = []
-        chunk_size = 10000 * batch_size
-        for i in range(0, len(token_set), chunk_size):
-            indices = self._sort_indices(token_set[i:i + chunk_size],
-                                         batch_size)
+        chunk_size = chunk_size_for_sort
+        total_utts = len(dataset)
+        num_parts = total_utts // chunk_size + 1
+        print(f"BatchSampler: sort indices ({num_parts} parts) ...", flush=True)
+        for i in range(0, total_utts, chunk_size):
+            indices = self._sort_indices(
+                [dataset[i] for i in range(i, min(i + chunk_size, total_utts))],
+                batch_size, i)
             self.batches += indices
+            print("BatchSampler: " +
+                  f"done {i * 100/ float(total_utts):.2f}% ...",
+                  flush=True)
 
-    def _sort_indices(self, subset: List[int],
-                      batch_size: int) -> List[List[int]]:
-        utts_len = [len(seq) for seq in subset]
+    def _sort_indices(self, subset: List[int], batch_size: int,
+                      base: int) -> List[List[int]]:
         # short -> long
-        desc_idx = th.argsort(th.tensor(utts_len, dtype=th.int32),
-                              descending=False).tolist()
+        toks_len = [len(toks) for toks in subset]
+        desc_idx = np.argsort(toks_len)
+        kept_desc_idx = []
+        for i in range(len(desc_idx)):
+            tok_len = toks_len[desc_idx[i]]
+            if self.min_token_num <= tok_len <= self.max_token_num:
+                kept_desc_idx.append(i)
+        pass_utts = len(desc_idx) - len(kept_desc_idx)
+        if pass_utts:
+            warnings.warn(f"Pass {pass_utts} long/short utterances...")
         batches = []
         beg, cur_bz = 0, batch_size
-        while beg + cur_bz <= len(desc_idx):
-            cur_len = utts_len[desc_idx[beg]]
+        while beg + cur_bz <= len(kept_desc_idx):
+            cur_len = toks_len[kept_desc_idx[beg]]
             factor = cur_len // self.adapt_token_num
             cur_bz = int(max(self.min_batch_size, batch_size // (1 + factor)))
-            batches.append(desc_idx[beg:beg + cur_bz])
+            batches.append([base + i for i in kept_desc_idx[beg:beg + cur_bz]])
             beg += cur_bz
         return batches
 
@@ -88,110 +140,6 @@ class BatchSampler(dat.Sampler):
 
     def __len__(self) -> int:
         return len(self.batches)
-
-
-def parse_faster(scp_path: str,
-                 value_processor: Callable = lambda x: x,
-                 num_tokens: int = 2,
-                 restrict: bool = True) -> Dict:
-    scp_dict = dict()
-    with open(scp_path, "r") as f:
-        raw_lines = f.readlines()
-        for idx, raw_line in enumerate(raw_lines):
-            scp_tokens = raw_line.strip().split()
-            if scp_tokens[-1] == "|":
-                key, value = scp_tokens[0], " ".join(scp_tokens[1:])
-            else:
-                token_len = len(scp_tokens)
-                if num_tokens >= 2 and token_len != num_tokens or restrict and token_len < 2:
-                    raise RuntimeError(f"For {scp_path}, format error " +
-                                       f"in line[{idx:d}]: {raw_line}")
-                if num_tokens == 2:
-                    key, value = scp_tokens
-                else:
-                    key, value = scp_tokens[0], scp_tokens[1:]
-            if key in scp_dict:
-                raise ValueError(
-                    f"Duplicate key \'{key}\' exists in {scp_path}")
-            scp_dict[key] = value_processor(value)
-    return scp_dict
-
-
-class FasterTextReader(object):
-    """
-    To make it faster to load large text files
-    """
-
-    def __init__(self,
-                 scp_path: str,
-                 value_processor: Callable = lambda x: x,
-                 num_tokens: int = 2,
-                 restrict: bool = True) -> None:
-        self.index_dict = parse_faster(scp_path,
-                                       value_processor=value_processor,
-                                       num_tokens=num_tokens,
-                                       restrict=restrict)
-        self.index_keys = list(self.index_dict.keys())
-
-    def _load(self, key: str) -> List[str]:
-        return self.index_dict[key]
-
-    def __len__(self) -> int:
-        return len(self.index_dict)
-
-    def __contains__(self, key: str) -> bool:
-        return key in self.index_dict
-
-    def __iter__(self) -> Iterator[Tuple[str, List[str]]]:
-        for key in self.index_keys:
-            yield key, self._load(key)
-
-
-class Dataset(dat.Dataset):
-    """
-    Dataset for token corpus
-    """
-
-    def __init__(self,
-                 text: str,
-                 vocab_dict: Optional[Dict],
-                 faster: bool = False,
-                 min_token_num: int = 2,
-                 max_token_num: int = 2000,
-                 eos: Optional[int] = None) -> None:
-        reader_cls = FasterTextReader if faster else BaseReader
-        if vocab_dict:
-            text_reader = reader_cls(text, num_tokens=-1, restrict=False)
-        else:
-            text_reader = reader_cls(
-                text,
-                value_processor=lambda tok: list(map(int, tok)),
-                num_tokens=-1,
-                restrict=False)
-        self.token_set = []
-        for key, tokens in text_reader:
-            if len(tokens) < min_token_num:
-                warnings.warn(f"Pass utterance that is too short: {key}")
-            elif len(tokens) > max_token_num:
-                warnings.warn(f"Pass utterance that is too long: {key}")
-            else:
-                if vocab_dict:
-                    toks = []
-                    for t in tokens:
-                        toks.append(vocab_dict[t] if t in
-                                    vocab_dict else vocab_dict["<unk>"])
-                else:
-                    toks = tokens
-                if eos is None:
-                    self.token_set.append(toks)
-                else:
-                    self.token_set.append(toks + [eos])
-
-    def __getitem__(self, index: int) -> List[int]:
-        return self.token_set[index]
-
-    def __len__(self) -> int:
-        return len(self.token_set)
 
 
 class UttDataLoader(dat.DataLoader):
@@ -206,17 +154,23 @@ class UttDataLoader(dat.DataLoader):
                  shuffle: bool = True,
                  batch_size: int = 64,
                  num_workers: int = 0,
+                 min_token_num: int = 2,
+                 max_token_num: int = 2000,
                  adapt_token_num: int = 400,
-                 min_batch_size: int = 8) -> None:
+                 min_batch_size: int = 8,
+                 chunk_size_for_sort: int = 1000) -> None:
         if sos < 0 or eos < 0:
             raise ValueError(f"Invalid sos/eos value: {sos}/{eos}")
         self.eos = eos
         self.sos = sos
-        sampler = BatchSampler(dataset.token_set,
+        sampler = BatchSampler(dataset,
                                batch_size,
                                shuffle=shuffle,
+                               min_token_num=min_token_num,
+                               max_token_num=max_token_num,
                                min_batch_size=min_batch_size,
-                               adapt_token_num=adapt_token_num)
+                               adapt_token_num=adapt_token_num,
+                               chunk_size_for_sort=chunk_size_for_sort)
         super(UttDataLoader, self).__init__(dataset,
                                             batch_sampler=sampler,
                                             num_workers=num_workers,
@@ -227,9 +181,12 @@ class UttDataLoader(dat.DataLoader):
         sos_egs = [th.as_tensor([self.sos] + eg) for eg in egs]
         egs_eos = [th.as_tensor(eg + [self.eos]) for eg in egs]
         return {
-            "src": pad_sequence(sos_egs, batch_first=True, padding_value=0),
-            "tgt": pad_sequence(egs_eos, batch_first=True, padding_value=-1),
-            "len": th.tensor(ntok, dtype=th.int64)
+            "src":
+                pad_sequence(sos_egs, batch_first=True, padding_value=self.eos),
+            "tgt":
+                pad_sequence(egs_eos, batch_first=True, padding_value=self.eos),
+            "len":
+                th.tensor(ntok, dtype=th.int64)
         }
 
     def set_epoch(self, epoch: int) -> NoReturn:

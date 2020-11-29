@@ -40,11 +40,10 @@ def process_token(text: str,
             continue
         stats = {"key": key, "dur": num_frames, "len": L}
         if vocab_dict:
-            toks = []
-            for t in tokens:
-                toks.append(vocab_dict[t] if t in
-                            vocab_dict else vocab_dict["<unk>"])
-            stats["tok"] = toks
+            stats["tok"] = [
+                (vocab_dict[t] if t in vocab_dict else vocab_dict["<unk>"])
+                for t in tokens
+            ]
         else:
             stats["tok"] = tokens
         token_set.append(stats)

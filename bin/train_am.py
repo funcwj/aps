@@ -23,20 +23,15 @@ def run(args):
     conf, vocab_dict = load_am_conf(args.conf, args.dict)
     print(f"Arguments in yaml:\n{pprint.pformat(conf)}", flush=True)
     data_conf = conf["data_conf"]
-    trn_loader = aps_dataloader(**data_conf["train"],
-                                train=True,
-                                fmt=data_conf["fmt"],
-                                batch_size=args.batch_size,
-                                vocab_dict=vocab_dict,
-                                num_workers=args.num_workers,
-                                **data_conf["loader"])
-    dev_loader = aps_dataloader(**data_conf["valid"],
-                                train=False,
-                                fmt=data_conf["fmt"],
-                                batch_size=args.batch_size,
-                                vocab_dict=vocab_dict,
-                                num_workers=args.num_workers,
-                                **data_conf["loader"])
+    load_conf = {
+        "fmt": data_conf["fmt"],
+        "batch_size": args.batch_size,
+        "vocab_dict": vocab_dict,
+        "num_workers": args.num_workers,
+    }
+    load_conf.update(data_conf["loader"])
+    trn_loader = aps_dataloader(train=True, **data_conf["train"], **load_conf)
+    dev_loader = aps_dataloader(train=False, **data_conf["valid"], **load_conf)
 
     asr_cls = aps_asr_nnet(conf["nnet"])
     asr_transform = None

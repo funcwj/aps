@@ -24,18 +24,14 @@ def run(args):
     print(f"Arguments in yaml:\n{pprint.pformat(conf)}", flush=True)
 
     data_conf = conf["data_conf"]
-    trn_loader = aps_dataloader(**data_conf["train"],
-                                train=True,
-                                fmt=data_conf["fmt"],
-                                batch_size=args.batch_size,
-                                num_workers=args.num_workers,
-                                **data_conf["loader"])
-    dev_loader = aps_dataloader(**data_conf["valid"],
-                                train=False,
-                                fmt=data_conf["fmt"],
-                                batch_size=args.batch_size,
-                                num_workers=args.num_workers,
-                                **data_conf["loader"])
+    load_conf = {
+        "fmt": data_conf["fmt"],
+        "batch_size": args.batch_size,
+        "num_workers": args.num_workers,
+    }
+    load_conf.update(data_conf["loader"])
+    trn_loader = aps_dataloader(train=True, **load_conf, **data_conf["train"])
+    dev_loader = aps_dataloader(train=False, **load_conf, **data_conf["valid"])
 
     sse_cls = aps_sse_nnet(conf["nnet"])
     if "enh_transform" in conf:
