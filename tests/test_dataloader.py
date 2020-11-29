@@ -124,12 +124,13 @@ def test_ss_online_loader(batch_size, chunk_size, num_workers):
 
 
 @pytest.mark.parametrize("batch_size", [1, 4, 16])
-def test_lm_utt_loader(batch_size):
+@pytest.mark.parametrize("obj", ["egs.token", "egs.token.gz"])
+def test_lm_utt_loader(batch_size, obj):
     egs_dir = "data/dataloader/lm"
     loader = aps_dataloader(fmt="lm_utt",
-                            sos=0,
-                            eos=1,
-                            text=f"{egs_dir}/test.utt.text",
+                            sos=1,
+                            eos=2,
+                            text=f"{egs_dir}/{obj}",
                             vocab_dict=load_dict(f"{egs_dir}/dict"),
                             batch_size=batch_size,
                             min_batch_size=batch_size)

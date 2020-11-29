@@ -5,6 +5,7 @@
 """
 for RNNLM (utterance corpus)
 """
+import gzip
 import warnings
 import numpy as np
 import torch as th
@@ -12,9 +13,9 @@ import torch as th
 import torch.utils.data as dat
 
 from torch.nn.utils.rnn import pad_sequence
-from typing import NoReturn, List, Dict, Tuple, Optional, Callable, Iterator, Iterable
-from kaldi_python_io import Reader as BaseReader
+from typing import NoReturn, List, Dict, Optional, Iterator, Iterable
 from aps.libs import ApsRegisters
+from aps.const import IGNORE_ID
 
 UNK = "<unk>"
 
@@ -56,13 +57,23 @@ class Dataset(dat.Dataset):
                  vocab_dict: Optional[Dict],
                  kaldi_format=True) -> None:
         self.vocab = vocab_dict
-        # for larger file, it's faster
-        with open(text, "r") as txtf:
-            self.token = txtf.readlines()
         self.kaldi_format = kaldi_format
+        self.token = self._load(text)
+
+    def _load(self, text):
+        """
+        Read all the lines in text file
+        """
+        if text[-3:] == ".gz":
+            with gzip.open(text, "r") as gzip_f:
+                token = [line.decode() for line in gzip_f.readlines()]
+        else:
+            with open(text, "r") as text_f:
+                token = text_f.readlines()
+        return token
 
     def __getitem__(self, index: int) -> List[int]:
-        str_toks = self.token[index]
+        str_toks = self.token[index].split()
         # remove the first token (key)
         if self.kaldi_format:
             str_toks = str_toks[1:]
@@ -91,10 +102,12 @@ class BatchSampler(dat.Sampler):
                  min_batch_size: int = 8,
                  adapt_token_num: int = 400,
                  shuffle: bool = False) -> None:
-        self.min_batch_size = min_batch_size
-        self.adapt_token_num = adapt_token_num
-        self.min_token_num = min_token_num
-        self.max_token_num = max_token_num
+        self.const = {
+            "min": min_token_num,
+            "max": max_token_num,
+            "adapt": adapt_token_num,
+            "floor": min_batch_size
+        }
         self.genfunc = th.randperm if shuffle else th.arange
         self.batches = []
         chunk_size = chunk_size_for_sort
@@ -106,9 +119,8 @@ class BatchSampler(dat.Sampler):
                 [dataset[i] for i in range(i, min(i + chunk_size, total_utts))],
                 batch_size, i)
             self.batches += indices
-            print("BatchSampler: " +
-                  f"done {i * 100/ float(total_utts):.2f}% ...",
-                  flush=True)
+            done = min(i + chunk_size, total_utts) * 100 / float(total_utts)
+            print(f"BatchSampler: done {done:.2f}% ...", flush=True)
 
     def _sort_indices(self, subset: List[int], batch_size: int,
                       base: int) -> List[List[int]]:
@@ -118,7 +130,7 @@ class BatchSampler(dat.Sampler):
         kept_desc_idx = []
         for i in range(len(desc_idx)):
             tok_len = toks_len[desc_idx[i]]
-            if self.min_token_num <= tok_len <= self.max_token_num:
+            if self.const["min"] <= tok_len <= self.const["max"]:
                 kept_desc_idx.append(i)
         pass_utts = len(desc_idx) - len(kept_desc_idx)
         if pass_utts:
@@ -127,16 +139,16 @@ class BatchSampler(dat.Sampler):
         beg, cur_bz = 0, batch_size
         while beg + cur_bz <= len(kept_desc_idx):
             cur_len = toks_len[kept_desc_idx[beg]]
-            factor = cur_len // self.adapt_token_num
-            cur_bz = int(max(self.min_batch_size, batch_size // (1 + factor)))
+            factor = cur_len // self.const["adapt"]
+            cur_bz = int(max(self.const["floor"], batch_size // (1 + factor)))
             batches.append([base + i for i in kept_desc_idx[beg:beg + cur_bz]])
             beg += cur_bz
         return batches
 
     def __iter__(self) -> Iterator[List[int]]:
-        indices = self.genfunc(len(self.batches)).tolist()
-        for i in indices:
-            yield self.batches[i]
+        num_batches = len(self.batches)
+        indices = [self.batches[i] for i in self.genfunc(num_batches).tolist()]
+        return iter(indices)
 
     def __len__(self) -> int:
         return len(self.batches)
@@ -177,16 +189,16 @@ class UttDataLoader(dat.DataLoader):
                                             collate_fn=self.egs_collate)
 
     def egs_collate(self, egs):
-        ntok = [len(eg) + 1 for eg in egs]
         sos_egs = [th.as_tensor([self.sos] + eg) for eg in egs]
         egs_eos = [th.as_tensor(eg + [self.eos]) for eg in egs]
         return {
             "src":
                 pad_sequence(sos_egs, batch_first=True, padding_value=self.eos),
             "tgt":
-                pad_sequence(egs_eos, batch_first=True, padding_value=self.eos),
+                pad_sequence(egs_eos, batch_first=True,
+                             padding_value=IGNORE_ID),
             "len":
-                th.tensor(ntok, dtype=th.int64)
+                th.tensor([len(eg) + 1 for eg in egs], dtype=th.int64)
         }
 
     def set_epoch(self, epoch: int) -> NoReturn:

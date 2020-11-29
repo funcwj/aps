@@ -25,8 +25,8 @@ am_eval_interval=3000
 # lm
 lm_exp=1a
 lm_seed=777
-lm_batch_size=96
-lm_eval_interval=50000
+lm_batch_size=32
+lm_eval_interval=20000
 lm_epochs=30
 lm_num_workers=4
 

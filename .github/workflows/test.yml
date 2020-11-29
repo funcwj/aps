@@ -24,9 +24,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Set up Git LFS
-        run: |
-          bash .ci/install_git_lfs.sh && git lfs install && git lfs pull
+      # don't have enough git-lfs bandwidth
+      # - name: Set up Git LFS
+      #   run: |
+      #     bash .ci/install_git_lfs.sh && git lfs install && git lfs pull
 
       - name: Install dependencies
         run: |
