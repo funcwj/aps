@@ -36,7 +36,6 @@ def train_worker(task, conf, args):
 
     # dump configurations
     if rank == 0:
-        print(f"Arguments in yaml:\n{pprint.pformat(conf)}", flush=True)
         conf["cmd_args"] = vars(args)
         with open(f"{args.checkpoint}/train.yaml", "w") as f:
             yaml.dump(conf, f)
@@ -73,13 +72,14 @@ def train_worker(task, conf, args):
 
 
 def run(args):
-    print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     # set random seed
     seed = set_seed(args.seed)
     if seed is not None:
         print(f"Set random seed as {seed}")
 
     conf = load_ss_conf(args.conf)
+    print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
+    print(f"Arguments in yaml:\n{pprint.pformat(conf)}", flush=True)
 
     sse_cls = aps_sse_nnet(conf["nnet"])
     # with or without enh_tranform

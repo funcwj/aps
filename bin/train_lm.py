@@ -13,13 +13,13 @@ from aps.libs import aps_task, aps_dataloader, aps_asr_nnet, aps_trainer
 
 
 def run(args):
-    print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     # set random seed
     seed = set_seed(args.seed)
     if seed is not None:
         print(f"Set random seed as {seed}")
 
     conf, vocab = load_lm_conf(args.conf, args.dict)
+    print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     print(f"Arguments in yaml:\n{pprint.pformat(conf)}", flush=True)
     eos = vocab["<eos>"]
     sos = vocab["<sos>"]

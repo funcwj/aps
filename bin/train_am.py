@@ -14,13 +14,13 @@ from aps.libs import aps_transform, aps_task, aps_dataloader, aps_asr_nnet, aps_
 
 
 def run(args):
-    print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     # set random seed
     seed = set_seed(args.seed)
     if seed is not None:
         print(f"Set random seed as {seed}")
 
     conf, vocab_dict = load_am_conf(args.conf, args.dict)
+    print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     print(f"Arguments in yaml:\n{pprint.pformat(conf)}", flush=True)
     data_conf = conf["data_conf"]
     load_conf = {
