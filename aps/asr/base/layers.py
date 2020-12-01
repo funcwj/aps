@@ -262,7 +262,7 @@ class FSMN(nn.Module):
 
 class VariantRNN(nn.Module):
     """
-    A custom rnn layer for PyramidEncoder
+    A custom rnn layer to support other features
     """
 
     def __init__(self,

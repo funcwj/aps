@@ -237,15 +237,11 @@ class VariantRNNEncoder(EncoderBase):
         """
         Do subsampling for RNN output
         """
-        _, T, _ = inp.shape
-        # concat
-        if T % 2:
+        if inp.shape[1] % 2:
             inp = inp[:, :-1]
-        ctx = [inp[:, ::2], inp[:, 1::2]]
-        inp = th.cat(ctx, -1)
-        if inp_len is not None:
-            inp_len = inp_len // 2
-        return inp, inp_len
+        # concat
+        inp = th.cat([inp[:, ::2], inp[:, 1::2]], -1)
+        return inp, None if inp_len is None else inp_len // 2
 
     def forward(
             self, inp: th.Tensor, inp_len: Optional[th.Tensor]

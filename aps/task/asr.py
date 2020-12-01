@@ -15,19 +15,19 @@ import torch.nn.functional as tf
 # https://github.com/HawkAaron/warp-transducer
 # https://github.com/1ytic/warp-rnnt
 try:
-    from warp_rnnt import rnnt_loss as rnnt_loss_v1
+    from warp_rnnt import rnnt_loss as warp_rnnt_objf
     warp_rnnt_available = True
 except ImportError:
     warp_rnnt_available = False
 try:
-    from warprnnt_pytorch import rnnt_loss as rnnt_loss_v2
-    warprnnt_pytorch_available = True
+    from warprnnt_pytorch import rnnt_loss as warprnnt_pt_objf
+    warprnnt_pt_available = True
 except ImportError:
-    warprnnt_pytorch_available = False
+    warprnnt_pt_available = False
 
-from typing import Tuple, Dict
+from typing import Tuple, Dict, NoReturn
 from aps.task.base import Task
-from aps.task.objf import ce_objf, ls_objf
+from aps.task.objf import ce_objf, ls_objf, ctc_objf
 from aps.const import IGNORE_ID
 from aps.libs import ApsRegisters
 
@@ -112,16 +112,12 @@ class CtcXentHybridTask(Task):
 
         stats = {}
         if self.ctc_weight > 0:
-            # add log-softmax, N x T x V => T x N x V
-            log_prob = tf.log_softmax(ctc_enc, dim=-1).transpose(0, 1)
-            # CTC loss
-            ctc_loss = tf.ctc_loss(log_prob,
-                                   tgt_pad,
-                                   enc_len,
-                                   egs["tgt_len"],
-                                   blank=self.ctc_blank,
-                                   reduction="mean",
-                                   zero_infinity=True)
+            ctc_loss = ctc_objf(ctc_enc,
+                                tgt_pad,
+                                enc_len,
+                                egs["tgt_len"],
+                                blank=self.ctc_blank,
+                                add_softmax=True)
             loss = self.ctc_weight * ctc_loss + (1 - self.ctc_weight) * loss
             stats["@ctc"] = ctc_loss.item()
         # compute accu
@@ -145,15 +141,23 @@ class TransducerTask(Task):
         super(TransducerTask,
               self).__init__(nnet,
                              description="RNNT objective function for ASR")
+        self.blank = blank
+        self._setup_rnnt_backend(interface)
+
+    def _setup_rnnt_backend(self, interface: str) -> NoReturn:
+        """
+        Setup RNNT loss impl in the backend
+        """
         if interface not in ["warp_rnnt", "warprnnt_pytorch"]:
             raise ValueError(f"Unsupported RNNT interface: {interface}")
-        self.blank = blank
-        self.interface = interface
         if interface == "warp_rnnt" and not warp_rnnt_available:
             raise ImportError("\"from warp_rnnt import rnnt_loss\" failed")
-        if interface == "warprnnt_pytorch" and not warprnnt_pytorch_available:
+        if interface == "warprnnt_pytorch" and not warprnnt_pt_available:
             raise ImportError(
                 "\"from warprnnt_pytorch import rnnt_loss\" failed")
+        self.interface = interface
+        self.rnnt_objf = (warp_rnnt_objf
+                          if interface == "warp_rnnt" else warprnnt_pt_objf)
 
     def forward(self, egs: Dict) -> Dict:
         """
@@ -169,24 +173,14 @@ class TransducerTask(Task):
         # N x Ti x To+1 x V
         outs, enc_len = self.nnet(egs["src_pad"], egs["src_len"], tgt_pad,
                                   egs["tgt_len"])
+        rnnt_kwargs = {"blank": self.blank, "reduction": "mean"}
         # add log_softmax if use https://github.com/1ytic/warp-rnnt
         if self.interface == "warp_rnnt":
             outs = tf.log_softmax(outs, -1)
-            # compute loss
-            loss = rnnt_loss_v1(outs,
-                                tgt_pad.to(th.int32),
-                                enc_len.to(th.int32),
-                                egs["tgt_len"].to(th.int32),
-                                blank=self.blank,
-                                reduction="mean",
-                                gather=True)
-        else:
-            loss = rnnt_loss_v2(outs,
-                                tgt_pad.to(th.int32),
-                                enc_len.to(th.int32),
-                                egs["tgt_len"].to(th.int32),
-                                blank=self.blank,
-                                reduction="mean")
+            rnnt_kwargs["gather"] = True
+        # compute loss
+        loss = self.rnnt_objf(outs, tgt_pad.to(th.int32), enc_len.to(th.int32),
+                              egs["tgt_len"].to(th.int32), **rnnt_kwargs)
         return {"loss": loss}
 
 

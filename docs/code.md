@@ -50,15 +50,19 @@ Supported task in aps. The `Task` class is responsible for the computation of an
 
 ## `aps.loader`
 
-Supported data loader in aps. For acoustic model training, we have two options
+The supported data loader in aps. For acoustic model training, we have two options
 
-* `am_raw`: Raw waveform data loader which do not need us to prepare acoustic features beforehead (recommended).
-* `am_kaldi`: Data loader that supports feature format in Kaldi toolkit.
+* `am_raw`: Raw waveform data loader which do not need us to prepare acoustic features beforehead (recommended way).
+* `am_kaldi`: A data loader that supports the Kaldi's feature.
 
-For enhancement/separation model, we also have two options
+For enhancement/separation model training, we also have two options
 
 * `ss_chunk`: Raw waveform data loader and also no need to prepare features.
-* `ss_online`: A data loader in an online manner which generates training audio (noisy, single/multi-speaker, close-talk/far-field) on-the-fly.
+* `ss_online`: A data loader performed in an online manner which generates training audio (noisy, single/multi-speaker, close-talk/far-field) on-the-fly.
+
+For language model (target at ASR task), we have
+
+* `lm_utt`: A utterance corpus data loader.
 
 ## `aps.distributed`
 

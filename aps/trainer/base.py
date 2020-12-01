@@ -172,9 +172,45 @@ class ProgressReporter(object):
         return reports, logstr
 
 
-class StopCriterion(object):
+class ErrorDetector(object):
     """
-    Manage the early stop of the training
+    Detect mini-batch training errors
+    """
+
+    def __init__(self, stop_on_errors: int) -> None:
+        self.stop_on_errors = stop_on_errors
+        self.reset()
+
+    def reset(self) -> NoReturn:
+        """
+        Reset status
+        """
+        self.counter = 0
+        self.last_error_step = 0
+        self.local_step = 0
+
+    def stop(self) -> bool:
+        """
+        Stop training or not
+        """
+        return self.counter == self.stop_on_errors
+
+    def step(self, status):
+        """
+        Make one step
+        """
+        self.local_step += 1
+        if self.local_step - self.last_error_step == 1 and not status:
+            self.counter += 1
+            self.last_error_step = self.local_step
+        else:
+            self.counter = 0
+        return self.stop()
+
+
+class StopDetector(object):
+    """
+    To manage the early stop of the training
     """
 
     def __init__(self,
@@ -255,6 +291,7 @@ class Trainer(object):
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
                  report_metrics: List[str] = ["loss"],
+                 stop_on_errors: int = 10,
                  **kwargs) -> None:
         if not isinstance(task, Task):
             raise TypeError(
@@ -311,10 +348,11 @@ class Trainer(object):
 
         mode = "max" if stop_criterion == "accu" else "min"
         self.stop_on = stop_criterion
-        self.stop_criterion = StopCriterion(no_impr,
-                                            mode=mode,
-                                            no_impr_thres=no_impr_thres)
-
+        self.stop_detector = StopDetector(no_impr,
+                                          mode=mode,
+                                          no_impr_thres=no_impr_thres)
+        self.stop_on_errors = stop_on_errors
+        self.error_detector = ErrorDetector(stop_on_errors)
         self.num_params = sum(
             [param.nelement() for param in task.nnet.parameters()]) / 10.0**6
         self.task = task
@@ -373,7 +411,7 @@ class Trainer(object):
                 f"#param: {self.num_params:.2f}M")
 
         self.reporter.log(f"Track the metrics: {report_metrics}")
-        self.reporter.log(f"Stop criterion: {self.stop_on}")
+        self.reporter.log(f"Stop detected on {self.stop_on}")
         if clip_gradient:
             self.reporter.log(
                 f"Gradient clipping if over {clip_gradient} L2 norm")
@@ -434,22 +472,20 @@ class Trainer(object):
         if manner not in ["resume", "init"]:
             raise ValueError(f"Unsupported manner: {manner}")
         cpt_stats = th.load(cpt_path, map_location="cpu")
-        cpt_epoch = cpt_stats["epoch"]
-        cpt_loss = cpt_stats["loss"]
-        cpt_step = cpt_stats["step"]
         self.task.nnet.load_state_dict(cpt_stats["model_state_dict"])
+        cpt_str = (f"checkpoint {cpt_path}: " +
+                   f"epoch/step {cpt_stats['epoch']}/{cpt_stats['step']}")
         optimizer_dict = None
         if manner == "resume":
-            self.reporter.log(f"Resume from checkpoint {cpt_path}: " +
-                              f"epoch/step {cpt_epoch}/{cpt_step}")
+            self.reporter.log(f"Resume from {cpt_str}")
             optimizer_dict = cpt_stats["optim_state_dict"]
             # set current epoch/step number
-            self.cur_epoch = cpt_epoch
-            self.cur_step = cpt_step
+            self.cur_epoch = cpt_stats['epoch']
+            self.cur_step = cpt_stats['step']
         else:
-            self.reporter.log(f"Intialize from checkpoint {cpt_path}: " +
-                              f"epoch/step {cpt_epoch}/{cpt_step}")
-        self.reporter.log(f"Loss tracked in the checkpoint: {cpt_loss:.3f}")
+            self.reporter.log(f"Intialize from {cpt_str}")
+        self.reporter.log(
+            f"Loss tracked in the checkpoint: {cpt_stats['loss']:.3f}")
         return cpt_stats, optimizer_dict
 
     def model_states(self) -> Dict:
@@ -527,19 +563,27 @@ class Trainer(object):
             else:
                 self.lr_scheduler.step()
 
-    def train_epoch(self, data_loader: Iterable[Dict]) -> NoReturn:
+    def train_epoch(self, data_loader: Iterable[Dict]) -> bool:
         """
         Run one training epoch
         """
         self.task.train()
         self.reporter.train()
-        # for idx, egs in enumerate(data_loader):
+        self.error_detector.reset()
         for egs in data_loader:
             # load to gpu
             egs = self.prep_egs(egs)
             # make one training step
-            if self.train_one_step(egs):
+            status = self.train_one_step(egs)
+            if status:
                 self.cur_step += 1
+            if self.error_detector.step(status):
+                break
+        stop = self.error_detector.stop()
+        if stop:
+            self.reporter.log("Stop training as detecting " +
+                              f"{self.stop_on_errors} consecutive errors")
+        return (not stop)
 
     def valid_epoch(self, data_loader: Iterable[Dict]) -> NoReturn:
         """
@@ -571,7 +615,7 @@ class Trainer(object):
             logstr += f" | ssr = {self.ssr:.3f}"
 
         update_value = reports[self.stop_on]
-        better = self.stop_criterion.step(update_value)
+        better = self.stop_detector.step(update_value)
 
         status = {
             "step": self.cur_step,
@@ -583,8 +627,8 @@ class Trainer(object):
         if better:
             self.save_checkpoint(status, best=True)
         else:
-            logstr += f" | no impr: {self.stop_criterion.no_impr:d}, "
-            logstr += f"best = {self.stop_criterion.best:.4f}"
+            logstr += f" | no impr: {self.stop_detector.no_impr:d}, "
+            logstr += f"best = {self.stop_detector.best:.4f}"
 
         self.reporter.log(logstr)
         # << valid
@@ -595,7 +639,7 @@ class Trainer(object):
         # save last checkpoint
         self.save_checkpoint(status, best=False)
         # early stop
-        if self.stop_criterion.stop():
+        if self.stop_detector.stop():
             self.reporter.log("Stop training cause no impr for " +
                               f"{self.no_impr} epochs")
             return True
@@ -623,11 +667,11 @@ class Trainer(object):
         if self.ss_scheduler:
             self.ssr = self.ss_scheduler.step(self.cur_epoch, reports["accu"])
         # make sure not inf
-        best_value = reports[self.stop_on]
+        best = reports[self.stop_on]
         # for ReduceLROnPlateau
         if hasattr(self.lr_scheduler, "best"):
-            self.lr_scheduler.best = best_value
-        self.stop_criterion.reset(best_value)
+            self.lr_scheduler.best = best
+        self.stop_detector.reset(best)
 
     def run_in_epoch(self,
                      trn_loader: Iterable[Dict],
@@ -640,7 +684,8 @@ class Trainer(object):
             trn_loader.set_epoch(self.cur_epoch)
             self.cur_epoch += 1
             # >> train
-            self.train_epoch(trn_loader)
+            if not self.train_epoch(trn_loader):
+                break
             cur_lr = self.optimizer.param_groups[0]["lr"]
             _, logstr = self.reporter.report(self.cur_epoch, cur_lr)
             self.reporter.log(logstr)
@@ -665,12 +710,18 @@ class Trainer(object):
                 if self.cur_step % eval_interval == 0:
                     self.task.train()
                     self.reporter.train()
+                    self.error_detector.reset()
                     trn_loader.set_epoch(self.cur_epoch)
                 # update per-batch
                 egs = self.prep_egs(egs)
                 succ = self.train_one_step(egs)
                 if succ:
                     self.cur_step = (self.cur_step + 1) % eval_interval
+                if self.error_detector.step(succ):
+                    self.reporter.log("Stop training cause no impr for " +
+                                      f"{self.no_impr} epochs")
+                    stop = True
+                    break
                 # if trained on batches done, start evaluation
                 if self.cur_step % eval_interval == 0 and succ:
                     self.cur_epoch += 1

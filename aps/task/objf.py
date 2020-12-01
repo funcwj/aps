@@ -60,6 +60,36 @@ def ls_objf(outs: th.Tensor,
     return loss
 
 
+def ctc_objf(outs: th.Tensor,
+             tgts: th.Tensor,
+             out_len: th.Tensor,
+             tgt_len: th.Tensor,
+             blank: int = 0,
+             add_softmax: bool = True) -> th.Tensor:
+    """
+    PyTorch CTC loss function
+    Args:
+        outs (Tensor): N x T x V
+        tgts (Tensor): N x T
+        out_len (Tensor): N
+        tgt_len (Tensor): N
+    Return
+        loss (Tensor): (1)
+    """
+    # add log-softmax, N x T x V => T x N x V
+    if add_softmax:
+        outs = tf.log_softmax(outs, dim=-1).transpose(0, 1)
+    # CTC loss
+    loss = tf.ctc_loss(outs,
+                       tgts,
+                       out_len,
+                       tgt_len,
+                       blank=blank,
+                       reduction="mean",
+                       zero_infinity=True)
+    return loss
+
+
 def multiple_objf(inp: List[Any],
                   ref: List[Any],
                   objf: Callable,

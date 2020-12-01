@@ -42,6 +42,7 @@ class DdpTrainer(Trainer):
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
                  report_metrics: List[str] = ["loss"],
+                 stop_on_errors: int = 10,
                  **kwargs) -> None:
         super(DdpTrainer,
               self).__init__(task,
@@ -65,7 +66,8 @@ class DdpTrainer(Trainer):
                              stop_criterion=stop_criterion,
                              no_impr=no_impr,
                              no_impr_thres=no_impr_thres,
-                             report_metrics=report_metrics)
+                             report_metrics=report_metrics,
+                             stop_on_errors=stop_on_errors)
         if dist.get_backend() not in ["torch", "none"]:
             raise ValueError(
                 "DdpTrainer should use torch/none as distributed backend")
