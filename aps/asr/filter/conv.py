@@ -12,7 +12,7 @@ from typing import Optional
 from torch_complex.tensor import ComplexTensor
 
 from aps.transform.utils import init_melfilter
-from aps.asr.base.encoder import VanillaRNNEncoder
+from aps.asr.base.encoder import PyTorchRNNEncoder
 
 
 class ComplexConvXd(nn.Module):
@@ -176,7 +176,7 @@ class TimeInvariantAttFilter(nn.Module):
                                  bias=False)
 
         if query_type == "rnn":
-            self.pred_q = VanillaRNNEncoder(num_bins,
+            self.pred_q = PyTorchRNNEncoder(num_bins,
                                             num_bins,
                                             dropout=0.2,
                                             hidden=512)

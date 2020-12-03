@@ -104,7 +104,7 @@ class ApexTrainer(Trainer):
             self.distributed = False
         # restore amp stats
         if self.cpt_stats:
-            apex.amp.load_state_dict(self.cpt_stats["amp_state_dict"])
+            apex.amp.load_state_dict(self.cpt_stats["amp_state"])
 
     def train_one_step(self, egs: Dict) -> bool:
         """
@@ -156,9 +156,9 @@ class ApexTrainer(Trainer):
         Return model states which will be saved in the checkpoint
         """
         return {
-            "amp_state_dict":
+            "amp_state":
                 apex.amp.state_dict(),
-            "model_state_dict":
+            "model_state":
                 self.task.module.nnet.state_dict()
                 if self.distributed else self.task.nnet.state_dict()
         }

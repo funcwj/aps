@@ -42,7 +42,9 @@ def compute_accu(outs: th.Tensor, tgts: th.Tensor) -> float:
     pred = th.argmax(outs.detach(), dim=-1)
     # ignore mask, -1
     mask = (tgts != IGNORE_ID)
+    # numerator
     ncorr = th.sum(pred[mask] == tgts[mask]).float()
+    # denumerator
     total = th.sum(mask)
     return (ncorr / total).item()
 

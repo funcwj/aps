@@ -10,7 +10,7 @@ from typing import Optional, Dict, Tuple, List
 from torch_complex import ComplexTensor
 
 from aps.asr.att import AttASR
-from aps.asr.base.encoder import VanillaRNNEncoder
+from aps.asr.base.encoder import PyTorchRNNEncoder
 from aps.asr.filter.mvdr import MvdrBeamformer
 from aps.asr.filter.google import CLPFsBeamformer  # same as TimeInvariantFilter
 from aps.asr.filter.conv import (TimeInvariantFilter, TimeVariantFilter,
@@ -102,7 +102,6 @@ class EnhAttASR(nn.Module):
                     beam: int = 16,
                     nbest: int = 8,
                     max_len: int = -1,
-                    vectorized: bool = False,
                     normalized: bool = True) -> List[Dict]:
         """
         Args
@@ -118,7 +117,6 @@ class EnhAttASR(nn.Module):
                                             beam=beam,
                                             nbest=nbest,
                                             max_len=max_len,
-                                            vectorized=vectorized,
                                             normalized=normalized)
 
 
@@ -144,7 +142,7 @@ class MvdrAttASR(EnhAttASR):
         # Front-end feature extraction
         self.enh_transform = enh_transform
         # TF-mask estimation network
-        self.mask_net = VanillaRNNEncoder(
+        self.mask_net = PyTorchRNNEncoder(
             enh_input_size, num_bins * 2 if mask_net_noise else num_bins,
             **mask_net_kwargs)
         self.mask_net_noise = mask_net_noise

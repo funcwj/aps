@@ -47,6 +47,7 @@ def test_with_librosa(wav, frame_len, frame_hop, window, center):
                               window=window,
                               center=center,
                               output="complex")
+
     torch_mag = (real**2 + imag**2)**0.5
     librosa_mag = np.abs(
         librosa.stft(wav,

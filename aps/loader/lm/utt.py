@@ -15,9 +15,7 @@ import torch.utils.data as dat
 from torch.nn.utils.rnn import pad_sequence
 from typing import NoReturn, List, Dict, Optional, Iterator, Iterable
 from aps.libs import ApsRegisters
-from aps.const import IGNORE_ID
-
-UNK = "<unk>"
+from aps.const import IGNORE_ID, UNK_TOKEN
 
 
 @ApsRegisters.loader.register("lm_utt")
@@ -78,8 +76,10 @@ class Dataset(dat.Dataset):
         if self.kaldi_format:
             str_toks = str_toks[1:]
         if self.vocab:
-            int_toks = [(self.vocab[t] if t in self.vocab else self.vocab[UNK])
-                        for t in str_toks]
+            int_toks = [
+                (self.vocab[t] if t in self.vocab else self.vocab[UNK_TOKEN])
+                for t in str_toks
+            ]
         else:
             int_toks = list(map(int, str_toks))
         return int_toks

@@ -86,14 +86,15 @@ class DfTransform(nn.Module):
     """
 
     def __init__(self,
-                 geometric: str = "7ch_circle",
+                 geometric: str = "7@",
                  sr: int = 16000,
                  velocity: int = 340,
                  num_bins: int = 257,
                  num_doas: int = 1,
                  af_index: str = "1,0;2,0;3,0;4,0;5,0;6,0") -> None:
         super(DfTransform, self).__init__()
-        if geometric not in ["7ch_circle"]:
+        # NOTE: add your costomized topo here
+        if geometric not in ["7@"]:
             raise RuntimeError(f"Unsupported array geometric: {geometric}")
         self.geometric = geometric
         self.sr = sr
@@ -129,14 +130,12 @@ class DfTransform(nn.Module):
             # N x D
             doa = th.linspace(0, MATH_PI * 2, self.num_doas + 1,
                               device=device)[:-1].repeat(N, 1)
-        # for 7ch_circle
-        # M = 7, R = 0.0425, treat M_0 as (0, 0)
         #      *3    *2
         #
         #   *4    *0    *1
         #
         #      *5    *6
-        if self.geometric == "7ch_circle":
+        if self.geometric == "7@":
             R = 0.0425
             zero = th.zeros_like(doa)
             # N x 7 or N x D x 7

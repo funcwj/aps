@@ -8,7 +8,7 @@ import torch.nn as nn
 
 from typing import Optional, Dict, Tuple, List
 from aps.asr.transformer.encoder import support_xfmr_encoder
-from aps.asr.transducer.decoder import TorchTransformerDecoder, TorchRNNDecoder
+from aps.asr.transducer.decoder import TorchTransformerDecoder, PyTorchRNNDecoder
 from aps.asr.base.encoder import encoder_instance
 from aps.libs import ApsRegisters
 
@@ -44,7 +44,7 @@ class TorchTransducerASR(nn.Module):
             self.encoder = encoder_instance(enc_type, input_size, enc_proj,
                                             enc_kwargs)
             dec_kwargs["enc_dim"] = enc_proj
-        self.decoder = TorchRNNDecoder(vocab_size, **dec_kwargs)
+        self.decoder = PyTorchRNNDecoder(vocab_size, **dec_kwargs)
         self.blank = blank
         self.asr_transform = asr_transform
 

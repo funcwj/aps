@@ -16,7 +16,7 @@ from aps.asr.transformer.decoder import prep_sub_mask
 from aps.asr.transformer.encoder import ApsTransformerEncoder
 from aps.asr.transformer.impl import TransformerTorchEncoderLayer
 from aps.asr.base.attention import padding_mask
-from aps.asr.base.layers import OneHotEmbedding
+from aps.asr.base.layers import OneHotEmbedding, PyTorchRNN
 
 
 class Node(object):
@@ -58,7 +58,7 @@ def _prep_nbest(container: Union[List, PriorityQueue],
     return nbest_hypos[:nbest]
 
 
-class TorchRNNDecoder(nn.Module):
+class PyTorchRNNDecoder(nn.Module):
     """
     Wrapper for pytorch's RNN Decoder
     """
@@ -72,22 +72,18 @@ class TorchRNNDecoder(nn.Module):
                  dec_layers: int = 3,
                  dec_hidden: int = 512,
                  dec_dropout: float = 0.0) -> None:
-        super(TorchRNNDecoder, self).__init__()
-        RNN = dec_rnn.upper()
-        supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
-        if RNN not in supported_rnn:
-            raise RuntimeError(f"Unknown RNN type: {RNN}")
+        super(PyTorchRNNDecoder, self).__init__()
         if embed_size != vocab_size:
             self.vocab_embed = nn.Embedding(vocab_size, embed_size)
         else:
             self.vocab_embed = OneHotEmbedding(vocab_size)
         # uni-dir RNNs
-        self.decoder = supported_rnn[RNN](embed_size,
-                                          dec_hidden,
-                                          dec_layers,
-                                          batch_first=True,
-                                          dropout=dec_dropout,
-                                          bidirectional=False)
+        self.decoder = PyTorchRNN(dec_rnn,
+                                  embed_size,
+                                  dec_hidden,
+                                  dec_layers,
+                                  dropout=dec_dropout,
+                                  bidirectional=False)
         self.enc_proj = nn.Linear(enc_dim, jot_dim, bias=False)
         self.dec_proj = nn.Linear(dec_hidden, jot_dim)
         self.vocab_size = vocab_size

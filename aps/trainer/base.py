@@ -9,7 +9,6 @@ from collections import defaultdict
 
 import torch as th
 from torch.nn.utils import clip_grad_norm_
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 from typing import Optional, Dict, List, Union, Tuple, NoReturn, Iterable
 from aps.trainer.ss import SsScheduler
 from aps.trainer.lr import LrScheduler
@@ -137,12 +136,9 @@ class ProgressReporter(object):
             if metric not in self.stats:
                 raise RuntimeError(
                     f"Metric {metric} is not tracked by the reporter")
+            reports[metric] = sum(self.stats[metric]) / len(self.stats[metric])
             if metric == "accu":
-                reports["accu"] = sum(self.stats["accu"]) * 100 / len(
-                    self.stats["accu"])
-            else:
-                reports[metric] = sum(self.stats[metric]) / len(
-                    self.stats[metric])
+                reports[metric] *= 100
         return reports
 
     def report(self, epoch: int, lr: float) -> Tuple[Dict, str]:
@@ -242,6 +238,18 @@ class StopDetector(object):
         Return the tracked best criterion number
         """
         return self.best_criterion
+
+    def state_dict(self) -> Dict:
+        """
+        Return the state of the detector
+        """
+        return {key: value for key, value in self.__dict__.items()}
+
+    def load_state_dict(self, state_dict: Dict) -> NoReturn:
+        """
+        Load the detector state.
+        """
+        self.__dict__.update(state_dict)
 
     def step(self, update_value: float) -> bool:
         """
@@ -353,8 +361,6 @@ class Trainer(object):
                                           no_impr_thres=no_impr_thres)
         self.stop_on_errors = stop_on_errors
         self.error_detector = ErrorDetector(stop_on_errors)
-        self.num_params = sum(
-            [param.nelement() for param in task.nnet.parameters()]) / 10.0**6
         self.task = task
         if self.rank in [0, None]:
             self.reporter.log(f"Model summary:\n{task.nnet}")
@@ -364,7 +370,7 @@ class Trainer(object):
         if resume or init:
             self.cpt_stats, optimizer_dict = self.load_checkpoint(
                 resume if resume else init, "resume" if resume else "init")
-            _lr_scheduler_kwargs["state"] = self.cpt_stats["lr_scheduler_dict"]
+            _lr_scheduler_kwargs["state"] = self.cpt_stats["lr_scheduler_state"]
         else:
             self.cpt_stats, optimizer_dict = None, None
             _lr_scheduler_kwargs["state"] = None
@@ -401,6 +407,8 @@ class Trainer(object):
         else:
             self.ss_scheduler = None
 
+        self.num_params = sum(
+            [param.nelement() for param in task.nnet.parameters()]) / 10.0**6
         # logging
         if rank is None:
             self.reporter.log(f"Loading model to GPU:{device_ids[0]}, " +
@@ -442,7 +450,7 @@ class Trainer(object):
         self.reporter.log(f"Create optimizer {optimizer}: {kwargs}")
         if state is not None:
             opt.load_state_dict(state)
-            self.reporter.log("Load optimizer state dict from checkpoint")
+            self.reporter.log("Load optimizer state from the checkpoint")
         return opt
 
     def create_scheduler(self,
@@ -459,7 +467,7 @@ class Trainer(object):
         self.reporter.log(f"Create scheduler {scheduler}: {kwargs}")
         if state is not None:
             lr_scheduler.load_state_dict(state)
-            self.reporter.log("Load scheduler state dict from checkpoint")
+            self.reporter.log("Load scheduler state from the checkpoint")
         return lr_scheduler
 
     def load_checkpoint(
@@ -472,16 +480,17 @@ class Trainer(object):
         if manner not in ["resume", "init"]:
             raise ValueError(f"Unsupported manner: {manner}")
         cpt_stats = th.load(cpt_path, map_location="cpu")
-        self.task.nnet.load_state_dict(cpt_stats["model_state_dict"])
+        self.task.nnet.load_state_dict(cpt_stats["model_state"])
         cpt_str = (f"checkpoint {cpt_path}: " +
                    f"epoch/step {cpt_stats['epoch']}/{cpt_stats['step']}")
         optimizer_dict = None
         if manner == "resume":
             self.reporter.log(f"Resume from {cpt_str}")
-            optimizer_dict = cpt_stats["optim_state_dict"]
+            optimizer_dict = cpt_stats["optimizer_state"]
+            self.stop_detector.load_state_dict(cpt_stats["detector_state"])
             # set current epoch/step number
-            self.cur_epoch = cpt_stats['epoch']
-            self.cur_step = cpt_stats['step']
+            self.cur_epoch = cpt_stats["epoch"]
+            self.cur_step = cpt_stats["step"]
         else:
             self.reporter.log(f"Intialize from {cpt_str}")
         self.reporter.log(
@@ -558,7 +567,7 @@ class Trainer(object):
         if end_at == "step" and self.lr_scheduler_period == "step":
             self.lr_scheduler.step()
         if end_at == "epoch" and self.lr_scheduler_period == "epoch":
-            if isinstance(self.lr_scheduler, ReduceLROnPlateau):
+            if isinstance(self.lr_scheduler, LrScheduler["reduce_lr"]):
                 self.lr_scheduler.step(update_value)
             else:
                 self.lr_scheduler.step()
@@ -620,8 +629,10 @@ class Trainer(object):
         status = {
             "step": self.cur_step,
             "epoch": self.cur_epoch,
-            "optim_state_dict": self.optimizer.state_dict(),
-            "lr_scheduler_dict": self.lr_scheduler.state_dict()
+            "num_parameters": self.num_params,
+            "detector_state": self.stop_detector.state_dict(),
+            "optimizer_state": self.optimizer.state_dict(),
+            "lr_scheduler_state": self.lr_scheduler.state_dict()
         }
         status.update(reports)
         if better:
@@ -652,7 +663,10 @@ class Trainer(object):
         egs = load_obj(egs, self.default_device)
         # use ssr = 0 when in eval mode
         if self.ss_scheduler:
-            egs["ssr"] = self.ssr if self.task.training else 0
+            if self.task.training:
+                egs["ssr"] = self.ssr
+            else:
+                egs["ssr"] = 0
         return egs
 
     def prep_run(self, dev_loader: Iterable[Dict]) -> int:
@@ -668,10 +682,10 @@ class Trainer(object):
             self.ssr = self.ss_scheduler.step(self.cur_epoch, reports["accu"])
         # make sure not inf
         best = reports[self.stop_on]
+        self.stop_detector.reset(best)
         # for ReduceLROnPlateau
         if hasattr(self.lr_scheduler, "best"):
             self.lr_scheduler.best = best
-        self.stop_detector.reset(best)
 
     def run_in_epoch(self,
                      trn_loader: Iterable[Dict],
@@ -718,8 +732,9 @@ class Trainer(object):
                 if succ:
                     self.cur_step = (self.cur_step + 1) % eval_interval
                 if self.error_detector.step(succ):
-                    self.reporter.log("Stop training cause no impr for " +
-                                      f"{self.no_impr} epochs")
+                    self.reporter.log(
+                        f"Stop training as detecting {self.stop_on_errors} " +
+                        "consecutive errors")
                     stop = True
                     break
                 # if trained on batches done, start evaluation

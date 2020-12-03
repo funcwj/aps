@@ -7,10 +7,12 @@ import torch as th
 import torch.nn as nn
 
 from typing import Optional, Dict, Tuple, List
-from aps.asr.base.decoder import VanillaRNNDecoder
+from aps.asr.base.decoder import PyTorchRNNDecoder
 from aps.asr.base.encoder import encoder_instance
 from aps.asr.base.attention import att_instance
 from aps.libs import ApsRegisters
+
+_pytorch_decoder = PyTorchRNNDecoder
 
 
 @ApsRegisters.asr.register("att")
@@ -36,10 +38,11 @@ class AttASR(nn.Module):
         super(AttASR, self).__init__()
         self.encoder = encoder_instance(enc_type, input_size, enc_proj,
                                         enc_kwargs)
-        self.decoder = VanillaRNNDecoder(enc_proj,
-                                         vocab_size - 1 if ctc else vocab_size,
-                                         **dec_kwargs)
         self.att_net = att_instance(att_type, enc_proj, dec_dim, **att_kwargs)
+        # TODO: make decoder flexible here
+        self.decoder = _pytorch_decoder(enc_proj,
+                                        vocab_size - 1 if ctc else vocab_size,
+                                        **dec_kwargs)
         if eos < 0 or sos < 0:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         self.sos = sos
@@ -88,7 +91,6 @@ class AttASR(nn.Module):
                     beam: int = 16,
                     nbest: int = 8,
                     max_len: int = -1,
-                    vectorized: bool = False,
                     normalized: bool = True) -> List[Dict]:
         """
         Args
@@ -111,27 +113,16 @@ class AttASR(nn.Module):
             max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
             # clear status
             self.att_net.clear()
-            if vectorized:
-                return self.decoder.beam_search_vectorized(
-                    self.att_net,
-                    enc_out,
-                    beam=beam,
-                    lm=lm,
-                    lm_weight=lm_weight,
-                    nbest=nbest,
-                    max_len=max_len,
-                    sos=self.sos,
-                    eos=self.eos,
-                    normalized=normalized)
-            else:
-                return self.decoder.beam_search(self.att_net,
-                                                enc_out,
-                                                beam=beam,
-                                                nbest=nbest,
-                                                max_len=max_len,
-                                                sos=self.sos,
-                                                eos=self.eos,
-                                                normalized=normalized)
+            return self.decoder.beam_search(self.att_net,
+                                            enc_out,
+                                            beam=beam,
+                                            lm=lm,
+                                            lm_weight=lm_weight,
+                                            nbest=nbest,
+                                            max_len=max_len,
+                                            sos=self.sos,
+                                            eos=self.eos,
+                                            normalized=normalized)
 
     def beam_search_batch(self,
                           x: th.Tensor,

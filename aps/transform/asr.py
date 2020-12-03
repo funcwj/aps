@@ -23,6 +23,8 @@ from aps.transform.augment import tf_mask
 from aps.const import EPSILON
 from aps.libs import ApsRegisters
 
+from kaldi_python_io.functional import read_kaldi_mat
+
 
 class SpectrogramTransform(STFT):
     """
@@ -215,7 +217,7 @@ class DiscreteCosineTransform(nn.Module):
 
 class CmvnTransform(nn.Module):
     """
-    Utterance-level mean-variance normalization
+    Utterance & Global level mean & variance normalization
     """
 
     def __init__(self,
@@ -226,8 +228,16 @@ class CmvnTransform(nn.Module):
         super(CmvnTransform, self).__init__()
         self.gmean, self.gstd = None, None
         if gcmvn:
-            stats = th.load(gcmvn)
-            mean, std = stats[0], stats[1]
+            # in Kaldi format
+            if gcmvn[-4:] == ".ark":
+                cmvn = read_kaldi_mat(gcmvn)
+                N = cmvn[0, -1]
+                mean = th.tensor(cmvn[0, :-1] / N, dtype=th.float32)
+                std = th.tensor(cmvn[1, :-1] / N - mean**2,
+                                dtype=th.float32)**0.5
+            else:
+                stats = th.load(gcmvn)
+                mean, std = stats[0], stats[1]
             self.gmean = nn.Parameter(mean, requires_grad=False)
             self.gstd = nn.Parameter(std, requires_grad=False)
         self.norm_mean = norm_mean
@@ -316,14 +326,18 @@ class SpliceTransform(nn.Module):
     Do splicing as well as downsampling if needed
     """
 
-    def __init__(self, lctx: int = 0, rctx: int = 0, ds_rate: int = 1) -> None:
+    def __init__(self,
+                 lctx: int = 0,
+                 rctx: int = 0,
+                 subsampling_factor: int = 1) -> None:
         super(SpliceTransform, self).__init__()
-        self.rate = ds_rate
+        self.subsampling_factor = subsampling_factor
         self.lctx = max(lctx, 0)
         self.rctx = max(rctx, 0)
 
     def extra_repr(self) -> str:
-        return f"context=({self.lctx}, {self.rctx}), downsample_rate={self.rate}"
+        return (f"context=({self.lctx}, {self.rctx}), " +
+                f"subsampling_factor={self.subsampling_factor}")
 
     def dim_scale(self) -> int:
         return (1 + self.rctx + self.lctx)
@@ -336,7 +350,7 @@ class SpliceTransform(nn.Module):
             y (Tensor): spliced feature, N x ... x To x FD
         """
         T = x.shape[-2]
-        T = T - T % self.rate
+        T = T - T % self.subsampling_factor
         if self.lctx + self.rctx != 0:
             ctx = []
             for c in range(-self.lctx, self.rctx + 1):
@@ -346,8 +360,8 @@ class SpliceTransform(nn.Module):
                 ctx.append(th.index_select(x, -2, idx))
             # N x ... x T x FD
             x = th.cat(ctx, -1)
-        if self.rate != 1:
-            x = x[..., ::self.rate, :]
+        if self.subsampling_factor != 1:
+            x = x[..., ::self.subsampling_factor, :]
         return x
 
 
@@ -428,7 +442,7 @@ class FeatureTransform(nn.Module):
                  norm_mean: bool = True,
                  norm_var: bool = True,
                  gcmvn: str = "",
-                 ds_rate: int = 1,
+                 subsampling_factor: int = 1,
                  lctx: int = 1,
                  rctx: int = 1,
                  delta_ctx: int = 2,
@@ -439,7 +453,6 @@ class FeatureTransform(nn.Module):
         trans_tokens = feats.split("-")
         transform = []
         feats_dim = 0
-        downsample_rate = 1
         stft_kwargs = {
             "mode": stft_mode,
             "window": window,
@@ -518,9 +531,10 @@ class FeatureTransform(nn.Module):
                                      num_time_masks=num_aug_frame))
             elif tok == "splice":
                 transform.append(
-                    SpliceTransform(lctx=lctx, rctx=rctx, ds_rate=ds_rate))
+                    SpliceTransform(lctx=lctx,
+                                    rctx=rctx,
+                                    subsampling_factor=subsampling_factor))
                 feats_dim *= (1 + lctx + rctx)
-                downsample_rate = ds_rate
             elif tok == "delta":
                 transform.append(
                     DeltaTransform(ctx=delta_ctx, order=delta_order))
@@ -529,7 +543,7 @@ class FeatureTransform(nn.Module):
                 raise RuntimeError(f"Unknown token {tok} in {feats}")
         self.transform = nn.Sequential(*transform)
         self.feats_dim = feats_dim
-        self.downsample_rate = downsample_rate
+        self.subsampling_factor = subsampling_factor
 
     def num_frames(self, wav_len: th.Tensor) -> th.Tensor:
         """
@@ -556,5 +570,5 @@ class FeatureTransform(nn.Module):
             num_frames = None
         else:
             num_frames = self.num_frames(wav_len)
-            num_frames = num_frames // self.downsample_rate
+            num_frames = num_frames // self.subsampling_factor
         return feats_pad, num_frames

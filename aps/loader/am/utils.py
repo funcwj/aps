@@ -10,55 +10,90 @@ import aps.distributed as dist
 
 from typing import Dict, List, Tuple, NoReturn, Optional
 from kaldi_python_io import Reader as BaseReader
+from aps.const import UNK_TOKEN
 
 
-def process_token(text: str,
-                  utt2dur: str,
-                  vocab_dict: Optional[Dict],
-                  max_token_num: int = 400,
-                  min_token_num: int = 2,
-                  max_dur: float = 3000,
-                  min_dur: float = 40) -> List[Dict]:
-    utt2dur = BaseReader(utt2dur, value_processor=float)
-    if vocab_dict:
-        text_reader = BaseReader(text, num_tokens=-1, restrict=False)
-    else:
-        text_reader = BaseReader(
-            text,
-            value_processor=lambda tok: list(map(int, tok)),
-            num_tokens=-1,
-            restrict=False)
-    token_set = []
-    for key, tokens in text_reader:
-        L = len(tokens)
-        if L > max_token_num or L <= min_token_num:
-            continue
-        if key not in utt2dur:
-            continue
-        num_frames = utt2dur[key]
-        if num_frames < min_dur or num_frames > max_dur:
-            continue
-        stats = {"key": key, "dur": num_frames, "len": L}
-        if vocab_dict:
-            stats["tok"] = [
-                (vocab_dict[t] if t in vocab_dict else vocab_dict["<unk>"])
-                for t in tokens
-            ]
+class TokenReader(object):
+    """
+    The token/text reader for ASR task
+    """
+
+    def __init__(self,
+                 text: str,
+                 utt2dur: str,
+                 vocab_dict: Optional[Dict],
+                 max_token_num: int = 400,
+                 min_token_num: int = 2,
+                 max_dur: float = 3000,
+                 min_dur: float = 40):
+        self.vocab_dict = vocab_dict
+        self.token_list = self._pre_process(text,
+                                            utt2dur,
+                                            max_token_num=max_token_num,
+                                            min_token_num=min_token_num,
+                                            max_dur=max_dur,
+                                            min_dur=min_dur)
+        if len(self.token_list) < 10:
+            raise RuntimeError(
+                f"Too less utterances: {len(self.token_list)}, " +
+                "please check data configurations")
+
+    def _pre_process(self,
+                     text: str,
+                     utt2dur: str,
+                     max_token_num: int = 400,
+                     min_token_num: int = 2,
+                     max_dur: float = 3000,
+                     min_dur: float = 40) -> List[Dict]:
+        """
+        Preprocess the transcriptions
+        """
+        utt2dur = BaseReader(utt2dur, value_processor=float)
+        if self.vocab_dict:
+            text_reader = BaseReader(text, num_tokens=-1, restrict=False)
         else:
-            stats["tok"] = tokens
-        token_set.append(stats)
-    # long -> short
-    token_set = sorted(token_set, key=lambda d: d["dur"], reverse=True)
-    N = len(token_set)
-    if N < 10:
-        raise RuntimeError(
-            f"Too less utterances: {N}, check data configurations")
-    return token_set
+            text_reader = BaseReader(
+                text,
+                value_processor=lambda tok: list(map(int, tok)),
+                num_tokens=-1,
+                restrict=False)
+        token_set = []
+        for key, tokens in text_reader:
+            L = len(tokens)
+            if L > max_token_num or L <= min_token_num:
+                continue
+            if key not in utt2dur:
+                continue
+            num_frames = utt2dur[key]
+            if num_frames < min_dur or num_frames > max_dur:
+                continue
+            token_set.append({
+                "key": key,
+                "dur": num_frames,
+                "len": L,
+                "tok": tokens
+            })
+        # long -> short
+        token_set = sorted(token_set, key=lambda d: d["dur"], reverse=True)
+        return token_set
+
+    def __getitem__(self, index):
+        stats = self.token_list[index]
+        if self.vocab_dict:
+            unk_tok = self.vocab_dict[UNK_TOKEN]
+            stats["tok"] = [
+                (self.vocab_dict[t] if t in self.vocab_dict else unk_tok)
+                for t in stats["tok"]
+            ]
+        return stats
+
+    def __len__(self) -> int:
+        return len(self.token_list)
 
 
 class BatchSampler(dat.Sampler):
     """
-    A custom batchsampler
+    A custom batch sampler
     """
 
     def __init__(self,

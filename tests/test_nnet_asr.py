@@ -74,7 +74,7 @@ conv2d_rnn_enc_kwargs = {
         "padding": 1,
         "kernel_size": 3,
     },
-    "vanilla_rnn": {
+    "pytorch_rnn": {
         "rnn": "lstm",
         "num_layers": 3,
         "bidirectional": True,
@@ -91,7 +91,7 @@ conv1d_rnn_enc_kwargs = {
         "stride": [2, 2, 2],
         "dilation": [1, 1, 2],
     },
-    "vanilla_rnn": {
+    "pytorch_rnn": {
         "rnn": "lstm",
         "num_layers": 3,
         "bidirectional": True,
@@ -243,7 +243,7 @@ def test_att(att_type, att_kwargs):
                        asr_transform=asr_transform,
                        att_type=att_type,
                        att_kwargs=att_kwargs,
-                       enc_type="vanilla_rnn",
+                       enc_type="pytorch_rnn",
                        enc_proj=256,
                        enc_kwargs=default_rnn_enc_kwargs,
                        dec_dim=512,
@@ -295,7 +295,7 @@ def test_mvdr_att(att_type, att_kwargs):
                             enh_transform=enh_transform,
                             att_type=att_type,
                             att_kwargs=att_kwargs,
-                            enc_type="vanilla_rnn",
+                            enc_type="pytorch_rnn",
                             enc_proj=256,
                             enc_kwargs=default_rnn_enc_kwargs,
                             dec_dim=512,
@@ -354,7 +354,7 @@ def test_beam_att(mode, enh_kwargs):
                             enh_transform=enh_transform,
                             att_type="dot",
                             att_kwargs={"att_dim": 512},
-                            enc_type="vanilla_rnn",
+                            enc_type="pytorch_rnn",
                             enc_proj=256,
                             enc_kwargs=default_rnn_enc_kwargs,
                             dec_dim=512,

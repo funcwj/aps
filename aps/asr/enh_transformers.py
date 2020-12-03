@@ -10,7 +10,7 @@ from typing import Optional, Dict, Tuple, List
 from torch_complex import ComplexTensor
 
 from aps.asr.transformers import TransformerASR
-from aps.asr.base.encoder import VanillaRNNEncoder
+from aps.asr.base.encoder import PyTorchRNNEncoder
 from aps.asr.filter.conv import (TimeInvariantFilter, TimeVariantFilter,
                                  TimeInvariantAttFilter)
 from aps.asr.filter.mvdr import MvdrBeamformer
@@ -168,7 +168,7 @@ class MvdrTransformerASR(EnhTransformerASR):
         # Front-end feature extraction
         self.enh_transform = enh_transform
         # TF-mask estimation network
-        self.mask_net = VanillaRNNEncoder(
+        self.mask_net = PyTorchRNNEncoder(
             enh_input_size, num_bins * 2 if mask_net_noise else num_bins,
             **mask_net_kwargs)
         self.mask_net_noise = mask_net_noise

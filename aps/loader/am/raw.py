@@ -12,8 +12,9 @@ import torch.utils.data as dat
 from torch.nn.utils.rnn import pad_sequence
 
 from typing import Dict, Iterable, Optional, NoReturn
-from aps.loader.am.utils import process_token, BatchSampler
+from aps.loader.am.utils import TokenReader, BatchSampler
 from aps.loader.audio import AudioReader
+from aps.const import IGNORE_ID
 from aps.libs import ApsRegisters
 
 
@@ -76,12 +77,12 @@ class Dataset(dat.Dataset):
                                         sr=sr,
                                         channel=channel,
                                         norm=True)
-        self.token_reader = process_token(text,
-                                          utt2dur,
-                                          vocab_dict,
-                                          max_token_num=max_token_num,
-                                          max_dur=max_wav_dur,
-                                          min_dur=min_wav_dur)
+        self.token_reader = TokenReader(text,
+                                        utt2dur,
+                                        vocab_dict,
+                                        max_dur=max_wav_dur,
+                                        min_dur=min_wav_dur,
+                                        max_token_num=max_token_num)
 
     def __getitem__(self, idx: int) -> Dict:
         tok = self.token_reader[idx]
@@ -90,8 +91,8 @@ class Dataset(dat.Dataset):
         return {
             "dur": wav.shape[-1],
             "len": tok["len"],
-            "wav": wav,
-            "tok": tok["tok"]
+            "inp": wav,
+            "ref": tok["tok"]
         }
 
     def __len__(self) -> int:
@@ -116,13 +117,17 @@ def egs_collate(egs: Dict) -> Dict:
 
     egs = {
         # N x S or N x C x S
-        "src_pad": pad_seq([th.from_numpy(eg["wav"]) for eg in egs], value=0),
+        "src_pad":
+            pad_seq([th.from_numpy(eg["inp"]) for eg in egs], value=0),
         # N x T
-        "tgt_pad": pad_seq([th.as_tensor(eg["tok"]) for eg in egs], value=-1),
+        "tgt_pad":
+            pad_seq([th.as_tensor(eg["ref"]) for eg in egs], value=IGNORE_ID),
         # N, number of the frames
-        "src_len": th.tensor([eg["dur"] for eg in egs], dtype=th.int64),
+        "src_len":
+            th.tensor([eg["dur"] for eg in egs], dtype=th.int64),
         # N, length of the tokens
-        "tgt_len": th.tensor([eg["len"] for eg in egs], dtype=th.int64)
+        "tgt_len":
+            th.tensor([eg["len"] for eg in egs], dtype=th.int64)
     }
     return egs
 

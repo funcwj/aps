@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from typing import List, Dict, Optional, Tuple, Union
-from aps.asr.base.layers import OneHotEmbedding
+from aps.asr.base.layers import OneHotEmbedding, PyTorchRNN
 from aps.const import NEG_INF
 
 
@@ -41,7 +41,7 @@ def trace_back_hypos(point: th.Tensor,
     return hypos
 
 
-class VanillaRNNDecoder(nn.Module):
+class PyTorchRNNDecoder(nn.Module):
     """
     PyTorch's RNN decoder
     """
@@ -56,23 +56,19 @@ class VanillaRNNDecoder(nn.Module):
                  rnn_dropout: float = 0.0,
                  input_feeding: bool = False,
                  vocab_embeded: bool = True) -> None:
-        super(VanillaRNNDecoder, self).__init__()
-        RNN = dec_rnn.upper()
-        supported_rnn = {"RNN": nn.RNN, "GRU": nn.GRU, "LSTM": nn.LSTM}
-        if RNN not in supported_rnn:
-            raise RuntimeError(f"unknown RNN type: {RNN}")
+        super(PyTorchRNNDecoder, self).__init__()
         if vocab_embeded:
             self.vocab_embed = nn.Embedding(vocab_size, rnn_hidden)
             input_size = enc_proj + rnn_hidden
         else:
             self.vocab_embed = OneHotEmbedding(vocab_size)
             input_size = enc_proj + vocab_size
-        self.decoder = supported_rnn[RNN](input_size,
-                                          rnn_hidden,
-                                          rnn_layers,
-                                          batch_first=True,
-                                          dropout=rnn_dropout,
-                                          bidirectional=False)
+        self.decoder = PyTorchRNN(dec_rnn,
+                                  input_size,
+                                  rnn_hidden,
+                                  rnn_layers,
+                                  dropout=rnn_dropout,
+                                  bidirectional=False)
         self.proj = nn.Linear(rnn_hidden + enc_proj, enc_proj)
         self.pred = nn.Linear(enc_proj, vocab_size)
         self.input_feeding = input_feeding
@@ -104,8 +100,8 @@ class VanillaRNNDecoder(nn.Module):
         att_ctx: th.Tensor,
         dec_hid: Optional[HiddenType] = None,
         att_ali: Optional[th.Tensor] = None,
-        enc_len: Optional[th.Tensor] = None,
-        proj: Optional[th.Tensor] = None
+        proj: Optional[th.Tensor] = None,
+        enc_len: Optional[th.Tensor] = None
     ) -> Tuple[th.Tensor, th.Tensor, HiddenType, th.Tensor, th.Tensor]:
         """
         Make a prediction step
@@ -121,7 +117,7 @@ class VanillaRNNDecoder(nn.Module):
         proj = self.proj(th.cat([dec_out, att_ctx], dim=-1))
         # pred: N x V
         pred = self.pred(F.relu(proj))
-        return att_ali, att_ctx, dec_hid, proj, pred
+        return pred, att_ctx, dec_hid, att_ali, proj
 
     def forward(self,
                 att_net: nn.Module,
@@ -166,7 +162,7 @@ class VanillaRNNDecoder(nn.Module):
                 else:
                     out_pre = tgt_pad[:, t - 1]
             # step forward
-            att_ali, att_ctx, dec_hid, proj, pred = self._step(att_net,
+            pred, att_ctx, dec_hid, att_ali, proj = self._step(att_net,
                                                                out_pre,
                                                                enc_pad,
                                                                att_ctx,
@@ -185,123 +181,14 @@ class VanillaRNNDecoder(nn.Module):
     def beam_search(self,
                     att_net: nn.Module,
                     enc_out: th.Tensor,
+                    lm: Optional[nn.Module] = None,
+                    lm_weight: float = 0,
                     beam: int = 8,
                     nbest: int = 1,
                     max_len: int = -1,
                     sos: int = -1,
                     eos: int = -1,
                     normalized: bool = True) -> List[Dict]:
-        """
-        Beam search algothrim (intuitive but not efficient)
-        Args
-            enc_out: 1 x T x F
-        """
-        if sos < 0 or eos < 0:
-            raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
-        if max_len <= 0:
-            raise RuntimeError(f"Invalid max_len: {max_len:d}")
-        N, _, D_enc = enc_out.shape
-        if N != 1:
-            raise RuntimeError(
-                f"Got batch size {N:d}, now only support one utterance")
-        dev = enc_out.device
-        att_ctx = th.zeros([N, D_enc], device=dev)
-        proj = th.zeros([N, D_enc], device=dev)
-
-        def init_node():
-            return {
-                "proj": proj,
-                "score": 0.0,
-                "trans": [sos],
-                "att_ali": None,
-                "att_ctx": att_ctx,
-                "dec_hid": None
-            }
-
-        alive = [init_node()]
-        hypos = []
-        nbest = min(beam, nbest)
-        if beam > self.vocab_size:
-            raise RuntimeError(f"Beam size({beam}) > vocabulary size")
-        # step by step
-        for t in range(max_len):
-            beams = []
-            for n in alive:
-                # [x], out is different
-                out = th.tensor([n["trans"][-1]], dtype=th.int64, device=dev)
-                # step forward
-                att_ali, att_ctx, dec_hid, proj, pred = self._step(
-                    att_net,
-                    out,
-                    enc_out,
-                    n["att_ctx"],
-                    dec_hid=n["dec_hid"],
-                    att_ali=n["att_ali"],
-                    proj=n["proj"])
-                # compute prob: V, nagetive
-                prob = F.log_softmax(pred, dim=1).squeeze(0)
-                # beam
-                topk_score, topk_index = th.topk(prob, beam)
-                # new node
-                next_node_templ = {
-                    "att_ali": att_ali,
-                    "att_ctx": att_ctx,
-                    "dec_hid": dec_hid,
-                    "score": n["score"],
-                    "proj": proj
-                }
-                for score, index in zip(topk_score, topk_index):
-                    # copy
-                    new_node = next_node_templ.copy()
-                    # add score
-                    new_node["score"] += score.item()
-                    # add trans
-                    new_node["trans"] = n["trans"].copy()
-                    new_node["trans"].append(index.item())
-                    beams.append(new_node)
-            # clip beam
-            beams = sorted(beams, key=lambda n: n["score"], reverse=True)[:beam]
-
-            # add finished ones
-            hypos.extend([n for n in beams if n["trans"][-1] == eos])
-            # keep unfinished ones
-            alive = [n for n in beams if n["trans"][-1] != eos]
-
-            if not len(alive):
-                break
-
-            if len(hypos) >= beam:
-                break
-
-            if t == max_len - 1:
-                for n in alive:
-                    n["trans"].append(eos)
-                    hypos.append(n)
-
-        # choose nbest
-        if normalized:
-            nbest_hypos = sorted(hypos,
-                                 key=lambda n: n["score"] /
-                                 (len(n["trans"]) - 1),
-                                 reverse=True)
-        else:
-            nbest_hypos = sorted(hypos, key=lambda n: n["score"], reverse=True)
-        return [{
-            "score": n["score"],
-            "trans": n["trans"]
-        } for n in nbest_hypos[:nbest]]
-
-    def beam_search_vectorized(self,
-                               att_net: nn.Module,
-                               enc_out: th.Tensor,
-                               lm: Optional[nn.Module] = None,
-                               lm_weight: float = 0,
-                               beam: int = 8,
-                               nbest: int = 1,
-                               max_len: int = -1,
-                               sos: int = -1,
-                               eos: int = -1,
-                               normalized: bool = True) -> List[Dict]:
         """
         Vectorized beam search algothrim
         Args
@@ -356,7 +243,7 @@ class VanillaRNNDecoder(nn.Module):
                 att_ali = att_ali[point]
 
             # step forward
-            att_ali, att_ctx, dec_hid, proj, pred = self._step(att_net,
+            pred, att_ctx, dec_hid, att_ali, proj = self._step(att_net,
                                                                out,
                                                                enc_out,
                                                                att_ctx[point],
@@ -531,7 +418,7 @@ class VanillaRNNDecoder(nn.Module):
                 att_ali = att_ali[point]
 
             # step forward
-            att_ali, att_ctx, dec_hid, proj, pred = self._step(att_net,
+            pred, att_ctx, dec_hid, att_ali, proj = self._step(att_net,
                                                                out,
                                                                enc_out,
                                                                att_ctx[point],

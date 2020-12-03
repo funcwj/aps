@@ -144,4 +144,4 @@ class HvdTrainer(Trainer):
         """
         Return model states which will be saved in the checkpoint
         """
-        return {"model_state_dict": self.task.nnet.state_dict()}
+        return {"model_state": self.task.nnet.state_dict()}

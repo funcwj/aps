@@ -132,8 +132,9 @@ Almost all the hyper-parameters are configured in the yaml files. You can check 
     ```yaml
     task: ctc_xent
     task_conf:
+      # CTC weight
       ctc_weight: 0.2
-      # label smoothing
+      # label smoothing factor
       lsm_factor: 0.1
     ```
 
@@ -180,7 +181,7 @@ Almost all the hyper-parameters are configured in the yaml files. You can check 
         ref_scp: "data/wsj0_2mix/cv/spk1.scp,data/wsj0_2mix/cv/spk2.scp"
     ```
 
-* `trainer_conf`: Parameters for `Trainer` class, including learning rate and schedule sampling scheduler (if necessary). For example:
+* `trainer_conf`: Parameters for `Trainer` class, including optimizer, learning rate scheduler, schedule sampling scheduler (if necessary). For example:
     ```yaml
     trainer_conf:
       # optimizer and parameters
@@ -202,11 +203,13 @@ Almost all the hyper-parameters are configured in the yaml files. You can check 
           epoch_beg: 10
           epoch_end: 26
           update_interval: 4
-      # gradient clipping
+      # gradient clipping (norm)
       clip_gradient: 5
-      # for early stop
+      # for early stop detection
       no_impr: 6
       no_impr_thres: 0.2
+      # report metrics on validation epoch
+      report_metrics: ["loss", "accu", "@ctc"]
       stop_criterion: "accu"
     ```
 

@@ -12,8 +12,9 @@ from torch.nn.utils.rnn import pad_sequence
 from typing import Dict, Iterable, Optional, NoReturn
 from kaldi_python_io import ScriptReader
 
-from aps.loader.am.utils import process_token, BatchSampler
+from aps.loader.am.utils import TokenReader, BatchSampler
 from aps.libs import ApsRegisters
+from aps.const import IGNORE_ID
 
 
 @ApsRegisters.loader.register("am_kaldi")
@@ -64,13 +65,12 @@ class Dataset(dat.Dataset):
                  max_frame_num: float = 3000,
                  min_frame_num: float = 40) -> None:
         self.feats_reader = ScriptReader(feats_scp)
-        # sorted
-        self.token_reader = process_token(text,
-                                          utt2num_frames,
-                                          vocab_dict,
-                                          max_token_num=max_token_num,
-                                          max_dur=max_frame_num,
-                                          min_dur=min_frame_num)
+        self.token_reader = TokenReader(text,
+                                        utt2num_frames,
+                                        vocab_dict,
+                                        max_dur=max_frame_num,
+                                        min_dur=min_frame_num,
+                                        max_token_num=max_token_num)
 
     def __getitem__(self, idx: int) -> Dict:
         tok = self.token_reader[idx]
@@ -78,8 +78,8 @@ class Dataset(dat.Dataset):
         return {
             "dur": tok["dur"],
             "len": tok["len"],
-            "feats": self.feats_reader[key],
-            "token": tok["tok"]
+            "inp": self.feats_reader[key],
+            "ref": tok["tok"]
         }
 
     def __len__(self) -> int:
@@ -94,10 +94,10 @@ def egs_collate(egs: Dict) -> Dict:
     return {
         # N x S
         "src_pad":
-            pad_seq([th.from_numpy(eg["feats"].copy()) for eg in egs], value=0),
+            pad_seq([th.from_numpy(eg["inp"].copy()) for eg in egs], value=0),
         # N x T
         "tgt_pad":
-            pad_seq([th.as_tensor(eg["token"]) for eg in egs], value=-1),
+            pad_seq([th.as_tensor(eg["ref"]) for eg in egs], value=IGNORE_ID),
         # N, number of the frames
         "src_len":
             th.tensor([int(eg["dur"]) for eg in egs], dtype=th.int64),

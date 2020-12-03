@@ -10,10 +10,11 @@ import torch.nn.functional as tf
 from typing import Optional, Tuple, Union, List, Dict
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
-from aps.asr.base.layers import VariantRNN, FSMN, Conv1d, Conv2d
+from aps.asr.base.layers import VariantRNN, FSMN, Conv1d, Conv2d, PyTorchRNN
 from aps.libs import Register
 
 AsrEncoder = Register("asr_encoder")
+EncRetType = Tuple[th.Tensor, Optional[th.Tensor]]
 
 
 def encoder_instance(enc_type: str, inp_features: int, out_features: int,
@@ -63,9 +64,8 @@ class ConcatEncoder(nn.Module):
         super(ConcatEncoder, self).__init__()
         self.enc_list = nn.ModuleList(enc_list)
 
-    def forward(
-            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+    def forward(self, inp: th.Tensor,
+                inp_len: Optional[th.Tensor]) -> EncRetType:
         """
         Args:
             inp (Tensor): N x Ti x F
@@ -90,8 +90,8 @@ class EncoderBase(nn.Module):
         self.out_features = out_features
 
 
-@AsrEncoder.register("vanilla_rnn")
-class VanillaRNNEncoder(EncoderBase):
+@AsrEncoder.register("pytorch_rnn")
+class PyTorchRNNEncoder(EncoderBase):
     """
     PyTorch's RNN encoder
     """
@@ -106,17 +106,13 @@ class VanillaRNNEncoder(EncoderBase):
                  dropout: int = 0.2,
                  bidirectional: bool = False,
                  non_linear: str = ""):
-        super(VanillaRNNEncoder, self).__init__(inp_features, out_features)
-        RNN = rnn.upper()
-        supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
+        super(PyTorchRNNEncoder, self).__init__(inp_features, out_features)
         supported_non_linear = {
             "relu": tf.relu,
             "sigmoid": th.sigmoid,
             "tanh": th.tanh,
             "": None
         }
-        if RNN not in supported_rnn:
-            raise RuntimeError(f"Unknown RNN type: {RNN}")
         if non_linear not in supported_non_linear:
             raise ValueError(
                 f"Unsupported output non-linear function: {non_linear}")
@@ -124,11 +120,11 @@ class VanillaRNNEncoder(EncoderBase):
             self.proj = nn.Linear(inp_features, input_project)
         else:
             self.proj = None
-        self.rnns = supported_rnn[RNN](
+        self.rnns = PyTorchRNN(
+            rnn,
             inp_features if input_project is None else input_project,
             hidden,
             num_layers=num_layers,
-            batch_first=True,
             dropout=dropout,
             bidirectional=bidirectional)
         self.outp = nn.Linear(hidden if not bidirectional else hidden * 2,
@@ -138,12 +134,10 @@ class VanillaRNNEncoder(EncoderBase):
     def flat(self):
         self.rnns.flatten_parameters()
 
-    def forward(
-            self,
-            inp: th.Tensor,
-            inp_len: Optional[th.Tensor],
-            max_len: Optional[int] = None
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+    def forward(self,
+                inp: th.Tensor,
+                inp_len: Optional[th.Tensor],
+                max_len: Optional[int] = None) -> EncRetType:
         """
         Args:
             inp (Tensor): (N) x Ti x F
@@ -160,7 +154,7 @@ class VanillaRNNEncoder(EncoderBase):
                                        enforce_sorted=False)
         else:
             if inp.dim() not in [2, 3]:
-                raise RuntimeError("VanillaRNNEncoder expects 2/3D Tensor, " +
+                raise RuntimeError("PyTorchRNNEncoder expects 2/3D Tensor, " +
                                    f"got {inp.dim():d}")
             if inp.dim() != 3:
                 inp = th.unsqueeze(inp, 0)
@@ -183,7 +177,7 @@ class VanillaRNNEncoder(EncoderBase):
 @AsrEncoder.register("variant_rnn")
 class VariantRNNEncoder(EncoderBase):
     """
-    Variant RNN layer (e.g., with pyramid stack, layernrom, projection layer, .etc)
+    Variant RNN layer (e.g., with pyramid style, layernrom, projection, .etc)
     """
 
     def __init__(self,
@@ -231,9 +225,8 @@ class VariantRNNEncoder(EncoderBase):
         ])
         self.use_pyramid = use_pyramid
 
-    def _subsample_concat(
-            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+    def _subsample_concat(self, inp: th.Tensor,
+                          inp_len: Optional[th.Tensor]) -> EncRetType:
         """
         Do subsampling for RNN output
         """
@@ -243,9 +236,8 @@ class VariantRNNEncoder(EncoderBase):
         inp = th.cat([inp[:, ::2], inp[:, 1::2]], -1)
         return inp, None if inp_len is None else inp_len // 2
 
-    def forward(
-            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+    def forward(self, inp: th.Tensor,
+                inp_len: Optional[th.Tensor]) -> EncRetType:
         """
         Args:
             inp (Tensor): (N) x Ti x F
@@ -294,9 +286,8 @@ class Conv1dEncoder(EncoderBase):
                    dropout=dropout) for i in range(num_layers)
         ])
 
-    def forward(
-            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+    def forward(self, inp: th.Tensor,
+                inp_len: Optional[th.Tensor]) -> EncRetType:
         """
         Args:
             inp (Tensor): N x Ti x F
@@ -358,9 +349,8 @@ class Conv2dEncoder(EncoderBase):
             freq_dim = enc_layer.compute_outp_dim(freq_dim, 1)
         self.out_features = freq_dim * channel[-1]
 
-    def forward(
-            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+    def forward(self, inp: th.Tensor,
+                inp_len: Optional[th.Tensor]) -> EncRetType:
         """
         Args:
             inp (Tensor): N x T x F, input
@@ -418,9 +408,8 @@ class FSMNEncoder(EncoderBase):
         ])
         self.residual = residual
 
-    def forward(
-            self, inp: th.Tensor, inp_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+    def forward(self, inp: th.Tensor,
+                inp_len: Optional[th.Tensor]) -> EncRetType:
         """
         Args:
             inp (Tensor): N x T x F, input

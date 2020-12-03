@@ -7,13 +7,13 @@ import torch as th
 import torch.nn as nn
 
 from typing import Optional, NoReturn, Union, List
-from aps.asr.base.encoder import VanillaRNNEncoder
+from aps.asr.base.encoder import PyTorchRNNEncoder
 from aps.sse.utils import MaskNonLinear
 from aps.libs import ApsRegisters
 
 
 @ApsRegisters.sse.register("base_rnn")
-class ToyRNN(VanillaRNNEncoder):
+class ToyRNN(PyTorchRNNEncoder):
     """
     Toy RNN structure for separation & enhancement
     """

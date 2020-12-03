@@ -53,8 +53,7 @@ if [ $batch_size -eq 1 ]; then
     --nbest $nbest \
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
     --max-len $max_len \
-    --normalized $normalized \
-    --vectorized true \
+    --normalized $normalized
     > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
 else
   bin/decode_batch.py \

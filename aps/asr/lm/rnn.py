@@ -5,7 +5,7 @@ import torch as th
 import torch.nn as nn
 
 from typing import NoReturn, Union, Tuple, Optional
-from aps.asr.base.layers import OneHotEmbedding
+from aps.asr.base.layers import OneHotEmbedding, PyTorchRNN
 from aps.libs import ApsRegisters
 
 
@@ -28,6 +28,7 @@ class TorchRNNLM(nn.Module):
     """
     A simple Torch RNN LM
     """
+    HiddenType = Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]
 
     def __init__(self,
                  embed_size: int = 256,
@@ -38,22 +39,18 @@ class TorchRNNLM(nn.Module):
                  rnn_dropout: float = 0.2,
                  tie_weights: bool = False) -> None:
         super(TorchRNNLM, self).__init__()
-        RNN = rnn.upper()
-        supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
-        if RNN not in supported_rnn:
-            raise RuntimeError(f"Unknown RNN type: {RNN}")
         self.vocab_drop = nn.Dropout(rnn_dropout)
         if embed_size != vocab_size:
             self.vocab_embed = nn.Embedding(vocab_size, embed_size)
         else:
             self.vocab_embed = OneHotEmbedding(vocab_size)
         # uni-directional RNNs
-        self.pred = supported_rnn[RNN](embed_size,
-                                       rnn_hidden,
-                                       rnn_layers,
-                                       batch_first=True,
-                                       dropout=rnn_dropout,
-                                       bidirectional=False)
+        self.pred = PyTorchRNN(rnn,
+                               embed_size,
+                               rnn_hidden,
+                               rnn_layers,
+                               dropout=rnn_dropout,
+                               bidirectional=False)
         # output distribution
         self.dist = nn.Linear(rnn_hidden, vocab_size)
         self.vocab_size = vocab_size
@@ -69,12 +66,10 @@ class TorchRNNLM(nn.Module):
         self.dist.bias.data.zero_()
         self.dist.weight.data.uniform_(-initrange, initrange)
 
-    def forward(
-        self,
-        token: th.Tensor,
-        h: Union[th.Tensor, Tuple[th.Tensor, th.Tensor], None] = None,
-        token_len=Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]]:
+    def forward(self,
+                token: th.Tensor,
+                h: Optional[HiddenType] = None,
+                token_len=Optional[th.Tensor]) -> Tuple[th.Tensor, HiddenType]:
         """
         Args:
             token: input token sequence, N x T

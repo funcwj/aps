@@ -93,8 +93,7 @@ def run(args):
                                   nbest=args.nbest,
                                   max_len=args.max_len,
                                   lm_weight=args.lm_weight,
-                                  normalized=args.normalized,
-                                  vectorized=args.vectorized)
+                                  normalized=args.normalized)
         nbest = [f"{key}\n"]
         for idx, hyp in enumerate(nbest_hypos):
             score = hyp["score"]
@@ -187,10 +186,6 @@ if __name__ == "__main__":
                         choices=["beam_search", "greedy_search"],
                         default="beam_search",
                         help="Name of the decoding function")
-    parser.add_argument("--vectorized",
-                        action=StrToBoolAction,
-                        default="true",
-                        help="If ture, using vectorized algothrim")
     parser.add_argument("--normalized",
                         action=StrToBoolAction,
                         default="false",

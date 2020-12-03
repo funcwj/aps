@@ -74,6 +74,48 @@ class Normalize1d(nn.Module):
         return out
 
 
+def PyTorchRNN(mode: str,
+               input_size: int,
+               hidden_size: int,
+               num_layers: int = 1,
+               bias: bool = True,
+               dropout: float = 0.,
+               bidirectional: bool = False) -> nn.Module:
+    """
+    Wrapper for PyTorch RNNs (LSTM, GRU, RNN_TANH, RNN_RELU)
+    """
+    supported_rnn = {
+        "RNN_TANH": nn.RNN,
+        "RNN_RELU": nn.ReLU,
+        "GRU": nn.GRU,
+        "LSTM": nn.LSTM
+    }
+    mode = mode.upper()
+    if mode not in supported_rnn:
+        raise ValueError(f"Unsupported RNNs: {mode}")
+    kwargs = {
+        "bias": bias,
+        "dropout": dropout,
+        "batch_first": True,
+        "bidirectional": bidirectional
+    }
+    if mode in ["GRU", "LSTM"]:
+        return supported_rnn[mode](input_size, hidden_size, num_layers,
+                                   **kwargs)
+    elif mode == "RNN_TANH":
+        return supported_rnn[mode](input_size,
+                                   hidden_size,
+                                   num_layers,
+                                   nonlinearity="tanh",
+                                   **kwargs)
+    else:
+        return supported_rnn[mode](input_size,
+                                   hidden_size,
+                                   num_layers,
+                                   nonlinearity="relu",
+                                   **kwargs)
+
+
 class Conv1d(nn.Module):
     """
     Time delay neural network (TDNN) layer using conv1d operations
@@ -275,15 +317,11 @@ class VariantRNN(nn.Module):
                  bidirectional: bool = False,
                  add_forward_backward: bool = False):
         super(VariantRNN, self).__init__()
-        RNN = rnn.upper()
-        supported_rnn = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}
-        if RNN not in supported_rnn:
-            raise RuntimeError(f"Unknown RNN type: {RNN}")
-        self.rnn = supported_rnn[RNN](input_size,
-                                      hidden_size,
-                                      1,
-                                      batch_first=True,
-                                      bidirectional=bidirectional)
+        self.rnn = PyTorchRNN(rnn,
+                              input_size,
+                              hidden_size,
+                              1,
+                              bidirectional=bidirectional)
         self.add_forward_backward = add_forward_backward and bidirectional
         self.dropout = nn.Dropout(dropout) if dropout != 0 else None
         if not add_forward_backward and bidirectional:

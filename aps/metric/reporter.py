@@ -89,7 +89,7 @@ class WerReporter(MetricReporter):
         sum_err = sum([self.val[cls_str] for cls_str in self.val])
         sum_len = sum([self.tot[cls_str] for cls_str in self.tot])
         print(f"Total: {sum_err * 100 / sum_len:.2f}{self.unit}, " +
-              f"{self.cnt} utterances")
+              f"{self.cnt} utterances ({sum_err} errors, {sum_len} units)")
         if len(self.val) != 1:
             for cls_str in self.val:
                 cls_err = self.val[cls_str]

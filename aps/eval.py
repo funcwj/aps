@@ -65,7 +65,7 @@ class Computer(object):
         else:
             nnet = net_cls(**conf["nnet_conf"])
 
-        nnet.load_state_dict(cpt["model_state_dict"])
+        nnet.load_state_dict(cpt["model_state"])
         return cpt["epoch"], nnet, conf
 
     def run(self, *args, **kwargs):

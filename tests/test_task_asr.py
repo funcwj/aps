@@ -72,7 +72,7 @@ def test_ctc_xent():
                        asr_transform=asr_transform,
                        att_type="ctx",
                        att_kwargs={"att_dim": 512},
-                       enc_type="vanilla_rnn",
+                       enc_type="pytorch_rnn",
                        enc_proj=256,
                        enc_kwargs=att_enc_kwargs,
                        dec_dim=512,
@@ -96,7 +96,7 @@ def test_rnnt():
                         vocab_size=vocab_size,
                         asr_transform=asr_transform,
                         blank=vocab_size - 1,
-                        enc_type="vanilla_rnn",
+                        enc_type="pytorch_rnn",
                         enc_kwargs=att_enc_kwargs,
                         enc_proj=512,
                         dec_kwargs=rnnt_dec_kwargs)

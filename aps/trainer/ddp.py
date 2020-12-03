@@ -92,7 +92,7 @@ class DdpTrainer(Trainer):
         Return model states which will be saved in the checkpoint
         """
         return {
-            "model_state_dict":
+            "model_state":
                 self.task.module.nnet.state_dict()
                 if self.distributed else self.task.nnet.state_dict()
         }
