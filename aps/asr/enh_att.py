@@ -102,6 +102,7 @@ class EnhAttASR(nn.Module):
                     beam: int = 16,
                     nbest: int = 8,
                     max_len: int = -1,
+                    penalty: float = 0,
                     normalized: bool = True,
                     temperature: float = 1) -> List[Dict]:
         """
@@ -118,6 +119,7 @@ class EnhAttASR(nn.Module):
                                             beam=beam,
                                             nbest=nbest,
                                             max_len=max_len,
+                                            penalty=penalty,
                                             normalized=normalized,
                                             temperature=temperature)
 
@@ -129,6 +131,7 @@ class EnhAttASR(nn.Module):
                           beam: int = 16,
                           nbest: int = 8,
                           max_len: int = -1,
+                          penalty: float = 0,
                           normalized: bool = True,
                           temperature: float = 1) -> List[Dict]:
         """
@@ -144,6 +147,7 @@ class EnhAttASR(nn.Module):
                                                   beam=beam,
                                                   nbest=nbest,
                                                   max_len=max_len,
+                                                  penalty=penalty,
                                                   normalized=normalized,
                                                   temperature=temperature)
 

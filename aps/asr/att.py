@@ -92,6 +92,7 @@ class AttASR(nn.Module):
                     beam: int = 16,
                     nbest: int = 8,
                     max_len: int = -1,
+                    penalty: float = 0,
                     normalized: bool = True,
                     temperature: float = 1) -> List[Dict]:
         """
@@ -124,6 +125,7 @@ class AttASR(nn.Module):
                                             max_len=max_len,
                                             sos=self.sos,
                                             eos=self.eos,
+                                            penalty=penalty,
                                             normalized=normalized,
                                             temperature=temperature)
 
@@ -135,6 +137,7 @@ class AttASR(nn.Module):
                           beam: int = 16,
                           nbest: int = 8,
                           max_len: int = -1,
+                          penalty: float = 0,
                           normalized=True,
                           temperature: float = 1) -> List[Dict]:
         """
@@ -169,5 +172,6 @@ class AttASR(nn.Module):
                                                   max_len=max_len,
                                                   sos=self.sos,
                                                   eos=self.eos,
+                                                  penalty=penalty,
                                                   normalized=normalized,
                                                   temperature=temperature)

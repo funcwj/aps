@@ -41,7 +41,9 @@ def trace_back_hypos(point: th.Tensor,
                      hist_token: List[th.Tensor],
                      score: th.Tensor,
                      sos: int = 1,
-                     eos: int = 2) -> List[Dict]:
+                     eos: int = 2,
+                     penalty: float = 0,
+                     normalized: bool = True) -> List[Dict]:
     """
     Trace back the decoding transcription sequence from the current time point
     Args:
@@ -59,7 +61,9 @@ def trace_back_hypos(point: th.Tensor,
     trans = trans[::-1]
     for i, s in enumerate(score):
         token = [t[i] for t in trans]
-        hypos.append({"score": s, "trans": [sos] + token + [eos]})
+        score = (s + (len(token) + 1) * penalty) / (len(token) +
+                                                    1 if normalized else 1)
+        hypos.append({"score": score, "trans": [sos] + token + [eos]})
     return hypos
 
 
@@ -209,6 +213,7 @@ class PyTorchRNNDecoder(nn.Module):
                     max_len: int = -1,
                     sos: int = -1,
                     eos: int = -1,
+                    penalty: float = 0,
                     normalized: bool = True,
                     temperature: float = 1) -> List[Dict]:
         """
@@ -309,7 +314,9 @@ class PyTorchRNNDecoder(nn.Module):
                                             hist_token,
                                             accu_score[idx],
                                             sos=sos,
-                                            eos=eos)
+                                            eos=eos,
+                                            penalty=penalty,
+                                            normalized=normalized)
                 accu_score[idx] = NEG_INF
                 hypos += hyp_full
 
@@ -332,13 +339,12 @@ class PyTorchRNNDecoder(nn.Module):
                                                    hist_token,
                                                    accu_score[idx],
                                                    sos=sos,
-                                                   eos=eos)
+                                                   eos=eos,
+                                                   penalty=penalty,
+                                                   normalized=normalized)
                     hypos += hyp_partial
 
-        nbest_hypos = sorted(hypos,
-                             key=lambda n: n["score"] / (len(n["trans"]) - 1
-                                                         if normalized else 1),
-                             reverse=True)
+        nbest_hypos = sorted(hypos, key=lambda n: n["score"], reverse=True)
         return nbest_hypos[:nbest]
 
     def beam_search_batch(self,
@@ -353,6 +359,7 @@ class PyTorchRNNDecoder(nn.Module):
                           sos: int = -1,
                           eos: int = -1,
                           normalized: bool = True,
+                          penalty: float = 0,
                           temperature: float = 1) -> List[Dict]:
         """
         Batch level vectorized beam search algothrim (NOTE: not stable!)
@@ -461,7 +468,9 @@ class PyTorchRNNDecoder(nn.Module):
                                                 [t[u] for t in hist_token],
                                                 accu_score[u, idx],
                                                 sos=sos,
-                                                eos=eos)
+                                                eos=eos,
+                                                penalty=penalty,
+                                                normalized=normalized)
                     accu_score[u, idx] = NEG_INF
                     hypos[u] += hyp_full
 
@@ -493,14 +502,13 @@ class PyTorchRNNDecoder(nn.Module):
                             [t[u] for t in hist_token],
                             accu_score[u, idx],
                             sos=sos,
-                            eos=eos)
+                            eos=eos,
+                            penalty=penalty,
+                            normalized=normalized)
                         hypos[u] += hyp_partial
 
         nbest_hypos = []
         for utt_bypos in hypos:
-            hypos = sorted(utt_bypos,
-                           key=lambda n: n["score"] / (len(n["trans"]) - 1
-                                                       if normalized else 1),
-                           reverse=True)
+            hypos = sorted(utt_bypos, key=lambda n: n["score"], reverse=True)
             nbest_hypos.append(hypos[:nbest])
         return nbest_hypos

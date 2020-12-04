@@ -424,7 +424,7 @@ class Trainer(object):
             self.reporter.log(
                 f"Gradient clipping if over {clip_gradient} L2 norm")
         if weight_noise_std:
-            self.reporter.log("Add gaussian noise to weights, with " +
+            self.reporter.log("Add gaussian noise to gradient, with " +
                               f"std = {weight_noise_std}")
 
     def create_optimizer(self,
@@ -512,7 +512,8 @@ class Trainer(object):
             cpt.update(states)
             cpt_name = "{}.pt.tar".format("best" if best else "last")
             th.save(cpt, self.checkpoint / cpt_name)
-            self.reporter.log(f"Save checkpoint {self.checkpoint / cpt_name}")
+            self.reporter.log(
+                f"Save checkpoint ==> {self.checkpoint / cpt_name}")
             if self.save_interval > 0 and self.cur_epoch % self.save_interval == 0:
                 th.save(cpt, self.checkpoint / f"{self.cur_epoch}.pt.tar")
 

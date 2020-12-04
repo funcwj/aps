@@ -13,6 +13,7 @@ channel=-1
 max_len=100
 beam_size=16
 batch_size=1
+penalty=0
 normalized=true
 temperature=1
 lm=""
@@ -49,6 +50,7 @@ if [ $batch_size -eq 1 ]; then
     --channel $channel \
     --dict "$dict" \
     --lm "$lm" \
+    --penalty $penalty \
     --temperature $temperature \
     --lm-weight $lm_weight \
     --space "$space" \
@@ -68,6 +70,7 @@ else
     --channel $channel \
     --dict "$dict" \
     --space "$space" \
+    --penalty $penalty \
     --temperature $temperature \
     --nbest $nbest \
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \

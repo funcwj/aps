@@ -79,12 +79,11 @@ class TokenReader(object):
 
     def __getitem__(self, index):
         stats = self.token_list[index]
-        if self.vocab_dict:
-            unk_tok = self.vocab_dict[UNK_TOKEN]
-            stats["tok"] = [
-                (self.vocab_dict[t] if t in self.vocab_dict else unk_tok)
-                for t in stats["tok"]
-            ]
+        # if processed, skip
+        if self.vocab_dict and "vis" not in stats:
+            stats["tok"] = [(self.vocab_dict[t] if t in self.vocab_dict else
+                             self.vocab_dict[UNK_TOKEN]) for t in stats["tok"]]
+            stats["vis"] = True
         return stats
 
     def __len__(self) -> int:

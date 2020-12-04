@@ -16,7 +16,7 @@ git clone https://github.com/funcwj/aps
 # 2) create conda enviroments based on requirements.txt (see docker/*.Dockerfile)
 cd aps && pip install -r requirements.txt
 ```
-For developers (who want to make commits or PRs), please install the `git-lfs` first (as I use Git LFS [Large File Storage] to track some PyTorch checkpoints for testing, see [link](https://github.com/git-lfs/git-lfs/wiki/Installation) as the reference) and contiune running
+For developers (who want to make commits or PRs), please install the `git-lfs` first (as I use Git LFS to track some PyTorch checkpoints for testing, see [link](https://github.com/git-lfs/git-lfs/wiki/Installation) as the reference) and contiune running
 ```shell
 # set up the git hook scripts
 pre-commit install
