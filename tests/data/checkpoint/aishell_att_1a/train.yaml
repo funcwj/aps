@@ -68,7 +68,7 @@ nnet_conf:
       - 2
       - 2
       - 2
-    vanilla_rnn:
+    pytorch_rnn:
       bidirectional: true
       dropout: 0.2
       hidden: 320

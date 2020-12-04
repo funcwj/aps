@@ -3,6 +3,7 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
+import warnings
 import torch as th
 import torch.nn as nn
 
@@ -127,6 +128,8 @@ class AttASR(nn.Module):
     def beam_search_batch(self,
                           x: th.Tensor,
                           x_len: Optional[th.Tensor],
+                          lm: Optional[nn.Module] = None,
+                          lm_weight: float = 0,
                           beam: int = 16,
                           nbest: int = 8,
                           max_len: int = -1,
@@ -138,7 +141,7 @@ class AttASR(nn.Module):
         with th.no_grad():
             if self.asr_transform:
                 if x.dim() == 1:
-                    raise RuntimeError(
+                    warnings.warn(
                         "Got one utterance, use beam_search(...) instead")
                 x, x_len = self.asr_transform(x, x_len)
                 inp_len = x.shape[-2]
@@ -146,7 +149,7 @@ class AttASR(nn.Module):
             else:
                 # N x Ti x F
                 if x.dim() == 2:
-                    raise RuntimeError(
+                    warnings.warn(
                         "Got one utterance, use beam_search(...) instead")
                 inp_len = x.shape[1]
                 enc_out, enc_len = self.encoder(x, x_len)
@@ -156,6 +159,8 @@ class AttASR(nn.Module):
             return self.decoder.beam_search_batch(self.att_net,
                                                   enc_out,
                                                   enc_len,
+                                                  lm=lm,
+                                                  lm_weight=lm_weight,
                                                   beam=beam,
                                                   nbest=nbest,
                                                   max_len=max_len,

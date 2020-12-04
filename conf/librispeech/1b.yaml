@@ -12,7 +12,7 @@ nnet_conf:
       stride: 2
       padding: 1
       kernel_size: 3
-    vanilla_rnn:
+    pytorch_rnn:
       rnn: "lstm"
       num_layers: 3
       bidirectional: true

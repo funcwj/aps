@@ -1,6 +1,6 @@
-1. Beam search in batch mode (also optimization)
-2. LM fusion (decoding)
-3. More recipes (speaker tasks, hybrid AM training)
-4. More test cases
-5. More acoustic & speech enhancement & separation model
+1. Beam search optimization and batch mode implementation
+2. More recipes (speaker tasks, hybrid AM training)
+3. More test cases
+4. More SOTA models
+5. TorchScript/JIT features
 6. ...

@@ -65,7 +65,7 @@ def run(args):
                             device_id=args.device_id)
     if decoder.accept_raw:
         src_reader = AudioReader(args.feats_or_wav_scp,
-                                 sr=16000,
+                                 sr=args.sr,
                                  channel=args.channel)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
@@ -138,6 +138,10 @@ if __name__ == "__main__":
                         type=int,
                         default=-1,
                         help="Channel index for wav.scp")
+    parser.add_argument("--sr",
+                        type=int,
+                        default=16000,
+                        help="Sample rate of the original audio")
     parser.add_argument("--checkpoint",
                         type=str,
                         required=True,

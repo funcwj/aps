@@ -3,8 +3,8 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-import random
 import argparse
+import warnings
 
 import torch as th
 
@@ -30,17 +30,17 @@ class BatchDecoder(Computer):
         super(BatchDecoder, self).__init__(cpt_dir, device_id=device_id)
         logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
 
-    def run(self, src, xlen, **kwargs):
-        src = pad_sequence([th.from_numpy(s) for s in src],
+    def run(self, inp, inp_len, **kwargs):
+        inp = pad_sequence([th.from_numpy(s) for s in inp],
                            batch_first=True,
-                           padding_value=0)
-        xlen = th.tensor(xlen, dtype=th.int64, device=self.device)
-        return self.nnet.beam_search_batch(src.to(self.device), xlen, **kwargs)
+                           padding_value=0).to(self.device)
+        inp_len = th.tensor(inp_len, device=self.device)
+        return self.nnet.beam_search_batch(inp, inp_len, **kwargs)
 
 
 def run(args):
     if args.batch_size == 1:
-        raise RuntimeError("batch_size == 1, use decode.py instead")
+        warnings.warn("can use decode.py instead as batch_size == 1")
     # build dictionary
     if args.dict:
         vocab = load_dict(args.dict, reverse=True)
@@ -48,7 +48,9 @@ def run(args):
         vocab = None
     decoder = BatchDecoder(args.checkpoint, device_id=args.device_id)
     if decoder.accept_raw:
-        src_reader = AudioReader(args.feats_or_wav_scp, sr=16000)
+        src_reader = AudioReader(args.feats_or_wav_scp,
+                                 sr=args.sr,
+                                 channel=args.channel)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
@@ -62,9 +64,18 @@ def run(args):
     while n < len(utts_sort):
         batches.append(utts_sort[n:n + args.batch_size])
         n += args.batch_size
-    random.shuffle(batches)
+    if n != len(utts_sort):
+        batches.append(utts_sort[n:])
 
-    stdout_top1, top1 = io_wrapper(args.output, "w")
+    if args.lm:
+        lm = Computer(args.lm, device_id=args.device_id)
+        logger.info(f"Load lm from {args.lm}: epoch {lm.epoch}, " +
+                    f"weight = {args.lm_weight}")
+        lm = lm.nnet
+    else:
+        lm = None
+
+    stdout_top1, top1 = io_wrapper(args.best, "w")
     topn = None
     if args.dump_nbest:
         stdout_topn, topn = io_wrapper(args.dump_nbest, "w")
@@ -73,14 +84,16 @@ def run(args):
     for batch in batches:
         # prepare inputs
         keys = [b["key"] for b in batch]
-        xlen = [b["len"] for b in batch]
-        mats = [src_reader[key] for key in keys]
+        inp = [src_reader[key] for key in keys]
+        inp_len = [b["len"] for b in batch]
         # decode
-        batch_nbest = decoder.run(mats,
-                                  xlen,
+        batch_nbest = decoder.run(inp,
+                                  inp_len,
+                                  lm=lm,
                                   beam=args.beam_size,
                                   nbest=args.nbest,
                                   max_len=args.max_len,
+                                  lm_weight=args.lm_weight,
                                   normalized=args.normalized)
         for key, nbest in zip(keys, batch_nbest):
             logger.info(f"Decoding utterance {key}...")
@@ -101,9 +114,9 @@ def run(args):
                     top1.write(f"{key}\t{trans}\n")
             if topn:
                 topn.write("".join(nbest_hypos))
-            top1.flush()
-            if topn:
-                topn.flush()
+        top1.flush()
+        if topn:
+            topn.flush()
     if not stdout_top1:
         top1.close()
     if topn and not stdout_topn:
@@ -114,14 +127,21 @@ def run(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=
-        "Command to do End-To-End decoding using beam search algothrim",
+        "Command to do End-To-End decoding using batch beam search algothrim "
+        "(numbers may different when #batch_size != 1)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("feats_or_wav_scp",
                         type=str,
                         help="Feature/Wave scripts")
-    parser.add_argument("output",
-                        type=str,
-                        help="Wspecifier for decoded results")
+    parser.add_argument("best", type=str, help="Wspecifier for decoded results")
+    parser.add_argument("--channel",
+                        type=int,
+                        default=-1,
+                        help="Channel index for wav.scp")
+    parser.add_argument("--sr",
+                        type=int,
+                        default=16000,
+                        help="Sample rate of the original audio")
     parser.add_argument("--checkpoint",
                         type=str,
                         required=True,
@@ -130,6 +150,15 @@ if __name__ == "__main__":
                         type=int,
                         default=8,
                         help="Beam size used during decoding")
+    parser.add_argument("--lm",
+                        type=str,
+                        default="",
+                        help="Checkpoint of the nerual network LM "
+                        "used in shallow fusion")
+    parser.add_argument("--lm-weight",
+                        type=float,
+                        default=0.1,
+                        help="LM score weight used in shallow fusion")
     parser.add_argument("--dict",
                         type=str,
                         default="",
@@ -156,11 +185,6 @@ if __name__ == "__main__":
                         type=str,
                         default="",
                         help="If not empty, dump n-best hypothesis")
-    parser.add_argument("--nnet",
-                        type=str,
-                        default="las",
-                        choices=["las", "enh_las", "transformer"],
-                        help="Network type used")
     parser.add_argument("--batch-size",
                         type=int,
                         default=4,

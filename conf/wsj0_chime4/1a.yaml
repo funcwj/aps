@@ -11,7 +11,7 @@ nnet_conf:
       num_layers: 3
       stride: [2, 2, 2]
       dilation: [1, 1, 2]
-    vanilla_rnn:
+    pytorch_rnn:
       rnn: "lstm"
       num_layers: 3
       bidirectional: true

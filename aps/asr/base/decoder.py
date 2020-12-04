@@ -13,6 +13,28 @@ from typing import List, Dict, Optional, Tuple, Union
 from aps.asr.base.layers import OneHotEmbedding, PyTorchRNN
 from aps.const import NEG_INF
 
+HiddenType = Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]
+
+
+def adjust_hidden_states(back_point: th.Tensor,
+                         state: HiddenType) -> HiddenType:
+    """
+    Adjust RNN hidden states
+    Args:
+        back_point (Tensor): N
+        state (None or Tensor, [Tensor, Tensor])
+    Return:
+        state (None or Tensor, [Tensor, Tensor])
+    """
+    if state is not None:
+        if isinstance(state, tuple):
+            # shape: num_layers * num_directions, batch, hidden_size
+            h, c = state
+            state = (h[:, back_point], c[:, back_point])
+        else:
+            state = state[:, back_point]
+    return state
+
 
 def trace_back_hypos(point: th.Tensor,
                      back_point: List[th.Tensor],
@@ -45,7 +67,6 @@ class PyTorchRNNDecoder(nn.Module):
     """
     PyTorch's RNN decoder
     """
-    HiddenType = Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]
 
     def __init__(self,
                  enc_proj: int,
@@ -158,7 +179,7 @@ class PyTorchRNNDecoder(nn.Module):
                 out_pre = th.argmax(outs[-1].detach(), dim=1)
             else:
                 if t == 0:
-                    out_pre = th.tensor([sos] * N, dtype=th.int64, device=dev)
+                    out_pre = th.tensor([sos] * N, device=dev)
                 else:
                     out_pre = tgt_pad[:, t - 1]
             # step forward
@@ -190,7 +211,7 @@ class PyTorchRNNDecoder(nn.Module):
                     eos: int = -1,
                     normalized: bool = True) -> List[Dict]:
         """
-        Vectorized beam search algothrim
+        Vectorized beam search algothrim (see batch version beam_search_batch)
         Args
             enc_out: 1 x T x F
         """
@@ -207,15 +228,15 @@ class PyTorchRNNDecoder(nn.Module):
         if beam > self.vocab_size:
             raise RuntimeError(f"Beam size({beam}) > vocabulary size")
 
-        dev = enc_out.device
+        device = enc_out.device
         att_ali = None
         dec_hid = None
         # N x T x F => N*beam x T x F
         enc_out = th.repeat_interleave(enc_out, beam, 0)
-        att_ctx = th.zeros([N * beam, D_enc], device=dev)
-        proj = th.zeros([N * beam, D_enc], device=dev)
+        att_ctx = th.zeros([N * beam, D_enc], device=device)
+        proj = th.zeros([N * beam, D_enc], device=device)
 
-        accu_score = th.zeros(beam, device=dev)
+        accu_score = th.zeros(beam, device=device)
         hist_token = []
         back_point = []
         lm_state = None
@@ -228,20 +249,12 @@ class PyTorchRNNDecoder(nn.Module):
                 out = hist_token[-1]
                 point = back_point[-1]
             else:
-                out = th.tensor([sos] * (beam * N), dtype=th.int64, device=dev)
-                point = th.arange(0, beam, dtype=th.int64, device=dev)
+                out = th.tensor([sos] * (beam * N), device=device)
+                point = th.arange(0, beam, device=device)
 
-            # swap order
-            if dec_hid is not None:
-                if isinstance(dec_hid, tuple):
-                    # shape: num_layers * num_directions, batch, hidden_size
-                    h, c = dec_hid
-                    dec_hid = (h[:, point], c[:, point])
-                else:
-                    dec_hid = dec_hid[:, point]
-            if att_ali is not None:
-                att_ali = att_ali[point]
-
+            # adjust order
+            dec_hid = adjust_hidden_states(point, dec_hid)
+            att_ali = None if att_ali is None else att_ali[point]
             # step forward
             pred, att_ctx, dec_hid, att_ali, proj = self._step(att_net,
                                                                out,
@@ -254,13 +267,9 @@ class PyTorchRNNDecoder(nn.Module):
             prob = F.log_softmax(pred, dim=-1)
 
             if lm:
-                if lm_state is not None:
-                    if isinstance(lm_state, tuple):
-                        # shape: num_layers * num_directions, batch, hidden_size
-                        h, c = lm_state
-                        lm_state = (h[:, point], c[:, point])
-                    else:
-                        lm_state = lm_state[:, point]
+                # adjust order
+                lm_state = adjust_hidden_states(point, lm_state)
+                # LM prediction
                 lm_prob, lm_state = lm(out[..., None], lm_state)
                 # beam x V
                 prob += F.log_softmax(lm_prob[:, 0], dim=-1) * lm_weight
@@ -293,7 +302,7 @@ class PyTorchRNNDecoder(nn.Module):
                 idx = [
                     i for i, end_with_eos in enumerate(end_eos) if end_with_eos
                 ]
-                idx = th.tensor(idx, dtype=th.int64, device=dev)
+                idx = th.tensor(idx, device=device)
                 hyp_full = trace_back_hypos(point[idx],
                                             back_point,
                                             hist_token,
@@ -314,8 +323,9 @@ class PyTorchRNNDecoder(nn.Module):
             if t == max_len - 1:
                 end_wo_eos = (token != eos).tolist()
                 if sum(end_wo_eos):
-                    idx = [i for i, go_on in enumerate(end_wo_eos) if go_on]
-                    idx = th.tensor(idx, dtype=th.int64, device=dev)
+                    idx = th.tensor(
+                        [i for i, go_on in enumerate(end_wo_eos) if go_on],
+                        device=device)
                     hyp_partial = trace_back_hypos(idx,
                                                    back_point,
                                                    hist_token,
@@ -337,6 +347,8 @@ class PyTorchRNNDecoder(nn.Module):
                           att_net: nn.Module,
                           enc_out: th.Tensor,
                           enc_len: th.Tensor,
+                          lm: Optional[nn.Module] = None,
+                          lm_weight: float = 0,
                           beam: int = 8,
                           nbest: int = 1,
                           max_len: int = -1,
@@ -355,40 +367,24 @@ class PyTorchRNNDecoder(nn.Module):
             raise RuntimeError(f"Invalid max_len: {max_len:d}")
         N, _, D_enc = enc_out.shape
 
-        def _trace_back_hypos(uttid,
-                              point,
-                              back_point,
-                              hist_token,
-                              score,
-                              sos=1,
-                              eos=2):
-            """
-            Trace back from current time point
-            """
-            trans = []
-            score = score.item()
-            for ptr, tok in zip(back_point[::-1], hist_token[::-1]):
-                trans.append(tok[uttid, point].item())
-                point = ptr[uttid, point]
-            return {"score": score, "trans": [sos] + trans[::-1] + [eos]}
-
         nbest = min(beam, nbest)
         if beam > self.vocab_size:
             raise RuntimeError(f"Beam size({beam}) > vocabulary size")
 
-        dev = enc_out.device
+        device = enc_out.device
         att_ali = None
         dec_hid = None
         # N x T x F => N*beam x T x F
         enc_out = th.repeat_interleave(enc_out, beam, 0)
         enc_len = th.repeat_interleave(enc_len, beam, 0)
-        att_ctx = th.zeros([N * beam, D_enc], device=dev)
-        proj = th.zeros([N * beam, D_enc], device=dev)
+        att_ctx = th.zeros([N * beam, D_enc], device=device)
+        proj = th.zeros([N * beam, D_enc], device=device)
 
-        accu_score = th.zeros(N, beam, device=dev)
+        lm_state = None
+        accu_score = th.zeros(N, beam, device=device)
         hist_token = []
         back_point = []
-        step_point = th.arange(0, beam * N, beam, device=dev, dtype=th.int64)
+        step_point = th.arange(0, beam * N, beam, device=device)
         # for each utterance
         hypos = [[] for _ in range(N)]
         stop_batch = [False] * N
@@ -401,22 +397,12 @@ class PyTorchRNNDecoder(nn.Module):
                 point = back_point[-1] + step_point[..., None]
                 point = point.view(-1)
             else:
-                out = th.tensor([sos] * (beam * N), dtype=th.int64, device=dev)
-                point = th.tensor(list(range(beam)) * N,
-                                  dtype=th.int64,
-                                  device=dev)
+                out = th.tensor([sos] * (N * beam), device=device)
+                point = th.tensor(list(range(beam)) * N, device=device)
 
-            # swap order
-            if dec_hid is not None:
-                if isinstance(dec_hid, tuple):
-                    # shape: num_layers * num_directions, batch, hidden_size
-                    h, c = dec_hid
-                    dec_hid = (h[:, point], c[:, point])
-                else:
-                    dec_hid = dec_hid[:, point]
-            if att_ali is not None:
-                att_ali = att_ali[point]
-
+            # adjust order
+            dec_hid = adjust_hidden_states(point, dec_hid)
+            att_ali = None if att_ali is None else att_ali[point]
             # step forward
             pred, att_ctx, dec_hid, att_ali, proj = self._step(att_net,
                                                                out,
@@ -428,6 +414,15 @@ class PyTorchRNNDecoder(nn.Module):
                                                                proj=proj[point])
             # compute prob: N*beam x V, nagetive
             prob = F.log_softmax(pred, dim=-1)
+
+            if lm:
+                # adjust order
+                lm_state = adjust_hidden_states(point, lm_state)
+                # N*beam x 1 x V, LM prediction
+                lm_prob, lm_state = lm(out[..., None], lm_state)
+                # N*beam x V
+                prob += F.log_softmax(lm_prob[:, 0], dim=-1) * lm_weight
+
             # local pruning: N*beam x beam
             topk_score, topk_token = th.topk(prob, beam, dim=-1)
             if t == 0:
@@ -451,25 +446,28 @@ class PyTorchRNNDecoder(nn.Module):
                 token = th.gather(topk_token, -1, topk_index)
 
             # continue flags, N x beam
-            not_end = (token != eos).tolist()
+            end_eos = (token == eos).tolist()
 
             # process eos nodes
             for u in range(N):
                 # skip utterance u
-                if sum(not_end[u]) == 0 or len(hypos[u]) >= beam:
+                if sum(end_eos[u]):
+                    idx = [
+                        i for i, end_with_eos in enumerate(end_eos[u])
+                        if end_with_eos
+                    ]
+                    idx = th.tensor(idx, device=device)
+                    hyp_full = trace_back_hypos(point[u, idx],
+                                                [p[u] for p in back_point],
+                                                [t[u] for t in hist_token],
+                                                accu_score[u, idx],
+                                                sos=sos,
+                                                eos=eos)
+                    accu_score[u, idx] = NEG_INF
+                    hypos[u] += hyp_full
+
+                if len(hypos[u]) >= beam:
                     stop_batch[u] = True
-                else:
-                    for i, go_on in enumerate(not_end[u]):
-                        if not go_on:
-                            hyp = _trace_back_hypos(u,
-                                                    point[u, i],
-                                                    back_point,
-                                                    hist_token,
-                                                    accu_score[u, i],
-                                                    sos=sos,
-                                                    eos=eos)
-                            accu_score[u, i] = NEG_INF
-                            hypos[u].append(hyp)
 
             # all True, break search
             if sum(stop_batch) == N:
@@ -485,16 +483,19 @@ class PyTorchRNNDecoder(nn.Module):
                     # skip utterance u
                     if stop_batch[u]:
                         continue
-                    for i, go_on in enumerate(not_end[u]):
-                        if go_on:
-                            hyp = _trace_back_hypos(u,
-                                                    i,
-                                                    back_point,
-                                                    hist_token,
-                                                    accu_score[u, i],
-                                                    sos=sos,
-                                                    eos=eos)
-                            hypos[u].append(hyp)
+                    # process end
+                    end_wo_eos = (token[u] != eos).tolist()
+                    if sum(end_wo_eos):
+                        idx = th.tensor(
+                            [i for i, go_on in enumerate(end_wo_eos) if go_on],
+                            device=device)
+                        hyp_partial = trace_back_hypos(
+                            idx, [p[u] for p in back_point],
+                            [t[u] for t in hist_token],
+                            accu_score[u, idx],
+                            sos=sos,
+                            eos=eos)
+                        hypos[u] += hyp_partial
 
         nbest_hypos = []
         for utt_bypos in hypos:
