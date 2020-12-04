@@ -285,14 +285,17 @@ class SpecAugTransform(nn.Module):
                  max_bands: int = 30,
                  max_frame: int = 40,
                  num_freq_masks: int = 2,
-                 num_time_masks: int = 2) -> None:
+                 num_time_masks: int = 2,
+                 mask_zero: bool = True) -> None:
         super(SpecAugTransform, self).__init__()
         self.fnum, self.tnum = num_freq_masks, num_time_masks
+        self.mask_zero = mask_zero
         self.F, self.T = max_bands, max_frame
         self.p = p
 
     def extra_repr(self) -> str:
-        return (f"max_bands={self.F}, max_frame={self.T}, p={self.p}, "
+        return (f"max_bands={self.F}, max_frame={self.T}, " +
+                f"p={self.p}, mask_zero={self.mask_zero}, "
                 f"num_freq_masks={self.fnum}, num_time_masks={self.tnum}")
 
     def forward(self, x: th.Tensor) -> th.Tensor:
@@ -317,7 +320,10 @@ class SpecAugTransform(nn.Module):
             if x.dim() == 4:
                 # N x 1 x T x F
                 mask = mask.unsqueeze(1)
-            x = x * mask
+            if self.mask_zero:
+                x = x * mask
+            else:
+                x = th.masked_fill(x, mask, x.mean())
         return x
 
 
@@ -437,6 +443,7 @@ class FeatureTransform(nn.Module):
                  aug_prob: float = 0,
                  aug_max_bands: int = 30,
                  aug_max_frame: int = 40,
+                 aug_mask_zero: bool = True,
                  num_aug_bands: int = 2,
                  num_aug_frame: int = 2,
                  norm_mean: bool = True,
@@ -527,6 +534,7 @@ class FeatureTransform(nn.Module):
                     SpecAugTransform(p=aug_prob,
                                      max_bands=aug_max_bands,
                                      max_frame=aug_max_frame,
+                                     mask_zero=aug_mask_zero,
                                      num_freq_masks=num_aug_bands,
                                      num_time_masks=num_aug_frame))
             elif tok == "splice":

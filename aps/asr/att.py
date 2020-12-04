@@ -92,7 +92,8 @@ class AttASR(nn.Module):
                     beam: int = 16,
                     nbest: int = 8,
                     max_len: int = -1,
-                    normalized: bool = True) -> List[Dict]:
+                    normalized: bool = True,
+                    temperature: float = 1) -> List[Dict]:
         """
         Args
             x: audio samples or acoustic features, S or Ti x F
@@ -123,7 +124,8 @@ class AttASR(nn.Module):
                                             max_len=max_len,
                                             sos=self.sos,
                                             eos=self.eos,
-                                            normalized=normalized)
+                                            normalized=normalized,
+                                            temperature=temperature)
 
     def beam_search_batch(self,
                           x: th.Tensor,
@@ -133,7 +135,8 @@ class AttASR(nn.Module):
                           beam: int = 16,
                           nbest: int = 8,
                           max_len: int = -1,
-                          normalized=True) -> List[Dict]:
+                          normalized=True,
+                          temperature: float = 1) -> List[Dict]:
         """
         args
             x: audio samples or acoustic features, N x S or N x Ti x F
@@ -166,4 +169,5 @@ class AttASR(nn.Module):
                                                   max_len=max_len,
                                                   sos=self.sos,
                                                   eos=self.eos,
-                                                  normalized=normalized)
+                                                  normalized=normalized,
+                                                  temperature=temperature)

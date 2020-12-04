@@ -13,6 +13,7 @@ nbest=1
 channel=-1
 max_len=100
 beam_size=16
+temperature=1
 normalized=true
 lm=""
 lm_weight=0
@@ -52,6 +53,7 @@ $cmd JOB=1:$nj $log_dir/decode.JOB.log \
   --dict "$dict" \
   --lm "$lm" \
   --lm-weight $lm_weight \
+  --temperature $temperature \
   --space "$space" \
   --nbest $nbest \
   --dump-nbest $log_dir/beam${beam_size}.JOB.${nbest}best \

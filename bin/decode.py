@@ -93,7 +93,8 @@ def run(args):
                                   nbest=args.nbest,
                                   max_len=args.max_len,
                                   lm_weight=args.lm_weight,
-                                  normalized=args.normalized)
+                                  normalized=args.normalized,
+                                  temperature=args.temperature)
         nbest = [f"{key}\n"]
         for idx, hyp in enumerate(nbest_hypos):
             score = hyp["score"]
@@ -159,6 +160,11 @@ if __name__ == "__main__":
                         type=float,
                         default=0.1,
                         help="LM score weight used in shallow fusion")
+    parser.add_argument("--temperature",
+                        type=float,
+                        default=1,
+                        help="Temperature value used to smooth "
+                        "the acoustic scores")
     parser.add_argument("--dict",
                         type=str,
                         default="",

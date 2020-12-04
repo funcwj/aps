@@ -73,7 +73,8 @@ def test_asr_transform(wav, feats, shape):
                              frame_len=400,
                              frame_hop=160,
                              pre_emphasis=0.96,
-                             aug_prob=0.2)
+                             aug_prob=0.2,
+                             aug_mask_zero=False)
     feats, _ = transform(th.from_numpy(wav[None, ...]), None)
     assert feats.shape == th.Size(shape)
     assert th.sum(th.isnan(feats)) == 0

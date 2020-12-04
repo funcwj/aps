@@ -209,7 +209,8 @@ class PyTorchRNNDecoder(nn.Module):
                     max_len: int = -1,
                     sos: int = -1,
                     eos: int = -1,
-                    normalized: bool = True) -> List[Dict]:
+                    normalized: bool = True,
+                    temperature: float = 1) -> List[Dict]:
         """
         Vectorized beam search algothrim (see batch version beam_search_batch)
         Args
@@ -264,7 +265,7 @@ class PyTorchRNNDecoder(nn.Module):
                                                                att_ali=att_ali,
                                                                proj=proj[point])
             # compute prob: beam x V, nagetive
-            prob = F.log_softmax(pred, dim=-1)
+            prob = F.log_softmax(pred / temperature, dim=-1)
 
             if lm:
                 # adjust order
@@ -334,13 +335,10 @@ class PyTorchRNNDecoder(nn.Module):
                                                    eos=eos)
                     hypos += hyp_partial
 
-        if normalized:
-            nbest_hypos = sorted(hypos,
-                                 key=lambda n: n["score"] /
-                                 (len(n["trans"]) - 1),
-                                 reverse=True)
-        else:
-            nbest_hypos = sorted(hypos, key=lambda n: n["score"], reverse=True)
+        nbest_hypos = sorted(hypos,
+                             key=lambda n: n["score"] / (len(n["trans"]) - 1
+                                                         if normalized else 1),
+                             reverse=True)
         return nbest_hypos[:nbest]
 
     def beam_search_batch(self,
@@ -354,7 +352,8 @@ class PyTorchRNNDecoder(nn.Module):
                           max_len: int = -1,
                           sos: int = -1,
                           eos: int = -1,
-                          normalized: bool = True) -> List[Dict]:
+                          normalized: bool = True,
+                          temperature: float = 1) -> List[Dict]:
         """
         Batch level vectorized beam search algothrim (NOTE: not stable!)
         Args
@@ -413,7 +412,7 @@ class PyTorchRNNDecoder(nn.Module):
                                                                att_ali=att_ali,
                                                                proj=proj[point])
             # compute prob: N*beam x V, nagetive
-            prob = F.log_softmax(pred, dim=-1)
+            prob = F.log_softmax(pred / temperature, dim=-1)
 
             if lm:
                 # adjust order
@@ -499,13 +498,9 @@ class PyTorchRNNDecoder(nn.Module):
 
         nbest_hypos = []
         for utt_bypos in hypos:
-            if normalized:
-                hypos = sorted(utt_bypos,
-                               key=lambda n: n["score"] / (len(n["trans"]) - 1),
-                               reverse=True)
-            else:
-                hypos = sorted(utt_bypos,
-                               key=lambda n: n["score"],
-                               reverse=True)
+            hypos = sorted(utt_bypos,
+                           key=lambda n: n["score"] / (len(n["trans"]) - 1
+                                                       if normalized else 1),
+                           reverse=True)
             nbest_hypos.append(hypos[:nbest])
         return nbest_hypos

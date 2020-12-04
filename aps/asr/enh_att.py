@@ -102,10 +102,11 @@ class EnhAttASR(nn.Module):
                     beam: int = 16,
                     nbest: int = 8,
                     max_len: int = -1,
-                    normalized: bool = True) -> List[Dict]:
+                    normalized: bool = True,
+                    temperature: float = 1) -> List[Dict]:
         """
         Args
-            x: C x S
+            x (Tensor): C x S
         """
         with th.no_grad():
             if x.dim() != 2:
@@ -117,7 +118,34 @@ class EnhAttASR(nn.Module):
                                             beam=beam,
                                             nbest=nbest,
                                             max_len=max_len,
-                                            normalized=normalized)
+                                            normalized=normalized,
+                                            temperature=temperature)
+
+    def beam_search_batch(self,
+                          x: th.Tensor,
+                          x_len: Optional[th.Tensor],
+                          lm: Optional[nn.Module] = None,
+                          lm_weight: float = 0,
+                          beam: int = 16,
+                          nbest: int = 8,
+                          max_len: int = -1,
+                          normalized: bool = True,
+                          temperature: float = 1) -> List[Dict]:
+        """
+        Args
+            x (Tensor): N x C x S
+        """
+        with th.no_grad():
+            x_enh, x_len = self._enhance(x, x_len)
+            return self.las_asr.beam_search_batch(x_enh,
+                                                  x_len,
+                                                  lm=lm,
+                                                  lm_weight=lm_weight,
+                                                  beam=beam,
+                                                  nbest=nbest,
+                                                  max_len=max_len,
+                                                  normalized=normalized,
+                                                  temperature=temperature)
 
 
 @ApsRegisters.asr.register("mvdr_att")
