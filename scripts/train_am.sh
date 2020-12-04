@@ -30,7 +30,7 @@ conf=conf/$data/$exp_id.yaml
 [ ! -f $dict ] && echo "$0: missing dictionary $dict" && exit 1
 [ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
 
-bin/train_am.py \
+cmd/train_am.py \
   --conf $conf \
   --dict $dict \
   --seed $seed \

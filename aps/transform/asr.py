@@ -323,7 +323,7 @@ class SpecAugTransform(nn.Module):
             if self.mask_zero:
                 x = x * mask
             else:
-                x = th.masked_fill(x, mask, x.mean())
+                x = th.masked_fill(x, mask == 0, x.mean())
         return x
 
 

@@ -40,7 +40,7 @@ mkdir -p $dec_dir
 [ ! -z $log_suffix ] && log_suffix=${log_suffix}.
 
 if [ $batch_size -eq 1 ]; then
-  bin/decode.py \
+  cmd/decode.py \
     $tst_scp \
     $dec_dir/beam${beam_size}.decode \
     --beam-size $beam_size \
@@ -58,7 +58,7 @@ if [ $batch_size -eq 1 ]; then
     --normalized $normalized \
     > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
 else
-  bin/decode_batch.py \
+  cmd/decode_batch.py \
     $tst_scp \
     $dec_dir/beam${beam_size}.decode \
     --beam-size $beam_size \

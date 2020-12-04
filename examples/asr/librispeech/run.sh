@@ -94,7 +94,7 @@ if [ $stage -le 4 ]; then
       exp/librispeech/$wp_name \
       > exp/librispeech/$am_exp/$data/beam$beam_size.decode.final
     # WER
-    ./bin/compute_wer.py \
+    ./cmd/compute_wer.py \
       exp/librispeech/$am_exp/$data/beam$beam_size.decode.final \
       data/librispeech/$data/text
   done
@@ -151,7 +151,7 @@ if [ $stage -le 7 ]; then
       exp/librispeech/$subdir/$wp_name \
       > exp/librispeech/$subdir/beam$beam_size.decode.final
     # WER
-    ./bin/compute_wer.py \
+    ./cmd/compute_wer.py \
       exp/librispeech/$subdir/beam$beam_size.decode.final \
       data/librispeech/$name/text
   done

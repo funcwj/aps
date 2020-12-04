@@ -59,6 +59,6 @@ if [ $stage -le 3 ]; then
     data/timit/test/wav.scp \
     exp/timit/$exp/dec
   # wer
-  ./bin/compute_wer.py exp/timit/$exp/dec/beam${beam_size}.decode \
+  ./cmd/compute_wer.py exp/timit/$exp/dec/beam${beam_size}.decode \
     data/timit/test/text
 fi

@@ -26,21 +26,21 @@ prog_interval=50
 [ $stage -le 1 ] && local/prep_data.sh --dataset $dataset $chime4_data $cache_dir
 
 if [ $stage -le 2 ]; then
-    ./scripts/train_ss.sh \
-        --gpu $gpu --seed $seed \
-        --epochs $epochs --batch-size $batch_size \
-        --num-workers $num_workers \
-        --eval-interval $eval_interval \
-        --save-interval $save_interval \
-        --prog-interval $prog_interval \
-        --tensorboard $tensorboard \
-        $dataset $exp
-    echo "$0: Train model done under exp/$dataset/$exp"
+  ./scripts/train_ss.sh \
+    --gpu $gpu --seed $seed \
+    --epochs $epochs --batch-size $batch_size \
+    --num-workers $num_workers \
+    --eval-interval $eval_interval \
+    --save-interval $save_interval \
+    --prog-interval $prog_interval \
+    --tensorboard $tensorboard \
+    $dataset $exp
+  echo "$0: Train model done under exp/$dataset/$exp"
 fi
 
 if [ $stage -le 3 ]; then
-    ./local/eval.py \
-        --checkpoint exp/$dataset/$exp \
-        --sr 16000 \
-        data/$dataset/tst.scp exp/$dataset/$exp/mask
+  ./local/eval.py \
+    --checkpoint exp/$dataset/$exp \
+    --sr 16000 \
+    data/$dataset/tst.scp exp/$dataset/$exp/mask
 fi

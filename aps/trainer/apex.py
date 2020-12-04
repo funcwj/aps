@@ -135,6 +135,10 @@ class ApexTrainer(Trainer):
             norm = clip_grad_norm_(apex.amp.master_params(self.optimizer),
                                    self.clip_gradient)
 
+        # add noise if needed
+        if self.weight_noise_adder:
+            self.weight_noise_adder(self.task)
+
         # step optimizer and update statistics
         if math.isfinite(norm):
             self.optimizer.step()
@@ -142,9 +146,6 @@ class ApexTrainer(Trainer):
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
             self.reporter.update(stats)
-            # add noise if needed
-            if self.weight_noise_adder:
-                self.weight_noise_adder(self.task)
             self.lr_scheduler_step(None, end_at="step")
             return True
         else:

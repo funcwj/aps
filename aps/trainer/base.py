@@ -541,6 +541,10 @@ class Trainer(object):
         if self.clip_gradient:
             norm = clip_grad_norm_(self.task.parameters(), self.clip_gradient)
 
+        # add noise if needed
+        if self.weight_noise_adder:
+            self.weight_noise_adder(self.task)
+
         # step optimizer and update statistics
         if math.isfinite(norm):
             self.optimizer.step()
@@ -548,9 +552,6 @@ class Trainer(object):
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
             self.reporter.update(stats)
-            # add noise if needed
-            if self.weight_noise_adder:
-                self.weight_noise_adder(self.task)
             # schedule lr if needed
             self.lr_scheduler_step(None, end_at="step")
             return True
@@ -760,8 +761,10 @@ class Trainer(object):
         """
         Entry of the Trainer class
         """
+        trn_batches = len(trn_loader) if len(trn_loader) else "unknown"
+        dev_batches = len(dev_loader) if len(dev_loader) else "unknown"
         self.reporter.log(
-            f"Number of batches: {len(trn_loader)}/{len(dev_loader)}")
+            f"Number of batches (train/valid): {trn_batches}/{dev_batches}")
         self.prep_run(dev_loader)
         if eval_interval > 0:
             done_epoch = self.run_in_batch(trn_loader,

@@ -40,7 +40,7 @@ case $distributed in
       --nproc_per_node $num_process \
       --master_port $port \
       --use_env \
-      bin/distributed_train_ss.py \
+      cmd/distributed_train_ss.py \
       --conf $conf \
       --seed $seed \
       --device-ids $gpu \
@@ -58,7 +58,7 @@ case $distributed in
     ;;
   "horovod" )
     horovodrun -np $num_process -H localhost:$num_process \
-      python bin/distributed_train_ss.py \
+      python cmd/distributed_train_ss.py \
       --conf $conf \
       --seed $seed \
       --device-ids $gpu \

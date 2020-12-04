@@ -47,7 +47,7 @@ if [ $stage -le 3 ]; then
 		$dataset $exp \
 		data/$name/tst/wav.scp \
 		exp/$dataset/$exp/$name
-	./bin/compute_wer.py \
+	./cmd/compute_wer.py \
 		exp/$dataset/$exp/$name/beam${beam_size}.decode \
 		data/$name/tst/text
 	done

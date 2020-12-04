@@ -41,7 +41,7 @@ case $distributed in
       --nproc_per_node $num_process \
       --master_port $port \
       --use_env \
-      bin/distributed_train_am.py \
+      cmd/distributed_train_am.py \
       --conf $conf \
       --dict $dict \
       --seed $seed \
@@ -59,7 +59,7 @@ case $distributed in
     ;;
   "horovod" )
     horovodrun -np $num_process -H localhost:$num_process \
-      python bin/distributed_train_am.py \
+      python cmd/distributed_train_am.py \
         --conf $conf \
         --dict $dict \
         --seed $seed \

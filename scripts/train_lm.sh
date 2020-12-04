@@ -30,7 +30,7 @@ conf=conf/$data/nnlm/$exp_id.yaml
 [ ! -f $dict ] && echo "$0: missing dictionary $dict" && exit 1
 [ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
 
-python bin/train_lm.py \
+cmd/train_lm.py \
   --conf $conf \
   --dict $dict \
   --seed $seed \

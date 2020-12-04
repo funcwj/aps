@@ -11,7 +11,7 @@ from torch.nn import TransformerDecoder, TransformerDecoderLayer
 from typing import Union, Optional, List, Dict
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
-from aps.asr.base.decoder import trace_back_hypos
+from aps.asr.base.decoder import trace_back_hypos, adjust_hidden_states
 from aps.const import NEG_INF
 
 
@@ -171,14 +171,9 @@ class TorchTransformerDecoder(nn.Module):
 
                 # add LM score
                 if lm:
-                    if lm_state is not None:
-                        if isinstance(lm_state, tuple):
-                            # shape in
-                            # num_layers * num_directions, batch, hidden_size
-                            h, c = lm_state
-                            lm_state = (h[:, point], c[:, point])
-                        else:
-                            lm_state = lm_state[:, point]
+                    # adjust lm states
+                    lm_state = adjust_hidden_states(point, lm_state)
+                    # LM prediction
                     lm_prob, lm_state = lm(pre_out[:, -1:], lm_state)
                     # beam x V
                     prob += F.log_softmax(lm_prob[:, -1], dim=-1) * lm_weight
@@ -251,13 +246,8 @@ class TorchTransformerDecoder(nn.Module):
                     if t == max_len - 1:
                         hypos += hyp_partial
 
-            if normalized:
-                nbest_hypos = sorted(hypos,
-                                     key=lambda n: n["score"] /
-                                     (len(n["trans"]) - 1),
-                                     reverse=True)
-            else:
-                nbest_hypos = sorted(hypos,
-                                     key=lambda n: n["score"],
-                                     reverse=True)
+            nbest_hypos = sorted(hypos,
+                                 key=lambda n: n["score"] /
+                                 (len(n["trans"]) - 1 if normalized else 1),
+                                 reverse=True)
             return nbest_hypos[:nbest]

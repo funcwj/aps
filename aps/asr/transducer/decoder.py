@@ -49,12 +49,10 @@ def _prep_nbest(container: Union[List, PriorityQueue],
     else:
         beam_hypos = container
     # return best
-    if normalized:
-        nbest_hypos = sorted(beam_hypos,
-                             key=lambda n: n["score"] / (len(n["trans"]) - 1),
-                             reverse=True)
-    else:
-        nbest_hypos = sorted(beam_hypos, key=lambda n: n["score"], reverse=True)
+    nbest_hypos = sorted(beam_hypos,
+                         key=lambda n: n["score"] / (len(n["trans"]) - 1
+                                                     if normalized else 1),
+                         reverse=True)
     return nbest_hypos[:nbest]
 
 

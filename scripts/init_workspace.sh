@@ -11,7 +11,7 @@ name=$1
 
 mkdir -p {conf,data}/$name
 
-[ ! -s bin ] && ln -s $APS_ROOT/bin
+[ ! -s cmd ] && ln -s $APS_ROOT/cmd
 [ ! -s utils ] && ln -s $APS_ROOT/utils
 [ ! -s scripts ] && ln -s $APS_ROOT/scripts
 

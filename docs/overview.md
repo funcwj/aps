@@ -4,7 +4,7 @@ There is no `setup.py` script for installing the package in the repository and a
 
 A typical working directory looks like:
 ```bash
-bin conf data exp scripts utils
+cmd conf data exp scripts utils
 ```
 and it can be initialized using `scripts/init_workspace.sh`, e.g.,
 ```bash
@@ -15,7 +15,7 @@ $APS_ROOT/scripts/init_workspace.sh aishell_v1
 will make directory current `workspace` like (`APS_ROOT=../aps`):
 ```
 .
-├── bin -> ../aps/bin
+├── cmd -> ../aps/cmd
 ├── conf
 │   ├── wsj0_2mix
 │   └── aishell_v1
@@ -38,7 +38,7 @@ E.g., running
 will load `.yaml` configuration from `conf/aishell_v1/1a.yaml` and create checkpoint directory in `exp/aishell_v1/1a`. After one epoch is done, the directory looks like:
 ```
 .
-├── bin -> ../aps/bin
+├── cmd -> ../aps/cmd
 ├── conf
 │   ├── aishell_v1
 │   │   └── 1a.yaml
