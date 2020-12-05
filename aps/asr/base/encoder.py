@@ -184,13 +184,13 @@ class VariantRNNEncoder(EncoderBase):
                  inp_features: int,
                  out_features: int,
                  rnn: str = "lstm",
+                 hidden: int = 512,
                  num_layers: int = 3,
                  bidirectional: bool = True,
                  dropout: float = 0.0,
-                 hidden: int = 512,
                  project: Optional[int] = None,
                  layernorm: bool = False,
-                 use_pyramid: bool = False,
+                 pyramid_stack: bool = False,
                  add_forward_backward: bool = False):
         super(VariantRNNEncoder, self).__init__(inp_features, out_features)
 
@@ -207,7 +207,7 @@ class VariantRNNEncoder(EncoderBase):
                     in_size = hidden
                     if bidirectional and not add_forward_backward:
                         in_size = in_size * 2
-                if use_pyramid:
+                if pyramid_stack:
                     in_size = in_size * 2
             return in_size
 
@@ -223,7 +223,7 @@ class VariantRNNEncoder(EncoderBase):
                 add_forward_backward=add_forward_backward)
             for i in range(num_layers)
         ])
-        self.use_pyramid = use_pyramid
+        self.pyramid_stack = pyramid_stack
 
     def _subsample_concat(self, inp: th.Tensor,
                           inp_len: Optional[th.Tensor]) -> EncRetType:
@@ -247,7 +247,7 @@ class VariantRNNEncoder(EncoderBase):
             out_len (Tensor or None): (N) x To
         """
         for i, layer in enumerate(self.enc_layers):
-            if i != 0 and self.use_pyramid:
+            if i != 0 and self.pyramid_stack:
                 inp, inp_len = self._subsample_concat(inp, inp_len)
             inp = layer(inp, inp_len)
         return inp, inp_len

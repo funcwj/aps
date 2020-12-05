@@ -526,6 +526,7 @@ class Trainer(object):
         3) Clip Gradient
         4) Step optimizer
         """
+        self.reporter.log(f"step {self.cur_step}")
         self.optimizer.zero_grad()
 
         stats = self.task(egs)

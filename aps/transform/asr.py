@@ -26,6 +26,30 @@ from aps.libs import ApsRegisters
 from kaldi_python_io.functional import read_kaldi_mat
 
 
+class PreEmphasisTransform(nn.Module):
+    """
+    Do audio level preemphasis
+    """
+
+    def __init__(self, pre_emphasis: float = 0) -> None:
+        super(PreEmphasisTransform, self).__init__()
+        self.pre_emphasis = pre_emphasis
+
+    def extra_repr(self) -> str:
+        return f"pre_emphasis={self.pre_emphasis}"
+
+    def forward(self, s: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            s (Tensor): input signal, N x (C) x S
+        Return:
+            s (Tensor): output signal, N x (C) x S
+        """
+        if self.pre_emphasis > 0:
+            s[..., 1:] = s[..., 1:] - self.pre_emphasis * s[..., :-1]
+        return s
+
+
 class SpectrogramTransform(STFT):
     """
     Compute spectrogram as a layer
@@ -40,7 +64,7 @@ class SpectrogramTransform(STFT):
                  normalized: bool = False,
                  onesided: bool = True,
                  mode: str = "librosa",
-                 pre_emphasis: float = 0) -> None:
+                 use_power: bool = False) -> None:
         super(SpectrogramTransform,
               self).__init__(frame_len,
                              frame_hop,
@@ -50,7 +74,7 @@ class SpectrogramTransform(STFT):
                              normalized=normalized,
                              onesided=onesided,
                              mode=mode)
-        self.pre_emphasis = pre_emphasis
+        self.use_power = use_power
 
     def dim(self):
         return self.num_bins
@@ -59,7 +83,7 @@ class SpectrogramTransform(STFT):
         return self.num_frames(xlen)
 
     def extra_repr(self) -> str:
-        return self.expr + f", pre_emphasis={self.pre_emphasis}"
+        return self.expr + f", use_power={self.use_power}"
 
     def forward(self, x: th.Tensor) -> th.Tensor:
         """
@@ -68,10 +92,10 @@ class SpectrogramTransform(STFT):
         Return:
             m (Tensor): magnitude, N x (C) x T x F
         """
-        if self.pre_emphasis > 0:
-            x[..., 1:] = x[..., 1:] - self.pre_emphasis * x[..., :-1]
         m, _ = super().forward(x)
         m = th.transpose(m, -1, -2)
+        if self.use_power:
+            m = m**2
         return m
 
 
@@ -97,6 +121,24 @@ class AbsTransform(nn.Module):
         if not isinstance(x, th.Tensor):
             x = x + self.eps
         return x.abs()
+
+
+class PowerTransform(nn.Module):
+    """
+    Power transform
+    """
+
+    def __init__(self) -> None:
+        super(PowerTransform, self).__init__()
+
+    def forward(self, x: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            x (Tensor): N x T x F
+        Return:
+            y (Tensor): N x T x F
+        """
+        return x**2
 
 
 class MelTransform(nn.Module):
@@ -129,8 +171,8 @@ class MelTransform(nn.Module):
         return self.num_mels
 
     def extra_repr(self) -> str:
-        return "fmin={0}, fmax={1}, mel_filter={2[0]}x{2[1]}".format(
-            self.fmin, self.fmax, self.filters.shape)
+        return ("fmin={0}, fmax={1}, mel_filter={2[0]}x{2[1]}".format(
+            self.fmin, self.fmax, self.filters.shape))
 
     def forward(self, x: th.Tensor) -> th.Tensor:
         """
@@ -152,15 +194,16 @@ class LogTransform(nn.Module):
     Transform linear domain to log domain
     """
 
-    def __init__(self, eps: float = 1e-5) -> None:
+    def __init__(self, eps: float = 1e-5, lower_bound: float = 0) -> None:
         super(LogTransform, self).__init__()
         self.eps = eps
+        self.lower_bound = lower_bound
 
     def dim_scale(self) -> int:
         return 1
 
     def extra_repr(self) -> str:
-        return f"eps={self.eps:.3e}"
+        return f"eps={self.eps:.3e}, lower_bound={self.lower_bound}"
 
     def forward(self, x: th.Tensor) -> th.Tensor:
         """
@@ -169,7 +212,10 @@ class LogTransform(nn.Module):
         Return:
             y (Tensor): log features, N x (C) x T x F
         """
-        x = th.clamp(x, min=self.eps)
+        if self.lower_bound:
+            x = self.lower_bound + x
+        else:
+            x = th.clamp(x, min=self.eps)
         return th.log(x)
 
 
@@ -415,7 +461,9 @@ class DeltaTransform(nn.Module):
 class FeatureTransform(nn.Module):
     """
     Feature transform for ASR tasks
-        - Spectrogram
+        - PreEmphasisTransform
+        - SpectrogramTransform
+        - PowerTransform
         - MelTransform
         - AbsTransform
         - LogTransform
@@ -436,7 +484,9 @@ class FeatureTransform(nn.Module):
                  stft_normalized: bool = False,
                  stft_mode: str = "librosa",
                  pre_emphasis: float = 0,
+                 use_power: bool = False,
                  sr: int = 16000,
+                 log_lower_bound: float = 0,
                  num_mels: int = 80,
                  num_ceps: int = 13,
                  lifter: float = 0,
@@ -464,57 +514,54 @@ class FeatureTransform(nn.Module):
             "mode": stft_mode,
             "window": window,
             "center": center,
+            "use_power": use_power,
             "normalized": stft_normalized,
             "round_pow_of_two": round_pow_of_two
         }
-        for tok in trans_tokens:
-            if tok == "spectrogram":
+        mel_kwargs = {
+            "round_pow_of_two": round_pow_of_two,
+            "sr": sr,
+            "num_mels": num_mels,
+            "requires_grad": requires_grad
+        }
+        self.spec_index = -1
+        for idx, tok in enumerate(trans_tokens):
+            if tok == "emph":
                 transform.append(
-                    SpectrogramTransform(frame_len,
-                                         frame_hop,
-                                         **stft_kwargs,
-                                         pre_emphasis=pre_emphasis))
+                    PreEmphasisTransform(pre_emphasis=pre_emphasis))
+            elif tok == "spectrogram":
+                transform.append(
+                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs))
                 feats_dim = transform[-1].dim()
+                self.spec_index = idx
+            elif tok == "power":
+                transform.append(PowerTransform())
             elif tok == "fbank":
                 fbank = [
-                    SpectrogramTransform(frame_len,
-                                         frame_hop,
-                                         **stft_kwargs,
-                                         pre_emphasis=pre_emphasis),
-                    MelTransform(frame_len,
-                                 round_pow_of_two=round_pow_of_two,
-                                 sr=sr,
-                                 num_mels=num_mels,
-                                 requires_grad=requires_grad)
+                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    MelTransform(frame_len, **mel_kwargs)
                 ]
+                self.spec_index = idx
                 transform += fbank
                 feats_dim = transform[-1].dim()
             elif tok == "mfcc":
-                log_fbank = [
-                    SpectrogramTransform(frame_len,
-                                         frame_hop,
-                                         **stft_kwargs,
-                                         pre_emphasis=pre_emphasis),
-                    MelTransform(frame_len,
-                                 round_pow_of_two=round_pow_of_two,
-                                 sr=sr,
-                                 num_mels=num_mels),
+                mfcc = [
+                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    MelTransform(frame_len, **mel_kwargs),
                     LogTransform(eps=eps),
                     DiscreteCosineTransform(num_ceps=num_ceps,
                                             num_mels=num_mels,
                                             lifter=lifter)
                 ]
-                transform += log_fbank
+                self.spec_index = idx
+                transform += mfcc
                 feats_dim = transform[-1].dim()
             elif tok == "mel":
-                transform.append(
-                    MelTransform(frame_len,
-                                 round_pow_of_two=round_pow_of_two,
-                                 sr=sr,
-                                 num_mels=num_mels))
+                transform.append(MelTransform(frame_len, **mel_kwargs))
                 feats_dim = transform[-1].dim()
             elif tok == "log":
-                transform.append(LogTransform(eps=eps))
+                transform.append(
+                    LogTransform(eps=eps, lower_bound=log_lower_bound))
             elif tok == "abs":
                 transform.append(AbsTransform(eps=eps))
             elif tok == "dct":
@@ -557,10 +604,10 @@ class FeatureTransform(nn.Module):
         """
         Work out number of frames
         """
-        if not isinstance(self.transform[0], SpectrogramTransform):
-            raise RuntimeError(
-                "0-th layer of transform is not SpectrogramTransform")
-        return self.transform[0].len(wav_len)
+        if self.spec_index == -1:
+            raise RuntimeError("No SpectrogramTransform layer is found, "
+                               "can not work out number of the frames")
+        return self.transform[self.spec_index].len(wav_len)
 
     def forward(
             self, wav_pad: th.Tensor, wav_len: Optional[th.Tensor]

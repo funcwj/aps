@@ -7,10 +7,9 @@ import random
 
 import torch as th
 import torch.nn as nn
-import torch.nn.functional as F
 
 from typing import Optional, Tuple, Union
-from aps.asr.base.layers import OneHotEmbedding, PyTorchRNN
+from aps.asr.base.layers import OneHotEmbedding, PyTorchRNN, DropoutRNN
 from aps.asr.beam_search.lm import adjust_hidden
 
 HiddenType = Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]
@@ -25,25 +24,33 @@ class PyTorchRNNDecoder(nn.Module):
                  enc_proj: int,
                  vocab_size: int,
                  dec_rnn: str = "lstm",
+                 dropout_on: str = "state",
                  rnn_layers: int = 3,
                  rnn_hidden: int = 512,
                  rnn_dropout: float = 0.0,
+                 emb_dropout: float = 0.0,
+                 dropout: float = 0.0,
                  input_feeding: bool = False,
                  vocab_embeded: bool = True) -> None:
         super(PyTorchRNNDecoder, self).__init__()
+        dropout_rnn_cls = {"state": PyTorchRNN, "input": DropoutRNN}
+        if dropout_on not in dropout_rnn_cls:
+            raise ValueError(f"Unsupported dropout_on: {dropout_on}")
         if vocab_embeded:
-            self.vocab_embed = nn.Embedding(vocab_size, rnn_hidden)
+            self.vocab_embed = nn.Sequential(
+                nn.Embedding(vocab_size, rnn_hidden), nn.Dropout(p=emb_dropout))
             input_size = enc_proj + rnn_hidden
         else:
             self.vocab_embed = OneHotEmbedding(vocab_size)
             input_size = enc_proj + vocab_size
-        self.decoder = PyTorchRNN(dec_rnn,
-                                  input_size,
-                                  rnn_hidden,
-                                  rnn_layers,
-                                  dropout=rnn_dropout,
-                                  bidirectional=False)
-        self.proj = nn.Linear(rnn_hidden + enc_proj, enc_proj)
+        self.decoder = dropout_rnn_cls[dropout_on](dec_rnn,
+                                                   input_size,
+                                                   rnn_hidden,
+                                                   rnn_layers,
+                                                   dropout=rnn_dropout,
+                                                   bidirectional=False)
+        self.proj = nn.Sequential(nn.Linear(rnn_hidden + enc_proj, enc_proj),
+                                  nn.ReLU(), nn.Dropout(p=dropout))
         self.pred = nn.Linear(enc_proj, vocab_size)
         self.input_feeding = input_feeding
         self.vocab_size = vocab_size
@@ -100,7 +107,7 @@ class PyTorchRNNDecoder(nn.Module):
         # proj: N x D_enc
         proj = self.proj(th.cat([dec_out, att_ctx], dim=-1))
         # pred: N x V
-        pred = self.pred(F.relu(proj))
+        pred = self.pred(proj)
         return pred, att_ctx, dec_hid, att_ali, proj
 
     def forward(self,

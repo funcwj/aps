@@ -10,6 +10,8 @@ import torch.nn.functional as tf
 from typing import Optional, Tuple, Union, NoReturn
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
+HiddenType = Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]
+
 
 class OneHotEmbedding(nn.Module):
     """
@@ -114,6 +116,105 @@ def PyTorchRNN(mode: str,
                                    num_layers,
                                    nonlinearity="relu",
                                    **kwargs)
+
+
+class InputDropoutRNN(nn.Module):
+    """
+    Avoid applying dropout along time axis (for decoders)
+    """
+
+    def __init__(self,
+                 mode: str,
+                 input_size: int,
+                 hidden_size: int,
+                 bias: bool = True,
+                 dropout: float = 0,
+                 bidirectional: bool = False):
+        super(InputDropoutRNN, self).__init__()
+        self.rnn_pytorch = PyTorchRNN(mode,
+                                      input_size,
+                                      hidden_size,
+                                      num_layers=1,
+                                      dropout=0,
+                                      bidirectional=bidirectional,
+                                      bias=bias)
+        self.dep_dropout = nn.Dropout(p=dropout)
+
+    def forward(
+            self,
+            inp: th.Tensor,
+            hx: Optional[HiddenType] = None) -> Tuple[th.Tensor, HiddenType]:
+        """
+        Args:
+            inp (Tensor): N x T x D
+        Return:
+            out (Tensor): N x T x H
+            hx (Tensor or [Tensor, Tensor]): 1/2 x N x H
+        """
+        out = []
+        # N x 1 x D for each time step
+        for t in range(inp.shape[1]):
+            inp = self.dep_dropout(inp[:, t:t + 1])
+            inp, hx = self.rnn_pytorch(inp, hx)
+            out.append(inp)
+        return th.cat(out, dim=1), hx
+
+
+class DropoutRNN(nn.Module):
+    """
+    Stack of InputDropoutRNN
+    """
+
+    def __init__(self,
+                 mode: str,
+                 input_size: int,
+                 hidden_size: int,
+                 num_layers: int,
+                 dropout: float = 0,
+                 bidirectional: bool = False) -> None:
+        super(DropoutRNN, self).__init__()
+        self.layers = nn.ModuleList([
+            InputDropoutRNN(mode,
+                            input_size if i == 0 else hidden_size,
+                            hidden_size,
+                            dropout=0 if i == 0 else dropout,
+                            bidirectional=bidirectional)
+            for i in range(num_layers)
+        ])
+        self.factor = 2 if bidirectional else 1
+
+    def forward(
+            self,
+            inp: th.Tensor,
+            hx: Optional[HiddenType] = None) -> Tuple[th.Tensor, HiddenType]:
+        """
+        Args:
+            inp (Tensor): N x T x D
+        Return:
+            out (Tensor): N x T x H
+        """
+        states = []
+        for index, layer in enumerate(self.layers):
+            # state: 1 x N x H
+            index = index * self.factor
+            if hx is None:
+                state = None
+            elif isinstance(hx, th.Tensor):
+                state = hx[index:index + self.factor]
+            else:
+                h, c = hx
+                state = (h[index:index + self.factor],
+                         c[index:index + self.factor])
+            inp, state = layer(inp, state)
+            states.append(state)
+        # for RNN/GRU
+        if isinstance(states[0], th.Tensor):
+            states = th.cat(states, 0)
+        else:
+            h = th.cat([s[0] for s in states], 0)
+            c = th.cat([s[1] for s in states], 0)
+            states = (h, c)
+        return inp, states
 
 
 class Conv1d(nn.Module):
@@ -323,51 +424,43 @@ class VariantRNN(nn.Module):
                               1,
                               bidirectional=bidirectional)
         self.add_forward_backward = add_forward_backward and bidirectional
-        self.dropout = nn.Dropout(dropout) if dropout != 0 else None
-        if not add_forward_backward and bidirectional:
+        if bidirectional and not add_forward_backward:
             hidden_size *= 2
+        self.dropout = nn.Dropout(dropout)
         self.norm = nn.LayerNorm(hidden_size) if layernorm else None
         self.proj = nn.Linear(hidden_size,
                               project_size) if project_size else None
 
-    def flat(self):
-        self.rnn.flatten_parameters()
-
-    def forward(self, inp_pad: th.Tensor,
+    def forward(self, inp: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> th.Tensor:
         """
         Args:
-            inp_pad (Tensor): N x Ti x F
+            inp (Tensor): N x Ti x F
             inp_len (Tensor or None): N
         Return:
             out_pad (Tensor): N x Ti x O
         """
         if inp_len is not None:
-            inp_pad = pack_padded_sequence(inp_pad,
-                                           inp_len,
-                                           batch_first=True,
-                                           enforce_sorted=False)
+            inp = pack_padded_sequence(inp,
+                                       inp_len,
+                                       batch_first=True,
+                                       enforce_sorted=False)
         else:
-            if inp_pad.dim() not in [2, 3]:
-                raise RuntimeError("VariantRNN expect input dim as 2 or 3, " +
-                                   f"got {inp_pad.dim()}")
-            if inp_pad.dim() != 3:
-                inp_pad = th.unsqueeze(inp_pad, 0)
-        y, _ = self.rnn(inp_pad)
+            if inp.dim() != 3:
+                inp = th.unsqueeze(inp, 0)
+        out, _ = self.rnn(inp)
         # N x T x D
         if inp_len is not None:
-            y, _ = pad_packed_sequence(y, batch_first=True)
+            out, _ = pad_packed_sequence(out, batch_first=True)
         # add forward & backward
         if self.add_forward_backward:
-            f, b = th.chunk(y, 2, dim=-1)
-            y = f + b
+            out = sum(th.chunk(out, -1, dim=-1))
         # add ln
         if self.norm:
-            y = self.norm(y)
+            out = self.norm(out)
         # dropout
-        if self.dropout:
-            y = self.dropout(y)
+        out = self.dropout(out)
         # proj
         if self.proj:
-            y = self.proj(y)
-        return y
+            out = self.proj(out)
+        return out

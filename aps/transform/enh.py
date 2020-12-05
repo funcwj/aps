@@ -13,7 +13,8 @@ import torch.nn as nn
 from torch_complex.tensor import ComplexTensor
 from typing import Union, List, Optional, Tuple
 from aps.transform.utils import STFT, iSTFT
-from aps.transform.asr import LogTransform, AbsTransform, CmvnTransform, SpecAugTransform
+from aps.transform.asr import (LogTransform, AbsTransform, PowerTransform,
+                               CmvnTransform, SpecAugTransform)
 from aps.const import MATH_PI, EPSILON
 from aps.libs import ApsRegisters
 
@@ -316,6 +317,7 @@ class FeatureTransform(nn.Module):
                  stft_normalized: bool = False,
                  stft_mode: str = "librosa",
                  center: bool = False,
+                 use_power: bool = False,
                  sr: int = 16000,
                  gcmvn: str = "",
                  norm_mean: bool = True,
@@ -354,6 +356,8 @@ class FeatureTransform(nn.Module):
                 feats_dim = self.forward_stft.num_bins
             if tok == "spectrogram":
                 transform.append(AbsTransform(eps=EPSILON))
+                if use_power:
+                    transform.append(PowerTransform())
             elif tok == "log":
                 transform.append(LogTransform(eps=EPSILON))
             elif tok == "cmvn":

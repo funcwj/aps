@@ -2,7 +2,9 @@
 
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
-
+"""
+Beam search for attention based encoder/decoder AM
+"""
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf

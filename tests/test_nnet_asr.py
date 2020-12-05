@@ -12,6 +12,7 @@ from aps.asr.base.encoder import Conv1dEncoder, Conv2dEncoder
 
 default_rnn_dec_kwargs = {
     "dec_rnn": "lstm",
+    "dropout_on": "input",
     "rnn_layers": 2,
     "rnn_hidden": 512,
     "rnn_dropout": 0.1,
