@@ -7,6 +7,8 @@ __pycache__/
 /bin/debug*
 /local/
 *.log
+*.nbest
+*.decode
 
 /exp/
 /log/

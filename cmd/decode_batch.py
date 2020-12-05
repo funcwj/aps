@@ -79,7 +79,8 @@ def run(args):
     topn = None
     if args.dump_nbest:
         stdout_topn, topn = io_wrapper(args.dump_nbest, "w")
-        topn.write(f"{args.nbest}\n")
+        nbest = min(args.beam_size, args.nbest)
+        topn.write(f"{nbest}\n")
 
     for batch in batches:
         # prepare inputs

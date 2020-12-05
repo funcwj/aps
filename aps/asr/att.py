@@ -11,6 +11,7 @@ from typing import Optional, Dict, Tuple, List
 from aps.asr.base.decoder import PyTorchRNNDecoder
 from aps.asr.base.encoder import encoder_instance
 from aps.asr.base.attention import att_instance
+from aps.asr.beam_search.att import beam_search, beam_search_batch, greedy_search
 from aps.libs import ApsRegisters
 
 _pytorch_decoder = PyTorchRNNDecoder
@@ -85,17 +86,13 @@ class AttASR(nn.Module):
         enc_ctc = self.ctc(enc_out) if self.ctc else None
         return outs, alis, enc_ctc, enc_len
 
-    def beam_search(self,
-                    x: th.Tensor,
-                    lm: Optional[nn.Module] = None,
-                    lm_weight: float = 0,
-                    beam: int = 16,
-                    nbest: int = 8,
-                    max_len: int = -1,
-                    penalty: float = 0,
-                    normalized: bool = True,
-                    temperature: float = 1) -> List[Dict]:
+    def greedy_search(self,
+                      x: th.Tensor,
+                      max_len: int = -1,
+                      normalized: bool = True,
+                      **kwargs) -> List[Dict]:
         """
+        Greedy search (numbers should be same as beam_search with #beam-size == 1)
         Args
             x: audio samples or acoustic features, S or Ti x F
         """
@@ -114,20 +111,56 @@ class AttASR(nn.Module):
                 inp_len = x.shape[0]
                 enc_out, _ = self.encoder(x[None, ...], None)
             max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
-            # clear status
-            self.att_net.clear()
-            return self.decoder.beam_search(self.att_net,
-                                            enc_out,
-                                            beam=beam,
-                                            lm=lm,
-                                            lm_weight=lm_weight,
-                                            nbest=nbest,
-                                            max_len=max_len,
-                                            sos=self.sos,
-                                            eos=self.eos,
-                                            penalty=penalty,
-                                            normalized=normalized,
-                                            temperature=temperature)
+            return greedy_search(self.decoder,
+                                 self.att_net,
+                                 enc_out,
+                                 sos=self.sos,
+                                 eos=self.eos,
+                                 normalized=normalized)
+
+    def beam_search(self,
+                    x: th.Tensor,
+                    lm: Optional[nn.Module] = None,
+                    lm_weight: float = 0,
+                    beam: int = 16,
+                    nbest: int = 8,
+                    max_len: int = -1,
+                    penalty: float = 0,
+                    normalized: bool = True,
+                    temperature: float = 1) -> List[Dict]:
+        """
+        Vectorized beam search
+        Args
+            x (Tensor): audio samples or acoustic features, S or Ti x F
+        """
+        with th.no_grad():
+            if self.asr_transform:
+                if x.dim() != 1:
+                    raise RuntimeError("Now only support for one utterance")
+                x, _ = self.asr_transform(x[None, ...], None)
+                # 1 x C x T x ... or 1 x T x F
+                inp_len = x.shape[-2]
+                enc_out, _ = self.encoder(x, None)
+            else:
+                if x.dim() != 2:
+                    raise RuntimeError("Now only support for one utterance")
+                # Ti x F
+                inp_len = x.shape[0]
+                enc_out, _ = self.encoder(x[None, ...], None)
+            max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
+            return beam_search(self.decoder,
+                               self.att_net,
+                               enc_out,
+                               beam=beam,
+                               lm=lm,
+                               lm_weight=lm_weight,
+                               nbest=nbest,
+                               max_len=max_len,
+                               sos=self.sos,
+                               eos=self.eos,
+                               penalty=penalty,
+                               normalized=normalized,
+                               temperature=temperature)
 
     def beam_search_batch(self,
                           x: th.Tensor,
@@ -141,8 +174,9 @@ class AttASR(nn.Module):
                           normalized=True,
                           temperature: float = 1) -> List[Dict]:
         """
-        args
-            x: audio samples or acoustic features, N x S or N x Ti x F
+        Batch version of beam search (numbers may differ with beam_search)
+        Args
+            x (Tensor): audio samples or acoustic features, N x S or N x Ti x F
         """
         with th.no_grad():
             if self.asr_transform:
@@ -160,18 +194,17 @@ class AttASR(nn.Module):
                 inp_len = x.shape[1]
                 enc_out, enc_len = self.encoder(x, x_len)
             max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
-            # clear status
-            self.att_net.clear()
-            return self.decoder.beam_search_batch(self.att_net,
-                                                  enc_out,
-                                                  enc_len,
-                                                  lm=lm,
-                                                  lm_weight=lm_weight,
-                                                  beam=beam,
-                                                  nbest=nbest,
-                                                  max_len=max_len,
-                                                  sos=self.sos,
-                                                  eos=self.eos,
-                                                  penalty=penalty,
-                                                  normalized=normalized,
-                                                  temperature=temperature)
+            return beam_search_batch(self.decoder,
+                                     self.att_net,
+                                     enc_out,
+                                     enc_len,
+                                     lm=lm,
+                                     lm_weight=lm_weight,
+                                     beam=beam,
+                                     nbest=nbest,
+                                     max_len=max_len,
+                                     sos=self.sos,
+                                     eos=self.eos,
+                                     penalty=penalty,
+                                     normalized=normalized,
+                                     temperature=temperature)
