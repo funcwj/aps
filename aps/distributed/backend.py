@@ -1,5 +1,6 @@
 from os import environ
 from typing import NoReturn
+import torch as th
 import torch.distributed as dist
 
 try:
@@ -33,6 +34,16 @@ def init(backend) -> NoReturn:
                                 world_size=int(environ["WORLD_SIZE"]))
 
 
+def check_backend() -> NoReturn:
+    """
+    Check validity of the backend
+    """
+    if BACKEND not in ["horovod", "torch"]:
+        raise RuntimeError("distributed backend is not initialized")
+    if BACKEND == "horovod" and not hvd_available:
+        raise RuntimeError("horovod not installed!")
+
+
 def get_backend() -> str:
     """
     Get distributed backend
@@ -44,11 +55,8 @@ def rank() -> int:
     """
     Return rank id
     """
-    if BACKEND not in ["horovod", "torch"]:
-        raise RuntimeError("distributed backend is not initialized")
-    if BACKEND == "horovod" and not hvd_available:
-        raise RuntimeError("horovod not installed!")
-    elif BACKEND == "torch":
+    check_backend()
+    if BACKEND == "torch":
         return dist.get_rank()
     else:
         return hvd.local_rank()
@@ -58,11 +66,22 @@ def world_size() -> int:
     """
     Return world size
     """
-    if BACKEND not in ["horovod", "torch"]:
-        raise RuntimeError("distributed backend is not initialized")
-    if BACKEND == "horovod" and not hvd_available:
-        raise RuntimeError("horovod not installed!")
-    elif BACKEND == "torch":
+    check_backend()
+    if BACKEND == "torch":
         return dist.get_world_size()
     else:
         return hvd.size()
+
+
+def all_reduce(tensor: th.Tensor) -> th.Tensor:
+    """
+    Return tensor after all reduce
+    """
+    check_backend()
+    if BACKEND == "torch":
+        # default: sum
+        dist.all_reduce(tensor)
+        return tensor / world_size()
+    else:
+        # default: avg
+        return hvd.allreduce(tensor)

@@ -5,7 +5,7 @@
 
 # 1a.yaml
 #   WER(%) Report:
-#   Total WER: 26.13%, 192 utterances
+#   Total: 26.86%, 192 utterances (1938 errors, 7215 units in total)
 # 1b.yaml (beam-size/4)
 #   WER(%) Report:
 #   Total WER: 25.68%, 192 utterances
@@ -21,7 +21,7 @@ exp=1a # load training configuration in conf/timit/1a.yaml
 seed=777
 epochs=100
 tensorboard=false
-batch_size=8
+batch_size=12
 num_workers=2
 prog_interval=100
 

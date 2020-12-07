@@ -1,11 +1,13 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-from pathlib import Path
+import math
 
 import torch as th
+from torch.nn.utils import clip_grad_norm_
 from torch.nn.parallel import DistributedDataParallel
 from typing import Optional, Dict, List, Union, NoReturn
+from pathlib import Path
 
 from aps.trainer.base import Trainer
 from aps.libs import ApsRegisters
@@ -86,6 +88,53 @@ class DdpTrainer(Trainer):
                                                 device_ids=[self.rank])
         else:
             self.distributed = False
+
+    def train_one_step(self, egs: Dict) -> bool:
+        """
+        Make one training step (return true if no error exists)
+
+        1) Zero optimizer
+        2) Forward & Backword
+        3) Clip Gradient
+        4) Step optimizer
+        """
+        self.optimizer.zero_grad()
+
+        stats = self.task(egs)
+        # use all reduce to check loss
+        if self.distributed:
+            loss = dist.all_reduce(stats["loss"].clone())
+        else:
+            loss = stats["loss"].item()
+        # backward if not nan/inf
+        if math.isfinite(loss):
+            stats["loss"].backward()
+        else:
+            self.reporter.log(f"Invalid loss {loss:.3f}, skip...")
+            return False
+
+        # clip gradient after backward
+        norm = -1
+        if self.clip_gradient:
+            norm = clip_grad_norm_(self.task.parameters(), self.clip_gradient)
+
+        # add noise if needed
+        if self.weight_noise_adder:
+            self.weight_noise_adder(self.task)
+
+        # step optimizer and update statistics
+        if math.isfinite(norm):
+            self.optimizer.step()
+            if norm != -1:
+                stats["norm"] = norm
+            stats["rate"] = self.optimizer.param_groups[0]["lr"]
+            self.reporter.update(stats)
+            # schedule lr if needed
+            self.lr_scheduler_step(None, end_at="step")
+            return True
+        else:
+            self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
+            return False
 
     def model_states(self) -> Dict:
         """

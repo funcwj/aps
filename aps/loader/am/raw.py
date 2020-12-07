@@ -68,6 +68,7 @@ class Dataset(dat.Dataset):
                  vocab_dict: Optional[Dict],
                  sr: int = 16000,
                  channel: int = -1,
+                 audio_norm: bool = True,
                  max_token_num: int = 400,
                  max_wav_dur: float = 30,
                  min_wav_dur: float = 0.4,
@@ -76,7 +77,7 @@ class Dataset(dat.Dataset):
         self.audio_reader = AudioReader(wav_scp,
                                         sr=sr,
                                         channel=channel,
-                                        norm=True)
+                                        norm=audio_norm)
         self.token_reader = TokenReader(text,
                                         utt2dur,
                                         vocab_dict,

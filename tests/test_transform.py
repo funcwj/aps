@@ -63,7 +63,7 @@ def test_with_librosa(wav, frame_len, frame_hop, window, center):
 @pytest.mark.parametrize("wav",
                          [read_audio("data/transform/egs1.wav", sr=16000)])
 @pytest.mark.parametrize("feats,shape", [("spectrogram-log", [1, 807, 257]),
-                                         ("fbank-log-cmvn", [1, 807, 80]),
+                                         ("emph-fbank-log-cmvn", [1, 807, 80]),
                                          ("mfcc", [1, 807, 13]),
                                          ("mfcc-aug", [1, 807, 13]),
                                          ("mfcc-splice", [1, 807, 39]),
@@ -72,8 +72,9 @@ def test_asr_transform(wav, feats, shape):
     transform = AsrTransform(feats=feats,
                              frame_len=400,
                              frame_hop=160,
+                             use_power=True,
                              pre_emphasis=0.96,
-                             aug_prob=0.2,
+                             aug_prob=0.5,
                              aug_mask_zero=False)
     feats, _ = transform(th.from_numpy(wav[None, ...]), None)
     assert feats.shape == th.Size(shape)
@@ -84,7 +85,7 @@ def test_asr_transform(wav, feats, shape):
 @pytest.mark.parametrize("wav",
                          [read_audio("data/transform/egs2.wav", sr=16000)])
 @pytest.mark.parametrize("feats,shape",
-                         [("spectrogram-log-cmvn-ipd", [1, 366, 257 * 5]),
+                         [("spectrogram-log-cmvn-aug-ipd", [1, 366, 257 * 5]),
                           ("ipd", [1, 366, 257 * 4])])
 def test_enh_transform(wav, feats, shape):
     transform = EnhTransform(feats=feats,
@@ -92,9 +93,8 @@ def test_enh_transform(wav, feats, shape):
                              frame_hop=256,
                              ipd_index="0,1;0,2;0,3;0,4",
                              aug_prob=0.2)
-    feats, stft, _ = transform(th.from_numpy(wav[None, ...]),
-                               None,
-                               norm_obs=True)
+    print(transform)
+    feats, stft, _ = transform(th.from_numpy(wav[None, ...]), None)
     assert feats.shape == th.Size(shape)
     assert th.sum(th.isnan(feats)) == 0
     assert stft.shape == th.Size([1, 5, 257, 366])

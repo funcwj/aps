@@ -137,17 +137,29 @@ class UnsupervisedRNNEnh(PyTorchRNNEncoder):
             _, masks = self.forward(noisy)
             return masks[0]
 
+    def _norm_abs(self, obs: ComplexTensor) -> ComplexTensor:
+        """
+        Normalize complex-valued STFTs
+        """
+        mag = obs.abs()
+        pha = obs.angle()
+        mag_norm = th.norm(mag, p=2, dim=1, keepdim=True)
+        mag = mag / th.clamp(mag_norm, min=EPSILON)
+        obs = ComplexTensor(mag * th.cos(pha), mag * th.sin(pha))
+        return obs
+
     def forward(self, noisy: th.Tensor) -> Union[ComplexTensor, th.Tensor]:
         """
         Args
             noisy: N x C x S
         Return
-            cspec (ComplexTensor): N x C x F x T
+            cstft (ComplexTensor): N x C x F x T
             masks (Tensor): N x T x F
         """
         self.check_args(noisy, training=True)
         # feats: N x T x F
         # cspec: N x C x F x T
-        feats, cspec, _ = self.enh_transform(noisy, None, norm_obs=True)
+        feats, cstft, _ = self.enh_transform(noisy, None)
+        cstft = self._norm_abs(cstft)
         masks, _ = super().forward(feats, None)
-        return cspec, masks
+        return cstft, masks

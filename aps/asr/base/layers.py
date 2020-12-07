@@ -131,6 +131,7 @@ class InputDropoutRNN(nn.Module):
                  dropout: float = 0,
                  bidirectional: bool = False):
         super(InputDropoutRNN, self).__init__()
+        self.inp_dropout = nn.Dropout(p=dropout)
         self.rnn_pytorch = PyTorchRNN(mode,
                                       input_size,
                                       hidden_size,
@@ -138,12 +139,13 @@ class InputDropoutRNN(nn.Module):
                                       dropout=0,
                                       bidirectional=bidirectional,
                                       bias=bias)
-        self.dep_dropout = nn.Dropout(p=dropout)
 
     def forward(
             self,
             inp: th.Tensor,
-            hx: Optional[HiddenType] = None) -> Tuple[th.Tensor, HiddenType]:
+            hx: Optional[HiddenType] = None,
+            inp_len: Optional[th.Tensor] = None
+    ) -> Tuple[th.Tensor, HiddenType]:
         """
         Args:
             inp (Tensor): N x T x D
@@ -151,13 +153,16 @@ class InputDropoutRNN(nn.Module):
             out (Tensor): N x T x H
             hx (Tensor or [Tensor, Tensor]): 1/2 x N x H
         """
-        out = []
-        # N x 1 x D for each time step
-        for t in range(inp.shape[1]):
-            inp = self.dep_dropout(inp[:, t:t + 1])
-            inp, hx = self.rnn_pytorch(inp, hx)
-            out.append(inp)
-        return th.cat(out, dim=1), hx
+        inp = self.inp_dropout(inp)
+        if inp_len is not None:
+            inp = pack_padded_sequence(inp,
+                                       inp_len,
+                                       batch_first=True,
+                                       enforce_sorted=False)
+        out, hx = self.rnn_pytorch(inp, hx)
+        if inp_len is not None:
+            out, _ = pad_packed_sequence(out, batch_first=True)
+        return out, hx
 
 
 class DropoutRNN(nn.Module):
@@ -205,7 +210,7 @@ class DropoutRNN(nn.Module):
                 h, c = hx
                 state = (h[index:index + self.factor],
                          c[index:index + self.factor])
-            inp, state = layer(inp, state)
+            inp, state = layer(inp, hx=state)
             states.append(state)
         # for RNN/GRU
         if isinstance(states[0], th.Tensor):
@@ -232,14 +237,14 @@ class Conv1d(nn.Module):
                  dropout: float = 0):
         super(Conv1d, self).__init__()
         padding = (dilation * (kernel_size - 1)) // 2
-        self.conv1d = nn.Conv1d(inp_features,
-                                out_features,
-                                kernel_size,
-                                stride=stride,
-                                dilation=dilation,
-                                padding=padding)
+        self.conv = nn.Conv1d(inp_features,
+                              out_features,
+                              kernel_size,
+                              stride=stride,
+                              dilation=dilation,
+                              padding=padding)
         self.norm = Normalize1d(norm, out_features)
-        self.dropout = nn.Dropout(p=dropout)
+        self.drop = nn.Dropout(p=dropout)
         self.stride = stride
         self.kernel_size = kernel_size
         self.dilation = dilation
@@ -271,9 +276,9 @@ class Conv1d(nn.Module):
         # N x T x F => N x F x T
         inp = inp.transpose(1, 2)
         # conv & norm
-        out = self.norm(self.conv1d(inp))
+        out = self.norm(self.conv(inp))
         # ReLU & dropout
-        out = self.dropout(tf.relu(out))
+        out = self.drop(tf.relu(out))
         return out
 
 
@@ -411,25 +416,23 @@ class VariantRNN(nn.Module):
     def __init__(self,
                  input_size: int,
                  hidden_size: int = 512,
-                 project_size: Optional[int] = None,
                  rnn: str = "lstm",
                  layernorm: bool = False,
+                 project: Optional[int] = None,
                  dropout: float = 0.0,
                  bidirectional: bool = False,
                  add_forward_backward: bool = False):
         super(VariantRNN, self).__init__()
-        self.rnn = PyTorchRNN(rnn,
-                              input_size,
-                              hidden_size,
-                              1,
-                              bidirectional=bidirectional)
+        self.rnn = InputDropoutRNN(rnn,
+                                   input_size,
+                                   hidden_size,
+                                   dropout=dropout,
+                                   bidirectional=bidirectional)
         self.add_forward_backward = add_forward_backward and bidirectional
         if bidirectional and not add_forward_backward:
             hidden_size *= 2
-        self.dropout = nn.Dropout(dropout)
         self.norm = nn.LayerNorm(hidden_size) if layernorm else None
-        self.proj = nn.Linear(hidden_size,
-                              project_size) if project_size else None
+        self.proj = nn.Linear(hidden_size, project) if project else None
 
     def forward(self, inp: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> th.Tensor:
@@ -440,26 +443,14 @@ class VariantRNN(nn.Module):
         Return:
             out_pad (Tensor): N x Ti x O
         """
-        if inp_len is not None:
-            inp = pack_padded_sequence(inp,
-                                       inp_len,
-                                       batch_first=True,
-                                       enforce_sorted=False)
-        else:
-            if inp.dim() != 3:
-                inp = th.unsqueeze(inp, 0)
-        out, _ = self.rnn(inp)
-        # N x T x D
-        if inp_len is not None:
-            out, _ = pad_packed_sequence(out, batch_first=True)
+        out, _ = self.rnn(inp, hx=None, inp_len=inp_len)
         # add forward & backward
         if self.add_forward_backward:
-            out = sum(th.chunk(out, -1, dim=-1))
+            fp, bp = th.chunk(out, -1, dim=-1)
+            out = fp + bp
         # add ln
         if self.norm:
             out = self.norm(out)
-        # dropout
-        out = self.dropout(out)
         # proj
         if self.proj:
             out = self.proj(out)

@@ -26,6 +26,24 @@ from aps.libs import ApsRegisters
 from kaldi_python_io.functional import read_kaldi_mat
 
 
+class TFTransposeTransform(nn.Module):
+    """
+    Swap time/frequency axis
+    """
+
+    def __init__(self):
+        super(TFTransposeTransform, self).__init__()
+
+    def forward(self, s: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            s (Tensor): input signal, N x ... x F x T
+        Return:
+            s (Tensor): output signal, N x ... x T x F
+        """
+        return s.transpose(-1, -2)
+
+
 class PreEmphasisTransform(nn.Module):
     """
     Do audio level preemphasis
@@ -90,13 +108,13 @@ class SpectrogramTransform(STFT):
         Args:
             x (Tensor): input signal, N x (C) x S
         Return:
-            m (Tensor): magnitude, N x (C) x T x F
+            mag (Tensor): magnitude, N x (C) x F x T
         """
-        m, _ = super().forward(x)
-        m = th.transpose(m, -1, -2)
+        # N x (C) x F x T
+        mag, _ = super().forward(x)
         if self.use_power:
-            m = m**2
-        return m
+            mag = mag**2
+        return mag
 
 
 class AbsTransform(nn.Module):
@@ -212,7 +230,7 @@ class LogTransform(nn.Module):
         Return:
             y (Tensor): log features, N x (C) x T x F
         """
-        if self.lower_bound:
+        if self.lower_bound > 0:
             x = self.lower_bound + x
         else:
             x = th.clamp(x, min=self.eps)
@@ -463,6 +481,7 @@ class FeatureTransform(nn.Module):
     Feature transform for ASR tasks
         - PreEmphasisTransform
         - SpectrogramTransform
+        - TFTransposeTransform
         - PowerTransform
         - MelTransform
         - AbsTransform
@@ -489,6 +508,8 @@ class FeatureTransform(nn.Module):
                  log_lower_bound: float = 0,
                  num_mels: int = 80,
                  num_ceps: int = 13,
+                 min_freq: int = 0,
+                 max_freq: Optional[int] = None,
                  lifter: float = 0,
                  aug_prob: float = 0,
                  aug_max_bands: int = 30,
@@ -521,6 +542,8 @@ class FeatureTransform(nn.Module):
         mel_kwargs = {
             "round_pow_of_two": round_pow_of_two,
             "sr": sr,
+            "fmin": min_freq,
+            "fmax": max_freq,
             "num_mels": num_mels,
             "requires_grad": requires_grad
         }
@@ -530,15 +553,21 @@ class FeatureTransform(nn.Module):
                 transform.append(
                     PreEmphasisTransform(pre_emphasis=pre_emphasis))
             elif tok == "spectrogram":
-                transform.append(
-                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs))
-                feats_dim = transform[-1].dim()
+                spectrogram = [
+                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    TFTransposeTransform(),
+                ]
+                transform += spectrogram
+                feats_dim = transform[-2].dim()
                 self.spec_index = idx
+            elif tok == "trans":
+                transform.append(TFTransposeTransform())
             elif tok == "power":
                 transform.append(PowerTransform())
             elif tok == "fbank":
                 fbank = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    TFTransposeTransform(),
                     MelTransform(frame_len, **mel_kwargs)
                 ]
                 self.spec_index = idx
@@ -547,6 +576,7 @@ class FeatureTransform(nn.Module):
             elif tok == "mfcc":
                 mfcc = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    TFTransposeTransform(),
                     MelTransform(frame_len, **mel_kwargs),
                     LogTransform(eps=eps),
                     DiscreteCosineTransform(num_ceps=num_ceps,
@@ -604,10 +634,13 @@ class FeatureTransform(nn.Module):
         """
         Work out number of frames
         """
+        if wav_len is None:
+            return None
         if self.spec_index == -1:
             raise RuntimeError("No SpectrogramTransform layer is found, "
                                "can not work out number of the frames")
-        return self.transform[self.spec_index].len(wav_len)
+        num_frames = self.transform[self.spec_index].len(wav_len)
+        return num_frames / self.subsampling_factor
 
     def forward(
             self, wav_pad: th.Tensor, wav_len: Optional[th.Tensor]
@@ -617,13 +650,12 @@ class FeatureTransform(nn.Module):
             wav_pad (Tensor): raw waveform: N x C x S or N x S
             wav_len (Tensor or None): N or None
         Return:
-            feats_pad (Tensor): acoustic features: N x C x T x ...
+            feats (Tensor): acoustic features: N x C x T x ...
             num_frames (Tensor or None): number of frames
         """
-        feats_pad = self.transform(wav_pad)
-        if wav_len is None:
-            num_frames = None
-        else:
-            num_frames = self.num_frames(wav_len)
-            num_frames = num_frames // self.subsampling_factor
-        return feats_pad, num_frames
+        feats = self.transform(wav_pad)
+        nan_num = th.sum(th.isnan(feats))
+        if nan_num:
+            raise ValueError(f"Detect {nan_num} NANs in feature matrices, " +
+                             f"shape = {feats.shape}...")
+        return feats, self.num_frames(wav_len)

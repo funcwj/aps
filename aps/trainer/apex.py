@@ -118,7 +118,11 @@ class ApexTrainer(Trainer):
         self.optimizer.zero_grad()
 
         stats = self.task(egs)
-        loss = stats["loss"].item()
+        # use all reduce to check loss
+        if self.distributed:
+            loss = dist.all_reduce(stats["loss"].clone())
+        else:
+            loss = stats["loss"].item()
         # backward if not nan/inf
         if math.isfinite(loss):
             with apex.amp.scale_loss(stats["loss"],

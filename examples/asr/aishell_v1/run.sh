@@ -5,7 +5,7 @@
 
 # 1) 1a.yaml
 #	WER(%) Report:
-# 	Total CER: 9.94%, 7176 utterances
+#   Total: 9.04%, 7176 utterances (9468 errors, 104765 units in total)
 
 set -eu
 

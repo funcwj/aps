@@ -151,6 +151,7 @@ class AudioReader(BaseReader):
 
     def _load(self, key: str) -> Optional[np.ndarray]:
         fname = self.index_dict[key]
+        samps = None
         # return C x N or N
         if ":" in fname:
             tokens = fname.split(":")
@@ -164,12 +165,21 @@ class AudioReader(BaseReader):
             # wav_ark = open(fname, "rb")
             # seek and read
             wav_ark.seek(offset)
-            samps = read_audio(wav_ark, norm=self.norm, sr=self.sr)
+            try:
+                samps = read_audio(wav_ark, norm=self.norm, sr=self.sr)
+            except RuntimeError:
+                print(f"Read audio {key} {fname}:{offset} failed...",
+                      flush=True)
         else:
             if fname[-1] == "|":
                 shell, _ = run_command(fname[:-1], wait=True)
                 fname = io.BytesIO(shell)
-            samps = read_audio(fname, norm=self.norm, sr=self.sr)
+            try:
+                samps = read_audio(fname, norm=self.norm, sr=self.sr)
+            except RuntimeError:
+                print(f"Load audio {key} {fname} failed...", flush=True)
+        if samps is None:
+            raise RuntimeError("Audio IO failed ...")
         if self.ch >= 0 and samps.ndim == 2:
             samps = samps[self.ch]
         return samps

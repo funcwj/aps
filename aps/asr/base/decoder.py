@@ -7,6 +7,7 @@ import random
 
 import torch as th
 import torch.nn as nn
+import torch.nn.functional as tf
 
 from typing import Optional, Tuple, Union
 from aps.asr.base.layers import OneHotEmbedding, PyTorchRNN, DropoutRNN
@@ -49,8 +50,8 @@ class PyTorchRNNDecoder(nn.Module):
                                                    rnn_layers,
                                                    dropout=rnn_dropout,
                                                    bidirectional=False)
-        self.proj = nn.Sequential(nn.Linear(rnn_hidden + enc_proj, enc_proj),
-                                  nn.ReLU(), nn.Dropout(p=dropout))
+        self.proj = nn.Linear(rnn_hidden + enc_proj, enc_proj)
+        self.drop = nn.Dropout(p=dropout)
         self.pred = nn.Linear(enc_proj, vocab_size)
         self.input_feeding = input_feeding
         self.vocab_size = vocab_size
@@ -106,6 +107,7 @@ class PyTorchRNNDecoder(nn.Module):
         att_ali, att_ctx = att_net(enc_out, enc_len, dec_out, att_ali)
         # proj: N x D_enc
         proj = self.proj(th.cat([dec_out, att_ctx], dim=-1))
+        proj = self.drop(tf.relu(proj))
         # pred: N x V
         pred = self.pred(proj)
         return pred, att_ctx, dec_hid, att_ali, proj

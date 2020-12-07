@@ -13,10 +13,37 @@ import torch.nn as nn
 from torch_complex.tensor import ComplexTensor
 from typing import Union, List, Optional, Tuple
 from aps.transform.utils import STFT, iSTFT
-from aps.transform.asr import (LogTransform, AbsTransform, PowerTransform,
-                               CmvnTransform, SpecAugTransform)
+from aps.transform.asr import (TFTransposeTransform, LogTransform, AbsTransform,
+                               PowerTransform, CmvnTransform, SpecAugTransform)
 from aps.const import MATH_PI, EPSILON
 from aps.libs import ApsRegisters
+
+
+class RefChannelTransform(nn.Module):
+    """
+    Choose one reference channel
+    """
+
+    def __init__(self, ref_channel: int = 0, input_dim: int = 4) -> None:
+        super(RefChannelTransform, self).__init__()
+        # < 0 means return all
+        self.ref_channel = ref_channel
+        self.input_dim = input_dim
+
+    def extra_repr(self) -> str:
+        return f"ref_channel={self.ref_channel}"
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp (Tensor): N x (C) x ...
+        Return:
+            out (Tensor): N x ...
+        """
+        if inp.dim() != self.input_dim or self.ref_channel < 0:
+            return inp
+        else:
+            return inp[:, self.ref_channel]
 
 
 class IpdTransform(nn.Module):
@@ -317,8 +344,8 @@ class FeatureTransform(nn.Module):
                  stft_normalized: bool = False,
                  stft_mode: str = "librosa",
                  center: bool = False,
-                 use_power: bool = False,
                  sr: int = 16000,
+                 ref_channel: int = 0,
                  gcmvn: str = "",
                  norm_mean: bool = True,
                  norm_var: bool = True,
@@ -355,9 +382,11 @@ class FeatureTransform(nn.Module):
                                        "or IPD features")
                 feats_dim = self.forward_stft.num_bins
             if tok == "spectrogram":
-                transform.append(AbsTransform(eps=EPSILON))
-                if use_power:
-                    transform.append(PowerTransform())
+                spectrogram = [
+                    RefChannelTransform(ref_channel=ref_channel, input_dim=4),
+                    TFTransposeTransform()
+                ]
+                transform += spectrogram
             elif tok == "log":
                 transform.append(LogTransform(eps=EPSILON))
             elif tok == "cmvn":
@@ -366,10 +395,17 @@ class FeatureTransform(nn.Module):
                                   norm_var=norm_var,
                                   gcmvn=gcmvn,
                                   eps=eps))
+            elif tok == "aug":
+                transform.append(
+                    SpecAugTransform(p=aug_prob,
+                                     max_bands=aug_max_bands,
+                                     max_frame=aug_max_frame,
+                                     num_freq_masks=num_aug_bands,
+                                     num_time_masks=num_aug_frame))
             elif tok == "ipd":
-                self.ipd_transform = IpdTransform(ipd_index=ipd_index,
-                                                  cos=cos_ipd,
-                                                  sin=sin_ipd)
+                self.ipd_transform = nn.Sequential(
+                    IpdTransform(ipd_index=ipd_index, cos=cos_ipd, sin=sin_ipd),
+                    TFTransposeTransform())
                 ipd_index = ipd_index.split(";")
                 base = 0 if i == 0 else 1
                 if cos_ipd and sin_ipd:
@@ -382,14 +418,6 @@ class FeatureTransform(nn.Module):
             self.mag_transform = nn.Sequential(*transform)
         else:
             self.mag_transform = None
-        if aug_prob > 0:
-            self.aug_transform = SpecAugTransform(p=aug_prob,
-                                                  max_bands=aug_max_bands,
-                                                  max_frame=aug_max_frame,
-                                                  num_freq_masks=num_aug_bands,
-                                                  num_time_masks=num_aug_frame)
-        else:
-            self.aug_transform = None
         self.feats_dim = feats_dim
 
     def ctx(self, name: str = "forward_stft") -> nn.Module:
@@ -406,11 +434,17 @@ class FeatureTransform(nn.Module):
             raise ValueError(f"Unknown task context: {name}")
         return ctx[name]
 
+    def num_frames(self, wav_len: th.Tensor) -> th.Tensor:
+        """
+        Work out number of frames
+        """
+        if wav_len is None:
+            return None
+        # pass to forward_stft class
+        return self.forward_stft.num_frames(wav_len)
+
     def forward(
-        self,
-        wav_pad: th.Tensor,
-        wav_len: Optional[th.Tensor],
-        norm_obs: bool = False
+        self, wav_pad: th.Tensor, wav_len: Optional[th.Tensor]
     ) -> Tuple[th.Tensor, ComplexTensor, Optional[th.Tensor]]:
         """
         Args:
@@ -418,44 +452,27 @@ class FeatureTransform(nn.Module):
             wav_len (Tensor or None): number samples in wav_pad, N or None
         Return:
             feats (Tensor): spatial + spectral features, N x T x ...
-            cplx (ComplexTensor): STFT of reference channels, N x (C) x F x T
+            cplx (ComplexTensor): STFT coefficients, N x (C) x F x T
             num_frames (Tensor or None): number frames in each batch, N or None
         """
-        # N x C x F x T
+        # magnitude & phase: N x C x F x T
         mag, pha = self.forward_stft(wav_pad)
-        multi_channel = mag.dim() == 4
-        mag_ref = mag[:, 0] if multi_channel else mag
-
-        # spectral (magnitude) transform
-        if self.mag_transform:
-            # N x T x F
-            feats = mag_ref.transpose(-1, -2)
-            # spectra features of CH0, N x T x F
-            feats = self.mag_transform(feats)
-            if self.aug_transform:
-                # spectra augmentation if needed
-                feats = self.aug_transform(feats)
-        else:
-            feats = None
-            # spectra augmentation if needed
-            if self.aug_transform:
-                mag = self.aug_transform(mag)
-        # complex spectrogram of CH 0~(C-1), N x C x F x T
-        if norm_obs and multi_channel:
-            mag_norm = th.norm(mag, p=2, dim=1, keepdim=True)
-            mag = mag / th.clamp(mag_norm, min=EPSILON)
+        # STFT coefficients: N x C x F x T
         cplx = ComplexTensor(mag * th.cos(pha), mag * th.sin(pha))
+
+        feats = []
+        # magnitude transform
+        if self.mag_transform:
+            # N x (C) x T x F => N x T x F
+            feats.append(self.mag_transform(mag))
         # ipd transform
         if self.ipd_transform:
-            # N x T x ...
-            ipd = self.ipd_transform(pha)
-            # N x ... x T
-            ipd = ipd.transpose(1, 2)
-            # N x T x ...
-            if feats is not None:
-                feats = th.cat([feats, ipd], -1)
-            else:
-                feats = ipd
-        num_frames = self.forward_stft.num_frames(
-            wav_len) if wav_len is not None else None
-        return feats, cplx, num_frames
+            # N x C x F x T => N x ... x T
+            feats.append(self.ipd_transform(pha))
+        # concatenate: N x T x ...
+        feats = th.cat(feats, -1)
+        nan_num = th.sum(th.isnan(feats))
+        if nan_num:
+            raise ValueError(f"Detect {nan_num} NANs in feature matrices, " +
+                             f"shape = {feats.shape}...")
+        return feats, cplx, self.num_frames(wav_len)

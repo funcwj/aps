@@ -146,16 +146,12 @@ class PyTorchRNNEncoder(EncoderBase):
             out (Tensor): (N) x Ti x F
             inp_len (Tensor): (N) x Ti
         """
-        self.flat()
         if inp_len is not None:
             inp = pack_padded_sequence(inp,
                                        inp_len,
                                        batch_first=True,
                                        enforce_sorted=False)
         else:
-            if inp.dim() not in [2, 3]:
-                raise RuntimeError("PyTorchRNNEncoder expects 2/3D Tensor, " +
-                                   f"got {inp.dim():d}")
             if inp.dim() != 3:
                 inp = th.unsqueeze(inp, 0)
         if self.proj:
@@ -187,6 +183,7 @@ class VariantRNNEncoder(EncoderBase):
                  hidden: int = 512,
                  num_layers: int = 3,
                  bidirectional: bool = True,
+                 dropout_first: float = 0.0,
                  dropout: float = 0.0,
                  project: Optional[int] = None,
                  layernorm: bool = False,
@@ -194,7 +191,7 @@ class VariantRNNEncoder(EncoderBase):
                  add_forward_backward: bool = False):
         super(VariantRNNEncoder, self).__init__(inp_features, out_features)
 
-        def derive_in_size(layer_idx):
+        def derive_inp_size(layer_idx):
             """
             Compute input size of layer-i
             """
@@ -212,15 +209,15 @@ class VariantRNNEncoder(EncoderBase):
             return in_size
 
         self.enc_layers = nn.ModuleList([
-            VariantRNN(
-                derive_in_size(i),
-                hidden_size=hidden,
-                rnn=rnn,
-                project_size=project if i != num_layers - 1 else out_features,
-                layernorm=layernorm,
-                dropout=dropout,
-                bidirectional=bidirectional,
-                add_forward_backward=add_forward_backward)
+            VariantRNN(derive_inp_size(i),
+                       hidden_size=hidden,
+                       rnn=rnn,
+                       layernorm=layernorm,
+                       project=project if i != num_layers - 1 else out_features,
+                       dropout=dropout if i != 0 else
+                       (dropout if dropout_first else 0),
+                       bidirectional=bidirectional,
+                       add_forward_backward=add_forward_backward)
             for i in range(num_layers)
         ])
         self.pyramid_stack = pyramid_stack

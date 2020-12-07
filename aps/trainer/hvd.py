@@ -103,7 +103,8 @@ class HvdTrainer(Trainer):
         self.optimizer.zero_grad()
 
         stats = self.task(egs)
-        loss = stats["loss"].item()
+        loss = dist.all_reduce(stats["loss"])
+        loss = loss.item()
         # backward if not nan/inf
         if math.isfinite(loss):
             stats["loss"].backward()

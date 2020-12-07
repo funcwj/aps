@@ -16,7 +16,7 @@ from aps.asr.transformer.decoder import prep_sub_mask
 from aps.asr.transformer.encoder import ApsTransformerEncoder
 from aps.asr.transformer.impl import TransformerTorchEncoderLayer
 from aps.asr.base.attention import padding_mask
-from aps.asr.base.layers import OneHotEmbedding, PyTorchRNN
+from aps.asr.base.layers import OneHotEmbedding, PyTorchRNN, DropoutRNN
 
 
 class Node(object):
@@ -69,19 +69,23 @@ class PyTorchRNNDecoder(nn.Module):
                  dec_rnn: str = "lstm",
                  dec_layers: int = 3,
                  dec_hidden: int = 512,
+                 dropout_on: str = "state",
                  dec_dropout: float = 0.0) -> None:
         super(PyTorchRNNDecoder, self).__init__()
+        dropout_rnn_cls = {"state": PyTorchRNN, "input": DropoutRNN}
+        if dropout_on not in dropout_rnn_cls:
+            raise ValueError(f"Unsupported dropout_on: {dropout_on}")
         if embed_size != vocab_size:
             self.vocab_embed = nn.Embedding(vocab_size, embed_size)
         else:
             self.vocab_embed = OneHotEmbedding(vocab_size)
         # uni-dir RNNs
-        self.decoder = PyTorchRNN(dec_rnn,
-                                  embed_size,
-                                  dec_hidden,
-                                  dec_layers,
-                                  dropout=dec_dropout,
-                                  bidirectional=False)
+        self.decoder = dropout_rnn_cls[dropout_on](dec_rnn,
+                                                   embed_size,
+                                                   dec_hidden,
+                                                   dec_layers,
+                                                   dropout=dec_dropout,
+                                                   bidirectional=False)
         self.enc_proj = nn.Linear(enc_dim, jot_dim, bias=False)
         self.dec_proj = nn.Linear(dec_hidden, jot_dim)
         self.vocab_size = vocab_size

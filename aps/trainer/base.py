@@ -8,7 +8,6 @@ from pathlib import Path
 from collections import defaultdict
 
 import torch as th
-from torch.nn.utils import clip_grad_norm_
 from typing import Optional, Dict, List, Union, Tuple, NoReturn, Iterable
 from aps.trainer.ss import SsScheduler
 from aps.trainer.lr import LrScheduler
@@ -77,7 +76,7 @@ class ProgressReporter(object):
         """
         Log messages
         """
-        self.logger.info(f"{self.header}: {sstr}")
+        self.logger.info(f"{self.header} - {sstr}")
 
     def eval(self) -> NoReturn:
         """
@@ -526,40 +525,7 @@ class Trainer(object):
         3) Clip Gradient
         4) Step optimizer
         """
-        self.reporter.log(f"step {self.cur_step}")
-        self.optimizer.zero_grad()
-
-        stats = self.task(egs)
-        loss = stats["loss"].item()
-        # backward if not nan/inf
-        if math.isfinite(loss):
-            stats["loss"].backward()
-        else:
-            self.reporter.log(f"Invalid loss {loss:.3f}, skip...")
-            return False
-
-        # clip gradient after backward
-        norm = -1
-        if self.clip_gradient:
-            norm = clip_grad_norm_(self.task.parameters(), self.clip_gradient)
-
-        # add noise if needed
-        if self.weight_noise_adder:
-            self.weight_noise_adder(self.task)
-
-        # step optimizer and update statistics
-        if math.isfinite(norm):
-            self.optimizer.step()
-            if norm != -1:
-                stats["norm"] = norm
-            stats["rate"] = self.optimizer.param_groups[0]["lr"]
-            self.reporter.update(stats)
-            # schedule lr if needed
-            self.lr_scheduler_step(None, end_at="step")
-            return True
-        else:
-            self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
-            return False
+        raise NotImplementedError
 
     def lr_scheduler_step(self,
                           update_value: Optional[float],
@@ -678,8 +644,8 @@ class Trainer(object):
         """
         # valid
         self.valid_epoch(dev_loader)
-        cur_lr = self.optimizer.param_groups[0]["lr"]
-        reports, logstr = self.reporter.report(self.cur_epoch, cur_lr)
+        # log lr as 0
+        reports, logstr = self.reporter.report(self.cur_epoch, 0)
         self.reporter.log(logstr)
         if self.ss_scheduler:
             self.ssr = self.ss_scheduler.step(self.cur_epoch, reports["accu"])
