@@ -15,8 +15,11 @@ from typing import Union, List, Optional, Tuple
 from aps.transform.utils import STFT, iSTFT
 from aps.transform.asr import (TFTransposeTransform, LogTransform, AbsTransform,
                                PowerTransform, CmvnTransform, SpecAugTransform)
+from aps.transform.asr import detect_nan
 from aps.const import MATH_PI, EPSILON
 from aps.libs import ApsRegisters
+
+EnhReturnType = Tuple[th.Tensor, ComplexTensor, Optional[th.Tensor]]
 
 
 class RefChannelTransform(nn.Module):
@@ -443,9 +446,8 @@ class FeatureTransform(nn.Module):
         # pass to forward_stft class
         return self.forward_stft.num_frames(wav_len)
 
-    def forward(
-        self, wav_pad: th.Tensor, wav_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, ComplexTensor, Optional[th.Tensor]]:
+    def forward(self, wav_pad: th.Tensor,
+                wav_len: Optional[th.Tensor]) -> EnhReturnType:
         """
         Args:
             wav_pad (Tensor): raw waveform, N x C x S or N x S
@@ -471,8 +473,4 @@ class FeatureTransform(nn.Module):
             feats.append(self.ipd_transform(pha))
         # concatenate: N x T x ...
         feats = th.cat(feats, -1)
-        nan_num = th.sum(th.isnan(feats))
-        if nan_num:
-            raise ValueError(f"Detect {nan_num} NANs in feature matrices, " +
-                             f"shape = {feats.shape}...")
-        return feats, cplx, self.num_frames(wav_len)
+        return detect_nan(feats), cplx, self.num_frames(wav_len)

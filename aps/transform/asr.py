@@ -17,13 +17,28 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from typing import Optional, Union
-from aps.transform.utils import STFT, init_melfilter, init_dct
+from typing import Optional, Union, NoReturn
+from aps.transform.utils import STFT, init_melfilter
 from aps.transform.augment import tf_mask
 from aps.const import EPSILON
 from aps.libs import ApsRegisters
 
+from scipy.fftpack import dct
+from torch_complex import ComplexTensor
 from kaldi_python_io.functional import read_kaldi_mat
+
+AsrReturnType = Union[th.Tensor, Optional[th.Tensor]]
+
+
+def detect_nan(feature: th.Tensor) -> th.Tensor:
+    """
+    Check if nan exists
+    """
+    num_nans = th.sum(th.isnan(feature))
+    if num_nans:
+        raise ValueError(f"Detect {num_nans} NANs in feature matrices, " +
+                         f"shape = {feature.shape}...")
+    return feature
 
 
 class TFTransposeTransform(nn.Module):
@@ -34,14 +49,14 @@ class TFTransposeTransform(nn.Module):
     def __init__(self):
         super(TFTransposeTransform, self).__init__()
 
-    def forward(self, s: th.Tensor) -> th.Tensor:
+    def forward(self, tensor: th.Tensor) -> th.Tensor:
         """
         Args:
-            s (Tensor): input signal, N x ... x F x T
+            tensor (Tensor): input signal, N x ... x F x T
         Return:
-            s (Tensor): output signal, N x ... x T x F
+            tensor (Tensor): output signal, N x ... x T x F
         """
-        return s.transpose(-1, -2)
+        return tensor.transpose(-1, -2)
 
 
 class PreEmphasisTransform(nn.Module):
@@ -56,16 +71,16 @@ class PreEmphasisTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"pre_emphasis={self.pre_emphasis}"
 
-    def forward(self, s: th.Tensor) -> th.Tensor:
+    def forward(self, wav: th.Tensor) -> th.Tensor:
         """
         Args:
-            s (Tensor): input signal, N x (C) x S
+            wav (Tensor): input signal, N x (C) x S
         Return:
-            s (Tensor): output signal, N x (C) x S
+            wav (Tensor): output signal, N x (C) x S
         """
         if self.pre_emphasis > 0:
-            s[..., 1:] = s[..., 1:] - self.pre_emphasis * s[..., :-1]
-        return s
+            wav[..., 1:] = wav[..., 1:] - self.pre_emphasis * wav[..., :-1]
+        return wav
 
 
 class SpectrogramTransform(STFT):
@@ -103,15 +118,15 @@ class SpectrogramTransform(STFT):
     def extra_repr(self) -> str:
         return self.expr + f", use_power={self.use_power}"
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, wav: th.Tensor) -> th.Tensor:
         """
         Args:
-            x (Tensor): input signal, N x (C) x S
+            wav (Tensor): input signal, N x (C) x S
         Return:
             mag (Tensor): magnitude, N x (C) x F x T
         """
         # N x (C) x F x T
-        mag, _ = super().forward(x)
+        mag, _ = super().forward(wav)
         if self.use_power:
             mag = mag**2
         return mag
@@ -129,16 +144,16 @@ class AbsTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"eps={self.eps:.3e}"
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, tensor: Union[th.Tensor, ComplexTensor]) -> th.Tensor:
         """
         Args:
-            x (Tensor or ComplexTensor): N x T x F
+            tensor (Tensor or ComplexTensor): N x T x F
         Return:
-            y (Tensor): N x T x F
+            tensor (Tensor): N x T x F
         """
-        if not isinstance(x, th.Tensor):
-            x = x + self.eps
-        return x.abs()
+        if not isinstance(tensor, th.Tensor):
+            tensor = tensor + self.eps
+        return tensor.abs()
 
 
 class PowerTransform(nn.Module):
@@ -149,14 +164,14 @@ class PowerTransform(nn.Module):
     def __init__(self) -> None:
         super(PowerTransform, self).__init__()
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, tensor: th.Tensor) -> th.Tensor:
         """
         Args:
-            x (Tensor): N x T x F
+            tensor (Tensor): N x T x F
         Return:
-            y (Tensor): N x T x F
+            tensor (Tensor): N x T x F
         """
-        return x**2
+        return tensor**2
 
 
 class MelTransform(nn.Module):
@@ -192,19 +207,19 @@ class MelTransform(nn.Module):
         return ("fmin={0}, fmax={1}, mel_filter={2[0]}x{2[1]}".format(
             self.fmin, self.fmax, self.filters.shape))
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, linear: th.Tensor) -> th.Tensor:
         """
         Args:
-            x (Tensor): spectrogram, N x (C) x T x F
+            linear (Tensor): linear spectrogram, N x (C) x T x F
         Return:
-            f (Tensor): mel-fbank feature, N x (C) x T x B
+            fbank (Tensor): mel-fbank feature, N x (C) x T x B
         """
-        if x.dim() not in [3, 4]:
+        if linear.dim() not in [3, 4]:
             raise RuntimeError("MelTransform expect 3/4D tensor, " +
-                               f"but got {x.dim():d} instead")
+                               f"but got {linear.dim()} instead")
         # N x T x F => N x T x M
-        f = F.linear(x, self.filters, bias=None)
-        return f
+        fbank = F.linear(linear, self.filters, bias=None)
+        return fbank
 
 
 class LogTransform(nn.Module):
@@ -223,18 +238,18 @@ class LogTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"eps={self.eps:.3e}, lower_bound={self.lower_bound}"
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, linear: th.Tensor) -> th.Tensor:
         """
         Args:
-            x (Tensor): linear, N x (C) x T x F
+            linear (Tensor): linear feature, N x (C) x T x F
         Return:
-            y (Tensor): log features, N x (C) x T x F
+            logf (Tensor): log features, N x (C) x T x F
         """
         if self.lower_bound > 0:
-            x = self.lower_bound + x
+            linear = self.lower_bound + linear
         else:
-            x = th.clamp(x, min=self.eps)
-        return th.log(x)
+            linear = th.clamp(linear, min=self.eps)
+        return th.log(linear)
 
 
 class DiscreteCosineTransform(nn.Module):
@@ -249,7 +264,11 @@ class DiscreteCosineTransform(nn.Module):
         super(DiscreteCosineTransform, self).__init__()
         self.lifter = lifter
         self.num_ceps = num_ceps
-        self.dct = nn.Parameter(init_dct(num_ceps, num_mels),
+
+        # num_ceps x num_mels
+        self.dct = nn.Parameter(th.tensor(dct(th.eye(num_mels).numpy(),
+                                              norm="ortho")[:num_ceps],
+                                          dtype=th.float32),
                                 requires_grad=False)
         if lifter > 0:
             cepstral_lifter = 1 + lifter * 0.5 * th.sin(
@@ -266,17 +285,17 @@ class DiscreteCosineTransform(nn.Module):
         return "cepstral_lifter={0}, dct={1[0]}x{1[1]}".format(
             self.lifter, self.dct.shape)
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, log_mel: th.Tensor) -> th.Tensor:
         """
         Args:
-            x (Tensor): log mel-fbank, N x (C) x T x B
+            log_mel (Tensor): log mel-fbank, N x (C) x T x B
         Return:
-            f (Tensor): mfcc, N x (C) x T x P
+            mfcc (Tensor): mfcc feature, N x (C) x T x P
         """
-        f = F.linear(x, self.dct, bias=None)
+        mfcc = F.linear(log_mel, self.dct, bias=None)
         if self.cepstral_lifter is not None:
-            f = f * self.cepstral_lifter
-        return f
+            mfcc = mfcc * self.cepstral_lifter
+        return mfcc
 
 
 class CmvnTransform(nn.Module):
@@ -310,33 +329,36 @@ class CmvnTransform(nn.Module):
         self.eps = eps
 
     def extra_repr(self) -> str:
-        return f"norm_mean={self.norm_mean}, norm_var={self.norm_var}, " + \
-            f"gcmvn_stats={self.gcmvn}, eps={self.eps:.3e}"
+        return (f"norm_mean={self.norm_mean}, norm_var={self.norm_var}, " +
+                f"gcmvn_stats={self.gcmvn}, eps={self.eps:.3e}")
 
     def dim_scale(self) -> int:
         return 1
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, feats: th.Tensor) -> th.Tensor:
         """
         Args:
-            x (Tensor): feature before normalization, N x (C) x T x F
+            feats (Tensor): feature before normalization, N x (C) x T x F
         Return:
-            y (Tensor): normalized feature, N x (C) x T x F
+            feats (Tensor): normalized feature, N x (C) x T x F
         """
         if not self.norm_mean and not self.norm_var:
-            return x
-        # over time axis
-        m = th.mean(x, -2, keepdim=True) if self.gmean is None else self.gmean
-        if self.gstd is None:
-            ms = th.mean(x**2, -2, keepdim=True)
-            s = (ms - m**2 + self.eps)**0.5
+            return feats
+        if self.gmean is not None:
+            if self.norm_mean:
+                feats = feats - self.gmean
+            if self.norm_var:
+                feats = feats / self.gstd
         else:
-            s = self.gstd
-        if self.norm_mean:
-            x = x - m
-        if self.norm_var:
-            x = x / s
-        return x
+            if self.norm_mean:
+                feats = feats - th.mean(feats, -2, keepdim=True)
+            if self.norm_var:
+                if self.norm_mean:
+                    var = th.mean(feats**2, -2, keepdim=True)
+                else:
+                    var = th.var(feats, unbiased=False, keepdim=True)
+                feats = feats / th.sqrt(var + self.eps)
+        return feats
 
 
 class SpecAugTransform(nn.Module):
@@ -412,12 +434,12 @@ class SpliceTransform(nn.Module):
     def dim_scale(self) -> int:
         return (1 + self.rctx + self.lctx)
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, feats: th.Tensor) -> th.Tensor:
         """
         args:
-            x (Tensor): original feature, N x ... x Ti x F
+            feats (Tensor): original feature, N x ... x Ti x F
         return:
-            y (Tensor): spliced feature, N x ... x To x FD
+            slice (Tensor): spliced feature, N x ... x To x FD
         """
         T = x.shape[-2]
         T = T - T % self.subsampling_factor
@@ -427,12 +449,12 @@ class SpliceTransform(nn.Module):
                 idx = th.arange(c, c + T, device=x.device, dtype=th.int64)
                 idx = th.clamp(idx, min=0, max=T - 1)
                 # N x ... x T x F
-                ctx.append(th.index_select(x, -2, idx))
+                ctx.append(th.index_select(feats, -2, idx))
             # N x ... x T x FD
-            x = th.cat(ctx, -1)
+            feats = th.cat(ctx, -1)
         if self.subsampling_factor != 1:
-            x = x[..., ::self.subsampling_factor, :]
-        return x
+            feats = feats[..., ::self.subsampling_factor, :]
+        return feats
 
 
 class DeltaTransform(nn.Module):
@@ -461,14 +483,14 @@ class DeltaTransform(nn.Module):
         dx = dx / (2 * sum(i**2 for i in range(1, self.ctx + 1)))
         return dx
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, feats: th.Tensor) -> th.Tensor:
         """
         args:
-            x (Tensor): original feature, N x (C) x T x F
+            feats (Tensor): original feature, N x (C) x T x F
         return:
-            y (Tensor): delta feature, N x (C) x T x FD
+            delta (Tensor): delta feature, N x (C) x T x FD
         """
-        delta = [x]
+        delta = [feats]
         for _ in range(self.order):
             delta.append(self._add_delta(delta[-1]))
         # N x ... x T x FD
@@ -642,9 +664,8 @@ class FeatureTransform(nn.Module):
         num_frames = self.transform[self.spec_index].len(wav_len)
         return num_frames / self.subsampling_factor
 
-    def forward(
-            self, wav_pad: th.Tensor, wav_len: Optional[th.Tensor]
-    ) -> Union[th.Tensor, Optional[th.Tensor]]:
+    def forward(self, wav_pad: th.Tensor,
+                wav_len: Optional[th.Tensor]) -> AsrReturnType:
         """
         Args:
             wav_pad (Tensor): raw waveform: N x C x S or N x S
@@ -654,8 +675,4 @@ class FeatureTransform(nn.Module):
             num_frames (Tensor or None): number of frames
         """
         feats = self.transform(wav_pad)
-        nan_num = th.sum(th.isnan(feats))
-        if nan_num:
-            raise ValueError(f"Detect {nan_num} NANs in feature matrices, " +
-                             f"shape = {feats.shape}...")
-        return feats, self.num_frames(wav_len)
+        return detect_nan(feats), self.num_frames(wav_len)

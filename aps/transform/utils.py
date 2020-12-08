@@ -9,7 +9,6 @@ import torch.nn as nn
 import torch.nn.functional as tf
 import librosa.filters as filters
 
-from scipy.fftpack import dct
 from aps.const import EPSILON
 from typing import Optional, Union, Tuple
 
@@ -109,15 +108,6 @@ def init_melfilter(frame_len: int,
         mel = mel @ np.diag(1 / csum)
     # num_mels x (N // 2 + 1)
     return th.tensor(mel, dtype=th.float32)
-
-
-def init_dct(num_ceps: int = 13, num_mels: int = 40) -> th.Tensor:
-    """
-    Return DCT matrix
-    """
-    dct_mat = dct(np.eye(num_mels), norm="ortho")[:num_ceps]
-    # num_ceps x num_mels
-    return th.tensor(dct_mat, dtype=th.float32)
 
 
 def _forward_stft(
