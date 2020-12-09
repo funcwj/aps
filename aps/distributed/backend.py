@@ -24,7 +24,7 @@ def init(backend) -> NoReturn:
         hvd.init()
     if backend == "torch":
         for env in ["LOCAL_RANK", "WORLD_SIZE"]:
-            if "LOCAL_RANK" not in environ:
+            if env not in environ:
                 raise RuntimeError(
                     f"Not found in {env} environments, using python "
                     "-m torch.distributed.launch to launch the command")

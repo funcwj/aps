@@ -17,7 +17,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from typing import Optional, Union, NoReturn
+from typing import Optional, Union
 from aps.transform.utils import STFT, init_melfilter
 from aps.transform.augment import tf_mask
 from aps.const import EPSILON
@@ -46,8 +46,13 @@ class TFTransposeTransform(nn.Module):
     Swap time/frequency axis
     """
 
-    def __init__(self):
+    def __init__(self, axis1: int = -1, axis2: int = -2) -> None:
         super(TFTransposeTransform, self).__init__()
+        self.axis1 = axis1
+        self.axis2 = axis2
+
+    def extra_repr(self) -> str:
+        return f"axis1={self.axis1}, axis2={self.axis2}"
 
     def forward(self, tensor: th.Tensor) -> th.Tensor:
         """
@@ -441,12 +446,12 @@ class SpliceTransform(nn.Module):
         return:
             slice (Tensor): spliced feature, N x ... x To x FD
         """
-        T = x.shape[-2]
+        T = feats.shape[-2]
         T = T - T % self.subsampling_factor
         if self.lctx + self.rctx != 0:
             ctx = []
             for c in range(-self.lctx, self.rctx + 1):
-                idx = th.arange(c, c + T, device=x.device, dtype=th.int64)
+                idx = th.arange(c, c + T, device=feats.device, dtype=th.int64)
                 idx = th.clamp(idx, min=0, max=T - 1)
                 # N x ... x T x F
                 ctx.append(th.index_select(feats, -2, idx))
@@ -662,7 +667,7 @@ class FeatureTransform(nn.Module):
             raise RuntimeError("No SpectrogramTransform layer is found, "
                                "can not work out number of the frames")
         num_frames = self.transform[self.spec_index].len(wav_len)
-        return num_frames / self.subsampling_factor
+        return num_frames // self.subsampling_factor
 
     def forward(self, wav_pad: th.Tensor,
                 wav_len: Optional[th.Tensor]) -> AsrReturnType:

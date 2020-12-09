@@ -5,7 +5,7 @@ import torch as th
 import torch.nn as nn
 
 from typing import NoReturn, Union, Tuple, Optional
-from aps.asr.base.layers import OneHotEmbedding, PyTorchRNN, DropoutRNN
+from aps.asr.base.layers import OneHotEmbedding, PyTorchRNN
 from aps.libs import ApsRegisters
 
 
@@ -34,27 +34,23 @@ class TorchRNNLM(nn.Module):
                  embed_size: int = 256,
                  vocab_size: int = 40,
                  rnn: str = "lstm",
-                 dropout_on: str = "state",
                  rnn_layers: int = 3,
                  rnn_hidden: int = 512,
                  rnn_dropout: float = 0.2,
                  tie_weights: bool = False) -> None:
         super(TorchRNNLM, self).__init__()
-        dropout_rnn_cls = {"state": PyTorchRNN, "input": DropoutRNN}
-        if dropout_on not in dropout_rnn_cls:
-            raise ValueError(f"Unsupported dropout_on: {dropout_on}")
         self.vocab_drop = nn.Dropout(rnn_dropout)
         if embed_size != vocab_size:
             self.vocab_embed = nn.Embedding(vocab_size, embed_size)
         else:
             self.vocab_embed = OneHotEmbedding(vocab_size)
         # uni-directional RNNs
-        self.pred = dropout_rnn_cls[dropout_on](rnn,
-                                                embed_size,
-                                                rnn_hidden,
-                                                rnn_layers,
-                                                dropout=rnn_dropout,
-                                                bidirectional=False)
+        self.pred = PyTorchRNN(rnn,
+                               embed_size,
+                               rnn_hidden,
+                               rnn_layers,
+                               dropout=rnn_dropout,
+                               bidirectional=False)
         # output distribution
         self.dist = nn.Linear(rnn_hidden, vocab_size)
         self.vocab_size = vocab_size

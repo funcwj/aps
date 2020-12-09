@@ -10,7 +10,9 @@ import torch.nn.functional as tf
 from typing import Optional, Tuple, Union, List, Dict
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
-from aps.asr.base.layers import VariantRNN, FSMN, Conv1d, Conv2d, PyTorchRNN
+from aps.asr.base.layer import (VariantRNN, FSMN, Conv1d, Conv2d, PyTorchRNN,
+                                rnn_output_nonlinear)
+from aps.asr.base.jit import LSTM
 from aps.libs import Register
 
 AsrEncoder = Register("asr_encoder")
@@ -105,15 +107,9 @@ class PyTorchRNNEncoder(EncoderBase):
                  hidden: int = 512,
                  dropout: int = 0.2,
                  bidirectional: bool = False,
-                 non_linear: str = ""):
+                 non_linear: str = "none"):
         super(PyTorchRNNEncoder, self).__init__(inp_features, out_features)
-        supported_non_linear = {
-            "relu": tf.relu,
-            "sigmoid": th.sigmoid,
-            "tanh": th.tanh,
-            "": None
-        }
-        if non_linear not in supported_non_linear:
+        if non_linear not in rnn_output_nonlinear:
             raise ValueError(
                 f"Unsupported output non-linear function: {non_linear}")
         if input_project:
@@ -129,7 +125,7 @@ class PyTorchRNNEncoder(EncoderBase):
             bidirectional=bidirectional)
         self.outp = nn.Linear(hidden if not bidirectional else hidden * 2,
                               out_features)
-        self.non_linear = supported_non_linear[non_linear]
+        self.non_linear = rnn_output_nonlinear[non_linear]
 
     def flat(self):
         self.rnns.flatten_parameters()
@@ -170,6 +166,68 @@ class PyTorchRNNEncoder(EncoderBase):
         return out, inp_len
 
 
+@AsrEncoder.register("jit_lstm")
+class JitLSTMEncoder(EncoderBase):
+    """
+    LSTM encoder (see aps.asr.base.jit)
+    """
+
+    def __init__(self,
+                 inp_features: int,
+                 out_features: int,
+                 input_project: Optional[int] = None,
+                 num_layers: int = 3,
+                 hidden: int = 512,
+                 project: int = None,
+                 dropout: int = 0.2,
+                 bidirectional: bool = False,
+                 layer_norm: bool = False,
+                 non_linear: str = "none"):
+        super(JitLSTMEncoder, self).__init__(inp_features, out_features)
+        if non_linear not in rnn_output_nonlinear:
+            raise ValueError(
+                f"Unsupported output non-linear function: {non_linear}")
+        if input_project:
+            self.proj = nn.Linear(inp_features, input_project)
+        else:
+            self.proj = None
+        self.rnns = LSTM(
+            inp_features if input_project is None else input_project,
+            hidden,
+            dropout=dropout,
+            project=project,
+            num_layers=num_layers,
+            layer_norm=layer_norm,
+            bidirectional=bidirectional)
+        rnn_out_size = hidden if project is None else project
+        self.outp = nn.Linear(
+            rnn_out_size if not bidirectional else rnn_out_size * 2,
+            out_features)
+        self.non_linear = rnn_output_nonlinear[non_linear]
+
+    def forward(self, inp: th.Tensor,
+                inp_len: Optional[th.Tensor]) -> EncRetType:
+        """
+        Args:
+            inp (Tensor): (N) x Ti x F
+            inp_len (Tensor): (N) x Ti
+        Return:
+            out (Tensor): (N) x Ti x F
+            inp_len (Tensor): (N) x Ti
+        """
+        if inp.dim() != 3:
+            inp = th.unsqueeze(inp, 0)
+        if self.proj:
+            inp = tf.relu(self.proj(inp))
+        rnn_out, _ = self.rnns(inp)
+        # rnn_out: N x T x D
+        out = self.outp(rnn_out)
+        # pass through non-linear
+        if self.non_linear:
+            out = self.non_linear(out)
+        return out, inp_len
+
+
 @AsrEncoder.register("variant_rnn")
 class VariantRNNEncoder(EncoderBase):
     """
@@ -183,9 +241,10 @@ class VariantRNNEncoder(EncoderBase):
                  hidden: int = 512,
                  num_layers: int = 3,
                  bidirectional: bool = True,
-                 dropout_first: float = 0.0,
                  dropout: float = 0.0,
+                 dropout_input: bool = True,
                  project: Optional[int] = None,
+                 non_linear: str = "tanh",
                  layernorm: bool = False,
                  pyramid_stack: bool = False,
                  add_forward_backward: bool = False):
@@ -212,11 +271,12 @@ class VariantRNNEncoder(EncoderBase):
             VariantRNN(derive_inp_size(i),
                        hidden_size=hidden,
                        rnn=rnn,
-                       layernorm=layernorm,
+                       layernorm=False if i != num_layers - 1 else layernorm,
                        project=project if i != num_layers - 1 else out_features,
                        dropout=dropout if i != 0 else
-                       (dropout if dropout_first else 0),
+                       (dropout if dropout_input else 0),
                        bidirectional=bidirectional,
+                       non_linear=non_linear,
                        add_forward_backward=add_forward_backward)
             for i in range(num_layers)
         ])

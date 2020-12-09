@@ -8,9 +8,7 @@ Beam search for CTC
 import torch as th
 import torch.nn.functional as tf
 
-from typing import List, Dict, Optional
-
-from aps.asr.base.attention import padding_mask
+from typing import List, Dict
 
 
 def greedy_search(enc_out: th.Tensor, blank: int = -1) -> List[Dict]:

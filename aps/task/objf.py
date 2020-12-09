@@ -39,6 +39,7 @@ def ls_objf(outs: th.Tensor,
     Args:
         outs (Tensor): N x T x V
         tgts (Tensor): N x T
+        lsm_factor (float): label smooth factor
     Return
         loss (Tensor): (1)
     """
@@ -53,10 +54,10 @@ def ls_objf(outs: th.Tensor,
     # M
     tgts = th.masked_select(tgts, mask)
     # M x V
-    dist = outs.new_full(outs.size(), lsm_factor / (V - 1))
+    dist = th.full_like(outs, lsm_factor / (V - 1))
     dist = dist.scatter_(1, tgts.unsqueeze(-1), 1 - lsm_factor)
     # KL distance
-    loss = tf.kl_div(tf.log_softmax(outs, -1), dist, reduction="mean")
+    loss = tf.kl_div(tf.log_softmax(outs, -1), dist, reduction="batchmean")
     return loss
 
 

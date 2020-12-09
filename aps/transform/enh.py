@@ -13,8 +13,8 @@ import torch.nn as nn
 from torch_complex.tensor import ComplexTensor
 from typing import Union, List, Optional, Tuple
 from aps.transform.utils import STFT, iSTFT
-from aps.transform.asr import (TFTransposeTransform, LogTransform, AbsTransform,
-                               PowerTransform, CmvnTransform, SpecAugTransform)
+from aps.transform.asr import (TFTransposeTransform, LogTransform,
+                               CmvnTransform, SpecAugTransform)
 from aps.transform.asr import detect_nan
 from aps.const import MATH_PI, EPSILON
 from aps.libs import ApsRegisters
