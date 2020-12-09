@@ -11,6 +11,7 @@ import warnings
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
+import torch.nn.init as init
 
 import torch.jit as jit
 
@@ -43,9 +44,18 @@ class LSTMProjCell(jit.ScriptModule):
         self.bias_ih = nn.Parameter(th.randn(4 * hidden_size))
         self.bias_hh = nn.Parameter(th.randn(4 * hidden_size))
         self.repr = f"{input_size}, {hidden_size}, project={project_size}"
+        self.reset_parameters()
 
     def extra_repr(self) -> str:
         return self.repr
+
+    def reset_parameters(self) -> None:
+        k = (1.0 / self.weight_hr.shape[-1])**0.5
+        init.uniform_(self.weight_ih, -k, k)
+        init.uniform_(self.weight_hh, -k, k)
+        init.uniform_(self.weight_hr, -k, k)
+        init.uniform_(self.bias_ih, -k, k)
+        init.uniform_(self.bias_ih, -k, k)
 
     def init_hidden(self, batch_size: int):
         """
@@ -103,9 +113,17 @@ class LSTMLnCell(jit.ScriptModule):
         self.ln_h = nn.LayerNorm(4 * hidden_size)
         self.ln_c = nn.LayerNorm(hidden_size)
         self.repr = f"{input_size}, {hidden_size}, layer_norm=True"
+        self.reset_parameters()
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.repr})"
+
+    def reset_parameters(self) -> None:
+        k = (1.0 / self.weight_hh.shape[-1])**0.5
+        init.uniform_(self.weight_ih, -k, k)
+        init.uniform_(self.weight_hh, -k, k)
+        init.uniform_(self.bias_ih, -k, k)
+        init.uniform_(self.bias_ih, -k, k)
 
     def init_hidden(self, batch_size: int):
         """
@@ -170,6 +188,14 @@ class LSTMLnProjCell(jit.ScriptModule):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.repr})"
+
+    def reset_parameters(self) -> None:
+        k = 1.0 / (self.weight_hr.shape[-1])**0.5
+        init.uniform_(self.weight_ih, -k, k)
+        init.uniform_(self.weight_hh, -k, k)
+        init.uniform_(self.weight_hr, -k, k)
+        init.uniform_(self.bias_ih, -k, k)
+        init.uniform_(self.bias_ih, -k, k)
 
     def init_hidden(self, batch_size: int):
         """
@@ -321,6 +347,9 @@ def create_lstm_layer(input_size: int,
 
 
 class LSTM(jit.ScriptModule):
+    """
+    LSTM that supports LSTMP, layer normalization variants
+    """
 
     def __init__(self,
                  input_size: int,
