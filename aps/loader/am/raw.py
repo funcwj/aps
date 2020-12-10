@@ -12,7 +12,7 @@ import torch.utils.data as dat
 from torch.nn.utils.rnn import pad_sequence
 
 from typing import Dict, Iterable, Optional, NoReturn
-from aps.loader.am.utils import TokenReader, BatchSampler
+from aps.loader.am.utils import AsrDataset, TokenReader, BatchSampler
 from aps.loader.audio import AudioReader
 from aps.const import IGNORE_ID
 from aps.libs import ApsRegisters
@@ -56,7 +56,7 @@ def DataLoader(train: bool = True,
                            min_batch_size=min_batch_size)
 
 
-class Dataset(dat.Dataset):
+class Dataset(AsrDataset):
     """
     Dataset for raw waveform
     """
@@ -74,30 +74,19 @@ class Dataset(dat.Dataset):
                  min_wav_dur: float = 0.4,
                  adapt_wav_dur: float = 8,
                  adapt_token_num: int = 150) -> None:
-        self.audio_reader = AudioReader(wav_scp,
-                                        sr=sr,
-                                        channel=channel,
-                                        norm=audio_norm)
-        self.token_reader = TokenReader(text,
-                                        utt2dur,
-                                        vocab_dict,
-                                        max_dur=max_wav_dur,
-                                        min_dur=min_wav_dur,
-                                        max_token_num=max_token_num)
-
-    def __getitem__(self, idx: int) -> Dict:
-        tok = self.token_reader[idx]
-        key = tok["key"]
-        wav = self.audio_reader[key]
-        return {
-            "dur": wav.shape[-1],
-            "len": tok["len"],
-            "inp": wav,
-            "ref": tok["tok"]
-        }
-
-    def __len__(self) -> int:
-        return len(self.token_reader)
+        audio_reader = AudioReader(wav_scp,
+                                   sr=sr,
+                                   channel=channel,
+                                   norm=audio_norm)
+        token_reader = TokenReader(text,
+                                   utt2dur,
+                                   vocab_dict,
+                                   max_dur=max_wav_dur,
+                                   min_dur=min_wav_dur,
+                                   max_token_num=max_token_num)
+        super(Dataset, self).__init__(audio_reader,
+                                      token_reader,
+                                      duration_axis=-1)
 
 
 def egs_collate(egs: Dict) -> Dict:
