@@ -8,10 +8,9 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Optional, Tuple, Union, List, Dict
-from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
-from aps.asr.base.layer import (VariantRNN, FSMN, Conv1d, Conv2d, PyTorchRNN,
-                                rnn_output_nonlinear)
+from aps.asr.base.layer import VariantRNN, FSMN, Conv1d, Conv2d, PyTorchRNN
+from aps.asr.base.layer import var_len_rnn_forward, rnn_output_nonlinear
 from aps.asr.base.jit import LSTM
 from aps.libs import Register
 
@@ -142,24 +141,14 @@ class PyTorchRNNEncoder(EncoderBase):
             out (Tensor): (N) x Ti x F
             inp_len (Tensor): (N) x Ti
         """
-        if inp_len is not None:
-            inp = pack_padded_sequence(inp,
-                                       inp_len,
-                                       batch_first=True,
-                                       enforce_sorted=False)
-        else:
-            if inp.dim() != 3:
-                inp = th.unsqueeze(inp, 0)
         if self.proj:
             inp = tf.relu(self.proj(inp))
-        rnn_out, _ = self.rnns(inp)
-        # using unpacked sequence
-        # rnn_out: N x T x D
-        if inp_len is not None:
-            rnn_out, _ = pad_packed_sequence(rnn_out,
-                                             batch_first=True,
-                                             total_length=max_len)
-        out = self.outp(rnn_out)
+        out = var_len_rnn_forward(self.rnns,
+                                  inp,
+                                  inp_len=inp_len,
+                                  enforce_sorted=False,
+                                  add_forward_backward=False)
+        out = self.outp(out)
         # pass through non-linear
         if self.non_linear:
             out = self.non_linear(out)
@@ -245,12 +234,12 @@ class VariantRNNEncoder(EncoderBase):
                  dropout_input: bool = True,
                  project: Optional[int] = None,
                  non_linear: str = "tanh",
-                 layernorm: bool = False,
+                 norm: str = "",
                  pyramid_stack: bool = False,
                  add_forward_backward: bool = False):
         super(VariantRNNEncoder, self).__init__(inp_features, out_features)
 
-        def derive_inp_size(layer_idx):
+        def derive_inp_size(layer_idx: int) -> int:
             """
             Compute input size of layer-i
             """
@@ -267,16 +256,26 @@ class VariantRNNEncoder(EncoderBase):
                     in_size = in_size * 2
             return in_size
 
+        def derive_dropout(layer_idx: int) -> float:
+            """
+            Use dropout on layer-i
+            """
+            if layer_idx == 0:
+                return dropout if dropout_input else 0
+            elif layer_idx == num_layers - 1:
+                return 0
+            else:
+                return dropout
+
         self.enc_layers = nn.ModuleList([
             VariantRNN(derive_inp_size(i),
                        hidden_size=hidden,
                        rnn=rnn,
-                       layernorm=False if i != num_layers - 1 else layernorm,
+                       norm=norm if i != num_layers - 1 else "",
                        project=project if i != num_layers - 1 else out_features,
-                       dropout=dropout if i != 0 else
-                       (dropout if dropout_input else 0),
+                       dropout=derive_dropout(i),
                        bidirectional=bidirectional,
-                       non_linear=non_linear,
+                       non_linear=non_linear if i != num_layers - 1 else "none",
                        add_forward_backward=add_forward_backward)
             for i in range(num_layers)
         ])
@@ -472,7 +471,7 @@ class FSMNEncoder(EncoderBase):
             inp (Tensor): N x T x F, input
             inp_len (Tensor or None)
         Return:
-            out (Tensor): N x F x O
+            out (Tensor): N x T x F
             out_len (Tensor or None)
         """
         memory = None
@@ -481,5 +480,4 @@ class FSMNEncoder(EncoderBase):
                 inp, memory = fsmn(inp, memory=memory)
             else:
                 inp, _ = fsmn(inp, memory=memory)
-        inp = inp.transpose(1, 2)
         return inp, inp_len

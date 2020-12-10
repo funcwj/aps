@@ -44,6 +44,6 @@ def beam_search(enc_out: th.Tensor,
                 beam_size: int,
                 blank: int = 0) -> List[Dict]:
     """
-    Impl of CTC prefix beam search
+    Implementation of CTC prefix beam search
     """
     pass

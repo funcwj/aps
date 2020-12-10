@@ -472,5 +472,8 @@ class FeatureTransform(nn.Module):
             # N x C x F x T => N x ... x T
             feats.append(self.ipd_transform(pha))
         # concatenate: N x T x ...
-        feats = th.cat(feats, -1)
-        return detect_nan(feats), cplx, self.num_frames(wav_len)
+        if len(feats):
+            feats = detect_nan(th.cat(feats, -1))
+        else:
+            feats = None
+        return feats, cplx, self.num_frames(wav_len)

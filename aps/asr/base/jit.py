@@ -334,10 +334,8 @@ def create_lstm_layer(input_size: int,
         raise RuntimeError("In this case, please use PyTorch's LSTM layer")
     number = 2 if bidirectional else 1
     if project:
-        cell = [(LSTMLnProjCell if layer_norm else LSTMProjCell)(input_size,
-                                                                 hidden_size,
-                                                                 project)
-                for _ in range(number)]
+        inst = LSTMLnProjCell if layer_norm else LSTMProjCell
+        cell = [inst(input_size, hidden_size, project) for _ in range(number)]
     else:
         cell = [LSTMLnCell(input_size, hidden_size) for _ in range(number)]
     if bidirectional:

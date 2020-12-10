@@ -20,6 +20,37 @@ rnn_output_nonlinear = {
 }
 
 
+def var_len_rnn_forward(rnn_impl: nn.Module,
+                        inp: th.Tensor,
+                        inp_len: Optional[th.Tensor] = None,
+                        enforce_sorted: bool = False,
+                        add_forward_backward: bool = False) -> th.Tensor:
+    """
+    Forward of the RNN with variant length input
+    Args:
+        inp (Tensor): N x T x D
+        inp_len (Tensor or None): N
+    Return:
+        out (Tensor): N x T x H
+    """
+    if inp.dim() != 3:
+        raise ValueError(
+            f"RNN forward needs 3D tensor, got {inp.dim()} instead")
+    if inp_len is not None:
+        inp = pack_padded_sequence(inp,
+                                   inp_len,
+                                   batch_first=True,
+                                   enforce_sorted=enforce_sorted)
+
+    out, _ = rnn_impl(inp)
+    if inp_len is not None:
+        out, _ = pad_packed_sequence(out, batch_first=True)
+    if add_forward_backward:
+        prev, last = th.chunk(out, 2, dim=-1)
+        out = prev + last
+    return out
+
+
 class OneHotEmbedding(nn.Module):
     """
     Onehot embedding layer
@@ -69,16 +100,16 @@ class Normalize1d(nn.Module):
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
-            inp (Tensor): N x F x T
+            inp (Tensor): N x T x F
         Return:
-            out (Tensor): N x F x T
+            out (Tensor): N x T x F
         """
         if self.name == "BN":
-            # N x F x T => N x T x F
+            # N x T x F => N x F x T
+            inp = inp.transpose(1, 2)
             out = self.norm(inp)
             out = out.transpose(1, 2)
         else:
-            inp = inp.transpose(1, 2)
             out = self.norm(inp)
         return out
 
@@ -178,10 +209,11 @@ class Conv1d(nn.Module):
         self.check_args(inp)
         # N x T x F => N x F x T
         inp = inp.transpose(1, 2)
-        # conv & norm
-        out = self.norm(self.conv(inp))
-        # ReLU & dropout
-        out = self.drop(tf.relu(out))
+        out = self.conv(inp)
+        # N x T x F
+        out = out.transpose(1, 2)
+        # norm & ReLU & dropout
+        out = self.drop(tf.relu(self.norm(out)))
         return out
 
 
@@ -264,11 +296,8 @@ class FSMN(nn.Module):
                                   padding=(self.ctx_size - 1) // 2,
                                   bias=False)
         self.out_proj = nn.Linear(proj_features, out_features)
-        if norm:
-            self.norm = Normalize1d(norm, out_features)
-        else:
-            self.norm = None
         self.out_drop = nn.Dropout(p=dropout)
+        self.norm = Normalize1d(norm, out_features) if norm else None
 
     def check_args(self, inp: th.Tensor) -> NoReturn:
         """
@@ -302,11 +331,10 @@ class FSMN(nn.Module):
             proj = proj + memory
         # N x T x O
         out = self.out_proj(proj)
-        # N x O x T
-        out = out.transpose(1, 2)
         if self.norm:
-            out = self.norm(out)
-        out = self.out_drop(tf.relu(out))
+            out = self.out_drop(tf.relu(self.norm(out)))
+        else:
+            out = self.out_drop(tf.relu(out))
         # N x T x O
         return out, proj
 
@@ -320,7 +348,7 @@ class VariantRNN(nn.Module):
                  input_size: int,
                  hidden_size: int = 512,
                  rnn: str = "lstm",
-                 layernorm: bool = False,
+                 norm: str = "",
                  project: Optional[int] = None,
                  non_linear: str = "relu",
                  dropout: float = 0.0,
@@ -339,9 +367,10 @@ class VariantRNN(nn.Module):
         self.add_forward_backward = add_forward_backward and bidirectional
         if bidirectional and not add_forward_backward:
             hidden_size *= 2
-        self.drop = nn.Dropout(dropout) if dropout != 0 else None
-        self.norm = nn.LayerNorm(hidden_size) if layernorm else None
         self.proj = nn.Linear(hidden_size, project) if project else None
+        self.norm = Normalize1d(
+            norm, project if project else hidden_size) if norm else None
+        self.drop = nn.Dropout(dropout) if dropout != 0 else None
 
     def forward(self, inp: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> th.Tensor:
@@ -352,22 +381,12 @@ class VariantRNN(nn.Module):
         Return:
             out_pad (Tensor): N x Ti x O
         """
-        if inp_len is not None:
-            inp = pack_padded_sequence(inp,
-                                       inp_len,
-                                       batch_first=True,
-                                       enforce_sorted=False)
-        else:
-            if inp.dim() != 3:
-                inp = th.unsqueeze(inp, 0)
-        out, _ = self.rnn(inp)
-        # N x T x D
-        if inp_len is not None:
-            out, _ = pad_packed_sequence(out, batch_first=True)
-        # add forward & backward
-        if self.add_forward_backward:
-            forward, backward = th.chunk(out, 2, dim=-1)
-            out = forward + backward
+        out = var_len_rnn_forward(
+            self.rnn,
+            inp,
+            inp_len=inp_len,
+            enforce_sorted=False,
+            add_forward_backward=self.add_forward_backward)
         # proj
         if self.proj:
             out = self.proj(out)
