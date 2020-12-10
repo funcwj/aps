@@ -11,7 +11,7 @@ for x in wer ss_metric gmvn; do python ../cmd/compute_$x.py -h; done
 for x in separate_blind decode decode_batch; do python ../cmd/$x.py -h; done
 
 # 5.12% & 2.70%
-for cer in true false; do
+for cer in false true; do
   ../cmd/compute_wer.py --cer $cer data/metric/asr/hyp.en.text \
     data/metric/asr/ref.en.text
   ../cmd/compute_wer.py --cer $cer data/metric/asr/hyp.zh.text \

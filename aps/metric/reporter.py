@@ -2,7 +2,7 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 from collections import defaultdict
-from typing import Optional, NoReturn
+from typing import Optional, NoReturn, Tuple
 from kaldi_python_io import Reader as BaseReader
 
 
@@ -74,25 +74,41 @@ class WerReporter(MetricReporter):
                                           name=name,
                                           unit=unit)
         self.tot = defaultdict(float)
+        self.err = {
+            "sub": defaultdict(float),
+            "ins": defaultdict(float),
+            "del": defaultdict(float)
+        }
         self.cnt = 0
 
-    def add(self, key: str, val: float, tot: int) -> NoReturn:
+    def add(self, key: str, val: Tuple[float], tot: int) -> NoReturn:
         cls_str = "NG"
         if self.s2c:
             cls_str = self.s2c[key]
-        self.val[cls_str] += val
         self.tot[cls_str] += tot
+        self.val[cls_str] += sum(val)
+        self.err["sub"][cls_str] += val[0]
+        self.err["ins"][cls_str] += val[1]
+        self.err["del"][cls_str] += val[2]
         self.cnt += 1
 
     def report(self) -> NoReturn:
         print(f"{self.name} ({self.unit}) Report: ")
         sum_err = sum([self.val[cls_str] for cls_str in self.val])
         sum_len = sum([self.tot[cls_str] for cls_str in self.tot])
-        print(f"Total: {sum_err * 100 / sum_len:.2f}{self.unit}, " +
-              f"{self.cnt} utterances ({int(sum_err):d} errors, " +
-              f"{int(sum_len):d} units in total)")
+        wer = sum_err * 100 / sum_len
+        errs = {
+            key: sum([self.err[key][cls_str] for cls_str in self.val
+                     ]) for key in self.err
+        }
+        errs_str = f"{errs['sub']:.0f}/{errs['ins']:.0f}/{errs['del']:.0f}"
+        print(
+            f"Total ({self.cnt:.0f} utterances): {sum_err:.0f}/{sum_len:.0f} " +
+            f"= {wer:.2f}{self.unit}, SUB/INS/DEL = {errs_str}")
         if len(self.val) != 1:
             for cls_str in self.val:
                 cls_err = self.val[cls_str]
                 cls_tot = self.tot[cls_str]
-                print(f"  {cls_str}: {cls_err * 100 / cls_tot:.2f}{self.unit}")
+                wer = cls_err * 100 / cls_tot
+                print(f"  {cls_str}: {cls_err:.0f}/{cls_tot:.0f} " +
+                      f"= {wer:.2f}{self.unit}")
