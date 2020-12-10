@@ -9,7 +9,8 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from typing import Union, Tuple
+from aps.asr.base.layer import Conv1d, Conv2d
+from typing import Union, Tuple, Optional, NoReturn
 
 
 class PositionalEncoding(nn.Module):
@@ -90,6 +91,12 @@ class LinearEmbedding(nn.Module):
         self.proj = nn.Linear(input_size, embed_dim)
         self.norm = nn.LayerNorm(embed_dim)
 
+    def num_frames(self, inp_len: Optional[th.Tensor]) -> Optional[th.Tensor]:
+        """
+        Return the output frame number
+        """
+        return inp_len
+
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
@@ -112,41 +119,43 @@ class Conv1dEmbedding(nn.Module):
                  embed_dim: int = 512,
                  inner_channels: int = 256) -> None:
         super(Conv1dEmbedding, self).__init__()
-        self.conv1 = nn.Conv1d(input_size,
-                               inner_channels,
-                               3,
-                               stride=2,
-                               padding=1)
-        self.conv2 = nn.Conv1d(inner_channels,
-                               embed_dim,
-                               3,
-                               stride=2,
-                               padding=1)
+        self.conv1 = Conv1d(input_size, inner_channels)
+        self.conv2 = Conv1d(inner_channels, embed_dim)
 
-    def forward(self, inp: th.Tensor) -> th.Tensor:
+    def check_args(self, inp: th.Tensor) -> NoReturn:
         """
-        Args:
-            inp: features from front-end or asr transform, N x B x T x F or N x T x F
+        Check shape of the tensor
         """
         if inp.dim() not in [3, 4]:
             raise RuntimeError(
                 f"Conv1dEmbedding expect 3/4D tensor, got {inp.dim()} instead")
-        if inp.dim() == 3:
-            _, T, _ = inp.shape
-            # N x T x F => N x F x T
-            inp = inp.transpose(1, 2)
+
+    def num_frames(self, inp_len: Optional[th.Tensor]) -> Optional[th.Tensor]:
+        """
+        Return the output frame number
+        """
+        if inp_len is None:
+            return None
         else:
+            out_len = self.conv1.compute_outp_dim(inp_len)
+            out_len = self.conv1.compute_outp_dim(out_len)
+            return out_len
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp: features from front-end or asr transform, N x C x T x F or N x T x F
+        """
+        self.check_args(inp)
+        if inp.dim() == 4:
             N, _, T, _ = inp.shape
-            # N x B x D x T
-            inp = inp.transpose(-1, -2)
+            # N x T x D x C
+            inp = inp.transpose(1, -1)
             inp = inp.contiguous()
-            # N x BD x T
-            inp = inp.view(N, -1, T)
-        inp = F.relu(self.conv1(inp))
-        out = F.relu(self.conv2(inp))
-        # N x F x T/4 => N x T/4 x F
-        out = out.transpose(1, 2)
-        return out[:, :T // 4]
+            # N x T x DC
+            inp = inp.view(N, T, -1)
+        out = self.conv2(self.conv1(inp))
+        return out
 
 
 class Conv2dEmbedding(nn.Module):
@@ -161,40 +170,48 @@ class Conv2dEmbedding(nn.Module):
                  input_channels: int = 1) -> None:
         super(Conv2dEmbedding, self).__init__()
         inner_channels = embed_dim // 2
-        self.conv1 = nn.Conv2d(input_channels,
-                               inner_channels,
-                               3,
-                               stride=2,
-                               padding=1)
-        input_size = (input_size - 1) // 2 + 1
-        self.conv2 = nn.Conv2d(inner_channels,
-                               inner_channels,
-                               3,
-                               stride=2,
-                               padding=1)
-        input_size = (input_size - 1) // 2 + 1
+        self.conv1 = Conv2d(input_channels, inner_channels)
+        input_size = self.conv1.compute_outp_dim(input_size, 1)
+        self.conv2 = Conv2d(inner_channels, inner_channels)
+        input_size = self.conv1.compute_outp_dim(input_size, 1)
         self.proj = nn.Linear(input_size * inner_channels, embed_dim)
+
+    def check_args(self, inp: th.Tensor) -> NoReturn:
+        """
+        Check shape of the tensor
+        """
+        if inp.dim() not in [3, 4]:
+            raise RuntimeError(
+                f"Conv2dEmbedding expect 3/4D tensor, got {inp.dim()} instead")
+
+    def num_frames(self, inp_len: Optional[th.Tensor]) -> Optional[th.Tensor]:
+        """
+        Return the output frame number
+        """
+        if inp_len is None:
+            return None
+        else:
+            out_len = self.conv2.compute_outp_dim(inp_len, 0)
+            out_len = self.conv2.compute_outp_dim(out_len, 0)
+            return out_len
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
             inp: N x T x F (from asr transform) or N x C x T x F (from front-end processing)
         """
-        if inp.dim() not in [3, 4]:
-            raise RuntimeError(
-                f"Conv2dEmbedding expect 3/4D tensor, got {inp.dim()} instead")
-        L = inp.size(-2)
+        self.check_args(inp)
         # N x 1 x T x F => N x A x T' x F'
-        out = F.relu(self.conv1(inp[:, None] if inp.dim() == 3 else inp))
+        out = self.conv1(inp[:, None] if inp.dim() == 3 else inp)
         # N x A x T' x F'
-        out = F.relu(self.conv2(out))
+        out = self.conv2(out)
         # N x T' x A x F'
         out = out.transpose(1, 2)
         N, T, _, _ = out.shape
         out = out.contiguous()
         out = out.view(N, T, -1)
-        # N x T' x D
-        out = self.proj(out[:, :L // 4])
+        # N x T x D
+        out = self.proj(out)
         return out
 
 
@@ -243,6 +260,15 @@ class IOEmbedding(nn.Module):
                                                 max_len=6000)
         else:
             self.posencode = None
+
+    def num_frames(self, inp_len: Optional[th.Tensor]) -> Optional[th.Tensor]:
+        """
+        Return the output frame number
+        """
+        if not hasattr(self.embed, "num_frames"):
+            raise RuntimeError(
+                "Can not call num_frames as that function in self.embed")
+        return self.embed.num_frames(inp_len)
 
     def forward(self, inp: th.Tensor, t: int = 0) -> th.Tensor:
         """

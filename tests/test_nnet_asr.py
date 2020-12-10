@@ -364,16 +364,14 @@ def test_beam_att(mode, enh_kwargs):
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
-@pytest.mark.parametrize(
-    "enc_type,enc_kwargs",
-    [
-        # pytest.param("variant_rnn", custom_rnn_enc_kwargs),
-        # pytest.param("conv1d", conv1d_enc_kwargs),
-        pytest.param("fsmn", fsmn_enc_kwargs),
-        # pytest.param("concat", conv1d_rnn_enc_kwargs),
-        # pytest.param("concat", conv1d_fsmn_enc_kwargs),
-        # pytest.param("concat", conv2d_rnn_enc_kwargs)
-    ])
+@pytest.mark.parametrize("enc_type,enc_kwargs", [
+    pytest.param("variant_rnn", custom_rnn_enc_kwargs),
+    pytest.param("conv1d", conv1d_enc_kwargs),
+    pytest.param("fsmn", fsmn_enc_kwargs),
+    pytest.param("concat", conv1d_rnn_enc_kwargs),
+    pytest.param("concat", conv1d_fsmn_enc_kwargs),
+    pytest.param("concat", conv2d_rnn_enc_kwargs)
+])
 def test_common_encoder(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("att")
     vocab_size = 100
