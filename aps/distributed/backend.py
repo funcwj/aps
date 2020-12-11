@@ -1,3 +1,8 @@
+#!/usr/bin/env python
+
+# Copyright 2020 Jian Wu
+# License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
+
 from os import environ
 from typing import NoReturn
 import torch as th

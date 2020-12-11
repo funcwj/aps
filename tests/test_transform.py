@@ -14,10 +14,13 @@ from torch_complex import ComplexTensor
 from aps.transform.utils import forward_stft, inverse_stft
 from aps.loader import read_audio
 from aps.transform import AsrTransform, EnhTransform, FixedBeamformer, DfTransform
+from aps.transform.asr import SpeedPerturbTransform
+
+egs1_wav = read_audio("data/transform/egs1.wav", sr=16000)
+egs2_wav = read_audio("data/transform/egs2.wav", sr=16000)
 
 
-@pytest.mark.parametrize("wav",
-                         [read_audio("data/transform/egs1.wav", sr=16000)])
+@pytest.mark.parametrize("wav", [egs1_wav])
 @pytest.mark.parametrize("frame_len, frame_hop", [(512, 256), (1024, 256),
                                                   (256, 128)])
 @pytest.mark.parametrize("window", ["hamm", "sqrthann"])
@@ -34,8 +37,7 @@ def test_forward_inverse_stft(wav, frame_len, frame_hop, window, center):
     th.testing.assert_allclose(out[..., :trunc], wav[..., :trunc])
 
 
-@pytest.mark.parametrize("wav",
-                         [read_audio("data/transform/egs1.wav", sr=16000)])
+@pytest.mark.parametrize("wav", [egs1_wav, egs2_wav[0]])
 @pytest.mark.parametrize("frame_len, frame_hop", [(512, 256), (1024, 256),
                                                   (400, 160)])
 @pytest.mark.parametrize("window", ["hann", "hamm"])
@@ -60,19 +62,19 @@ def test_with_librosa(wav, frame_len, frame_hop, window, center):
     th.testing.assert_allclose(torch_mag[0], librosa_mag)
 
 
-@pytest.mark.parametrize("wav",
-                         [read_audio("data/transform/egs1.wav", sr=16000)])
-@pytest.mark.parametrize("feats,shape", [("spectrogram-log", [1, 807, 257]),
-                                         ("emph-fbank-log-cmvn", [1, 807, 80]),
-                                         ("mfcc", [1, 807, 13]),
-                                         ("mfcc-aug", [1, 807, 13]),
-                                         ("mfcc-splice", [1, 807, 39]),
-                                         ("mfcc-aug-delta", [1, 807, 39])])
+@pytest.mark.parametrize("wav", [egs1_wav])
+@pytest.mark.parametrize("feats,shape",
+                         [("spectrogram-log", [1, 807, 257]),
+                          ("perturb-emph-fbank-log-cmvn", [1, 807, 80]),
+                          ("mfcc", [1, 807, 13]), ("mfcc-aug", [1, 807, 13]),
+                          ("mfcc-splice", [1, 807, 39]),
+                          ("mfcc-aug-delta", [1, 807, 39])])
 def test_asr_transform(wav, feats, shape):
     transform = AsrTransform(feats=feats,
                              frame_len=400,
                              frame_hop=160,
                              use_power=True,
+                             speed_perturb="0.9,1.0,1.1",
                              pre_emphasis=0.96,
                              aug_prob=0.5,
                              aug_mask_zero=False)
@@ -82,8 +84,17 @@ def test_asr_transform(wav, feats, shape):
     assert transform.feats_dim == shape[-1]
 
 
-@pytest.mark.parametrize("wav",
-                         [read_audio("data/transform/egs2.wav", sr=16000)])
+@pytest.mark.parametrize("max_length", [160000])
+def test_speed_perturb(max_length):
+    for _ in range(4):
+        speed_perturb = SpeedPerturbTransform(sr=16000)
+        wav_len = th.randint(max_length // 2, max_length, (1,))
+        wav_out = speed_perturb(th.randn(1, wav_len.item()))
+        out_len = speed_perturb.output_length(wav_len)
+        assert wav_out.shape[-1] == out_len.item()
+
+
+@pytest.mark.parametrize("wav", [egs2_wav])
 @pytest.mark.parametrize("feats,shape",
                          [("spectrogram-log-cmvn-aug-ipd", [1, 366, 257 * 5]),
                           ("ipd", [1, 366, 257 * 4])])
@@ -134,3 +145,30 @@ def test_df_transform(num_bins, num_doas):
         assert df.shape == th.Size([batch_size, num_bins, num_frames])
     else:
         assert df.shape == th.Size([batch_size, num_doas, num_bins, num_frames])
+
+
+def debug_visualize_feature():
+    transform = AsrTransform(feats="fbank-log-aug",
+                             frame_len=400,
+                             frame_hop=160,
+                             use_power=True,
+                             aug_prob=1,
+                             aug_max_frame=100,
+                             aug_max_bands=40,
+                             aug_mask_zero=False)
+    feats, _ = transform(th.from_numpy(egs1_wav[None, ...]), None)
+    import matplotlib.pyplot as plt
+    plt.imshow(feats[0].numpy().T)
+    plt.show()
+
+
+def debug_speed_perturb():
+    from aps.loader import write_audio
+    speed_perturb = SpeedPerturbTransform(sr=16000)
+    for i in range(12):
+        egs2 = speed_perturb(th.from_numpy(egs1_wav[None, :]))
+        write_audio(f"egs1-{i + 1}.wav", egs2[0].numpy())
+
+
+if __name__ == "__main__":
+    debug_speed_perturb()

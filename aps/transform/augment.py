@@ -5,6 +5,7 @@
 
 import random
 import torch as th
+import torch.nn.functional as tf
 
 from typing import Tuple, Union
 
@@ -71,3 +72,30 @@ def random_mask(shape: Tuple[int],
         else:
             masks[beg:beg + dur, :] = 0
     return masks
+
+
+def perturb_speed(wav: th.Tensor, weight: th.Tensor):
+    """
+    Do speed perturb
+    Args:
+        wav (Tensor): N x S
+        weight (Tensor): dst_sr x src_sr x K
+    Return
+        wav (Tensor): N x (N/src_sr)*dst_sr
+    """
+    _, src_sr, K = weight.shape
+    N, S = wav.shape
+    num_blocks = S // src_sr
+    if num_blocks == 0:
+        raise RuntimeError(
+            f"Input wav is too short to be perturbed, length = {S}")
+    # N x B x sr
+    wav = wav[:, :num_blocks * src_sr].view(N, num_blocks, -1)
+    # N x src_sr x B
+    wav = wav.transpose(1, 2)
+    # N x dst_sr x B
+    wav = tf.conv1d(wav, weight, padding=(K - 1) // 2)
+    # N x B x dst_sr
+    wav = wav.transpose(1, 2).contiguous()
+    # N x B*dst_sr
+    return wav.view(N, -1)

@@ -352,11 +352,12 @@ class FeatureTransform(nn.Module):
                  gcmvn: str = "",
                  norm_mean: bool = True,
                  norm_var: bool = True,
+                 norm_per_band: bool = True,
                  aug_prob: float = 0,
-                 aug_max_bands: int = 90,
+                 aug_max_bands: int = 30,
                  aug_max_frame: int = 40,
-                 num_aug_bands: int = 2,
-                 num_aug_frame: int = 2,
+                 num_aug_bands: int = 1,
+                 num_aug_frame: int = 1,
                  ipd_index: str = "",
                  cos_ipd: bool = True,
                  sin_ipd: bool = False,
@@ -396,6 +397,7 @@ class FeatureTransform(nn.Module):
                 transform.append(
                     CmvnTransform(norm_mean=norm_mean,
                                   norm_var=norm_var,
+                                  per_band=norm_per_band,
                                   gcmvn=gcmvn,
                                   eps=eps))
             elif tok == "aug":

@@ -3,10 +3,6 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-# 1) 1a.yaml
-#	WER(%) Report:
-#   Total: 9.04%, 7176 utterances (9468 errors, 104765 units in total)
-
 set -eu
 
 # data

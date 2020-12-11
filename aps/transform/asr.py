@@ -18,8 +18,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from typing import Optional, Union
-from aps.transform.utils import STFT, init_melfilter
-from aps.transform.augment import tf_mask
+from aps.transform.utils import STFT, init_melfilter, speed_perturb_filter
+from aps.transform.augment import tf_mask, perturb_speed
 from aps.const import EPSILON
 from aps.libs import ApsRegisters
 
@@ -39,6 +39,62 @@ def detect_nan(feature: th.Tensor) -> th.Tensor:
         raise ValueError(f"Detect {num_nans} NANs in feature matrices, " +
                          f"shape = {feature.shape}...")
     return feature
+
+
+class SpeedPerturbTransform(nn.Module):
+    """
+    Transform layer for speed perturb
+    """
+
+    def __init__(self, sr: int = 16000, perturb: str = "0.9,1.0,1.1") -> None:
+        super(SpeedPerturbTransform, self).__init__()
+        self.sr = sr
+        self.factor_str = perturb
+        dst_sr = [int(factor * sr) for factor in map(float, perturb.split(","))]
+        if not len(dst_sr):
+            raise ValueError("No perturb options for doing speed perturb")
+        # N x dst_sr x src_sr x K
+        self.weights = nn.ParameterList([
+            nn.Parameter(speed_perturb_filter(sr, fs), requires_grad=False)
+            for fs in dst_sr
+            if fs != sr
+        ])
+        self.last_weight = None
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(sr={self.sr}, factor={self.factor_str})"
+
+    def output_length(self,
+                      inp_len: Optional[th.Tensor]) -> Optional[th.Tensor]:
+        """
+        Compute output length after speed perturb
+        """
+        if self.last_weight is None:
+            return inp_len
+        if inp_len is None:
+            return None
+        dst_sr, src_sr, _ = self.last_weight.shape
+        return (inp_len // src_sr) * dst_sr
+
+    def forward(self, wav: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            wav (Tensor): input signal, N x ... x S
+        Return:
+            wav (Tensor): output signal, N x ... x S
+        """
+        self.last_weight = None
+        if not self.training:
+            return wav
+        if wav.dim() != 2:
+            raise RuntimeError(f"Now only supports 2D tensor, got {wav.dim()}")
+        # 1.0, do not apply speed perturb
+        choice = th.randint(0, len(self.weights) + 1, (1,)).item()
+        if choice == len(self.weights):
+            return wav
+        else:
+            self.last_weight = self.weights[choice]
+            return perturb_speed(wav, self.last_weight)
 
 
 class TFTransposeTransform(nn.Module):
@@ -311,6 +367,7 @@ class CmvnTransform(nn.Module):
     def __init__(self,
                  norm_mean: bool = True,
                  norm_var: bool = True,
+                 per_band: bool = True,
                  gcmvn: str = "",
                  eps: float = 1e-5) -> None:
         super(CmvnTransform, self).__init__()
@@ -330,12 +387,14 @@ class CmvnTransform(nn.Module):
             self.gstd = nn.Parameter(std, requires_grad=False)
         self.norm_mean = norm_mean
         self.norm_var = norm_var
+        self.per_band = per_band
         self.gcmvn = gcmvn
         self.eps = eps
 
     def extra_repr(self) -> str:
-        return (f"norm_mean={self.norm_mean}, norm_var={self.norm_var}, " +
-                f"gcmvn_stats={self.gcmvn}, eps={self.eps:.3e}")
+        return (
+            f"norm_mean={self.norm_mean}, norm_var={self.norm_var}, per_band={self.per_band}"
+            + f"gcmvn_stats={self.gcmvn}, eps={self.eps:.3e}")
 
     def dim_scale(self) -> int:
         return 1
@@ -355,13 +414,14 @@ class CmvnTransform(nn.Module):
             if self.norm_var:
                 feats = feats / self.gstd
         else:
+            axis = (-1, -2) if self.per_band else -2
             if self.norm_mean:
-                feats = feats - th.mean(feats, -2, keepdim=True)
+                feats = feats - th.mean(feats, axis, keepdim=True)
             if self.norm_var:
                 if self.norm_mean:
-                    var = th.mean(feats**2, -2, keepdim=True)
+                    var = th.mean(feats**2, axis, keepdim=True)
                 else:
-                    var = th.var(feats, unbiased=False, keepdim=True)
+                    var = th.var(feats, axis, unbiased=False, keepdim=True)
                 feats = feats / th.sqrt(var + self.eps)
         return feats
 
@@ -506,6 +566,7 @@ class DeltaTransform(nn.Module):
 class FeatureTransform(nn.Module):
     """
     Feature transform for ASR tasks
+        - SpeedPerturbTransform
         - PreEmphasisTransform
         - SpectrogramTransform
         - TFTransposeTransform
@@ -529,9 +590,10 @@ class FeatureTransform(nn.Module):
                  round_pow_of_two: bool = True,
                  stft_normalized: bool = False,
                  stft_mode: str = "librosa",
-                 pre_emphasis: float = 0,
+                 pre_emphasis: float = 0.97,
                  use_power: bool = False,
                  sr: int = 16000,
+                 speed_perturb: str = "0.9,1.0,1.1",
                  log_lower_bound: float = 0,
                  num_mels: int = 80,
                  num_ceps: int = 13,
@@ -542,10 +604,11 @@ class FeatureTransform(nn.Module):
                  aug_max_bands: int = 30,
                  aug_max_frame: int = 40,
                  aug_mask_zero: bool = True,
-                 num_aug_bands: int = 2,
-                 num_aug_frame: int = 2,
+                 num_aug_bands: int = 1,
+                 num_aug_frame: int = 1,
                  norm_mean: bool = True,
                  norm_var: bool = True,
+                 norm_per_band: bool = True,
                  gcmvn: str = "",
                  subsampling_factor: int = 1,
                  lctx: int = 1,
@@ -555,7 +618,9 @@ class FeatureTransform(nn.Module):
                  requires_grad: bool = False,
                  eps: float = EPSILON) -> None:
         super(FeatureTransform, self).__init__()
-        trans_tokens = feats.split("-")
+        if not feats:
+            raise ValueError("FeatureTransform: \'feats\' can not be empty")
+        feat_tokens = feats.split("-")
         transform = []
         feats_dim = 0
         stft_kwargs = {
@@ -574,9 +639,14 @@ class FeatureTransform(nn.Module):
             "num_mels": num_mels,
             "requires_grad": requires_grad
         }
-        self.spec_index = -1
-        for idx, tok in enumerate(trans_tokens):
-            if tok == "emph":
+        self.spectra_index = -1
+        self.perturb_index = -1
+        for idx, tok in enumerate(feat_tokens):
+            if tok == "perturb":
+                transform.append(
+                    SpeedPerturbTransform(sr=sr, perturb=speed_perturb))
+                self.perturb_index = idx
+            elif tok == "emph":
                 transform.append(
                     PreEmphasisTransform(pre_emphasis=pre_emphasis))
             elif tok == "spectrogram":
@@ -586,7 +656,7 @@ class FeatureTransform(nn.Module):
                 ]
                 transform += spectrogram
                 feats_dim = transform[-2].dim()
-                self.spec_index = idx
+                self.spectra_index = idx
             elif tok == "trans":
                 transform.append(TFTransposeTransform())
             elif tok == "power":
@@ -597,7 +667,7 @@ class FeatureTransform(nn.Module):
                     TFTransposeTransform(),
                     MelTransform(frame_len, **mel_kwargs)
                 ]
-                self.spec_index = idx
+                self.spectra_index = idx
                 transform += fbank
                 feats_dim = transform[-1].dim()
             elif tok == "mfcc":
@@ -631,6 +701,7 @@ class FeatureTransform(nn.Module):
                 transform.append(
                     CmvnTransform(norm_mean=norm_mean,
                                   norm_var=norm_var,
+                                  per_band=norm_per_band,
                                   gcmvn=gcmvn,
                                   eps=eps))
             elif tok == "aug":
@@ -663,10 +734,12 @@ class FeatureTransform(nn.Module):
         """
         if wav_len is None:
             return None
-        if self.spec_index == -1:
+        if self.spectra_index == -1:
             raise RuntimeError("No SpectrogramTransform layer is found, "
                                "can not work out number of the frames")
-        num_frames = self.transform[self.spec_index].len(wav_len)
+        if self.perturb_index != -1:
+            wav_len = self.transform[self.perturb_index].output_length(wav_len)
+        num_frames = self.transform[self.spectra_index].len(wav_len)
         return num_frames // self.subsampling_factor
 
     def forward(self, wav_pad: th.Tensor,

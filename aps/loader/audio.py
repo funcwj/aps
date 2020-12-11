@@ -3,12 +3,12 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-import os
 import io
+import os
 import subprocess
 
-import soundfile as sf
 import numpy as np
+import soundfile as sf
 import scipy.signal as ss
 
 from kaldi_python_io import Reader as BaseReader
@@ -69,9 +69,9 @@ def write_audio(fname: Union[str, IO[Any]],
         samps = np.squeeze(samps)
     # make dirs
     if isinstance(fname, str):
-        fdir = os.path.dirname(fname)
-        if fdir and not os.path.exists(fdir):
-            os.makedirs(fdir)
+        parent = os.path.dirname(fname)
+        if parent and not os.path.exists(parent):
+            os.makedirs(parent)
     sf.write(fname, samps, sr)
 
 

@@ -164,6 +164,7 @@ class PyTorchRNNDecoder(nn.Module):
                     nbest: int = 8,
                     normalized: bool = True) -> List[Dict]:
         """
+        TODO: re-impl
         Beam search (best first) algorithm for RNN-T
         Args:
             enc_out: N(=1) x Ti x D
