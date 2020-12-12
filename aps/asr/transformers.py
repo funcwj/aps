@@ -5,6 +5,7 @@
 
 import torch as th
 import torch.nn as nn
+import torch.nn.functional as tf
 
 from typing import Optional, Dict, Tuple, List
 
@@ -12,6 +13,9 @@ from aps.asr.transformer.decoder import TorchTransformerDecoder
 from aps.asr.transformer.encoder import support_xfmr_encoder
 from aps.asr.base.encoder import encoder_instance
 from aps.libs import ApsRegisters
+
+XfmrASROutputType = Tuple[th.Tensor, None, Optional[th.Tensor],
+                          Optional[th.Tensor]]
 
 
 @ApsRegisters.asr.register("transformer")
@@ -41,23 +45,22 @@ class TransformerASR(nn.Module):
         else:
             if enc_proj is None:
                 raise ValueError("For non-transformer encoder, "
-                                 "encoder_proj can not be None")
+                                 "enc_proj can not be None")
+            if enc_proj != dec_kwargs["att_dim"]:
+                raise ValueError("enc_proj should be equal to att_dim")
             self.encoder = encoder_instance(enc_type, input_size, enc_proj,
                                             enc_kwargs)
         if dec_type != "transformer":
             raise ValueError("TransformerASR: decoder must be transformer")
-        self.decoder = TorchTransformerDecoder(vocab_size -
-                                               1 if ctc else vocab_size,
-                                               enc_dim=enc_proj,
-                                               **dec_kwargs)
+        self.decoder = TorchTransformerDecoder(
+            vocab_size - 1 if ctc else vocab_size, **dec_kwargs)
         self.sos = sos
         self.eos = eos
         self.asr_transform = asr_transform
         self.ctc = nn.Linear(dec_kwargs["att_dim"], vocab_size) if ctc else None
 
-    def forward(
-        self, x_pad: th.Tensor, x_len: Optional[th.Tensor], y_pad: th.Tensor
-    ) -> Tuple[th.Tensor, None, Optional[th.Tensor], Optional[th.Tensor]]:
+    def forward(self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
+                y_pad: th.Tensor) -> XfmrASROutputType:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -77,8 +80,10 @@ class TransformerASR(nn.Module):
             enc_ctc = enc_ctc.transpose(0, 1)
         else:
             enc_ctc = None
+        # N x To+1
+        y_pad = tf.pad(y_pad, (1, 0), value=self.sos)
         # To+1 x N x D
-        dec_out = self.decoder(enc_out, enc_len, y_pad, sos=self.sos)
+        dec_out = self.decoder(enc_out, enc_len, y_pad)
         # N x To+1 x D
         dec_out = dec_out.transpose(0, 1).contiguous()
         return dec_out, None, enc_ctc, enc_len
@@ -90,8 +95,9 @@ class TransformerASR(nn.Module):
                     lm_weight: float = 0,
                     nbest: int = 8,
                     max_len: int = -1,
-                    vectorized: bool = True,
-                    normalized: bool = True) -> List[Dict]:
+                    penalty: float = 0,
+                    normalized: bool = True,
+                    temperature: float = 1) -> List[Dict]:
         """
         Beam search for Transformer
         """
@@ -117,5 +123,4 @@ class TransformerASR(nn.Module):
                                             eos=self.eos,
                                             nbest=nbest,
                                             max_len=max_len,
-                                            vectorized=vectorized,
                                             normalized=normalized)

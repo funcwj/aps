@@ -16,6 +16,9 @@ from aps.libs import ApsRegisters
 
 _pytorch_decoder = PyTorchRNNDecoder
 
+AttASROutputType = Tuple[th.Tensor, th.Tensor, Optional[th.Tensor],
+                         Optional[th.Tensor]]
+
 
 @ApsRegisters.asr.register("att")
 class AttASR(nn.Module):
@@ -52,13 +55,11 @@ class AttASR(nn.Module):
         self.ctc = nn.Linear(enc_proj, vocab_size) if ctc else None
         self.asr_transform = asr_transform
 
-    def forward(
-        self,
-        x_pad: th.Tensor,
-        x_len: Optional[th.Tensor],
-        y_pad: th.Tensor,
-        ssr: float = 0
-    ) -> Tuple[th.Tensor, th.Tensor, Optional[th.Tensor], Optional[th.Tensor]]:
+    def forward(self,
+                x_pad: th.Tensor,
+                x_len: Optional[th.Tensor],
+                y_pad: th.Tensor,
+                ssr: float = 0) -> AttASROutputType:
         """
         Args:
             x_pad: N x Ti x D or N x S

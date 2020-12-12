@@ -1,7 +1,7 @@
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
-Load {am,lm,ss} training configurations
+Load {am,lm,se} training configurations
 """
 import yaml
 import codecs

@@ -9,7 +9,7 @@ import torch.nn as nn
 from typing import Optional, Dict, Tuple, List
 from torch_complex import ComplexTensor
 
-from aps.asr.att import AttASR
+from aps.asr.att import AttASR, AttASROutputType
 from aps.asr.base.encoder import PyTorchRNNEncoder
 from aps.asr.filter.mvdr import MvdrBeamformer
 from aps.asr.filter.google import CLPFsBeamformer  # same as TimeInvariantFilter
@@ -72,13 +72,11 @@ class EnhAttASR(nn.Module):
         """
         raise NotImplementedError
 
-    def forward(
-        self,
-        x_pad: th.Tensor,
-        x_len: Optional[th.Tensor],
-        y_pad: th.Tensor,
-        ssr: float = 0
-    ) -> Tuple[th.Tensor, th.Tensor, Optional[th.Tensor], Optional[th.Tensor]]:
+    def forward(self,
+                x_pad: th.Tensor,
+                x_len: Optional[th.Tensor],
+                y_pad: th.Tensor,
+                ssr: float = 0) -> AttASROutputType:
         """
         Args:
             x_pad: N x Ti x D or N x S

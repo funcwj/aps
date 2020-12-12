@@ -11,7 +11,7 @@ import torch.utils.data as dat
 from kaldi_python_io import Reader as BaseReader
 from typing import Dict, Iterator, Iterable
 from aps.loader.simu import run_simu, make_argparse
-from aps.loader.ss.chunk import WaveChunkDataLoader
+from aps.loader.se.chunk import WaveChunkDataLoader
 from aps.libs import ApsRegisters
 
 

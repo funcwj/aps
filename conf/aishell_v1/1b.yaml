@@ -1,4 +1,5 @@
-# Total (7176 utterances): 7658/104765 = 7.31%, SUB/INS/DEL = 7259/242/157
+# WER (%) Report:
+# Total (7176 utterances): 7377/104765 = 7.04%, SUB/INS/DEL = 6911/238/228
 
 nnet: "transformer"
 
@@ -23,7 +24,7 @@ nnet_conf:
     num_layers: 6
 
 asr_transform:
-  feats: "fbank-log-cmvn-aug"
+  feats: "perturb-fbank-log-cmvn-aug"
   frame_len: 400
   frame_hop: 160
   window: "hamm"

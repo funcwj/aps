@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch.nn import TransformerDecoder, TransformerDecoderLayer
-from typing import Union, Optional, List, Dict
+from typing import Union, Tuple, Optional, List, Dict
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
 from aps.asr.beam_search.lm import adjust_hidden
@@ -73,7 +73,6 @@ class TorchTransformerDecoder(nn.Module):
     def __init__(self,
                  vocab_size: int,
                  att_dim: int = 512,
-                 enc_dim: Optional[int] = None,
                  nhead: int = 8,
                  feedforward_dim: int = 2048,
                  scale_embed: bool = False,
@@ -93,48 +92,63 @@ class TorchTransformerDecoder(nn.Module):
                                                 dim_feedforward=feedforward_dim,
                                                 dropout=att_dropout)
         self.decoder = TransformerDecoder(decoder_layer, num_layers)
-        if enc_dim and enc_dim != att_dim:
-            self.enc_proj = nn.Linear(enc_dim, att_dim)
-        else:
-            self.enc_proj = None
         self.output = nn.Linear(att_dim, vocab_size, bias=False)
         self.vocab_size = vocab_size
 
-    def forward(self,
-                enc_out: th.Tensor,
-                enc_len: Optional[th.Tensor],
-                tgt_pad: th.Tensor,
-                sos: int = -1) -> th.Tensor:
+    def step(self,
+             enc_out: th.Tensor,
+             tgt_pad: th.Tensor,
+             enc_len: Optional[th.Tensor] = None,
+             pre_emb: Optional[th.Tensor] = None,
+             out_idx: Optional[int] = None) -> Tuple[th.Tensor]:
         """
         Args:
-            enc_out: Ti x N x D
-            enc_len: N or None
-            tgt_pad: N x To
+            enc_out (Tensor): T x N x D
+            tgt_pad (Tensor): N x To
+            enc_len (Tensor): N or None
+            pre_emb (Tensor): T' x N x D
         Return:
-            dec_out: To+1 x N x D
+            dec_out (Tensor): T+T' x N x D or N x D
         """
-        if sos < 0:
-            raise ValueError(f"Invalid sos value: {sos}")
         # N x Ti
         memory_mask = None if enc_len is None else (padding_mask(enc_len) == 1)
-        # N x To+1
-        tgt_pad = F.pad(tgt_pad, (1, 0), value=sos)
-        # genrarte target masks (-inf/0)
-        tgt_mask = prep_sub_mask(tgt_pad.shape[-1], device=tgt_pad.device)
-        # To+1 x N x E
-        tgt_pad = self.tgt_embed(tgt_pad)
-        # Ti x N x D
-        if self.enc_proj:
-            enc_out = self.enc_proj(enc_out)
+        if pre_emb is None:
+            # genrarte target masks (-inf/0)
+            tgt_mask = prep_sub_mask(tgt_pad.shape[-1], device=tgt_pad.device)
+            # To+1 x N x E
+            tgt_emb = self.tgt_embed(tgt_pad)
+        else:
+            tgt_mask = prep_sub_mask(tgt_pad.shape[-1] + pre_emb.shape[0],
+                                     device=tgt_pad.device)
+            # To+1 x N x E
+            tgt_emb = self.tgt_embed(tgt_pad, t=pre_emb.shape[0])
+            # T x N x E
+            tgt_emb = th.cat([pre_emb, tgt_emb], dim=0)
         # To+1 x N x D
-        dec_out = self.decoder(tgt_pad,
+        dec_out = self.decoder(tgt_emb,
                                enc_out,
                                tgt_mask=tgt_mask,
                                memory_mask=None,
                                tgt_key_padding_mask=None,
                                memory_key_padding_mask=memory_mask)
+        if out_idx is not None:
+            dec_out = dec_out[out_idx]
         # To+1 x N x V
         dec_out = self.output(dec_out)
+        return dec_out, tgt_emb
+
+    def forward(self, enc_out: th.Tensor, enc_len: Optional[th.Tensor],
+                tgt_pad: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            enc_out (Tensor): T x N x D
+            enc_len (Tensor): N or None
+            tgt_pad (Tensor): N x To
+        Return:
+            dec_out (Tensor): T x N x D
+        """
+        # T x N x V
+        dec_out, _ = self.step(enc_out, tgt_pad, enc_len=enc_len)
         return dec_out
 
     def beam_search(self,
@@ -146,7 +160,6 @@ class TorchTransformerDecoder(nn.Module):
                     eos: int = -1,
                     nbest: int = 8,
                     max_len: int = -1,
-                    vectorized: bool = True,
                     normalized: bool = True) -> List[Dict]:
         """
         Beam search for Transformer
@@ -163,41 +176,32 @@ class TorchTransformerDecoder(nn.Module):
             raise RuntimeError(f"Beam size({beam}) > vocabulary size")
 
         with th.no_grad():
-            # Ti x N x D
-            if self.enc_proj:
-                enc_out = self.enc_proj(enc_out)
             # Ti x beam x D
             enc_out = th.repeat_interleave(enc_out, beam, 1)
 
-            dev = enc_out.device
-            accu_score = th.zeros(beam, device=dev)
+            device = enc_out.device
+            accu_score = th.zeros(beam, device=device)
             hist_token = []
             back_point = []
             lm_state = None
 
             hypos = []
             dec_seq = []
-            point = th.arange(0, beam, dtype=th.int64, device=dev)
+            point = th.arange(0, beam, dtype=th.int64, device=device)
 
             # step by step
             for t in range(max_len):
-                # target mask
-                tgt_mask = prep_sub_mask(t + 1, device=dev)
                 # beam
                 if t:
                     # pre_out: beam x T
-                    pre_out = th.tensor(dec_seq, dtype=th.int64, device=dev)
+                    pre_out = th.tensor(dec_seq, dtype=th.int64, device=device)
                 else:
                     # pre_out: beam x 1
                     pre_out = th.tensor([[sos]] * beam,
                                         dtype=th.int64,
-                                        device=dev)
-                # beam x T x E
-                pre_emb = self.tgt_embed(pre_out)
-                # Tcur - 1 x beam x D
-                dec_out = self.decoder(pre_emb, enc_out, tgt_mask=tgt_mask)[-1]
+                                        device=device)
                 # beam x V
-                dec_out = self.output(dec_out)
+                dec_out, _ = self.step(enc_out, pre_out, out_idx=-1)
                 # compute prob: beam x V, nagetive
                 prob = F.log_softmax(dec_out, dim=-1)
 
@@ -241,7 +245,7 @@ class TorchTransformerDecoder(nn.Module):
                         i for i, end_with_eos in enumerate(end_eos)
                         if end_with_eos
                     ]
-                    idx = th.tensor(idx, dtype=th.int64, device=dev)
+                    idx = th.tensor(idx, dtype=th.int64, device=device)
                     hyp_full = trace_back_hypos(point[idx],
                                                 back_point,
                                                 hist_token,
@@ -264,7 +268,7 @@ class TorchTransformerDecoder(nn.Module):
                 end_wo_eos = (token != eos).tolist()
                 if sum(end_wo_eos):
                     idx = [i for i, go_on in enumerate(end_wo_eos) if go_on]
-                    idx = th.tensor(idx, dtype=th.int64, device=dev)
+                    idx = th.tensor(idx, dtype=th.int64, device=device)
                     hyp_partial = trace_back_hypos(idx,
                                                    back_point,
                                                    hist_token,

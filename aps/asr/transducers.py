@@ -12,6 +12,8 @@ from aps.asr.transducer.decoder import TorchTransformerDecoder, PyTorchRNNDecode
 from aps.asr.base.encoder import encoder_instance
 from aps.libs import ApsRegisters
 
+TransducerOutputType = Tuple[th.Tensor, Optional[th.Tensor]]
+
 
 @ApsRegisters.asr.register("transducer")
 class TorchTransducerASR(nn.Module):
@@ -48,10 +50,9 @@ class TorchTransducerASR(nn.Module):
         self.blank = blank
         self.asr_transform = asr_transform
 
-    def forward(
-            self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
-            y_pad: th.Tensor, y_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+    def forward(self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
+                y_pad: th.Tensor,
+                y_len: Optional[th.Tensor]) -> TransducerOutputType:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -151,18 +152,18 @@ class TransformerTransducerASR(nn.Module):
             self.is_xfmr_encoder = False
             if enc_proj is None:
                 raise ValueError("For non-transformer encoder, "
-                                 "encoder_proj can not be None")
+                                 "enc_proj can not be None")
+            if enc_proj != dec_kwargs["att_dim"]:
+                raise ValueError("enc_proj should be equal to att_dim")
             self.encoder = encoder_instance(enc_type, input_size, enc_proj,
                                             enc_kwargs)
-        dec_kwargs["enc_dim"] = enc_proj
         self.decoder = TorchTransformerDecoder(vocab_size, **dec_kwargs)
         self.blank = blank
         self.asr_transform = asr_transform
 
-    def forward(
-            self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
-            y_pad: th.Tensor, y_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+    def forward(self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
+                y_pad: th.Tensor,
+                y_len: Optional[th.Tensor]) -> TransducerOutputType:
         """
         Args:
             x_pad: N x Ti x D or N x S
