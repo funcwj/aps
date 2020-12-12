@@ -100,7 +100,8 @@ class TorchTransformerDecoder(nn.Module):
              tgt_pad: th.Tensor,
              enc_len: Optional[th.Tensor] = None,
              pre_emb: Optional[th.Tensor] = None,
-             out_idx: Optional[int] = None) -> Tuple[th.Tensor]:
+             out_idx: Optional[int] = None,
+             point: Optional[th.Tensor] = None) -> Tuple[th.Tensor]:
         """
         Args:
             enc_out (Tensor): T x N x D
@@ -109,21 +110,22 @@ class TorchTransformerDecoder(nn.Module):
             pre_emb (Tensor): T' x N x D
         Return:
             dec_out (Tensor): T+T' x N x D or N x D
+            tgt_emb (Tensor): T+T' x N x E
         """
         # N x Ti
+        offset = 0 if pre_emb is None else pre_emb.shape[0]
         memory_mask = None if enc_len is None else (padding_mask(enc_len) == 1)
-        if pre_emb is None:
-            # genrarte target masks (-inf/0)
-            tgt_mask = prep_sub_mask(tgt_pad.shape[-1], device=tgt_pad.device)
-            # To+1 x N x E
-            tgt_emb = self.tgt_embed(tgt_pad)
-        else:
-            tgt_mask = prep_sub_mask(tgt_pad.shape[-1] + pre_emb.shape[0],
-                                     device=tgt_pad.device)
-            # To+1 x N x E
-            tgt_emb = self.tgt_embed(tgt_pad, t=pre_emb.shape[0])
-            # T x N x E
+        tgt_mask = prep_sub_mask(tgt_pad.shape[-1] + offset,
+                                 device=tgt_pad.device)
+        if offset:
+            # T + T' x N x E
+            tgt_emb = self.tgt_embed(tgt_pad, t=offset)
+            if point is not None:
+                pre_emb = pre_emb[:, point]
             tgt_emb = th.cat([pre_emb, tgt_emb], dim=0)
+        else:
+            # T x N x E
+            tgt_emb = self.tgt_embed(tgt_pad)
         # To+1 x N x D
         dec_out = self.decoder(tgt_emb,
                                enc_out,
@@ -187,6 +189,7 @@ class TorchTransformerDecoder(nn.Module):
 
             hypos = []
             dec_seq = []
+            pre_emb = None
             point = th.arange(0, beam, dtype=th.int64, device=device)
 
             # step by step
@@ -201,7 +204,11 @@ class TorchTransformerDecoder(nn.Module):
                                         dtype=th.int64,
                                         device=device)
                 # beam x V
-                dec_out, _ = self.step(enc_out, pre_out, out_idx=-1)
+                dec_out, pre_emb = self.step(enc_out,
+                                             pre_out[:, -1:],
+                                             out_idx=-1,
+                                             pre_emb=pre_emb,
+                                             point=point)
                 # compute prob: beam x V, nagetive
                 prob = F.log_softmax(dec_out, dim=-1)
 

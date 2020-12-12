@@ -12,6 +12,7 @@ from typing import Optional, Dict, Tuple, List
 from aps.asr.transformer.decoder import TorchTransformerDecoder
 from aps.asr.transformer.encoder import support_xfmr_encoder
 from aps.asr.base.encoder import encoder_instance
+from aps.asr.beam_search.transformer import beam_search
 from aps.libs import ApsRegisters
 
 XfmrASROutputType = Tuple[th.Tensor, None, Optional[th.Tensor],
@@ -115,12 +116,24 @@ class TransformerASR(nn.Module):
             # Ti x N x D
             enc_out, _ = self.encoder(x, None)
             # beam search
-            return self.decoder.beam_search(enc_out,
-                                            beam=beam,
-                                            lm=lm,
-                                            lm_weight=lm_weight,
-                                            sos=self.sos,
-                                            eos=self.eos,
-                                            nbest=nbest,
-                                            max_len=max_len,
-                                            normalized=normalized)
+            return beam_search(self.decoder,
+                               enc_out,
+                               beam=beam,
+                               lm=lm,
+                               lm_weight=lm_weight,
+                               sos=self.sos,
+                               eos=self.eos,
+                               nbest=nbest,
+                               max_len=max_len,
+                               penalty=penalty,
+                               normalized=normalized,
+                               temperature=temperature)
+            # return self.decoder.beam_search(enc_out,
+            #                                 beam=beam,
+            #                                 lm=lm,
+            #                                 lm_weight=lm_weight,
+            #                                 sos=self.sos,
+            #                                 eos=self.eos,
+            #                                 nbest=nbest,
+            #                                 max_len=max_len,
+            #                                 normalized=normalized)
