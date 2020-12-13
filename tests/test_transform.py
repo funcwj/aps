@@ -63,18 +63,17 @@ def test_with_librosa(wav, frame_len, frame_hop, window, center):
 
 
 @pytest.mark.parametrize("wav", [egs1_wav])
-@pytest.mark.parametrize("feats,shape",
-                         [("spectrogram-log", [1, 807, 257]),
-                          ("perturb-emph-fbank-log-cmvn", [1, 807, 80]),
-                          ("mfcc", [1, 807, 13]), ("mfcc-aug", [1, 807, 13]),
-                          ("mfcc-splice", [1, 807, 39]),
-                          ("mfcc-aug-delta", [1, 807, 39])])
+@pytest.mark.parametrize("feats,shape", [("spectrogram-log", [1, 807, 257]),
+                                         ("emph-fbank-log-cmvn", [1, 807, 80]),
+                                         ("mfcc", [1, 807, 13]),
+                                         ("mfcc-aug", [1, 807, 13]),
+                                         ("mfcc-splice", [1, 807, 39]),
+                                         ("mfcc-aug-delta", [1, 807, 39])])
 def test_asr_transform(wav, feats, shape):
     transform = AsrTransform(feats=feats,
                              frame_len=400,
                              frame_hop=160,
                              use_power=True,
-                             speed_perturb="0.9,1.0,1.1",
                              pre_emphasis=0.96,
                              aug_prob=0.5,
                              aug_mask_zero=False)
@@ -104,7 +103,6 @@ def test_enh_transform(wav, feats, shape):
                              frame_hop=256,
                              ipd_index="0,1;0,2;0,3;0,4",
                              aug_prob=0.2)
-    print(transform)
     feats, stft, _ = transform(th.from_numpy(wav[None, ...]), None)
     assert feats.shape == th.Size(shape)
     assert th.sum(th.isnan(feats)) == 0

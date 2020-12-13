@@ -185,8 +185,8 @@ class AttASR(nn.Module):
                 warnings.warn(
                     "Got one utterance, use beam_search (...) instead")
             outs = []
-            # NOTE: if we do padding on input of the encoder, the output may differ with non-padding version
-            #       thus we use for loop here
+            # NOTE: if we do zero padding on the input features/signals and form them as a batch,
+            #       the output may slightly differ with the non-padding version. Thus we use for loop here
             for inp in batch:
                 if self.asr_transform:
                     inp, _ = self.asr_transform(inp[None, ...], None)

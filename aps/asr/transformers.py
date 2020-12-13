@@ -149,7 +149,8 @@ class TransformerASR(nn.Module):
             if len(batch) == 1:
                 warnings.warn(
                     "Got one utterance, use beam_search (...) instead")
-
+            # NOTE: If we do zero padding on the input features/signals and form them as a batch,
+            #       the output may slightly differ with the non-padding version. Thus we use for loop here
             outs = []
             for inp in batch:
                 if self.asr_transform:
@@ -160,7 +161,8 @@ class TransformerASR(nn.Module):
                 outs.append(enc_out[:, 0])
 
             lens = [out.shape[0] for out in outs]
-            enc_out = pad_sequence(outs, batch_first=True)
+            # T x N x D
+            enc_out = pad_sequence(outs, batch_first=False)
             enc_len = th.tensor(lens, device=enc_out.device)
             # beam search
             return beam_search_batch(self.decoder,

@@ -133,7 +133,7 @@ def beam_search_batch(decoder: nn.Module,
     device = enc_out.device
     # N x T x F => N*beam x T x F
     enc_out = th.repeat_interleave(enc_out, beam, 1)
-    enc_len = th.repeat_interleave(enc_len, beam, 1)
+    enc_len = th.repeat_interleave(enc_len, beam, 0)
 
     pre_emb = None
     lm_state = None

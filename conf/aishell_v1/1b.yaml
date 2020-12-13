@@ -1,5 +1,5 @@
 # WER (%) Report:
-# Total (7176 utterances): 7377/104765 = 7.04%, SUB/INS/DEL = 6911/238/228
+# Total (7176 utterances): 7362/104765 = 7.03%, SUB/INS/DEL = 6914/251/197
 
 nnet: "transformer"
 

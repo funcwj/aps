@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 
 from torch.nn import TransformerDecoder, TransformerDecoderLayer
-from typing import Union, Tuple, Optional, List, Dict
+from typing import Union, Tuple, Optional
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
 
@@ -28,38 +28,6 @@ def prep_sub_mask(T: int, device: Union[str, th.device] = "cpu") -> th.Tensor:
     mask = (th.triu(th.ones(T, T, device=device), diagonal=1) == 1).float()
     mask = mask.masked_fill(mask == 1, float("-inf"))
     return mask
-
-
-def trace_back_hypos(point: th.Tensor,
-                     back_point: List[th.Tensor],
-                     hist_token: List[th.Tensor],
-                     score: th.Tensor,
-                     sos: int = 1,
-                     eos: int = 2,
-                     penalty: float = 0,
-                     normalized: bool = True) -> List[Dict]:
-    """
-    TODO: remove it in the future
-    Trace back the decoding transcription sequence from the current time point
-    Args:
-        point (Tensor): starting point
-        back_point (list[Tensor]): father point at each step
-        hist_token (list[Tensor]): beam token at each step
-        score (Tensor): decoding score
-    """
-    trans = []
-    score = score.tolist()
-    for ptr, tok in zip(back_point[::-1], hist_token[::-1]):
-        trans.append(tok[point].tolist())
-        point = ptr[point]
-    hypos = []
-    trans = trans[::-1]
-    for i, s in enumerate(score):
-        token = [t[i] for t in trans]
-        score = (s + (len(token) + 1) * penalty) / (len(token) +
-                                                    1 if normalized else 1)
-        hypos.append({"score": score, "trans": [sos] + token + [eos]})
-    return hypos
 
 
 class TorchTransformerDecoder(nn.Module):

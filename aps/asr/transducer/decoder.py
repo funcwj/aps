@@ -401,6 +401,7 @@ class TorchTransformerDecoder(nn.Module):
                     nbest: int = 8,
                     normalized: bool = True) -> List[Dict]:
         """
+        TODO: re-impl
         Beam search (best first) algorithm for RNN-T
         Args:
             enc_out: Ti x N(=1) x D

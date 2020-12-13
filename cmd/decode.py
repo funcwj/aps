@@ -10,7 +10,7 @@ import torch as th
 from aps.eval import Computer
 from aps.opts import DecodingParser
 from aps.conf import load_dict
-from aps.utils import get_logger, io_wrapper
+from aps.utils import get_logger, io_wrapper, SimpleTimer
 from aps.loader import AudioReader
 
 from kaldi_python_io import ScriptReader
@@ -86,6 +86,7 @@ def run(args):
         topn.write(f"{nbest}\n")
 
     N = 0
+    timer = SimpleTimer()
     for key, src in src_reader:
         logger.info(f"Decoding utterance {key}...")
         nbest_hypos = decoder.run(src,
@@ -123,7 +124,9 @@ def run(args):
         top1.close()
     if topn and not stdout_topn:
         topn.close()
-    logger.info(f"Decode {len(src_reader)} utterance done")
+    cost = timer.elapsed()
+    logger.info(
+        f"Decode {len(src_reader)} utterance done, time cost = {cost:.2f}s")
 
 
 if __name__ == "__main__":

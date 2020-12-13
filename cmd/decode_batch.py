@@ -9,7 +9,7 @@ import warnings
 import torch as th
 
 from aps.loader import AudioReader
-from aps.utils import get_logger, io_wrapper
+from aps.utils import get_logger, io_wrapper, SimpleTimer
 from aps.opts import DecodingParser
 from aps.conf import load_dict
 from aps.eval import Computer
@@ -65,6 +65,7 @@ def run(args):
         topn.write(f"{nbest}\n")
 
     done = 0
+    timer = SimpleTimer()
     batches = []
     for key, src in src_reader:
         done += 1
@@ -77,7 +78,7 @@ def run(args):
         if len(batches) != args.batch_size and not end:
             continue
         # decode
-        batches = sorted(batches, lambda b: b["len"], reverse=True)
+        batches = sorted(batches, key=lambda b: b["len"], reverse=True)
         batch_nbest = decoder.run([bz["inp"] for bz in batches],
                                   lm=lm,
                                   beam=args.beam_size,
@@ -116,7 +117,9 @@ def run(args):
         top1.close()
     if topn and not stdout_topn:
         topn.close()
-    logger.info(f"Decode {len(src_reader)} utterance done")
+    cost = timer.elapsed()
+    logger.info(
+        f"Decode {len(src_reader)} utterance done, time cost = {cost:.2f}s")
 
 
 if __name__ == "__main__":

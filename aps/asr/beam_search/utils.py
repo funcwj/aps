@@ -11,7 +11,7 @@ from aps.const import NEG_INF
 
 class BaseBeamTracker(object):
     """
-    Base BeamTracker class (to be inheried)
+    Base class (to be inheried)
     """
 
     def __init__(self,
@@ -32,7 +32,7 @@ class BaseBeamTracker(object):
 
 class BeamTracker(BaseBeamTracker):
     """
-    The data structure used in beam search
+    A data structure used in beam search algothrim
     """
 
     def __init__(self,
@@ -126,6 +126,9 @@ class BeamTracker(BaseBeamTracker):
 
 
 class BatchBeamTracker(BaseBeamTracker):
+    """
+    A data structure used in batch version of the beam search
+    """
 
     def __init__(self,
                  beam_size: int,

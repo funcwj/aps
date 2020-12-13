@@ -11,6 +11,8 @@ import torch as th
 from aps.loader import AudioReader
 from aps.libs import aps_transform
 
+removed_keys = ["cmvn", "splice", "aug", "delta", "perturb"]
+
 
 def run(args):
     with open(args.conf, "r") as f:
@@ -21,7 +23,7 @@ def run(args):
     wav_reader = AudioReader(args.wav_scp, sr=args.sr, channel=args.channel)
 
     feats_conf_list = conf[trans_key]["feats"].split("-")
-    for remove_key in ["cmvn", "splice", "aug", "delta"]:
+    for remove_key in removed_keys:
         if remove_key in feats_conf_list:
             feats_conf_list.remove(remove_key)
             print(f"Removed key in feature configuration: {remove_key}")
@@ -29,6 +31,7 @@ def run(args):
     feats_conf = "-".join(feats_conf_list)
     conf[trans_key]["feats"] = feats_conf
     transform = aps_transform(args.transform)(**conf[trans_key])
+    transform.eval()
     print(f"Compute gmvn on feature {feats_conf}")
     gmvn = th.zeros([2, transform.feats_dim])
     num_utts = 0
