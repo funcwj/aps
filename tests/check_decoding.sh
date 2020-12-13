@@ -3,6 +3,8 @@
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
+# checkpoints may out of date
+
 set -eu
 
 # test decoding for att

@@ -3,16 +3,18 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
+import warnings
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from torch.nn.utils.rnn import pad_sequence
 from typing import Optional, Dict, Tuple, List
 
 from aps.asr.transformer.decoder import TorchTransformerDecoder
 from aps.asr.transformer.encoder import support_xfmr_encoder
 from aps.asr.base.encoder import encoder_instance
-from aps.asr.beam_search.transformer import beam_search
+from aps.asr.beam_search.transformer import beam_search, beam_search_batch
 from aps.libs import ApsRegisters
 
 XfmrASROutputType = Tuple[th.Tensor, None, Optional[th.Tensor],
@@ -118,22 +120,59 @@ class TransformerASR(nn.Module):
             # beam search
             return beam_search(self.decoder,
                                enc_out,
-                               beam=beam,
                                lm=lm,
                                lm_weight=lm_weight,
                                sos=self.sos,
                                eos=self.eos,
+                               beam=beam,
                                nbest=nbest,
                                max_len=max_len,
                                penalty=penalty,
                                normalized=normalized,
                                temperature=temperature)
-            # return self.decoder.beam_search(enc_out,
-            #                                 beam=beam,
-            #                                 lm=lm,
-            #                                 lm_weight=lm_weight,
-            #                                 sos=self.sos,
-            #                                 eos=self.eos,
-            #                                 nbest=nbest,
-            #                                 max_len=max_len,
-            #                                 normalized=normalized)
+
+    def beam_search_batch(self,
+                          batch: List[th.Tensor],
+                          beam: int = 16,
+                          lm: Optional[nn.Module] = None,
+                          lm_weight: float = 0,
+                          nbest: int = 8,
+                          max_len: int = -1,
+                          penalty: float = 0,
+                          normalized: bool = True,
+                          temperature: float = 1) -> List[Dict]:
+        """
+        Beam search for Transformer (batch version)
+        """
+        with th.no_grad():
+            # raw wave
+            if len(batch) == 1:
+                warnings.warn(
+                    "Got one utterance, use beam_search (...) instead")
+
+            outs = []
+            for inp in batch:
+                if self.asr_transform:
+                    inp, _ = self.asr_transform(inp[None, ...], None)
+                else:
+                    inp = inp[None, ...]
+                enc_out, _ = self.encoder(inp, None)
+                outs.append(enc_out[:, 0])
+
+            lens = [out.shape[0] for out in outs]
+            enc_out = pad_sequence(outs, batch_first=True)
+            enc_len = th.tensor(lens, device=enc_out.device)
+            # beam search
+            return beam_search_batch(self.decoder,
+                                     enc_out,
+                                     enc_len,
+                                     lm=lm,
+                                     lm_weight=lm_weight,
+                                     sos=self.sos,
+                                     eos=self.eos,
+                                     beam=beam,
+                                     nbest=nbest,
+                                     max_len=max_len,
+                                     penalty=penalty,
+                                     normalized=normalized,
+                                     temperature=temperature)

@@ -28,10 +28,9 @@ class BatchDecoder(Computer):
         super(BatchDecoder, self).__init__(cpt_dir, device_id=device_id)
         logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
 
-    def run(self, inps, inps_len, **kwargs):
-        inps = [th.from_numpy(t).to(self.device) for t in inps]
-        inps_len = th.tensor(inps_len, device=self.device)
-        return self.nnet.beam_search_batch(inps, inps_len, **kwargs)
+    def run(self, inps, **kwargs):
+        return self.nnet.beam_search_batch(
+            [th.from_numpy(t).to(self.device) for t in inps], **kwargs)
 
 
 def run(args):
@@ -75,11 +74,11 @@ def run(args):
             "len": src.shape[-1] if decoder.accept_raw else src.shape[0]
         })
         end = (done == len(src_reader) and len(batches))
-        if not end or len(batches) != args.batch_size:
+        if len(batches) != args.batch_size and not end:
             continue
         # decode
+        batches = sorted(batches, lambda b: b["len"], reverse=True)
         batch_nbest = decoder.run([bz["inp"] for bz in batches],
-                                  [bz["len"] for bz in batches],
                                   lm=lm,
                                   beam=args.beam_size,
                                   nbest=args.nbest,

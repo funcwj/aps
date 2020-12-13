@@ -7,6 +7,8 @@ import warnings
 import torch as th
 import torch.nn as nn
 
+from torch.nn.utils.rnn import pad_sequence
+
 from typing import Optional, Dict, Tuple, List
 from aps.asr.base.decoder import PyTorchRNNDecoder
 from aps.asr.base.encoder import encoder_instance
@@ -165,7 +167,6 @@ class AttASR(nn.Module):
 
     def beam_search_batch(self,
                           batch: List[th.Tensor],
-                          batch_len: th.Tensor,
                           lm: Optional[nn.Module] = None,
                           lm_weight: float = 0,
                           beam: int = 16,
@@ -176,26 +177,31 @@ class AttASR(nn.Module):
                           temperature: float = 1) -> List[Dict]:
         """
         Batch version of beam search
-        NOTE: if we do padding on input of the encoder, the number may differs
         Args
             batch (list[Tensor]): audio samples or acoustic features, S or Ti x F
         """
         with th.no_grad():
             if len(batch) == 1:
-                warnings.warn("Got one utterance, use beam_search(...) instead")
-            outs, lens = [], []
-            for i, inp in enumerate(batch):
+                warnings.warn(
+                    "Got one utterance, use beam_search (...) instead")
+            outs = []
+            # NOTE: if we do padding on input of the encoder, the output may differ with non-padding version
+            #       thus we use for loop here
+            for inp in batch:
                 if self.asr_transform:
-                    inp, _ = self.asr_transform(inp, None)
-                enc_out, enc_len = self.encoder(inp, batch_len[i])
-                outs.append(enc_out)
-                lens.append(enc_len)
-            inp_len = batch_len.max().item()
-            max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
+                    inp, _ = self.asr_transform(inp[None, ...], None)
+                else:
+                    inp = inp[None, ...]
+                enc_out, _ = self.encoder(inp, None)
+                outs.append(enc_out[0])
+            lens = [out.shape[-2] for out in outs]
+            max_len = max(lens) if max_len <= 0 else min(max(lens), max_len)
+            enc_out = pad_sequence(outs, batch_first=True)
+            enc_len = th.tensor(lens, device=enc_out.device)
             return beam_search_batch(self.decoder,
                                      self.att_net,
-                                     th.stack(outs),
-                                     th.concat(lens),
+                                     enc_out,
+                                     enc_len,
                                      lm=lm,
                                      lm_weight=lm_weight,
                                      beam=beam,

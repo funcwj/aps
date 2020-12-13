@@ -122,8 +122,7 @@ class EnhAttASR(nn.Module):
                                             temperature=temperature)
 
     def beam_search_batch(self,
-                          x: th.Tensor,
-                          x_len: Optional[th.Tensor],
+                          batch: List[th.Tensor],
                           lm: Optional[nn.Module] = None,
                           lm_weight: float = 0,
                           beam: int = 16,
@@ -134,12 +133,14 @@ class EnhAttASR(nn.Module):
                           temperature: float = 1) -> List[Dict]:
         """
         Args
-            x (Tensor): N x C x S
+            batch (list[Tensor]): [C x S, ...]
         """
         with th.no_grad():
-            x_enh, x_len = self._enhance(x, x_len)
-            return self.las_asr.beam_search_batch(x_enh,
-                                                  x_len,
+            batch_enh = []
+            for inp in batch:
+                x_enh, _ = self._enhance(inp, None)
+                batch_enh.append(x_enh[0])
+            return self.las_asr.beam_search_batch(batch_enh,
                                                   lm=lm,
                                                   lm_weight=lm_weight,
                                                   beam=beam,
