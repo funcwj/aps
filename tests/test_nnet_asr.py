@@ -43,7 +43,7 @@ custom_rnn_enc_kwargs = {
     "dropout": 0.2,
     "hidden": 512,
     "project": 512,
-    "layernorm": True
+    "norm": "LN"
 }
 
 conv1d_enc_kwargs = {

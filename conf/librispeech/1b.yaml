@@ -1,34 +1,44 @@
+# 4 GPU, DDP, 128 batch size
+# WER (%) Report:
+# Total (2620 utterances): 2762/52576 = 5.25%, SUB/INS/DEL = 2136/178/448
+# WER (%) Report:
+# Total (2939 utterances): 6815/52343 = 13.02%, SUB/INS/DEL = 5391/482/942
+
 nnet: "att"
 
 nnet_conf:
   input_size: 80
   enc_type: "concat"
-  enc_proj: 512
+  enc_proj: 1024
   enc_kwargs:
     conv2d:
       out_features: -1
-      channel: 32
+      channel: 48
       num_layers: 2
       stride: 2
       padding: 1
       kernel_size: 3
-    pytorch_rnn:
-      rnn: "lstm"
-      num_layers: 3
+    variant_rnn:
+      num_layers: 4
+      hidden: 1024
+      project: 512
+      dropout: 0.3
+      norm: "BN"
       bidirectional: true
-      dropout: 0.2
-      hidden: 320
-  dec_dim: 512
+      non_linear: "relu"
+  dec_dim: 1024
   dec_kwargs:
     dec_rnn: "lstm"
     rnn_layers: 2
-    rnn_hidden: 512  # must eq decoder_dim
+    rnn_hidden: 1024
     rnn_dropout: 0.2
+    emb_dropout: 0.2
+    dropout: 0.2
     input_feeding: true
     vocab_embeded: true
   att_type: "ctx"
   att_kwargs:
-    att_dim: 512
+    att_dim: 1024
 
 task: "ctc_xent"
 
@@ -37,46 +47,49 @@ task_conf:
   ctc_weight: 0.2
 
 asr_transform:
-  feats: "fbank-log-cmvn-aug"
+  feats: "perturb-emph-fbank-log-aug"
   frame_len: 400
   frame_hop: 160
   window: "hamm"
-  round_pow_of_two: True
+  round_pow_of_two: true
+  use_power: true
+  pre_emphasis: 0.97
   sr: 16000
   num_mels: 80
-  norm_mean: True
-  norm_var: True
-  aug_prob: 0.3
+  min_freq: 20
+  norm_mean: true
+  norm_var: true
+  aug_prob: 1
+  aug_max_frame: 100
+  aug_mask_zero: false
+  num_aug_bands: 1
+  num_aug_frame: 1
 
 trainer_conf:
   optimizer: "adam"
   optimizer_kwargs:
     lr: 1.0e-3
     weight_decay: 1.0e-5
+  lr_scheduler: "exp_lr"
+  lr_scheduler_period: "step"
   lr_scheduler_kwargs:
-    min_lr: 1.0e-8
-    patience: 1
-    factor: 0.5
-  ss_scheduler: "linear"
-  ss_scheduler_kwargs:
-    ssr: 0.2
-    epoch_beg: 8
-    epoch_end: 24
-    update_interval: 4
+    time_stamps: [500, 40000, 100000]
+    peak_lr: 1.0e-3
+    stop_lr: 1.0e-5
   no_impr: 6
   no_impr_thres: 0.1
-  clip_gradient: 10
+  clip_gradient: 1
   report_metrics: ["loss", "accu", "@ctc"]
   stop_criterion: "accu"
 
 data_conf:
-  fmt: am_raw
+  fmt: "am_raw"
   loader:
-    adapt_dur: 10
-    adapt_token_num: 150
-    max_dur: 30
     max_token_num: 400
-    min_dur: 0.4
+    adapt_token_num: 150
+    max_dur: 30 # (s)
+    min_dur: 0.4 # (s)
+    adapt_dur: 10 # (s)
   train:
     text: data/librispeech/train/token
     utt2dur: data/librispeech/train/utt2dur

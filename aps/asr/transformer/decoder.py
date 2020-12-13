@@ -5,14 +5,11 @@
 
 import torch as th
 import torch.nn as nn
-import torch.nn.functional as F
 
 from torch.nn import TransformerDecoder, TransformerDecoderLayer
-from typing import Union, Optional, List, Dict
+from typing import Union, Tuple, Optional
 from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.base.attention import padding_mask
-from aps.asr.base.decoder import trace_back_hypos, adjust_hidden_states
-from aps.const import NEG_INF
 
 
 def prep_sub_mask(T: int, device: Union[str, th.device] = "cpu") -> th.Tensor:
@@ -41,7 +38,6 @@ class TorchTransformerDecoder(nn.Module):
     def __init__(self,
                  vocab_size: int,
                  att_dim: int = 512,
-                 enc_dim: Optional[int] = None,
                  nhead: int = 8,
                  feedforward_dim: int = 2048,
                  scale_embed: bool = False,
@@ -61,193 +57,63 @@ class TorchTransformerDecoder(nn.Module):
                                                 dim_feedforward=feedforward_dim,
                                                 dropout=att_dropout)
         self.decoder = TransformerDecoder(decoder_layer, num_layers)
-        if enc_dim and enc_dim != att_dim:
-            self.enc_proj = nn.Linear(enc_dim, att_dim)
-        else:
-            self.enc_proj = None
         self.output = nn.Linear(att_dim, vocab_size, bias=False)
         self.vocab_size = vocab_size
 
-    def forward(self,
-                enc_out: th.Tensor,
-                enc_len: Optional[th.Tensor],
-                tgt_pad: th.Tensor,
-                sos: int = -1) -> th.Tensor:
+    def step(self,
+             enc_out: th.Tensor,
+             tgt_pad: th.Tensor,
+             enc_len: Optional[th.Tensor] = None,
+             pre_emb: Optional[th.Tensor] = None,
+             out_idx: Optional[int] = None,
+             point: Optional[th.Tensor] = None) -> Tuple[th.Tensor]:
         """
         Args:
-            enc_out: Ti x N x D
-            enc_len: N or None
-            tgt_pad: N x To
+            enc_out (Tensor): T x N x D
+            tgt_pad (Tensor): N x To
+            enc_len (Tensor): N or None
+            pre_emb (Tensor): T' x N x D
         Return:
-            dec_out: To+1 x N x D
+            dec_out (Tensor): T+T' x N x D or N x D
+            tgt_emb (Tensor): T+T' x N x E
         """
-        if sos < 0:
-            raise ValueError(f"Invalid sos value: {sos}")
         # N x Ti
+        offset = 0 if pre_emb is None else pre_emb.shape[0]
         memory_mask = None if enc_len is None else (padding_mask(enc_len) == 1)
-        # N x To+1
-        tgt_pad = F.pad(tgt_pad, (1, 0), value=sos)
-        # genrarte target masks (-inf/0)
-        tgt_mask = prep_sub_mask(tgt_pad.shape[-1], device=tgt_pad.device)
-        # To+1 x N x E
-        tgt_pad = self.tgt_embed(tgt_pad)
-        # Ti x N x D
-        if self.enc_proj:
-            enc_out = self.enc_proj(enc_out)
+        tgt_mask = prep_sub_mask(tgt_pad.shape[-1] + offset,
+                                 device=tgt_pad.device)
+        if offset:
+            # T + T' x N x E
+            tgt_emb = self.tgt_embed(tgt_pad, t=offset)
+            if point is not None:
+                pre_emb = pre_emb[:, point]
+            tgt_emb = th.cat([pre_emb, tgt_emb], dim=0)
+        else:
+            # T x N x E
+            tgt_emb = self.tgt_embed(tgt_pad)
         # To+1 x N x D
-        dec_out = self.decoder(tgt_pad,
+        dec_out = self.decoder(tgt_emb,
                                enc_out,
                                tgt_mask=tgt_mask,
                                memory_mask=None,
                                tgt_key_padding_mask=None,
                                memory_key_padding_mask=memory_mask)
+        if out_idx is not None:
+            dec_out = dec_out[out_idx]
         # To+1 x N x V
         dec_out = self.output(dec_out)
-        return dec_out
+        return dec_out, tgt_emb
 
-    def beam_search(self,
-                    enc_out: th.Tensor,
-                    lm: Optional[nn.Module] = None,
-                    lm_weight: float = 0,
-                    beam: int = 16,
-                    sos: int = -1,
-                    eos: int = -1,
-                    nbest: int = 8,
-                    max_len: int = -1,
-                    vectorized: bool = True,
-                    normalized: bool = True) -> List[Dict]:
+    def forward(self, enc_out: th.Tensor, enc_len: Optional[th.Tensor],
+                tgt_pad: th.Tensor) -> th.Tensor:
         """
-        Beam search for Transformer
         Args:
-            enc_out = self.encoder(x_emb),  Ti x 1 x D
+            enc_out (Tensor): T x N x D
+            enc_len (Tensor): N or None
+            tgt_pad (Tensor): N x To
+        Return:
+            dec_out (Tensor): T x N x D
         """
-        if sos < 0 or eos < 0:
-            raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
-        if max_len <= 0:
-            raise RuntimeError(f"Invalid max_len: {max_len:d}")
-
-        nbest = min(beam, nbest)
-        if beam > self.vocab_size:
-            raise RuntimeError(f"Beam size({beam}) > vocabulary size")
-
-        with th.no_grad():
-            # Ti x N x D
-            if self.enc_proj:
-                enc_out = self.enc_proj(enc_out)
-            # Ti x beam x D
-            enc_out = th.repeat_interleave(enc_out, beam, 1)
-
-            dev = enc_out.device
-            accu_score = th.zeros(beam, device=dev)
-            hist_token = []
-            back_point = []
-            lm_state = None
-
-            hypos = []
-            dec_seq = []
-            point = th.arange(0, beam, dtype=th.int64, device=dev)
-
-            # step by step
-            for t in range(max_len):
-                # target mask
-                tgt_mask = prep_sub_mask(t + 1, device=dev)
-                # beam
-                if t:
-                    # pre_out: beam x T
-                    pre_out = th.tensor(dec_seq, dtype=th.int64, device=dev)
-                else:
-                    # pre_out: beam x 1
-                    pre_out = th.tensor([[sos]] * beam,
-                                        dtype=th.int64,
-                                        device=dev)
-                # beam x T x E
-                pre_emb = self.tgt_embed(pre_out)
-                # Tcur - 1 x beam x D
-                dec_out = self.decoder(pre_emb, enc_out, tgt_mask=tgt_mask)[-1]
-                # beam x V
-                dec_out = self.output(dec_out)
-                # compute prob: beam x V, nagetive
-                prob = F.log_softmax(dec_out, dim=-1)
-
-                # add LM score
-                if lm:
-                    # adjust lm states
-                    lm_state = adjust_hidden_states(point, lm_state)
-                    # LM prediction
-                    lm_prob, lm_state = lm(pre_out[:, -1:], lm_state)
-                    # beam x V
-                    prob += F.log_softmax(lm_prob[:, -1], dim=-1) * lm_weight
-
-                # local pruning: beam x beam
-                topk_score, topk_token = th.topk(prob, beam, dim=-1)
-
-                if t == 0:
-                    # beam
-                    accu_score += topk_score[0]
-                    token = topk_token[0]
-                    dec_seq = token.tolist()
-                else:
-                    # beam x beam = beam x 1 + beam x beam
-                    accu_score = accu_score[..., None] + topk_score
-                    # beam*beam => beam
-                    accu_score, topk_index = th.topk(accu_score.view(-1),
-                                                     beam,
-                                                     dim=-1)
-                    # point to father's node
-                    point = topk_index // beam
-                    # beam*beam
-                    topk_token = topk_token.view(-1)
-                    token = topk_token[topk_index]
-
-                # continue flags
-                end_eos = (token == eos).tolist()
-
-                dec_seq = [None for _ in range(beam)]
-                # process eos nodes
-                if sum(end_eos):
-                    idx = [
-                        i for i, end_with_eos in enumerate(end_eos)
-                        if end_with_eos
-                    ]
-                    idx = th.tensor(idx, dtype=th.int64, device=dev)
-                    hyp_full = trace_back_hypos(point[idx],
-                                                back_point,
-                                                hist_token,
-                                                accu_score[idx],
-                                                sos=sos,
-                                                eos=eos)
-                    accu_score[idx] = NEG_INF
-                    hypos += hyp_full
-                    for i, h in enumerate(hyp_full):
-                        dec_seq[idx[i]] = h["trans"]
-
-                if len(hypos) >= beam:
-                    break
-
-                # add best token
-                hist_token.append(token)
-                back_point.append(point)
-
-                # process non-eos nodes
-                end_wo_eos = (token != eos).tolist()
-                if sum(end_wo_eos):
-                    idx = [i for i, go_on in enumerate(end_wo_eos) if go_on]
-                    idx = th.tensor(idx, dtype=th.int64, device=dev)
-                    hyp_partial = trace_back_hypos(idx,
-                                                   back_point,
-                                                   hist_token,
-                                                   accu_score[idx],
-                                                   sos=sos,
-                                                   eos=eos)
-                    # remove fake eos
-                    for i, h in enumerate(hyp_partial):
-                        dec_seq[idx[i]] = h["trans"][:-1]
-                    # process non-eos nodes at the final step
-                    if t == max_len - 1:
-                        hypos += hyp_partial
-
-            nbest_hypos = sorted(hypos,
-                                 key=lambda n: n["score"] /
-                                 (len(n["trans"]) - 1 if normalized else 1),
-                                 reverse=True)
-            return nbest_hypos[:nbest]
+        # T x N x V
+        dec_out, _ = self.step(enc_out, tgt_pad, enc_len=enc_len)
+        return dec_out

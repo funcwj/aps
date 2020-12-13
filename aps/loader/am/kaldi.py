@@ -12,7 +12,7 @@ from torch.nn.utils.rnn import pad_sequence
 from typing import Dict, Iterable, Optional, NoReturn
 from kaldi_python_io import ScriptReader
 
-from aps.loader.am.utils import TokenReader, BatchSampler
+from aps.loader.am.utils import AsrDataset, TokenReader, BatchSampler
 from aps.libs import ApsRegisters
 from aps.const import IGNORE_ID
 
@@ -51,7 +51,7 @@ def DataLoader(train: bool = True,
                            min_batch_size=min_batch_size)
 
 
-class Dataset(dat.Dataset):
+class Dataset(AsrDataset):
     """
     Dataset for kaldi features
     """
@@ -64,26 +64,16 @@ class Dataset(dat.Dataset):
                  max_token_num: int = 400,
                  max_frame_num: float = 3000,
                  min_frame_num: float = 40) -> None:
-        self.feats_reader = ScriptReader(feats_scp)
-        self.token_reader = TokenReader(text,
-                                        utt2num_frames,
-                                        vocab_dict,
-                                        max_dur=max_frame_num,
-                                        min_dur=min_frame_num,
-                                        max_token_num=max_token_num)
-
-    def __getitem__(self, idx: int) -> Dict:
-        tok = self.token_reader[idx]
-        key = tok["key"]
-        return {
-            "dur": tok["dur"],
-            "len": tok["len"],
-            "inp": self.feats_reader[key],
-            "ref": tok["tok"]
-        }
-
-    def __len__(self) -> int:
-        return len(self.token_reader)
+        feats_reader = ScriptReader(feats_scp)
+        token_reader = TokenReader(text,
+                                   utt2num_frames,
+                                   vocab_dict,
+                                   max_dur=max_frame_num,
+                                   min_dur=min_frame_num,
+                                   max_token_num=max_token_num)
+        super(Dataset, self).__init__(feats_reader,
+                                      token_reader,
+                                      duration_axis=0)
 
 
 def egs_collate(egs: Dict) -> Dict:

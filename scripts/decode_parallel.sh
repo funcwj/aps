@@ -12,6 +12,7 @@ space=""
 nbest=1
 channel=-1
 max_len=100
+penalty=0
 beam_size=16
 temperature=1
 normalized=true
@@ -52,6 +53,7 @@ $cmd JOB=1:$nj $log_dir/decode.JOB.log \
   --dict "$dict" \
   --lm "$lm" \
   --lm-weight $lm_weight \
+  --penalty $penalty \
   --temperature $temperature \
   --space "$space" \
   --nbest $nbest \

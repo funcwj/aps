@@ -9,7 +9,7 @@ import torch.nn as nn
 from typing import Optional, Dict, Tuple, List
 from torch_complex import ComplexTensor
 
-from aps.asr.att import AttASR
+from aps.asr.att import AttASR, AttASROutputType
 from aps.asr.base.encoder import PyTorchRNNEncoder
 from aps.asr.filter.mvdr import MvdrBeamformer
 from aps.asr.filter.google import CLPFsBeamformer  # same as TimeInvariantFilter
@@ -72,13 +72,11 @@ class EnhAttASR(nn.Module):
         """
         raise NotImplementedError
 
-    def forward(
-        self,
-        x_pad: th.Tensor,
-        x_len: Optional[th.Tensor],
-        y_pad: th.Tensor,
-        ssr: float = 0
-    ) -> Tuple[th.Tensor, th.Tensor, Optional[th.Tensor], Optional[th.Tensor]]:
+    def forward(self,
+                x_pad: th.Tensor,
+                x_len: Optional[th.Tensor],
+                y_pad: th.Tensor,
+                ssr: float = 0) -> AttASROutputType:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -102,6 +100,7 @@ class EnhAttASR(nn.Module):
                     beam: int = 16,
                     nbest: int = 8,
                     max_len: int = -1,
+                    penalty: float = 0,
                     normalized: bool = True,
                     temperature: float = 1) -> List[Dict]:
         """
@@ -118,32 +117,36 @@ class EnhAttASR(nn.Module):
                                             beam=beam,
                                             nbest=nbest,
                                             max_len=max_len,
+                                            penalty=penalty,
                                             normalized=normalized,
                                             temperature=temperature)
 
     def beam_search_batch(self,
-                          x: th.Tensor,
-                          x_len: Optional[th.Tensor],
+                          batch: List[th.Tensor],
                           lm: Optional[nn.Module] = None,
                           lm_weight: float = 0,
                           beam: int = 16,
                           nbest: int = 8,
                           max_len: int = -1,
+                          penalty: float = 0,
                           normalized: bool = True,
                           temperature: float = 1) -> List[Dict]:
         """
         Args
-            x (Tensor): N x C x S
+            batch (list[Tensor]): [C x S, ...]
         """
         with th.no_grad():
-            x_enh, x_len = self._enhance(x, x_len)
-            return self.las_asr.beam_search_batch(x_enh,
-                                                  x_len,
+            batch_enh = []
+            for inp in batch:
+                x_enh, _ = self._enhance(inp, None)
+                batch_enh.append(x_enh[0])
+            return self.las_asr.beam_search_batch(batch_enh,
                                                   lm=lm,
                                                   lm_weight=lm_weight,
                                                   beam=beam,
                                                   nbest=nbest,
                                                   max_len=max_len,
+                                                  penalty=penalty,
                                                   normalized=normalized,
                                                   temperature=temperature)
 

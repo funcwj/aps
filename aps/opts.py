@@ -18,7 +18,7 @@ class StrToBoolAction(argparse.Action):
         setattr(namespace, self.dest, bool_value)
 
 
-def get_aps_parser():
+def get_aps_train_parser():
     """
     Return default training parser for aps
     """
@@ -83,18 +83,104 @@ def get_aps_parser():
     return parser
 
 
+def get_aps_decode_parser():
+    """
+    Return default decoding parser for aps
+    """
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("feats_or_wav_scp",
+                        type=str,
+                        help="Feature/Wave scripts")
+    parser.add_argument("best",
+                        type=str,
+                        help="Wspecifier for decoded results (1-best)")
+    parser.add_argument("--channel",
+                        type=int,
+                        default=-1,
+                        help="Channel index for wav.scp")
+    parser.add_argument("--sr",
+                        type=int,
+                        default=16000,
+                        help="Sample rate of the original audio")
+    parser.add_argument("--checkpoint",
+                        type=str,
+                        required=True,
+                        help="Checkpoint of the E2E model")
+    parser.add_argument("--beam-size",
+                        type=int,
+                        default=8,
+                        help="Beam size used during decoding")
+    parser.add_argument("--lm",
+                        type=str,
+                        default="",
+                        help="Checkpoint of the nerual network LM "
+                        "used in shallow fusion")
+    parser.add_argument("--lm-weight",
+                        type=float,
+                        default=0.1,
+                        help="LM score weight used in shallow fusion")
+    parser.add_argument("--temperature",
+                        type=float,
+                        default=1,
+                        help="Temperature value used to smooth "
+                        "the acoustic scores")
+    parser.add_argument("--penalty",
+                        type=float,
+                        default=0,
+                        help="Length penalty factor for beam search")
+    parser.add_argument("--dict",
+                        type=str,
+                        default="",
+                        help="Dictionary file (not needed)")
+    parser.add_argument("--device-id",
+                        type=int,
+                        default=-1,
+                        help="GPU-id to offload model to, "
+                        "-1 means running on CPU")
+    parser.add_argument("--max-len",
+                        type=int,
+                        default=100,
+                        help="Maximum steps to do during decoding stage")
+    parser.add_argument("--space",
+                        type=str,
+                        default="",
+                        help="space flag for language like EN "
+                        "to merge characters to words")
+    parser.add_argument("--nbest",
+                        type=int,
+                        default=1,
+                        help="N-best decoded utterances to output")
+    parser.add_argument("--dump-nbest",
+                        type=str,
+                        default="",
+                        help="If not empty, dump n-best hypothesis")
+    parser.add_argument("--normalized",
+                        action=StrToBoolAction,
+                        default="false",
+                        help="If ture, using length normalized "
+                        "when sort nbest hypos")
+    return parser
+
+
 class BaseTrainParser(object):
     """
     Parser class for training commands
     """
-    parser = get_aps_parser()
+    parser = get_aps_train_parser()
+
+
+class DecodingParser(object):
+    """
+    Parser class for decoding commands
+    """
+    parser = get_aps_decode_parser()
 
 
 class DistributedTrainParser(BaseTrainParser):
     """
     Parser class for distributed training
     """
-    parser = get_aps_parser()
+    parser = get_aps_train_parser()
     parser.add_argument("--device-ids",
                         type=str,
                         default="0,1",

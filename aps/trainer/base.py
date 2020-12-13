@@ -8,7 +8,6 @@ from pathlib import Path
 from collections import defaultdict
 
 import torch as th
-from torch.nn.utils import clip_grad_norm_
 from typing import Optional, Dict, List, Union, Tuple, NoReturn, Iterable
 from aps.trainer.ss import SsScheduler
 from aps.trainer.lr import LrScheduler
@@ -77,7 +76,7 @@ class ProgressReporter(object):
         """
         Log messages
         """
-        self.logger.info(f"{self.header}: {sstr}")
+        self.logger.info(f"{self.header} - {sstr}")
 
     def eval(self) -> NoReturn:
         """
@@ -124,10 +123,21 @@ class ProgressReporter(object):
                 cur = self.stats[key][-1]
                 self.log(f"Processed {N:.2e} batches ({key} = {cur:.3e}) ...")
             else:
-                avg = sum(self.stats[key][-self.period:]) / self.period
+                avg = self._report_metric(key, period=self.period)
                 self.log(f"Processed {N:.2e} batches ({key} = {avg:+.2f}) ...")
 
-    def report_metrics(self):
+    def _report_metric(self, key: str, period: int = 0):
+        """
+        Return the averaged tracked metric
+        """
+        stats = self.stats[key][-period:]
+        if isinstance(stats[0], float):
+            metric = sum(stats) / len(stats)
+        else:
+            metric = sum([p[0] for p in stats]) / sum([p[1] for p in stats])
+        return metric
+
+    def _report_metrics(self):
         """
         Report the tracked metrics (used for logging & scheduling)
         """
@@ -136,7 +146,7 @@ class ProgressReporter(object):
             if metric not in self.stats:
                 raise RuntimeError(
                     f"Metric {metric} is not tracked by the reporter")
-            reports[metric] = sum(self.stats[metric]) / len(self.stats[metric])
+            reports[metric] = self._report_metric(metric)
             if metric == "accu":
                 reports[metric] *= 100
         return reports
@@ -154,7 +164,7 @@ class ProgressReporter(object):
         if N == 0:
             raise RuntimeError("No statistics to report")
         # Got reports
-        reports = self.report_metrics()
+        reports = self._report_metrics()
         # Write tensorboard if needed
         if self.board_writer:
             for name, value in reports.items():
@@ -411,20 +421,20 @@ class Trainer(object):
             [param.nelement() for param in task.nnet.parameters()]) / 10.0**6
         # logging
         if rank is None:
-            self.reporter.log(f"Loading model to GPU:{device_ids[0]}, " +
+            self.reporter.log(f"Load model to GPU:{device_ids[0]}, " +
                               f"#param: {self.num_params:.2f}M")
         else:
             self.reporter.log(
-                f"Loading model to GPU-{rank}/{self.cuda_devices}, " +
+                f"Load model to GPU-{rank}/{self.cuda_devices}, " +
                 f"#param: {self.num_params:.2f}M")
 
-        self.reporter.log(f"Track the metrics: {report_metrics}")
-        self.reporter.log(f"Stop detected on {self.stop_on}")
+        self.reporter.log(
+            f"Track the metrics during training: {report_metrics}")
+        self.reporter.log(f"Early stop detected on metric: {self.stop_on}")
         if clip_gradient:
-            self.reporter.log(
-                f"Gradient clipping if over {clip_gradient} L2 norm")
+            self.reporter.log(f"Clip gradient if over {clip_gradient} L2 norm")
         if weight_noise_std:
-            self.reporter.log("Add gaussian noise to weights, with " +
+            self.reporter.log("Add gaussian noise to gradient, with " +
                               f"std = {weight_noise_std}")
 
     def create_optimizer(self,
@@ -512,7 +522,8 @@ class Trainer(object):
             cpt.update(states)
             cpt_name = "{}.pt.tar".format("best" if best else "last")
             th.save(cpt, self.checkpoint / cpt_name)
-            self.reporter.log(f"Save checkpoint {self.checkpoint / cpt_name}")
+            self.reporter.log(
+                f"Save checkpoint ==> {self.checkpoint / cpt_name}")
             if self.save_interval > 0 and self.cur_epoch % self.save_interval == 0:
                 th.save(cpt, self.checkpoint / f"{self.cur_epoch}.pt.tar")
 
@@ -525,39 +536,7 @@ class Trainer(object):
         3) Clip Gradient
         4) Step optimizer
         """
-        self.optimizer.zero_grad()
-
-        stats = self.task(egs)
-        loss = stats["loss"].item()
-        # backward if not nan/inf
-        if math.isfinite(loss):
-            stats["loss"].backward()
-        else:
-            self.reporter.log(f"Invalid loss {loss:.3f}, skip...")
-            return False
-
-        # clip gradient after backward
-        norm = -1
-        if self.clip_gradient:
-            norm = clip_grad_norm_(self.task.parameters(), self.clip_gradient)
-
-        # add noise if needed
-        if self.weight_noise_adder:
-            self.weight_noise_adder(self.task)
-
-        # step optimizer and update statistics
-        if math.isfinite(norm):
-            self.optimizer.step()
-            if norm != -1:
-                stats["norm"] = norm
-            stats["rate"] = self.optimizer.param_groups[0]["lr"]
-            self.reporter.update(stats)
-            # schedule lr if needed
-            self.lr_scheduler_step(None, end_at="step")
-            return True
-        else:
-            self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
-            return False
+        raise NotImplementedError
 
     def lr_scheduler_step(self,
                           update_value: Optional[float],
@@ -584,10 +563,10 @@ class Trainer(object):
             # load to gpu
             egs = self.prep_egs(egs)
             # make one training step
-            status = self.train_one_step(egs)
-            if status:
+            succ = self.train_one_step(egs)
+            if succ:
                 self.cur_step += 1
-            if self.error_detector.step(status):
+            if self.error_detector.step(succ):
                 break
         stop = self.error_detector.stop()
         if stop:
@@ -676,8 +655,8 @@ class Trainer(object):
         """
         # valid
         self.valid_epoch(dev_loader)
-        cur_lr = self.optimizer.param_groups[0]["lr"]
-        reports, logstr = self.reporter.report(self.cur_epoch, cur_lr)
+        # log lr as 0
+        reports, logstr = self.reporter.report(self.cur_epoch, 0)
         self.reporter.log(logstr)
         if self.ss_scheduler:
             self.ssr = self.ss_scheduler.step(self.cur_epoch, reports["accu"])

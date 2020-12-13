@@ -1,4 +1,4 @@
-# common encoder-decoder structure
+# Total: 9.04%, 7176 utterances (9468 errors, 104765 units in total)
 
 nnet: "att"
 
@@ -22,11 +22,13 @@ nnet_conf:
   dec_dim: 512
   dec_kwargs:
     dec_rnn: "lstm"
+    dropout_on: "input"
     rnn_layers: 2
     rnn_hidden: 512  # must eq decoder_dim
-    rnn_dropout: 0
-    input_feeding: True
-    vocab_embeded: True
+    rnn_dropout: 0.2
+    emb_dropout: 0.3
+    input_feeding: true
+    vocab_embeded: true
   att_type: "ctx"
   att_kwargs:
     att_dim: 512
@@ -42,22 +44,28 @@ asr_transform:
   frame_len: 400
   frame_hop: 160
   window: "hamm"
-  round_pow_of_two: True
+  round_pow_of_two: true
   sr: 16000
   num_mels: 80
-  norm_mean: True
-  norm_var: True
+  norm_mean: true
+  norm_var: true
   aug_prob: 0.5
+  aug_mask_zero: false
+  aug_max_frame: 80
+  num_aug_bands: 1
+  num_aug_frame: 1
 
 trainer_conf:
   optimizer: "adam"
   optimizer_kwargs:
     lr: 1.0e-3
     weight_decay: 1.0e-5
+  lr_scheduler: "exp_lr"
+  lr_scheduler_period: "step"
   lr_scheduler_kwargs:
-    min_lr: 1.0e-8
-    patience: 1
-    factor: 0.5
+    time_stamps: [800, 40000, 100000]
+    peak_lr: 1.0e-3
+    stop_lr: 1.0e-5
   ss_scheduler: "linear"
   ss_scheduler_kwargs:
     ssr: 0.2

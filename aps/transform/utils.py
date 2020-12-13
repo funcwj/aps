@@ -9,7 +9,6 @@ import torch.nn as nn
 import torch.nn.functional as tf
 import librosa.filters as filters
 
-from scipy.fftpack import dct
 from aps.const import EPSILON
 from typing import Optional, Union, Tuple
 
@@ -111,13 +110,33 @@ def init_melfilter(frame_len: int,
     return th.tensor(mel, dtype=th.float32)
 
 
-def init_dct(num_ceps: int = 13, num_mels: int = 40) -> th.Tensor:
+def speed_perturb_filter(src_sr: int,
+                         dst_sr: int,
+                         cutoff_ratio: float = 0.95,
+                         num_zeros: int = 64) -> th.Tensor:
     """
-    Return DCT matrix
+    Return speed perturb filters, reference:
+        https://github.com/danpovey/filtering/blob/master/lilfilter/resampler.py
     """
-    dct_mat = dct(np.eye(num_mels), norm="ortho")[:num_ceps]
-    # num_ceps x num_mels
-    return th.tensor(dct_mat, dtype=th.float32)
+    if src_sr == dst_sr:
+        raise ValueError(
+            f"src_sr should not be equal to dst_sr: {src_sr}/{dst_sr}")
+    gcd = math.gcd(src_sr, dst_sr)
+    src_sr = src_sr // gcd
+    dst_sr = dst_sr // gcd
+    if src_sr == 1 or dst_sr == 1:
+        raise ValueError("do not support integer downsample/upsample")
+    zeros_per_block = min(src_sr, dst_sr) * cutoff_ratio
+    padding = 1 + int(num_zeros / zeros_per_block)
+    # dst_sr x src_sr x K
+    times = (np.arange(dst_sr)[:, None, None] / float(dst_sr) -
+             np.arange(src_sr)[None, :, None] / float(src_sr) -
+             np.arange(2 * padding + 1)[None, None, :] + padding)
+    window = np.heaviside(1 - np.abs(times / padding),
+                          0.0) * (0.5 + 0.5 * np.cos(times / padding * math.pi))
+    weight = np.sinc(
+        times * zeros_per_block) * window * zeros_per_block / float(src_sr)
+    return th.tensor(weight, dtype=th.float32)
 
 
 def _forward_stft(

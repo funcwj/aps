@@ -657,6 +657,7 @@ class MelTimeSaTask(TimeSaTask):
         return loss
 
 
+@ApsRegisters.task.register("complex_mapping")
 class ComplexMappingTask(SepTask):
     """
     Complex Spectral Mapping

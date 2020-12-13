@@ -43,7 +43,7 @@ RUN conda install -y python=${PYTHON_VERSION}
 RUN conda install -y pytorch==${PYTORCH_VERSION} torchvision cudatoolkit=${CUDA_VERSION} -c pytorch
 RUN conda install -y pyyaml matplotlib tqdm scipy h5py pybind11 yapf
 RUN conda install -y -c conda-forge tensorboard pysoundfile librosa pre-commit && conda clean -ya
-RUN pip install torch_complex kaldi_python_io editdistance museval sentencepiece pystoi pypesq pytest flake8 warp_rnnt
+RUN pip install torch_complex kaldi_python_io edit-distance museval sentencepiece pystoi pypesq pytest flake8 warp_rnnt
 RUN pip install https://github.com/kpu/kenlm/archive/master.zip
 
 # install hovorod

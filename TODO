@@ -1,6 +1,5 @@
 1. Beam search optimization and batch mode implementation
-2. More recipes (speaker tasks, hybrid AM training)
-3. More test cases
-4. More SOTA models
+2. Add recipes (speaker tasks, hybrid AM training)
+4. Add SOTA models
 5. TorchScript/JIT features
 6. ...

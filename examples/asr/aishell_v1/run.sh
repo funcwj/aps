@@ -3,10 +3,6 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-# 1) 1a.yaml
-#	WER(%) Report:
-# 	Total CER: 9.94%, 7176 utterances
-
 set -eu
 
 # data

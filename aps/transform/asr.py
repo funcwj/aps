@@ -18,12 +18,130 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from typing import Optional, Union
-from aps.transform.utils import STFT, init_melfilter, init_dct
-from aps.transform.augment import tf_mask
+from aps.transform.utils import STFT, init_melfilter, speed_perturb_filter
+from aps.transform.augment import tf_mask, perturb_speed
 from aps.const import EPSILON
 from aps.libs import ApsRegisters
 
+from scipy.fftpack import dct
+from torch_complex import ComplexTensor
 from kaldi_python_io.functional import read_kaldi_mat
+
+AsrReturnType = Union[th.Tensor, Optional[th.Tensor]]
+
+
+def detect_nan(feature: th.Tensor) -> th.Tensor:
+    """
+    Check if nan exists
+    """
+    num_nans = th.sum(th.isnan(feature))
+    if num_nans:
+        raise ValueError(f"Detect {num_nans} NANs in feature matrices, " +
+                         f"shape = {feature.shape}...")
+    return feature
+
+
+class SpeedPerturbTransform(nn.Module):
+    """
+    Transform layer for speed perturb
+    """
+
+    def __init__(self, sr: int = 16000, perturb: str = "0.9,1.0,1.1") -> None:
+        super(SpeedPerturbTransform, self).__init__()
+        self.sr = sr
+        self.factor_str = perturb
+        dst_sr = [int(factor * sr) for factor in map(float, perturb.split(","))]
+        if not len(dst_sr):
+            raise ValueError("No perturb options for doing speed perturb")
+        # N x dst_sr x src_sr x K
+        self.weights = nn.ParameterList([
+            nn.Parameter(speed_perturb_filter(sr, fs), requires_grad=False)
+            for fs in dst_sr
+            if fs != sr
+        ])
+        self.last_weight = None
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(sr={self.sr}, factor={self.factor_str})"
+
+    def output_length(self,
+                      inp_len: Optional[th.Tensor]) -> Optional[th.Tensor]:
+        """
+        Compute output length after speed perturb
+        """
+        if self.last_weight is None:
+            return inp_len
+        if inp_len is None:
+            return None
+        dst_sr, src_sr, _ = self.last_weight.shape
+        return (inp_len // src_sr) * dst_sr
+
+    def forward(self, wav: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            wav (Tensor): input signal, N x ... x S
+        Return:
+            wav (Tensor): output signal, N x ... x S
+        """
+        self.last_weight = None
+        if not self.training:
+            return wav
+        if wav.dim() != 2:
+            raise RuntimeError(f"Now only supports 2D tensor, got {wav.dim()}")
+        # 1.0, do not apply speed perturb
+        choice = th.randint(0, len(self.weights) + 1, (1,)).item()
+        if choice == len(self.weights):
+            return wav
+        else:
+            self.last_weight = self.weights[choice]
+            return perturb_speed(wav, self.last_weight)
+
+
+class TFTransposeTransform(nn.Module):
+    """
+    Swap time/frequency axis
+    """
+
+    def __init__(self, axis1: int = -1, axis2: int = -2) -> None:
+        super(TFTransposeTransform, self).__init__()
+        self.axis1 = axis1
+        self.axis2 = axis2
+
+    def extra_repr(self) -> str:
+        return f"axis1={self.axis1}, axis2={self.axis2}"
+
+    def forward(self, tensor: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            tensor (Tensor): input signal, N x ... x F x T
+        Return:
+            tensor (Tensor): output signal, N x ... x T x F
+        """
+        return tensor.transpose(-1, -2)
+
+
+class PreEmphasisTransform(nn.Module):
+    """
+    Do audio level preemphasis
+    """
+
+    def __init__(self, pre_emphasis: float = 0) -> None:
+        super(PreEmphasisTransform, self).__init__()
+        self.pre_emphasis = pre_emphasis
+
+    def extra_repr(self) -> str:
+        return f"pre_emphasis={self.pre_emphasis}"
+
+    def forward(self, wav: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            wav (Tensor): input signal, N x (C) x S
+        Return:
+            wav (Tensor): output signal, N x (C) x S
+        """
+        if self.pre_emphasis > 0:
+            wav[..., 1:] = wav[..., 1:] - self.pre_emphasis * wav[..., :-1]
+        return wav
 
 
 class SpectrogramTransform(STFT):
@@ -40,7 +158,7 @@ class SpectrogramTransform(STFT):
                  normalized: bool = False,
                  onesided: bool = True,
                  mode: str = "librosa",
-                 pre_emphasis: float = 0) -> None:
+                 use_power: bool = False) -> None:
         super(SpectrogramTransform,
               self).__init__(frame_len,
                              frame_hop,
@@ -50,7 +168,7 @@ class SpectrogramTransform(STFT):
                              normalized=normalized,
                              onesided=onesided,
                              mode=mode)
-        self.pre_emphasis = pre_emphasis
+        self.use_power = use_power
 
     def dim(self):
         return self.num_bins
@@ -59,20 +177,20 @@ class SpectrogramTransform(STFT):
         return self.num_frames(xlen)
 
     def extra_repr(self) -> str:
-        return self.expr + f", pre_emphasis={self.pre_emphasis}"
+        return self.expr + f", use_power={self.use_power}"
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, wav: th.Tensor) -> th.Tensor:
         """
         Args:
-            x (Tensor): input signal, N x (C) x S
+            wav (Tensor): input signal, N x (C) x S
         Return:
-            m (Tensor): magnitude, N x (C) x T x F
+            mag (Tensor): magnitude, N x (C) x F x T
         """
-        if self.pre_emphasis > 0:
-            x[..., 1:] = x[..., 1:] - self.pre_emphasis * x[..., :-1]
-        m, _ = super().forward(x)
-        m = th.transpose(m, -1, -2)
-        return m
+        # N x (C) x F x T
+        mag, _ = super().forward(wav)
+        if self.use_power:
+            mag = mag**2
+        return mag
 
 
 class AbsTransform(nn.Module):
@@ -87,16 +205,34 @@ class AbsTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"eps={self.eps:.3e}"
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, tensor: Union[th.Tensor, ComplexTensor]) -> th.Tensor:
         """
         Args:
-            x (Tensor or ComplexTensor): N x T x F
+            tensor (Tensor or ComplexTensor): N x T x F
         Return:
-            y (Tensor): N x T x F
+            tensor (Tensor): N x T x F
         """
-        if not isinstance(x, th.Tensor):
-            x = x + self.eps
-        return x.abs()
+        if not isinstance(tensor, th.Tensor):
+            tensor = tensor + self.eps
+        return tensor.abs()
+
+
+class PowerTransform(nn.Module):
+    """
+    Power transform
+    """
+
+    def __init__(self) -> None:
+        super(PowerTransform, self).__init__()
+
+    def forward(self, tensor: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            tensor (Tensor): N x T x F
+        Return:
+            tensor (Tensor): N x T x F
+        """
+        return tensor**2
 
 
 class MelTransform(nn.Module):
@@ -129,22 +265,22 @@ class MelTransform(nn.Module):
         return self.num_mels
 
     def extra_repr(self) -> str:
-        return "fmin={0}, fmax={1}, mel_filter={2[0]}x{2[1]}".format(
-            self.fmin, self.fmax, self.filters.shape)
+        return ("fmin={0}, fmax={1}, mel_filter={2[0]}x{2[1]}".format(
+            self.fmin, self.fmax, self.filters.shape))
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, linear: th.Tensor) -> th.Tensor:
         """
         Args:
-            x (Tensor): spectrogram, N x (C) x T x F
+            linear (Tensor): linear spectrogram, N x (C) x T x F
         Return:
-            f (Tensor): mel-fbank feature, N x (C) x T x B
+            fbank (Tensor): mel-fbank feature, N x (C) x T x B
         """
-        if x.dim() not in [3, 4]:
+        if linear.dim() not in [3, 4]:
             raise RuntimeError("MelTransform expect 3/4D tensor, " +
-                               f"but got {x.dim():d} instead")
+                               f"but got {linear.dim()} instead")
         # N x T x F => N x T x M
-        f = F.linear(x, self.filters, bias=None)
-        return f
+        fbank = F.linear(linear, self.filters, bias=None)
+        return fbank
 
 
 class LogTransform(nn.Module):
@@ -152,25 +288,29 @@ class LogTransform(nn.Module):
     Transform linear domain to log domain
     """
 
-    def __init__(self, eps: float = 1e-5) -> None:
+    def __init__(self, eps: float = 1e-5, lower_bound: float = 0) -> None:
         super(LogTransform, self).__init__()
         self.eps = eps
+        self.lower_bound = lower_bound
 
     def dim_scale(self) -> int:
         return 1
 
     def extra_repr(self) -> str:
-        return f"eps={self.eps:.3e}"
+        return f"eps={self.eps:.3e}, lower_bound={self.lower_bound}"
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, linear: th.Tensor) -> th.Tensor:
         """
         Args:
-            x (Tensor): linear, N x (C) x T x F
+            linear (Tensor): linear feature, N x (C) x T x F
         Return:
-            y (Tensor): log features, N x (C) x T x F
+            logf (Tensor): log features, N x (C) x T x F
         """
-        x = th.clamp(x, min=self.eps)
-        return th.log(x)
+        if self.lower_bound > 0:
+            linear = self.lower_bound + linear
+        else:
+            linear = th.clamp(linear, min=self.eps)
+        return th.log(linear)
 
 
 class DiscreteCosineTransform(nn.Module):
@@ -185,7 +325,11 @@ class DiscreteCosineTransform(nn.Module):
         super(DiscreteCosineTransform, self).__init__()
         self.lifter = lifter
         self.num_ceps = num_ceps
-        self.dct = nn.Parameter(init_dct(num_ceps, num_mels),
+
+        # num_ceps x num_mels
+        self.dct = nn.Parameter(th.tensor(dct(th.eye(num_mels).numpy(),
+                                              norm="ortho")[:num_ceps],
+                                          dtype=th.float32),
                                 requires_grad=False)
         if lifter > 0:
             cepstral_lifter = 1 + lifter * 0.5 * th.sin(
@@ -202,17 +346,17 @@ class DiscreteCosineTransform(nn.Module):
         return "cepstral_lifter={0}, dct={1[0]}x{1[1]}".format(
             self.lifter, self.dct.shape)
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, log_mel: th.Tensor) -> th.Tensor:
         """
         Args:
-            x (Tensor): log mel-fbank, N x (C) x T x B
+            log_mel (Tensor): log mel-fbank, N x (C) x T x B
         Return:
-            f (Tensor): mfcc, N x (C) x T x P
+            mfcc (Tensor): mfcc feature, N x (C) x T x P
         """
-        f = F.linear(x, self.dct, bias=None)
+        mfcc = F.linear(log_mel, self.dct, bias=None)
         if self.cepstral_lifter is not None:
-            f = f * self.cepstral_lifter
-        return f
+            mfcc = mfcc * self.cepstral_lifter
+        return mfcc
 
 
 class CmvnTransform(nn.Module):
@@ -223,6 +367,7 @@ class CmvnTransform(nn.Module):
     def __init__(self,
                  norm_mean: bool = True,
                  norm_var: bool = True,
+                 per_band: bool = True,
                  gcmvn: str = "",
                  eps: float = 1e-5) -> None:
         super(CmvnTransform, self).__init__()
@@ -242,37 +387,43 @@ class CmvnTransform(nn.Module):
             self.gstd = nn.Parameter(std, requires_grad=False)
         self.norm_mean = norm_mean
         self.norm_var = norm_var
+        self.per_band = per_band
         self.gcmvn = gcmvn
         self.eps = eps
 
     def extra_repr(self) -> str:
-        return f"norm_mean={self.norm_mean}, norm_var={self.norm_var}, " + \
-            f"gcmvn_stats={self.gcmvn}, eps={self.eps:.3e}"
+        return (
+            f"norm_mean={self.norm_mean}, norm_var={self.norm_var}, per_band={self.per_band}"
+            + f"gcmvn_stats={self.gcmvn}, eps={self.eps:.3e}")
 
     def dim_scale(self) -> int:
         return 1
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, feats: th.Tensor) -> th.Tensor:
         """
         Args:
-            x (Tensor): feature before normalization, N x (C) x T x F
+            feats (Tensor): feature before normalization, N x (C) x T x F
         Return:
-            y (Tensor): normalized feature, N x (C) x T x F
+            feats (Tensor): normalized feature, N x (C) x T x F
         """
         if not self.norm_mean and not self.norm_var:
-            return x
-        # over time axis
-        m = th.mean(x, -2, keepdim=True) if self.gmean is None else self.gmean
-        if self.gstd is None:
-            ms = th.mean(x**2, -2, keepdim=True)
-            s = (ms - m**2 + self.eps)**0.5
+            return feats
+        if self.gmean is not None:
+            if self.norm_mean:
+                feats = feats - self.gmean
+            if self.norm_var:
+                feats = feats / self.gstd
         else:
-            s = self.gstd
-        if self.norm_mean:
-            x = x - m
-        if self.norm_var:
-            x = x / s
-        return x
+            axis = (-1, -2) if self.per_band else -2
+            if self.norm_mean:
+                feats = feats - th.mean(feats, axis, keepdim=True)
+            if self.norm_var:
+                if self.norm_mean:
+                    var = th.mean(feats**2, axis, keepdim=True)
+                else:
+                    var = th.var(feats, axis, unbiased=False, keepdim=True)
+                feats = feats / th.sqrt(var + self.eps)
+        return feats
 
 
 class SpecAugTransform(nn.Module):
@@ -348,27 +499,27 @@ class SpliceTransform(nn.Module):
     def dim_scale(self) -> int:
         return (1 + self.rctx + self.lctx)
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, feats: th.Tensor) -> th.Tensor:
         """
         args:
-            x (Tensor): original feature, N x ... x Ti x F
+            feats (Tensor): original feature, N x ... x Ti x F
         return:
-            y (Tensor): spliced feature, N x ... x To x FD
+            slice (Tensor): spliced feature, N x ... x To x FD
         """
-        T = x.shape[-2]
+        T = feats.shape[-2]
         T = T - T % self.subsampling_factor
         if self.lctx + self.rctx != 0:
             ctx = []
             for c in range(-self.lctx, self.rctx + 1):
-                idx = th.arange(c, c + T, device=x.device, dtype=th.int64)
+                idx = th.arange(c, c + T, device=feats.device, dtype=th.int64)
                 idx = th.clamp(idx, min=0, max=T - 1)
                 # N x ... x T x F
-                ctx.append(th.index_select(x, -2, idx))
+                ctx.append(th.index_select(feats, -2, idx))
             # N x ... x T x FD
-            x = th.cat(ctx, -1)
+            feats = th.cat(ctx, -1)
         if self.subsampling_factor != 1:
-            x = x[..., ::self.subsampling_factor, :]
-        return x
+            feats = feats[..., ::self.subsampling_factor, :]
+        return feats
 
 
 class DeltaTransform(nn.Module):
@@ -397,14 +548,14 @@ class DeltaTransform(nn.Module):
         dx = dx / (2 * sum(i**2 for i in range(1, self.ctx + 1)))
         return dx
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, feats: th.Tensor) -> th.Tensor:
         """
         args:
-            x (Tensor): original feature, N x (C) x T x F
+            feats (Tensor): original feature, N x (C) x T x F
         return:
-            y (Tensor): delta feature, N x (C) x T x FD
+            delta (Tensor): delta feature, N x (C) x T x FD
         """
-        delta = [x]
+        delta = [feats]
         for _ in range(self.order):
             delta.append(self._add_delta(delta[-1]))
         # N x ... x T x FD
@@ -415,7 +566,11 @@ class DeltaTransform(nn.Module):
 class FeatureTransform(nn.Module):
     """
     Feature transform for ASR tasks
-        - Spectrogram
+        - SpeedPerturbTransform
+        - PreEmphasisTransform
+        - SpectrogramTransform
+        - TFTransposeTransform
+        - PowerTransform
         - MelTransform
         - AbsTransform
         - LogTransform
@@ -435,19 +590,25 @@ class FeatureTransform(nn.Module):
                  round_pow_of_two: bool = True,
                  stft_normalized: bool = False,
                  stft_mode: str = "librosa",
-                 pre_emphasis: float = 0,
+                 pre_emphasis: float = 0.97,
+                 use_power: bool = False,
                  sr: int = 16000,
+                 speed_perturb: str = "0.9,1.0,1.1",
+                 log_lower_bound: float = 0,
                  num_mels: int = 80,
                  num_ceps: int = 13,
+                 min_freq: int = 0,
+                 max_freq: Optional[int] = None,
                  lifter: float = 0,
                  aug_prob: float = 0,
                  aug_max_bands: int = 30,
                  aug_max_frame: int = 40,
                  aug_mask_zero: bool = True,
-                 num_aug_bands: int = 2,
-                 num_aug_frame: int = 2,
+                 num_aug_bands: int = 1,
+                 num_aug_frame: int = 1,
                  norm_mean: bool = True,
                  norm_var: bool = True,
+                 norm_per_band: bool = True,
                  gcmvn: str = "",
                  subsampling_factor: int = 1,
                  lctx: int = 1,
@@ -457,64 +618,77 @@ class FeatureTransform(nn.Module):
                  requires_grad: bool = False,
                  eps: float = EPSILON) -> None:
         super(FeatureTransform, self).__init__()
-        trans_tokens = feats.split("-")
+        if not feats:
+            raise ValueError("FeatureTransform: \'feats\' can not be empty")
+        feat_tokens = feats.split("-")
         transform = []
         feats_dim = 0
         stft_kwargs = {
             "mode": stft_mode,
             "window": window,
             "center": center,
+            "use_power": use_power,
             "normalized": stft_normalized,
             "round_pow_of_two": round_pow_of_two
         }
-        for tok in trans_tokens:
-            if tok == "spectrogram":
+        mel_kwargs = {
+            "round_pow_of_two": round_pow_of_two,
+            "sr": sr,
+            "fmin": min_freq,
+            "fmax": max_freq,
+            "num_mels": num_mels,
+            "requires_grad": requires_grad
+        }
+        self.spectra_index = -1
+        self.perturb_index = -1
+        for idx, tok in enumerate(feat_tokens):
+            if tok == "perturb":
                 transform.append(
-                    SpectrogramTransform(frame_len,
-                                         frame_hop,
-                                         **stft_kwargs,
-                                         pre_emphasis=pre_emphasis))
-                feats_dim = transform[-1].dim()
+                    SpeedPerturbTransform(sr=sr, perturb=speed_perturb))
+                self.perturb_index = idx
+            elif tok == "emph":
+                transform.append(
+                    PreEmphasisTransform(pre_emphasis=pre_emphasis))
+            elif tok == "spectrogram":
+                spectrogram = [
+                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    TFTransposeTransform(),
+                ]
+                transform += spectrogram
+                feats_dim = transform[-2].dim()
+                self.spectra_index = idx
+            elif tok == "trans":
+                transform.append(TFTransposeTransform())
+            elif tok == "power":
+                transform.append(PowerTransform())
             elif tok == "fbank":
                 fbank = [
-                    SpectrogramTransform(frame_len,
-                                         frame_hop,
-                                         **stft_kwargs,
-                                         pre_emphasis=pre_emphasis),
-                    MelTransform(frame_len,
-                                 round_pow_of_two=round_pow_of_two,
-                                 sr=sr,
-                                 num_mels=num_mels,
-                                 requires_grad=requires_grad)
+                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    TFTransposeTransform(),
+                    MelTransform(frame_len, **mel_kwargs)
                 ]
+                self.spectra_index = idx
                 transform += fbank
                 feats_dim = transform[-1].dim()
             elif tok == "mfcc":
-                log_fbank = [
-                    SpectrogramTransform(frame_len,
-                                         frame_hop,
-                                         **stft_kwargs,
-                                         pre_emphasis=pre_emphasis),
-                    MelTransform(frame_len,
-                                 round_pow_of_two=round_pow_of_two,
-                                 sr=sr,
-                                 num_mels=num_mels),
+                mfcc = [
+                    SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    TFTransposeTransform(),
+                    MelTransform(frame_len, **mel_kwargs),
                     LogTransform(eps=eps),
                     DiscreteCosineTransform(num_ceps=num_ceps,
                                             num_mels=num_mels,
                                             lifter=lifter)
                 ]
-                transform += log_fbank
+                self.spec_index = idx
+                transform += mfcc
                 feats_dim = transform[-1].dim()
             elif tok == "mel":
-                transform.append(
-                    MelTransform(frame_len,
-                                 round_pow_of_two=round_pow_of_two,
-                                 sr=sr,
-                                 num_mels=num_mels))
+                transform.append(MelTransform(frame_len, **mel_kwargs))
                 feats_dim = transform[-1].dim()
             elif tok == "log":
-                transform.append(LogTransform(eps=eps))
+                transform.append(
+                    LogTransform(eps=eps, lower_bound=log_lower_bound))
             elif tok == "abs":
                 transform.append(AbsTransform(eps=eps))
             elif tok == "dct":
@@ -527,6 +701,7 @@ class FeatureTransform(nn.Module):
                 transform.append(
                     CmvnTransform(norm_mean=norm_mean,
                                   norm_var=norm_var,
+                                  per_band=norm_per_band,
                                   gcmvn=gcmvn,
                                   eps=eps))
             elif tok == "aug":
@@ -557,26 +732,25 @@ class FeatureTransform(nn.Module):
         """
         Work out number of frames
         """
-        if not isinstance(self.transform[0], SpectrogramTransform):
-            raise RuntimeError(
-                "0-th layer of transform is not SpectrogramTransform")
-        return self.transform[0].len(wav_len)
+        if wav_len is None:
+            return None
+        if self.spectra_index == -1:
+            raise RuntimeError("No SpectrogramTransform layer is found, "
+                               "can not work out number of the frames")
+        if self.perturb_index != -1:
+            wav_len = self.transform[self.perturb_index].output_length(wav_len)
+        num_frames = self.transform[self.spectra_index].len(wav_len)
+        return num_frames // self.subsampling_factor
 
-    def forward(
-            self, wav_pad: th.Tensor, wav_len: Optional[th.Tensor]
-    ) -> Union[th.Tensor, Optional[th.Tensor]]:
+    def forward(self, wav_pad: th.Tensor,
+                wav_len: Optional[th.Tensor]) -> AsrReturnType:
         """
         Args:
             wav_pad (Tensor): raw waveform: N x C x S or N x S
             wav_len (Tensor or None): N or None
         Return:
-            feats_pad (Tensor): acoustic features: N x C x T x ...
+            feats (Tensor): acoustic features: N x C x T x ...
             num_frames (Tensor or None): number of frames
         """
-        feats_pad = self.transform(wav_pad)
-        if wav_len is None:
-            num_frames = None
-        else:
-            num_frames = self.num_frames(wav_len)
-            num_frames = num_frames // self.subsampling_factor
-        return feats_pad, num_frames
+        feats = self.transform(wav_pad)
+        return detect_nan(feats), self.num_frames(wav_len)

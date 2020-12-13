@@ -76,10 +76,9 @@ class TorchTransformerEncoder(nn.Module):
         Return:
             enc_out: Ti x N x D
         """
-        if self.input_embed[:4] == "conv" and x_len is not None:
-            x_len = x_len // 4
         # x_emb: N x Ti x D => Ti x N x D
         x_emb = self.src_embed(x_pad)
+        x_len = self.src_embed.num_frames(x_len)
         # src_pad_mask: N x Ti
         src_pad_mask = None if x_len is None else (padding_mask(x_len) == 1)
         # Ti x N x D
@@ -173,10 +172,9 @@ class RelTransformerEncoder(nn.Module):
         Return:
             enc_out: Ti x N x D
         """
-        if self.input_embed[:4] == "conv" and x_len is not None:
-            x_len = x_len // 4
         # x_emb: N x Ti x D => Ti x N x D
         x_emb = self.src_embed(x_pad)
+        x_len = self.src_embed.num_frames(x_len)
         # src_pad_mask: N x Ti
         src_pad_mask = None if x_len is None else (padding_mask(x_len) == 1)
         # rel embeddings
@@ -248,11 +246,10 @@ class RelXLTransformerEncoder(nn.Module):
         Return:
             enc_out: Ti x N x D
         """
-        if self.input_embed[:4] == "conv" and x_len is not None:
-            x_len = x_len // 4
         # x_emb: N x Ti x D => Ti x N x D
         # p_enc: Ti x D, sin encodings
         p_enc, x_emb = self.src_embed(x_pad)
+        x_len = self.src_embed.num_frames(x_len)
         # src_pad_mask: N x Ti
         src_pad_mask = None if x_len is None else (padding_mask(x_len) == 1)
         # Ti x N x D

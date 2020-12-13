@@ -1,11 +1,15 @@
+# WER (%) Report:
+# Total (7176 utterances): 7362/104765 = 7.03%, SUB/INS/DEL = 6914/251/197
+
 nnet: "transformer"
 
 nnet_conf:
   input_size: 80
-  enc_type: "transformer"
+  enc_type: "transformer_rel"
   enc_kwargs:
     input_embed: "conv2d"
     att_dim: 512
+    k_dim: 256
     nhead: 8
     feedforward_dim: 1024
     pos_dropout: 0.2
@@ -20,16 +24,20 @@ nnet_conf:
     num_layers: 6
 
 asr_transform:
-  feats: "fbank-log-cmvn-aug"
+  feats: "perturb-fbank-log-cmvn-aug"
   frame_len: 400
   frame_hop: 160
   window: "hamm"
   round_pow_of_two: true
   sr: 16000
   num_mels: 80
-  norm_mean: True
-  norm_var: True
+  norm_mean: true
+  norm_var: true
   aug_prob: 0.5
+  aug_mask_zero: false
+  aug_max_frame: 80
+  num_aug_bands: 1
+  num_aug_frame: 1
 
 task: "ctc_xent"
 

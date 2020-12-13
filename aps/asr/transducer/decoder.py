@@ -16,7 +16,7 @@ from aps.asr.transformer.decoder import prep_sub_mask
 from aps.asr.transformer.encoder import ApsTransformerEncoder
 from aps.asr.transformer.impl import TransformerTorchEncoderLayer
 from aps.asr.base.attention import padding_mask
-from aps.asr.base.layers import OneHotEmbedding, PyTorchRNN
+from aps.asr.base.layer import OneHotEmbedding, PyTorchRNN
 
 
 class Node(object):
@@ -164,6 +164,7 @@ class PyTorchRNNDecoder(nn.Module):
                     nbest: int = 8,
                     normalized: bool = True) -> List[Dict]:
         """
+        TODO: re-impl
         Beam search (best first) algorithm for RNN-T
         Args:
             enc_out: N(=1) x Ti x D
@@ -400,6 +401,7 @@ class TorchTransformerDecoder(nn.Module):
                     nbest: int = 8,
                     normalized: bool = True) -> List[Dict]:
         """
+        TODO: re-impl
         Beam search (best first) algorithm for RNN-T
         Args:
             enc_out: Ti x N(=1) x D

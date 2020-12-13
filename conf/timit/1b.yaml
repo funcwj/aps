@@ -7,11 +7,11 @@ nnet_conf:
   enc_kwargs:
     rnn: "lstm"
     num_layers: 4
+    layernorm: true
     bidirectional: true
     dropout: 0.2
-    hidden: 512
     project: 512
-    layernorm: true
+    hidden: 512
   dec_kwargs:
     embed_size: 512
     jot_dim: 512

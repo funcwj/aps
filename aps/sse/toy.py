@@ -39,7 +39,7 @@ class ToyRNN(PyTorchRNNEncoder):
                                      hidden=hidden,
                                      dropout=dropout,
                                      bidirectional=bidirectional,
-                                     non_linear="")
+                                     non_linear="none")
         if enh_transform is None:
             raise ValueError("enh_transform can not be None")
         if num_spks == 1 and output_nonlinear == "softmax":

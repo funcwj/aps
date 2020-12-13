@@ -1,9 +1,10 @@
 asr_transform:
-  feats: "fbank-log-cmvn-splice"
+  feats: "emph-perturb-fbank-log-cmvn-splice"
   frame_len: 400
   frame_hop: 160
   window: "hamm"
   round_pow_of_two: true
+  pre_emphasis: 0.97
   sr: 16000
   num_mels: 80
   lctx: 1

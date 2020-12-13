@@ -9,7 +9,7 @@ import torch.nn as nn
 from typing import Optional, Dict, Tuple, List
 from torch_complex import ComplexTensor
 
-from aps.asr.transformers import TransformerASR
+from aps.asr.transformers import TransformerASR, XfmrASROutputType
 from aps.asr.base.encoder import PyTorchRNNEncoder
 from aps.asr.filter.conv import (TimeInvariantFilter, TimeVariantFilter,
                                  TimeInvariantAttFilter)
@@ -65,9 +65,8 @@ class EnhTransformerASR(nn.Module):
         """
         raise NotImplementedError
 
-    def forward(
-        self, x_pad: th.Tensor, x_len: Optional[th.Tensor], y_pad: th.Tensor
-    ) -> Tuple[th.Tensor, None, Optional[th.Tensor], Optional[th.Tensor]]:
+    def forward(self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
+                y_pad: th.Tensor) -> XfmrASROutputType:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -89,8 +88,9 @@ class EnhTransformerASR(nn.Module):
                     lm_weight: float = 0,
                     nbest: int = 8,
                     max_len: int = -1,
-                    vectorized: bool = True,
-                    normalized: bool = True) -> List[Dict]:
+                    penalty: float = 0,
+                    normalized: bool = True,
+                    temperature: float = 1) -> List[Dict]:
         """
         Args
             x: C x S
@@ -105,8 +105,9 @@ class EnhTransformerASR(nn.Module):
                                                     lm_weight=lm_weight,
                                                     nbest=nbest,
                                                     max_len=max_len,
-                                                    vectorized=vectorized,
-                                                    normalized=normalized)
+                                                    penalty=penalty,
+                                                    normalized=normalized,
+                                                    temperature=temperature)
 
 
 @ApsRegisters.asr.register("beam_transformer")

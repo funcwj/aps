@@ -12,7 +12,8 @@ nbest=1
 channel=-1
 max_len=100
 beam_size=16
-batch_size=1
+batch_size=""
+penalty=0
 normalized=true
 temperature=1
 lm=""
@@ -39,7 +40,7 @@ exp_dir=exp/$mdl_id/$exp_id
 mkdir -p $dec_dir
 [ ! -z $log_suffix ] && log_suffix=${log_suffix}.
 
-if [ $batch_size -eq 1 ]; then
+if [ -z $batch_size ]; then
   cmd/decode.py \
     $tst_scp \
     $dec_dir/beam${beam_size}.decode \
@@ -49,6 +50,7 @@ if [ $batch_size -eq 1 ]; then
     --channel $channel \
     --dict "$dict" \
     --lm "$lm" \
+    --penalty $penalty \
     --temperature $temperature \
     --lm-weight $lm_weight \
     --space "$space" \
@@ -68,6 +70,7 @@ else
     --channel $channel \
     --dict "$dict" \
     --space "$space" \
+    --penalty $penalty \
     --temperature $temperature \
     --nbest $nbest \
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \

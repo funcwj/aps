@@ -12,6 +12,16 @@ from aps.metric.asr import permute_wer
 from kaldi_python_io import Reader as BaseReader
 
 
+def to_chars(str_list):
+    """
+    Convert str list to char list
+    """
+    chars = []
+    for sstr in str_list:
+        chars += list(sstr)
+    return chars
+
+
 class TransReader(object):
     """
     Class to handle single/multi-speaker transcriptions
@@ -30,17 +40,10 @@ class TransReader(object):
     def __getitem__(self, key):
         if not self._check(key):
             raise RuntimeError(f"Missing {key} in one of the text files")
-        ret = [reader[key] for reader in self.readers]
+        trans = [reader[key] for reader in self.readers]
         if self.cer:
-            char_ret = []
-            for ref in ret:
-                char_list = []
-                for r in ref:
-                    char_list += list(r)
-                char_ret.append(char_list)
-            return char_ret
-        else:
-            return ret
+            trans = [to_chars(r) for r in trans]
+        return trans
 
     def _check(self, key):
         status = [key in reader for reader in self.readers]
@@ -69,7 +72,7 @@ def run(args):
         ref_len = sum([len(r) for r in ref])
         if each_utt:
             if ref_len != 0:
-                each_utt.write(f"{key}\t{err / ref_len:.3f}\n")
+                each_utt.write(f"{key}\t{sum(err) / ref_len:.3f}\n")
             else:
                 each_utt.write(f"{key}\tINF\n")
         reporter.add(key, err, ref_len)

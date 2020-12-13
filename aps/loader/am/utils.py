@@ -3,6 +3,7 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
+import warnings
 import torch as th
 
 import torch.utils.data as dat
@@ -11,6 +12,31 @@ import aps.distributed as dist
 from typing import Dict, List, Tuple, NoReturn, Optional
 from kaldi_python_io import Reader as BaseReader
 from aps.const import UNK_TOKEN
+
+
+class AsrDataset(dat.Dataset):
+    """
+    A base dataset class for ASR task
+    """
+
+    def __init__(self, input_reader, token_reader, duration_axis=-1):
+        self.input_reader = input_reader
+        self.token_reader = token_reader
+        self.duration_axis = duration_axis
+
+    def __getitem__(self, idx: int) -> Dict:
+        tok = self.token_reader[idx]
+        key = tok["key"]
+        inp = self.input_reader[key]
+        return {
+            "dur": inp.shape[self.duration_axis],
+            "inp": inp,
+            "len": tok["len"],
+            "ref": tok["tok"]
+        }
+
+    def __len__(self) -> int:
+        return len(self.token_reader)
 
 
 class TokenReader(object):
@@ -58,14 +84,18 @@ class TokenReader(object):
                 num_tokens=-1,
                 restrict=False)
         token_set = []
+        drop_utts = 0
         for key, tokens in text_reader:
             L = len(tokens)
             if L > max_token_num or L <= min_token_num:
+                drop_utts += 1
                 continue
             if key not in utt2dur:
+                drop_utts += 1
                 continue
             num_frames = utt2dur[key]
             if num_frames < min_dur or num_frames > max_dur:
+                drop_utts += 1
                 continue
             token_set.append({
                 "key": key,
@@ -75,16 +105,17 @@ class TokenReader(object):
             })
         # long -> short
         token_set = sorted(token_set, key=lambda d: d["dur"], reverse=True)
+        if drop_utts:
+            warnings.warn(f"Drop {drop_utts} utterances")
         return token_set
 
     def __getitem__(self, index):
         stats = self.token_list[index]
-        if self.vocab_dict:
-            unk_tok = self.vocab_dict[UNK_TOKEN]
-            stats["tok"] = [
-                (self.vocab_dict[t] if t in self.vocab_dict else unk_tok)
-                for t in stats["tok"]
-            ]
+        # if processed, skip
+        if self.vocab_dict and "vis" not in stats:
+            stats["tok"] = [(self.vocab_dict[t] if t in self.vocab_dict else
+                             self.vocab_dict[UNK_TOKEN]) for t in stats["tok"]]
+            stats["vis"] = True
         return stats
 
     def __len__(self) -> int:

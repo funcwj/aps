@@ -3,12 +3,12 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-import os
 import io
+import os
 import subprocess
 
-import soundfile as sf
 import numpy as np
+import soundfile as sf
 import scipy.signal as ss
 
 from kaldi_python_io import Reader as BaseReader
@@ -69,9 +69,9 @@ def write_audio(fname: Union[str, IO[Any]],
         samps = np.squeeze(samps)
     # make dirs
     if isinstance(fname, str):
-        fdir = os.path.dirname(fname)
-        if fdir and not os.path.exists(fdir):
-            os.makedirs(fdir)
+        parent = os.path.dirname(fname)
+        if parent and not os.path.exists(parent):
+            os.makedirs(parent)
     sf.write(fname, samps, sr)
 
 
@@ -151,6 +151,7 @@ class AudioReader(BaseReader):
 
     def _load(self, key: str) -> Optional[np.ndarray]:
         fname = self.index_dict[key]
+        samps = None
         # return C x N or N
         if ":" in fname:
             tokens = fname.split(":")
@@ -164,12 +165,21 @@ class AudioReader(BaseReader):
             # wav_ark = open(fname, "rb")
             # seek and read
             wav_ark.seek(offset)
-            samps = read_audio(wav_ark, norm=self.norm, sr=self.sr)
+            try:
+                samps = read_audio(wav_ark, norm=self.norm, sr=self.sr)
+            except RuntimeError:
+                print(f"Read audio {key} {fname}:{offset} failed...",
+                      flush=True)
         else:
             if fname[-1] == "|":
                 shell, _ = run_command(fname[:-1], wait=True)
                 fname = io.BytesIO(shell)
-            samps = read_audio(fname, norm=self.norm, sr=self.sr)
+            try:
+                samps = read_audio(fname, norm=self.norm, sr=self.sr)
+            except RuntimeError:
+                print(f"Load audio {key} {fname} failed...", flush=True)
+        if samps is None:
+            raise RuntimeError("Audio IO failed ...")
         if self.ch >= 0 and samps.ndim == 2:
             samps = samps[self.ch]
         return samps

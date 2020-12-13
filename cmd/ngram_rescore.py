@@ -4,21 +4,41 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import kenlm
+import codecs
 import argparse
 
-from aps.asr.lm.utils import NbestReader
 from aps.utils import get_logger, io_wrapper
 from aps.opts import StrToBoolAction
+from typing import Dict, Tuple
 
 logger = get_logger(__name__)
 
 
+def read_nbest(nbest_fd: str) -> Tuple[int, Dict]:
+    hypos = {}
+    nbest = 1
+    with codecs.open(nbest_fd, "r", encoding="utf-8") as f:
+        nbest = int(f.readline())
+        while True:
+            key = f.readline().strip()
+            if not key:
+                break
+            topk = []
+            for _ in range(nbest):
+                items = f.readline().strip().split()
+                score = float(items[0])
+                trans = " ".join(items[1:])
+                topk.append((score, trans))
+            hypos[key] = topk
+    return (nbest, hypos)
+
+
 def run(args):
-    nbest_reader = NbestReader(args.nbest)
+    nbest, nbest_hypos = read_nbest(args.nbest)
     ngram = kenlm.Model(args.lm)
 
     stdout, top1 = io_wrapper(args.top1, "w")
-    for key, nbest in nbest_reader:
+    for key, nbest in nbest_hypos.items():
         rescore = []
         for hyp in nbest:
             am_score, trans = hyp
@@ -31,8 +51,7 @@ def run(args):
         top1.write(f"{key}\t{rescore[0][1]}\n")
     if not stdout:
         top1.close()
-    logger.info(f"Rescore {len(nbest_reader)} utterances " +
-                f"on {nbest_reader.nbest} hypos")
+    logger.info(f"Rescore {len(nbest_hypos)} utterances on {nbest} hypos")
 
 
 if __name__ == "__main__":

@@ -46,7 +46,8 @@ def compute_accu(outs: th.Tensor, tgts: th.Tensor) -> float:
     ncorr = th.sum(pred[mask] == tgts[mask]).float()
     # denumerator
     total = th.sum(mask)
-    return (ncorr / total).item()
+    # return pair
+    return (ncorr.item(), total.item())
 
 
 def prep_asr_target(tgt_pad: th.Tensor,
