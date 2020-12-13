@@ -164,8 +164,8 @@ class AttASR(nn.Module):
                                temperature=temperature)
 
     def beam_search_batch(self,
-                          x: th.Tensor,
-                          x_len: Optional[th.Tensor],
+                          batch: List[th.Tensor],
+                          batch_len: th.Tensor,
                           lm: Optional[nn.Module] = None,
                           lm_weight: float = 0,
                           beam: int = 16,
@@ -175,30 +175,27 @@ class AttASR(nn.Module):
                           normalized=True,
                           temperature: float = 1) -> List[Dict]:
         """
-        Batch version of beam search (numbers may differ with beam_search)
+        Batch version of beam search
+        NOTE: if we do padding on input of the encoder, the number may differs
         Args
-            x (Tensor): audio samples or acoustic features, N x S or N x Ti x F
+            batch (list[Tensor]): audio samples or acoustic features, S or Ti x F
         """
         with th.no_grad():
-            if self.asr_transform:
-                if x.dim() == 1:
-                    warnings.warn(
-                        "Got one utterance, use beam_search(...) instead")
-                x, x_len = self.asr_transform(x, x_len)
-                inp_len = x.shape[-2]
-                enc_out, enc_len = self.encoder(x, x_len)
-            else:
-                # N x Ti x F
-                if x.dim() == 2:
-                    warnings.warn(
-                        "Got one utterance, use beam_search(...) instead")
-                inp_len = x.shape[1]
-                enc_out, enc_len = self.encoder(x, x_len)
+            if len(batch) == 1:
+                warnings.warn("Got one utterance, use beam_search(...) instead")
+            outs, lens = [], []
+            for i, inp in enumerate(batch):
+                if self.asr_transform:
+                    inp, _ = self.asr_transform(inp, None)
+                enc_out, enc_len = self.encoder(inp, batch_len[i])
+                outs.append(enc_out)
+                lens.append(enc_len)
+            inp_len = batch_len.max().item()
             max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
             return beam_search_batch(self.decoder,
                                      self.att_net,
-                                     enc_out,
-                                     enc_len,
+                                     th.stack(outs),
+                                     th.concat(lens),
                                      lm=lm,
                                      lm_weight=lm_weight,
                                      beam=beam,

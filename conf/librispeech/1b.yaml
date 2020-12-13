@@ -1,8 +1,8 @@
 # 4 GPU, DDP, 128 batch size
 # WER (%) Report:
-# Total (2620 utterances): 2810/52576 = 5.34%, SUB/INS/DEL = 2111/180/519
+# Total (2620 utterances): 2762/52576 = 5.25%, SUB/INS/DEL = 2136/178/448
 # WER (%) Report:
-# Total (2939 utterances): 7003/52343 = 13.38%, SUB/INS/DEL = 5432/501/1070
+# Total (2939 utterances): 6815/52343 = 13.02%, SUB/INS/DEL = 5391/482/942
 
 nnet: "att"
 
@@ -47,7 +47,7 @@ task_conf:
   ctc_weight: 0.2
 
 asr_transform:
-  feats: "emph-fbank-log-aug"
+  feats: "perturb-emph-fbank-log-aug"
   frame_len: 400
   frame_hop: 160
   window: "hamm"

@@ -30,13 +30,13 @@ def beam_search(decoder: nn.Module,
     """
     Vectorized beam search algothrim for transformer decoder
     Args
-        enc_out (Tensor): 1 x T x F, encoder output
+        enc_out (Tensor): T x 1 x F, encoder output
     """
     if sos < 0 or eos < 0:
         raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
     if max_len <= 0:
         raise RuntimeError(f"Invalid max_len: {max_len:d}")
-    N, _, _ = enc_out.shape
+    _, N, _ = enc_out.shape
     if N != 1:
         raise RuntimeError(
             f"Got batch size {N:d}, now only support one utterance")
@@ -54,27 +54,30 @@ def beam_search(decoder: nn.Module,
                                device=device,
                                penalty=penalty,
                                normalized=normalized)
+    hypos = []
     pre_emb = None
     lm_state = None
-    # N x T x F => N*beam x T x F
-    enc_out = th.repeat_interleave(enc_out, beam, 0)
+    # Ti x beam x D
+    enc_out = th.repeat_interleave(enc_out, beam, 1)
     # step by step
     for t in range(max_len):
         # beam
         pre_out, point = beam_tracker[-1] if t else beam_tracker[0]
         # beam x V
         dec_out, pre_emb = decoder.step(enc_out,
-                                        pre_out,
+                                        pre_out[:, None],
                                         out_idx=-1,
                                         pre_emb=pre_emb,
                                         point=point)
+
+        # compute prob: beam x V, nagetive
+        prob = tf.log_softmax(dec_out / temperature, dim=-1)
+
         if lm:
             lm_prob, lm_state = lm_score(lm, point, pre_out, lm_state)
             # beam x V
             prob += lm_prob * lm_weight
 
-        # compute prob: beam x V, nagetive
-        prob = tf.log_softmax(dec_out / temperature, dim=-1)
         # local pruning
         beam_tracker.prune_beam(prob)
         # continue flags

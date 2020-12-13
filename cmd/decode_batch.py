@@ -8,8 +8,6 @@ import warnings
 
 import torch as th
 
-from torch.nn.utils.rnn import pad_sequence
-
 from aps.loader import AudioReader
 from aps.utils import get_logger, io_wrapper
 from aps.opts import DecodingParser
@@ -30,12 +28,10 @@ class BatchDecoder(Computer):
         super(BatchDecoder, self).__init__(cpt_dir, device_id=device_id)
         logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
 
-    def run(self, inp, inp_len, **kwargs):
-        inp = pad_sequence([th.from_numpy(s) for s in inp],
-                           batch_first=True,
-                           padding_value=0).to(self.device)
-        inp_len = th.tensor(inp_len, device=self.device)
-        return self.nnet.beam_search_batch(inp, inp_len, **kwargs)
+    def run(self, inps, inps_len, **kwargs):
+        inps = [th.from_numpy(t).to(self.device) for t in inps]
+        inps_len = th.tensor(inps_len, device=self.device)
+        return self.nnet.beam_search_batch(inps, inps_len, **kwargs)
 
 
 def run(args):
@@ -54,19 +50,6 @@ def run(args):
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
-    logger.info("Prepare dataset ...")
-    # long to short
-    utts_sort = [{"key": key, "len": src.shape[-1]} for key, src in src_reader]
-    utts_sort = sorted(utts_sort, key=lambda n: n["len"], reverse=True)
-    logger.info(f"Prepare dataset done ({len(utts_sort)}) utterances")
-    batches = []
-    n = 0
-    while n < len(utts_sort):
-        batches.append(utts_sort[n:n + args.batch_size])
-        n += args.batch_size
-    if n != len(utts_sort):
-        batches.append(utts_sort[n:])
-
     if args.lm:
         lm = Computer(args.lm, device_id=args.device_id)
         logger.info(f"Load lm from {args.lm}: epoch {lm.epoch}, " +
@@ -82,14 +65,21 @@ def run(args):
         nbest = min(args.beam_size, args.nbest)
         topn.write(f"{nbest}\n")
 
-    for batch in batches:
-        # prepare inputs
-        keys = [b["key"] for b in batch]
-        inp = [src_reader[key] for key in keys]
-        inp_len = [b["len"] for b in batch]
+    done = 0
+    batches = []
+    for key, src in src_reader:
+        done += 1
+        batches.append({
+            "key": key,
+            "inp": src,
+            "len": src.shape[-1] if decoder.accept_raw else src.shape[0]
+        })
+        end = (done == len(src_reader) and len(batches))
+        if not end or len(batches) != args.batch_size:
+            continue
         # decode
-        batch_nbest = decoder.run(inp,
-                                  inp_len,
+        batch_nbest = decoder.run([bz["inp"] for bz in batches],
+                                  [bz["len"] for bz in batches],
                                   lm=lm,
                                   beam=args.beam_size,
                                   nbest=args.nbest,
@@ -98,6 +88,7 @@ def run(args):
                                   lm_weight=args.lm_weight,
                                   normalized=args.normalized,
                                   temperature=args.temperature)
+        keys = [bz["key"] for bz in batches]
         for key, nbest in zip(keys, batch_nbest):
             logger.info(f"Decoding utterance {key}...")
             nbest_hypos = [f"{key}\n"]
@@ -120,6 +111,8 @@ def run(args):
         top1.flush()
         if topn:
             topn.flush()
+        batches.clear()
+
     if not stdout_top1:
         top1.close()
     if topn and not stdout_topn:
