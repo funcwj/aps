@@ -121,8 +121,7 @@ conv1d_fsmn_enc_kwargs = {
 }
 
 transformer_enc_kwargs = {
-    "input_embed": "conv2d",
-    "embed_other_opts": -1,
+    "proj_layer": "conv2d",
     "att_dim": 512,
     "nhead": 8,
     "feedforward_dim": 2048,
@@ -133,8 +132,7 @@ transformer_enc_kwargs = {
 }
 
 transformer_rel_enc_kwargs = {
-    "input_embed": "conv2d",
-    "embed_other_opts": -1,
+    "proj_layer": "conv2d",
     "att_dim": 512,
     "nhead": 8,
     "k_dim": 128,
@@ -143,12 +141,11 @@ transformer_rel_enc_kwargs = {
     "att_dropout": 0.1,
     "post_norm": True,
     "num_layers": 2,
-    "add_value_rel": True
+    "value_rel_pose": True
 }
 
 transformer_rel_xl_enc_kwargs = {
-    "input_embed": "conv2d",
-    "embed_other_opts": -1,
+    "proj_layer": "conv2d",
     "att_dim": 512,
     "nhead": 8,
     "feedforward_dim": 2048,

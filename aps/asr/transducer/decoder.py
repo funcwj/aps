@@ -5,16 +5,15 @@
 
 import torch as th
 import torch.nn as nn
-
-import torch.nn.functional as F
+import torch.nn.functional as tf
 
 from queue import PriorityQueue
 from typing import List, Dict, Optional, Union, Tuple
 
-from aps.asr.transformer.embedding import IOEmbedding
 from aps.asr.transformer.decoder import prep_sub_mask
 from aps.asr.transformer.encoder import ApsTransformerEncoder
 from aps.asr.transformer.impl import TransformerTorchEncoderLayer
+from aps.asr.transformer.pose import InputSinPosEncoding
 from aps.asr.base.attention import padding_mask
 from aps.asr.base.layer import OneHotEmbedding, PyTorchRNN
 
@@ -87,19 +86,16 @@ class PyTorchRNNDecoder(nn.Module):
         self.vocab_size = vocab_size
         self.output = nn.Linear(jot_dim, vocab_size, bias=False)
 
-    def forward(self,
-                enc_out: th.Tensor,
-                tgt_pad: th.Tensor,
-                blank: int = 0) -> th.Tensor:
+    def forward(self, enc_out: th.Tensor, tgt_pad: th.Tensor) -> th.Tensor:
         """
         Args:
-            enc_out: N x Ti x D
-            tgt_pad: N x To
+            enc_out (Tensor): N x Ti x D
+            tgt_pad (Tensor): N x To+1 (padding blank at time = 0)
         Return:
             output: N x Ti x To+1 x V
         """
         # N x To+1 x E
-        tgt_pad = self.vocab_embed(F.pad(tgt_pad, (1, 0), value=blank))
+        tgt_pad = self.vocab_embed(tgt_pad)
         # N x To+1 x D
         dec_out, _ = self.decoder(tgt_pad)
         # N x Ti x To+1 x V
@@ -144,8 +140,8 @@ class PyTorchRNNDecoder(nn.Module):
         _, T, _ = enc_out.shape
         for t in range(T):
             # 1 x V
-            prob = F.log_softmax(self._pred_joint(enc_out[:, t], dec_out)[0],
-                                 dim=-1)
+            prob = tf.log_softmax(self._pred_joint(enc_out[:, t], dec_out)[0],
+                                  dim=-1)
             best_prob, best_pred = th.max(prob, dim=-1)
             score += best_prob.item()
             # not blank
@@ -199,9 +195,9 @@ class PyTorchRNNDecoder(nn.Module):
                 dec_out, hidden = self._step_decoder(
                     trans[-1], hidden=cur_node.stats["hidden"])
                 # predition: 1 x V
-                prob = F.log_softmax(self._pred_joint(enc_out[:, t],
-                                                      dec_out)[0],
-                                     dim=-1).squeeze()
+                prob = tf.log_softmax(self._pred_joint(enc_out[:, t],
+                                                       dec_out)[0],
+                                      dim=-1).squeeze()
 
                 # add terminal node (end with blank)
                 score = cur_node.score + prob[blank].item()
@@ -221,8 +217,8 @@ class PyTorchRNNDecoder(nn.Module):
                     if blank != self.vocab_size - 1:
                         raise RuntimeError(
                             "Hard code for blank = self.vocab_size - 1 here")
-                    prob[:-1] += F.log_softmax(lm_prob[:, -1].squeeze(),
-                                               dim=-1) * lm_weight
+                    prob[:-1] += tf.log_softmax(lm_prob[:, -1].squeeze(),
+                                                dim=-1) * lm_weight
 
                 # extend other nodes
                 topk_score, topk_index = th.topk(prob, beam + 1)
@@ -276,11 +272,10 @@ class TorchTransformerDecoder(nn.Module):
                  num_layers: int = 6,
                  post_norm: bool = True) -> None:
         super(TorchTransformerDecoder, self).__init__()
-        self.tgt_embed = IOEmbedding("sparse",
-                                     vocab_size,
-                                     embed_dim=att_dim,
-                                     dropout=pos_dropout,
-                                     scale_embed=scale_embed)
+        self.vocab_embed = nn.Embedding(vocab_size, att_dim)
+        self.abs_pos_enc = InputSinPosEncoding(att_dim,
+                                               dropout=pos_dropout,
+                                               scale_embed=scale_embed)
         decoder_layer = TransformerTorchEncoderLayer(
             att_dim,
             nhead,
@@ -298,27 +293,22 @@ class TorchTransformerDecoder(nn.Module):
         self.vocab_size = vocab_size
         self.output = nn.Linear(jot_dim, vocab_size, bias=False)
 
-    def forward(self,
-                enc_out: th.Tensor,
-                tgt_pad: th.Tensor,
-                tgt_len: Optional[th.Tensor],
-                blank: int = 0) -> th.Tensor:
+    def forward(self, enc_out: th.Tensor, tgt_pad: th.Tensor,
+                tgt_len: Optional[th.Tensor]) -> th.Tensor:
         """
         Args:
-            enc_out: Ti x N x D
-            tgt_pad: N x To
-            tgt_len: N or None
+            enc_out (Tensor): Ti x N x D
+            tgt_pad (Tensor): N x To+1 (padding blank at time = 1)
+            tgt_len (Tensor): N or None
         Return:
             output: N x Ti x To+1 x V
         """
         # N x Ti
         pad_mask = None if tgt_len is None else (padding_mask(tgt_len + 1) == 1)
-        # N x To+1
-        tgt_pad = F.pad(tgt_pad, (1, 0), value=blank)
         # genrarte target masks (-inf/0)
         tgt_mask = prep_sub_mask(tgt_pad.shape[-1], device=tgt_pad.device)
         # To+1 x N x E
-        tgt_pad = self.tgt_embed(tgt_pad)
+        tgt_pad = self.abs_pos_enc(self.vocab_embed(tgt_pad))
         # To+1 x N x D
         dec_out = self.decoder(tgt_pad,
                                src_mask=tgt_mask,
@@ -361,7 +351,7 @@ class TorchTransformerDecoder(nn.Module):
         """
         t = 0 if prev_embed is None else prev_embed.shape[0]
         # 1 x 1 x E
-        pred_prev_emb = self.tgt_embed(pred_prev, t=t)
+        pred_prev_emb = self.abs_pos_enc(self.vocab_embed(pred_prev), t=t)
         prev_embed = pred_prev_emb if prev_embed is None else th.cat(
             [prev_embed, pred_prev_emb], dim=0)
         tgt_mask = prep_sub_mask(t + 1, device=pred_prev.device)
@@ -381,8 +371,8 @@ class TorchTransformerDecoder(nn.Module):
         T, _, _ = enc_out.shape
         for t in range(T):
             # 1 x V
-            prob = F.log_softmax(self._pred_joint(enc_out[t], dec_out)[0],
-                                 dim=-1)
+            prob = tf.log_softmax(self._pred_joint(enc_out[t], dec_out)[0],
+                                  dim=-1)
             best_prob, best_pred = th.max(prob, dim=-1)
             score += best_prob.item()
             # not blank
@@ -438,8 +428,8 @@ class TorchTransformerDecoder(nn.Module):
                 dec_out, prev_embed = self._step_decoder(
                     trans[-1], prev_embed=cur_node.stats["prev_embed"])
                 # predition: V
-                prob = F.log_softmax(self._pred_joint(enc_out[t], dec_out)[0],
-                                     dim=-1).squeeze()
+                prob = tf.log_softmax(self._pred_joint(enc_out[t], dec_out)[0],
+                                      dim=-1).squeeze()
 
                 # add terminal node (end with blank)
                 score = cur_node.score + prob[blank].item()
@@ -459,8 +449,8 @@ class TorchTransformerDecoder(nn.Module):
                     if blank != self.vocab_size - 1:
                         raise RuntimeError(
                             "Hard code for blank = self.vocab_size - 1 here")
-                    prob[:-1] += F.log_softmax(lm_prob[:, -1].squeeze(),
-                                               dim=-1) * lm_weight
+                    prob[:-1] += tf.log_softmax(lm_prob[:, -1].squeeze(),
+                                                dim=-1) * lm_weight
 
                 # extend other nodes
                 topk_score, topk_index = th.topk(prob, beam + 1)

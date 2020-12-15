@@ -5,6 +5,7 @@
 
 import torch as th
 import torch.nn as nn
+import torch.nn.functional as tf
 
 from typing import Optional, Dict, Tuple, List
 from aps.asr.transformer.encoder import support_xfmr_encoder
@@ -70,8 +71,10 @@ class TorchTransducerASR(nn.Module):
         # Ti x N x D => N x Ti x D
         if self.is_xfmr_encoder:
             enc_out = enc_out.transpose(0, 1)
+        # N x To+1
+        y_pad = tf.pad(y_pad, (1, 0), value=self.blank)
         # N x Ti x To+1 x V
-        dec_out = self.decoder(enc_out, y_pad, blank=self.blank)
+        dec_out = self.decoder(enc_out, y_pad)
         return dec_out, enc_len
 
     def _dec_prep(self, x: th.Tensor) -> th.Tensor:
@@ -181,8 +184,10 @@ class TransformerTransducerASR(nn.Module):
         # N x Ti x D => Ti x N x D
         if not self.is_xfmr_encoder:
             enc_out = enc_out.transpose(0, 1)
+        # N x To+1
+        y_pad = tf.pad(y_pad, (1, 0), value=self.blank)
         # N x Ti x To+1 x V
-        dec_out = self.decoder(enc_out, y_pad, y_len, blank=self.blank)
+        dec_out = self.decoder(enc_out, y_pad, y_len)
         return dec_out, enc_len
 
     def _dec_prep(self, x: th.Tensor) -> th.Tensor:

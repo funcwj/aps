@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from torch.nn import TransformerEncoderLayer
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 
 def _get_activation_fn(activation: str) -> nn.Module:
@@ -22,8 +22,7 @@ def _get_activation_fn(activation: str) -> nn.Module:
 
 class ApsMultiheadAttention(nn.Module):
     """
-    NOTE:
-    My own MultiheadAttention (just want to make sure it's same as torch.nn.MultiheadAttention)
+    NOTE: my own MultiheadAttention and make sure it's same as torch.nn.MultiheadAttention
     """
 
     def __init__(self,
@@ -47,18 +46,48 @@ class ApsMultiheadAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=True)
         self.dropout = nn.Dropout(p=dropout)
 
-    def _src_proj(self, tensor: th.Tensor, base: int) -> th.Tensor:
+    def inp_proj(self, inps: List[th.Tensor]) -> List[th.Tensor]:
         """
         Args:
-            tensor (Tensor): T x N x E
+            inps (list[Tensor]): T x N x E
         Return:
-            tensor (Tensor): T x N x H x D
+            outs (list[Tensor]): T x N x H x D
         """
-        index = slice(base * self.embed_dim, (base + 1) * self.embed_dim)
-        tensor = tf.linear(tensor, self.in_proj_weight[index],
-                           self.in_proj_bias[index])
-        tensor = tensor.view(tensor.size(0), -1, self.num_heads, self.head_dim)
-        return tensor
+
+        def _proj(base: int, mat: th.Tensor) -> th.Tensor:
+            idx = slice(base * self.embed_dim, (base + 1) * self.embed_dim)
+            mat = tf.linear(mat, self.in_proj_weight[idx],
+                            self.in_proj_bias[idx])
+            return mat.view(mat.size(0), -1, self.num_heads, self.head_dim)
+
+        return [_proj(i, inp) for i, inp in enumerate(inps)]
+
+    def context_weight(
+            self,
+            logit: th.Tensor,
+            value: th.Tensor,
+            key_padding_mask: Optional[th.Tensor] = None,
+            attn_mask: Optional[th.Tensor] = None) -> Tuple[th.Tensor]:
+        """
+        Return self-attention weight and context
+        Args:
+            logit (Tensor): L x N x H x S
+            value (Tensor): S x N x H x D
+        Return:
+            context (Tensor): L x N x H x D
+            weight (Tensor): L x N x H x S
+        """
+        logit = logit / (self.head_dim)**0.5
+        if key_padding_mask is not None:
+            logit = logit.masked_fill(key_padding_mask[None, :, None, :],
+                                      float("-inf"))
+        if attn_mask is not None:
+            logit += attn_mask[:, None, None, :]
+        # L x N x H x S
+        weight = self.dropout(th.softmax(logit, dim=-1))
+        # L x N x H x D
+        context = th.einsum("lnhs,snhd->lnhd", weight, value)
+        return context, weight
 
     def torch_forward(
             self,
@@ -98,6 +127,27 @@ class ApsMultiheadAttention(nn.Module):
             need_weights=True,
             attn_mask=attn_mask)
 
+    def wrap_out(self, context: th.Tensor,
+                 weight: th.Tensor) -> Tuple[th.Tensor]:
+        """
+        Return context & weight tensor
+        Args:
+            context (Tensor): L x N x H x D
+            weight (Tensor): L x N x H x S
+        Return:
+            context (Tensor): L x N x E
+            weight (Tensor): N x L x S
+        """
+        L, _, _, _ = context.shape
+        # L x N x HD
+        context = context.contiguous().view(L, -1, self.embed_dim)
+        # L x N x E
+        context = self.out_proj(context)
+        # L x N x S => N x L x S
+        weight = weight.mean(-2).transpose(0, 1)
+        # return
+        return context, weight
+
     def forward(
             self,
             query: th.Tensor,
@@ -114,34 +164,19 @@ class ApsMultiheadAttention(nn.Module):
             key_padding_mask (Tensor): N x S
             attn_mask (Tensor): L x S, additional mask
         Return:
-            output (Tensor): L x N x E
-            att_weights (Tensor): N x L x S
+            context (Tensor): L x N x E
+            weight (Tensor): N x L x S
         """
-        # L x N x H x D
-        query = self._src_proj(query, 0)
-        # S x N x H x D
-        key = self._src_proj(key, 1)
-        value = self._src_proj(value, 2)
+        # query: L x N x H x D
+        # key, value: S x N x H x D
+        query, key, value = self.inp_proj([query, key, value])
         # L x N x H x S
-        att_weights = th.einsum("lnhd,snhd->lnhs", query / (self.head_dim)**0.5,
-                                key)
-        if key_padding_mask is not None:
-            att_weights = att_weights.masked_fill(
-                key_padding_mask[None, :, None, :], float("-inf"))
-        if attn_mask is not None:
-            att_weights += attn_mask[:, None, None, :]
-        # L x N x H x S
-        att_weights = self.dropout(th.softmax(att_weights, dim=-1))
-        # L x N x H x D
-        output = th.einsum("lnhs,snhd->lnhd", att_weights, value)
-        # L x N x HD
-        output = output.contiguous()
-        output = output.view(output.size(0), -1, self.embed_dim)
-        # L x N x E
-        output = self.out_proj(output)
-        # L x N x S => N x L x S
-        att_weights = att_weights.mean(-2).transpose(0, 1)
-        return output, att_weights
+        logit = th.einsum("lnhd,snhd->lnhs", query, key)
+        context, weight = self.context_weight(logit,
+                                              value,
+                                              attn_mask=attn_mask,
+                                              key_padding_mask=key_padding_mask)
+        return self.wrap_out(context, weight)
 
 
 class RelMultiheadAttention(ApsMultiheadAttention):
@@ -165,8 +200,8 @@ class RelMultiheadAttention(ApsMultiheadAttention):
             query: th.Tensor,
             key: th.Tensor,
             value: th.Tensor,
-            key_pos: th.Tensor,
-            value_pos: Optional[th.Tensor],
+            key_rel_pose: th.Tensor,
+            value_rel_pose: Optional[th.Tensor],
             key_padding_mask: Optional[th.Tensor] = None,
             attn_mask: Optional[th.Tensor] = None
     ) -> Tuple[th.Tensor, th.Tensor]:
@@ -175,49 +210,33 @@ class RelMultiheadAttention(ApsMultiheadAttention):
             query (Tensor): L x N x E
             key (Tensor): S x N x E
             value (Tensor): S x N x E
-            key_pos (Tensor): L x S x D
-            value_pos (Tensor): L x S x D
+            key_rel_pose (Tensor): L x S x D
+            value_rel_pose (Tensor): L x S x D
             key_padding_mask (Tensor): N x S
             attn_mask (Tensor): L x S, additional mask
         Return:
-            output (Tensor): L x N x E
-            att_weights (Tensor): N x L x S
+            context (Tensor): L x N x E
+            weight (Tensor): N x L x S
         """
-        # L x N x H x D
-        query = self._src_proj(query, 0)
-        # S x N x H x D
-        key = self._src_proj(key, 1)
-        value = self._src_proj(value, 2)
+        # query: L x N x H x D
+        # key, value: S x N x H x D
+        query, key, value = self.inp_proj([query, key, value])
         # L x N x H x S
         term_a = th.einsum("lnhd,snhd->lnhs", query, key)
         L, N, H, D = query.shape
         query = query.view(L, N * H, D)
-        term_b = th.einsum("...hd,...sd->...hs", query, key_pos)
+        term_b = th.einsum("...hd,...sd->...hs", query, key_rel_pose)
         term_b = term_b.view(L, N, H, -1)
-        att_weights = (term_a + term_b) / (self.head_dim)**0.5
-
-        if key_padding_mask is not None:
-            att_weights = att_weights.masked_fill(
-                key_padding_mask[None, :, None, :], float("-inf"))
-        if attn_mask is not None:
-            att_weights += attn_mask[:, None, None, :]
-        # L x N x H x S
-        att_weights = self.dropout(th.softmax(att_weights, dim=-1))
-        # L x N x H x D
-        output = th.einsum("lnhs,snhd->lnhd", att_weights, value)
-        if value_pos is not None:
-            weights = att_weights.view(L, N * H, -1)
-            output_add = th.einsum("...hs,...sd->...hd", weights, value_pos)
-            output_add = output_add.view(L, N, H, -1)
-            output += output_add
-        # L x N x HD
-        output = output.contiguous()
-        output = output.view(output.size(0), -1, self.embed_dim)
-        # L x N x E
-        output = self.out_proj(output)
-        # L x N x S => N x L x S
-        att_weights = att_weights.mean(-2).transpose(0, 1)
-        return output, att_weights
+        logit = term_a + term_b
+        context, weight = self.context_weight(logit,
+                                              value,
+                                              attn_mask=attn_mask,
+                                              key_padding_mask=key_padding_mask)
+        if value_rel_pose is not None:
+            weights = weight.view(L, N * H, -1)
+            to_add = th.einsum("...hs,...sd->...hd", weights, value_rel_pose)
+            context += to_add.view(L, N, H, -1)
+        return self.wrap_out(context, weight)
 
 
 class XlMultiheadAttention(ApsMultiheadAttention):
@@ -275,7 +294,7 @@ class XlMultiheadAttention(ApsMultiheadAttention):
             query: th.Tensor,
             key: th.Tensor,
             value: th.Tensor,
-            sin_pos_enc: th.Tensor,
+            sin_pose: th.Tensor,
             key_padding_mask: Optional[th.Tensor] = None,
             attn_mask: Optional[th.Tensor] = None
     ) -> Tuple[th.Tensor, th.Tensor]:
@@ -284,20 +303,18 @@ class XlMultiheadAttention(ApsMultiheadAttention):
             query (Tensor): L x N x E
             key (Tensor): S x N x E
             value (Tensor): S x N x E
-            sin_pos_enc (Tensor): S x E
+            sin_pose (Tensor): S x E
             key_padding_mask (Tensor): N x S
             attn_mask (Tensor): L x S, additional mask
         Return:
             output (Tensor): L x N x E
             att_weights (Tensor): N x L x S
         """
-        # L x N x H x D
-        query = self._src_proj(query, 0)
-        # S x N x H x D
-        key = self._src_proj(key, 1)
-        value = self._src_proj(value, 2)
+        # query: L x N x H x D
+        # key, value: S x N x H x D
+        query, key, value = self.inp_proj([query, key, value])
         # S x E
-        rel_pos = self.rel_proj(sin_pos_enc)
+        rel_pos = self.rel_proj(sin_pose)
         # S x H x D
         rel_pos = rel_pos.view(rel_pos.size(0), self.num_heads, self.head_dim)
         # L x N x H x S
@@ -306,24 +323,12 @@ class XlMultiheadAttention(ApsMultiheadAttention):
         term_bd = th.einsum("lnhd,shd->lnhs", query + self.rel_v, rel_pos)
         term_bd = self._rel_shift(term_bd)
         # L x N x H x S
-        att_weights = (term_ac + term_bd) / (self.head_dim)**0.5
-        if key_padding_mask is not None:
-            att_weights = att_weights.masked_fill(
-                key_padding_mask[None, :, None, :], float("-inf"))
-        if attn_mask is not None:
-            att_weights += attn_mask[:, None, None, :]
-        # L x N x H x S
-        att_weights = self.dropout(th.softmax(att_weights, dim=-1))
-        # L x N x H x D
-        output = th.einsum("lnhs,snhd->lnhd", att_weights, value)
-        # L x N x HD
-        output = output.contiguous()
-        output = output.view(output.size(0), -1, self.embed_dim)
-        # L x N x E
-        output = self.out_proj(output)
-        # L x N x S => N x L x S
-        att_weights = att_weights.mean(-2).transpose(0, 1)
-        return output, att_weights
+        logit = term_ac + term_bd
+        context, weight = self.context_weight(logit,
+                                              value,
+                                              attn_mask=attn_mask,
+                                              key_padding_mask=key_padding_mask)
+        return self.wrap_out(context, weight)
 
 
 class TransformerTorchEncoderLayer(TransformerEncoderLayer):
@@ -432,8 +437,8 @@ class TransformerRelEncoderLayer(ApsTransformerEncoderLayer):
 
     def forward(self,
                 src: th.Tensor,
-                key_pos: Optional[th.Tensor] = None,
-                value_pos: Optional[th.Tensor] = None,
+                key_rel_pose: Optional[th.Tensor] = None,
+                value_rel_pose: Optional[th.Tensor] = None,
                 src_mask: Optional[th.Tensor] = None,
                 src_key_padding_mask: Optional[th.Tensor] = None) -> th.Tensor:
         inp = src
@@ -442,8 +447,8 @@ class TransformerRelEncoderLayer(ApsTransformerEncoderLayer):
         att = self.self_attn(src,
                              src,
                              src,
-                             key_pos,
-                             value_pos,
+                             key_rel_pose,
+                             value_rel_pose,
                              attn_mask=src_mask,
                              key_padding_mask=src_key_padding_mask)[0]
         src = inp + self.dropout(att)
@@ -484,7 +489,7 @@ class TransformerXLEncoderLayer(ApsTransformerEncoderLayer):
 
     def forward(self,
                 src: th.Tensor,
-                sin_pos_enc: Optional[th.Tensor] = None,
+                sin_pose: Optional[th.Tensor] = None,
                 src_mask: Optional[th.Tensor] = None,
                 src_key_padding_mask: Optional[th.Tensor] = None) -> th.Tensor:
         inp = src
@@ -493,7 +498,7 @@ class TransformerXLEncoderLayer(ApsTransformerEncoderLayer):
         att = self.self_attn(src,
                              src,
                              src,
-                             sin_pos_enc,
+                             sin_pose,
                              attn_mask=src_mask,
                              key_padding_mask=src_key_padding_mask)[0]
         src = inp + self.dropout(att)
@@ -547,7 +552,7 @@ def prep_sub_mask(T, device="cpu"):
     return mask
 
 
-def check_self_attn():
+def check_self_attn(round):
     S, L, N, E = 100, 100, 8, 256
     self_attn = ApsMultiheadAttention(E, 4, dropout=0)
     self_attn.train()
@@ -574,7 +579,9 @@ def check_self_attn():
     assert my2.shape == th2.shape
     th.testing.assert_allclose(my2, th2)
     th.testing.assert_allclose(my1, th1)
+    print(f"Test ApsMultiheadAttention Pass - round: {round}")
 
 
 if __name__ == "__main__":
-    check_self_attn()
+    for i in range(4):
+        check_self_attn(i)
