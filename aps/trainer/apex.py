@@ -117,6 +117,10 @@ class ApexTrainer(Trainer):
         """
         self.optimizer.zero_grad()
 
+        # add noise if needed
+        if self.weight_noise_adder:
+            self.weight_noise_adder(self.task)
+
         stats = self.task(egs)
         # use all reduce to check loss
         if self.distributed:
@@ -138,10 +142,6 @@ class ApexTrainer(Trainer):
             # for apex
             norm = clip_grad_norm_(apex.amp.master_params(self.optimizer),
                                    self.clip_gradient)
-
-        # add noise if needed
-        if self.weight_noise_adder:
-            self.weight_noise_adder(self.task)
 
         # step optimizer and update statistics
         if math.isfinite(norm):

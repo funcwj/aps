@@ -3,7 +3,7 @@
 
 import torch as th
 import torch.nn as nn
-
+import torch.nn.init as init
 from typing import NoReturn, Union, Tuple, Optional
 from aps.asr.base.layer import OneHotEmbedding, PyTorchRNN
 from aps.libs import ApsRegisters
@@ -34,37 +34,38 @@ class TorchRNNLM(nn.Module):
                  embed_size: int = 256,
                  vocab_size: int = 40,
                  rnn: str = "lstm",
-                 rnn_layers: int = 3,
-                 rnn_hidden: int = 512,
-                 rnn_dropout: float = 0.2,
+                 dropout: float = 0.2,
+                 num_layers: int = 3,
+                 hidden_size: int = 512,
                  tie_weights: bool = False) -> None:
         super(TorchRNNLM, self).__init__()
-        self.vocab_drop = nn.Dropout(rnn_dropout)
         if embed_size != vocab_size:
-            self.vocab_embed = nn.Embedding(vocab_size, embed_size)
+            self.embed = nn.Embedding(vocab_size, embed_size)
         else:
-            self.vocab_embed = OneHotEmbedding(vocab_size)
+            self.embed = OneHotEmbedding(vocab_size)
         # uni-directional RNNs
         self.pred = PyTorchRNN(rnn,
                                embed_size,
-                               rnn_hidden,
-                               rnn_layers,
-                               dropout=rnn_dropout,
+                               hidden_size,
+                               num_layers=num_layers,
+                               dropout=dropout,
                                bidirectional=False)
         # output distribution
-        self.dist = nn.Linear(rnn_hidden, vocab_size)
+        self.dist = nn.Linear(hidden_size, vocab_size)
+        self.embed_drop = nn.Dropout(p=dropout)
+        self.pred_drop = nn.Dropout(p=dropout)
         self.vocab_size = vocab_size
 
         self.init_weights()
 
         # tie_weights
-        if tie_weights and embed_size == rnn_hidden:
+        if tie_weights and embed_size == hidden_size:
             self.dist.weight = self.vocab_embed.weight
 
     def init_weights(self, initrange: float = 0.1) -> NoReturn:
-        self.vocab_embed.weight.data.uniform_(-initrange, initrange)
-        self.dist.bias.data.zero_()
-        self.dist.weight.data.uniform_(-initrange, initrange)
+        init.zeros_(self.dist.bias)
+        init.uniform_(self.dist.weight, -initrange, initrange)
+        init.uniform_(self.embed.weight, -initrange, initrange)
 
     def forward(self,
                 token: th.Tensor,
@@ -82,11 +83,9 @@ class TorchRNNLM(nn.Module):
         if h is not None:
             h = repackage_hidden(h)
         # N x T => N x T x V
-        x = self.vocab_embed(token)
-        x = self.vocab_drop(x)
-
+        inp_emb = self.embed_drop(self.embed(token))
         # N x T x H
-        y, h = self.pred(x, h)
+        out, h = self.pred(inp_emb, h)
         # N x T x V
-        output = self.dist(y)
-        return output, h
+        out = self.dist(self.pred_drop(out))
+        return out, h

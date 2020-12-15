@@ -58,7 +58,7 @@ def encoder_instance(enc_type: str, inp_features: int, out_features: int,
 
 class ConcatEncoder(nn.Module):
     """
-    Concatenation of the encoders
+    Concatenation of the encoders (similar to nn.Sequential)
     """
 
     def __init__(self, enc_list: List[nn.Module]) -> None:

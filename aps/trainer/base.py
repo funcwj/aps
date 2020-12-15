@@ -299,6 +299,7 @@ class Trainer(object):
                  ss_scheduler: str = "const",
                  ss_scheduler_kwargs: Optional[Dict] = None,
                  clip_gradient: Optional[float] = None,
+                 acmu_gradient: int = -1,
                  weight_noise_std: Optional[float] = None,
                  prog_interval: int = 100,
                  save_interval: int = -1,
@@ -358,6 +359,7 @@ class Trainer(object):
             self.weight_noise_adder = WeightNoiseAdder(weight_noise_std)
 
         self.clip_gradient = clip_gradient
+        self.acmu_gradient = acmu_gradient
         self.cur_epoch = 0  # zero based
         self.cur_step = 0
         self.save_interval = save_interval
@@ -433,6 +435,9 @@ class Trainer(object):
         self.reporter.log(f"Early stop detected on metric: {self.stop_on}")
         if clip_gradient:
             self.reporter.log(f"Clip gradient if over {clip_gradient} L2 norm")
+        if acmu_gradient:
+            self.reporter.log(
+                f"Accumulate gradient per {acmu_gradient} batches")
         if weight_noise_std:
             self.reporter.log("Add gaussian noise to gradient, with " +
                               f"std = {weight_noise_std}")
