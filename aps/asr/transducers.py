@@ -19,7 +19,7 @@ TransducerOutputType = Tuple[th.Tensor, Optional[th.Tensor]]
 @ApsRegisters.asr.register("transducer")
 class TorchTransducerASR(nn.Module):
     """
-    Transducer end-to-end ASR (rnn as decoder)
+    Transducer based ASR model with (Non-)Transformer encoder + RNN decoder
     """
 
     def __init__(self,
@@ -132,7 +132,7 @@ class TorchTransducerASR(nn.Module):
 @ApsRegisters.asr.register("transformer_transducer")
 class TransformerTransducerASR(nn.Module):
     """
-    Transducer end-to-end ASR (transformer as decoder)
+    Transducer based ASR model with (Non-)Transformer encoder + Transformer decoder
     """
 
     def __init__(self,

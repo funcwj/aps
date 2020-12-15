@@ -16,9 +16,9 @@ class SinPosEncoding(nn.Module):
     def __init__(self, embed_dim: int, dropout: float = 0.1) -> None:
         super(SinPosEncoding, self).__init__()
         # D//2: 1 / (10000 ** (torch.arange(0.0, embed_dim, 2.0) / embed_dim))
-        div_term = th.exp(
-            th.arange(0, embed_dim, 2.0) * (-math.log(10000.0) / embed_dim))
-        self.register_buffer("div_term", div_term)
+        self.div_term = nn.Parameter(th.exp(
+            th.arange(0, embed_dim, 2.0) * (-math.log(10000.0) / embed_dim)),
+                                     requires_grad=False)
         self.dropout = nn.Dropout(p=dropout)
 
     def _get_sin_pos_enc(self, num_frames: int, base: int = 0) -> th.Tensor:
@@ -26,7 +26,10 @@ class SinPosEncoding(nn.Module):
         Return sinusoidals encoding matrices
         """
         # T
-        sequence = th.arange(base, base + num_frames, 1.0)
+        sequence = th.arange(base,
+                             base + num_frames,
+                             1.0,
+                             device=self.div_term.device)
         # T x D//2
         sequence = sequence[:, None] * self.div_term
         # T x D//2 x 2

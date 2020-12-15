@@ -12,11 +12,25 @@ from torch.nn import TransformerEncoderLayer
 from typing import Optional, Tuple, List
 
 
+class Swish(nn.Module):
+    """
+    Swish activation
+    """
+
+    def __init__(self):
+        super(Swish, self).__init__()
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        return inp * th.sigmoid(inp)
+
+
 def _get_activation_fn(activation: str) -> nn.Module:
     if activation == "relu":
         return nn.ReLU()
     elif activation == "gelu":
         return nn.GELU()
+    elif activation == "swish":
+        return Swish()
     raise RuntimeError(f"activation should be relu/gelu, not {activation}")
 
 
@@ -405,7 +419,6 @@ class ApsTransformerEncoderLayer(nn.Module):
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
-        self.activation = _get_activation_fn(activation)
         self.pre_norm = pre_norm
 
     def __setstate__(self, state: str) -> None:
@@ -508,6 +521,88 @@ class TransformerXLEncoderLayer(ApsTransformerEncoderLayer):
             src = self.norm1(src)
             src = self.norm2(src + self.feedforward(src))
         return src
+
+
+class ConformerEncoderLayer(nn.Module):
+    """
+    Conformer encoder layer proposed by Google in
+        Conformer: Convolution-augmented Transformer for Speech Recognition
+    """
+
+    def __init__(self,
+                 d_model: int,
+                 nhead: int,
+                 dim_feedforward: int = 2048,
+                 dropout: float = 0.1,
+                 kernel_size: int = 16,
+                 activation: str = "swish",
+                 rel_u: Optional[nn.Parameter] = None,
+                 rel_v: Optional[nn.Parameter] = None):
+        super(ConformerEncoderLayer, self).__init__()
+        self.self_attn = XlMultiheadAttention(d_model,
+                                              nhead,
+                                              dropout=dropout,
+                                              rel_u=rel_u,
+                                              rel_v=rel_v)
+        self.feedforward1 = nn.Sequential(nn.LayerNorm(d_model),
+                                          nn.Linear(d_model, dim_feedforward),
+                                          _get_activation_fn(activation),
+                                          nn.Dropout(dropout),
+                                          nn.Linear(dim_feedforward, d_model),
+                                          nn.Dropout(dropout))
+        self.convolution = nn.Sequential(
+            nn.Conv1d(d_model, d_model * 2, 1), nn.GLU(dim=-2),
+            nn.Conv1d(d_model,
+                      d_model,
+                      kernel_size * 2 + 1,
+                      groups=d_model,
+                      stride=1,
+                      padding=kernel_size), nn.BatchNorm1d(d_model), nn.ReLU(),
+            nn.Conv1d(d_model, d_model, 1), nn.Dropout(p=dropout))
+        self.feedforward2 = nn.Sequential(nn.LayerNorm(d_model),
+                                          nn.Linear(d_model, dim_feedforward),
+                                          _get_activation_fn(activation),
+                                          nn.Dropout(dropout),
+                                          nn.Linear(dim_feedforward, d_model),
+                                          nn.Dropout(dropout))
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.norm3 = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def conv(self, inp: th.Tensor) -> th.Tensor:
+        # T x N x F
+        src = self.norm2(inp)
+        # T x N x F => N x F x T
+        src = th.einsum("tnf->nft", src)
+        out = self.convolution(src)
+        # N x F x T => T x N x F
+        out = th.einsum("nft->tnf", out)
+        return out + inp
+
+    def forward(self,
+                src: th.Tensor,
+                sin_pose: Optional[th.Tensor] = None,
+                src_mask: Optional[th.Tensor] = None,
+                src_key_padding_mask: Optional[th.Tensor] = None) -> th.Tensor:
+        # src: T x N x F
+        # 1) FFN
+        src1 = self.feedforward1(src) * 0.5 + src
+        # self-attention block
+        src2 = self.norm1(src1)
+        att = self.self_attn(src2,
+                             src2,
+                             src2,
+                             sin_pose,
+                             attn_mask=src_mask,
+                             key_padding_mask=src_key_padding_mask)[0]
+        src = src1 + self.dropout(att)
+        # conv
+        src = self.conv(src)
+        # 2) FFN
+        src = self.feedforward2(src) * 0.5 + src
+        # layernorm
+        return self.norm3(src)
 
 
 class ApsTransformerEncoder(nn.Module):

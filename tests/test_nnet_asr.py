@@ -155,6 +155,17 @@ transformer_rel_xl_enc_kwargs = {
     "num_layers": 2
 }
 
+conformer_enc_kwargs = {
+    "proj_layer": "conv2d",
+    "att_dim": 512,
+    "nhead": 8,
+    "feedforward_dim": 2048,
+    "pos_dropout": 0.1,
+    "att_dropout": 0.1,
+    "num_layers": 2,
+    "untie_rel": False
+}
+
 
 def gen_egs(vocab_size, batch_size, num_channels=1):
     u = th.randint(10, 20, (1,)).item()
@@ -404,7 +415,8 @@ def test_common_encoder(enc_type, enc_kwargs):
     pytest.param("concat", conv2d_rnn_enc_kwargs),
     pytest.param("transformer", transformer_enc_kwargs),
     pytest.param("transformer_rel", transformer_rel_enc_kwargs),
-    pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs)
+    pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs),
+    pytest.param("conformer", conformer_enc_kwargs)
 ])
 def test_transformer_encoder(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("transformer")
@@ -438,7 +450,8 @@ def test_transformer_encoder(enc_type, enc_kwargs):
     pytest.param("concat", conv1d_fsmn_enc_kwargs),
     pytest.param("transformer", transformer_enc_kwargs),
     pytest.param("transformer_rel", transformer_rel_enc_kwargs),
-    pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs)
+    pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs),
+    pytest.param("conformer", conformer_enc_kwargs)
 ])
 def test_common_transducer(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("transducer")
@@ -479,7 +492,8 @@ def test_common_transducer(enc_type, enc_kwargs):
     pytest.param("concat", conv1d_fsmn_enc_kwargs),
     pytest.param("transformer", transformer_enc_kwargs),
     pytest.param("transformer_rel", transformer_rel_enc_kwargs),
-    pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs)
+    pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs),
+    pytest.param("conformer", conformer_enc_kwargs)
 ])
 def test_transformer_transducer(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("transformer_transducer")

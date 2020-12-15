@@ -24,3 +24,6 @@ __pycache__/
 
 # MAC
 .DS_Store
+
+# TODO: remove it
+*.pt.tar

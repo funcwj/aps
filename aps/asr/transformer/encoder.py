@@ -9,7 +9,10 @@ import torch.nn as nn
 from typing import Optional, Dict
 from aps.asr.base.attention import padding_mask
 from aps.asr.base.encoder import EncRetType
-from aps.asr.transformer.impl import TransformerTorchEncoderLayer, TransformerRelEncoderLayer, TransformerXLEncoderLayer
+from aps.asr.transformer.impl import (TransformerTorchEncoderLayer,
+                                      TransformerRelEncoderLayer,
+                                      TransformerXLEncoderLayer,
+                                      ConformerEncoderLayer)
 from aps.asr.transformer.impl import ApsTransformerEncoder
 from aps.asr.transformer.pose import SinPosEncoding, InputSinPosEncoding, RelPosEncoding
 from aps.asr.transformer.utils import XfmrProjLayer
@@ -189,7 +192,6 @@ class RelXLTransformerEncoder(nn.Module):
                  att_dim: int = 512,
                  nhead: int = 8,
                  feedforward_dim: int = 2048,
-                 scale_embed: bool = False,
                  pos_dropout: float = 0.1,
                  att_dropout: float = 0.1,
                  post_norm: bool = True,
@@ -218,6 +220,68 @@ class RelXLTransformerEncoder(nn.Module):
         self.encoder = ApsTransformerEncoder(encoder_layer,
                                              num_layers,
                                              norm=final_norm)
+
+    def forward(self, x_pad: th.Tensor,
+                x_len: Optional[th.Tensor]) -> EncRetType:
+        """
+        Args:
+            x_pad: N x Ti x F
+            x_len: N or None
+        Return:
+            enc_out: Ti x N x D
+        """
+        # x_emb: N x Ti x D => Ti x N x D
+        x_emb = self.src_proj(x_pad).transpose(0, 1)
+        x_len = self.src_proj.num_frames(x_len)
+        # src_pad_mask: N x Ti
+        src_pad_mask = None if x_len is None else (padding_mask(x_len) == 1)
+        # Ti x D
+        sin_pos_enc = self.sin_pose(x_emb.shape[0])
+        # Ti x N x D
+        enc_out = self.encoder(x_emb,
+                               sin_pose=sin_pos_enc,
+                               src_mask=None,
+                               src_key_padding_mask=src_pad_mask)
+        return enc_out, x_len
+
+
+@TransformerEncoders.register("conformer")
+class ConformerEncoder(nn.Module):
+    """
+    Conformer encoder
+    """
+
+    def __init__(self,
+                 input_size: int,
+                 proj_layer: str = "conv2d",
+                 proj_other_opts: Dict = {},
+                 att_dim: int = 512,
+                 nhead: int = 8,
+                 feedforward_dim: int = 2048,
+                 pos_dropout: float = 0.1,
+                 att_dropout: float = 0.1,
+                 kernel_size: int = 16,
+                 untie_rel: bool = True,
+                 num_layers: int = 6) -> None:
+        super(ConformerEncoder, self).__init__()
+        self.src_proj = support_xfmr_proj(proj_layer, input_size, att_dim,
+                                          proj_other_opts)
+        self.sin_pose = SinPosEncoding(att_dim, dropout=pos_dropout)
+        if not untie_rel:
+            rel_u = nn.Parameter(th.Tensor(nhead, att_dim // nhead))
+            rel_v = nn.Parameter(th.Tensor(nhead, att_dim // nhead))
+            nn.init.normal_(rel_u, std=0.02)
+            nn.init.normal_(rel_v, std=0.02)
+        else:
+            rel_u, rel_v = None, None
+        encoder_layer = ConformerEncoderLayer(att_dim,
+                                              nhead,
+                                              dim_feedforward=feedforward_dim,
+                                              kernel_size=kernel_size,
+                                              dropout=att_dropout,
+                                              rel_u=rel_u,
+                                              rel_v=rel_v)
+        self.encoder = ApsTransformerEncoder(encoder_layer, num_layers)
 
     def forward(self, x_pad: th.Tensor,
                 x_len: Optional[th.Tensor]) -> EncRetType:
