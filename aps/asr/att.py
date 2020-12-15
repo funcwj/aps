@@ -27,8 +27,44 @@ XfmrASROutputType = Tuple[th.Tensor, None, Optional[th.Tensor],
                           Optional[th.Tensor]]
 
 
+class EncDecASRBase(nn.Module):
+    """
+    Base class for encoder/decoder ASR
+    """
+
+    def __init__(self,
+                 input_size: int = 80,
+                 vocab_size: int = 30,
+                 sos: int = -1,
+                 eos: int = -1,
+                 ctc: bool = False,
+                 asr_transform: Optional[nn.Module] = None,
+                 enc_type: str = "common",
+                 enc_proj: Optional[int] = None,
+                 enc_kwargs: Dict = {}) -> None:
+        super(EncDecASRBase, self).__init__()
+        if eos < 0 or sos < 0:
+            raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
+        self.sos = sos
+        self.eos = eos
+        self.asr_transform = asr_transform
+        xfmr_encoder_cls = support_xfmr_encoder(enc_type)
+        if xfmr_encoder_cls:
+            self.encoder = xfmr_encoder_cls(input_size, **enc_kwargs)
+            self.is_xfmr_encoder = True
+            enc_proj = enc_kwargs["att_dim"]
+        else:
+            if enc_proj is None:
+                raise ValueError(
+                    "For non-transformer encoder, enc_proj can not be None")
+            self.is_xfmr_encoder = False
+            self.encoder = encoder_instance(enc_type, input_size, enc_proj,
+                                            enc_kwargs)
+        self.ctc = nn.Linear(enc_proj, vocab_size) if ctc else None
+
+
 @ApsRegisters.asr.register("att")
-class AttASR(nn.Module):
+class AttASR(EncDecASRBase):
     """
     Attention based ASR model with (Non-)Transformer encoder + attention + RNN decoder
     """
@@ -43,35 +79,29 @@ class AttASR(nn.Module):
                  att_type: str = "ctx",
                  att_kwargs: Dict = {},
                  enc_type: str = "common",
-                 enc_proj: Optional[int] = 256,
+                 enc_proj: Optional[int] = None,
                  enc_kwargs: Dict = {},
                  dec_type: str = "rnn",
                  dec_dim: int = 512,
                  dec_kwargs: Dict = {}) -> None:
-        super(AttASR, self).__init__()
-        if eos < 0 or sos < 0:
-            raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
-        xfmr_encoder_cls = support_xfmr_encoder(enc_type)
-        if xfmr_encoder_cls:
-            self.encoder = xfmr_encoder_cls(input_size, **enc_kwargs)
-            enc_proj = enc_kwargs["att_dim"]
-        else:
-            if enc_proj is None:
-                raise ValueError("For non-transformer encoder, "
-                                 "enc_proj can not be None")
-            self.encoder = encoder_instance(enc_type, input_size, enc_proj,
-                                            enc_kwargs)
-        self.att_net = att_instance(att_type, enc_proj, dec_dim, **att_kwargs)
+        super(AttASR, self).__init__(input_size=input_size,
+                                     vocab_size=vocab_size,
+                                     sos=sos,
+                                     eos=eos,
+                                     ctc=ctc,
+                                     asr_transform=asr_transform,
+                                     enc_type=enc_type,
+                                     enc_proj=enc_proj,
+                                     enc_kwargs=enc_kwargs)
         if dec_type != "rnn":
             raise ValueError("AttASR: currently decoder must be rnn")
+        if self.is_xfmr_encoder:
+            enc_proj = enc_kwargs["att_dim"]
+        self.att_net = att_instance(att_type, enc_proj, dec_dim, **att_kwargs)
         # TODO: make decoder flexible here
         self.decoder = PyTorchRNNDecoder(enc_proj,
                                          vocab_size - 1 if ctc else vocab_size,
                                          **dec_kwargs)
-        self.sos = sos
-        self.eos = eos
-        self.ctc = nn.Linear(enc_proj, vocab_size) if ctc else None
-        self.asr_transform = asr_transform
 
     def forward(self,
                 x_pad: th.Tensor,
@@ -93,6 +123,9 @@ class AttASR(nn.Module):
             x_pad, x_len = self.asr_transform(x_pad, x_len)
         # N x Ti x D
         enc_out, enc_len = self.encoder(x_pad, x_len)
+        # Ti x N x D => N x Ti x D
+        if self.is_xfmr_encoder:
+            enc_out = enc_out.transpose(0, 1)
         # clear status
         self.att_net.clear()
         # N x To+1
@@ -106,6 +139,28 @@ class AttASR(nn.Module):
         enc_ctc = self.ctc(enc_out) if self.ctc else None
         return outs, alis, enc_ctc, enc_len
 
+    def _dec_prep(self, x: th.Tensor) -> Tuple[th.Tensor]:
+        """
+        Prepare data for decoding
+        """
+        if self.asr_transform:
+            if x.dim() != 1:
+                raise RuntimeError("Now only support for one utterance")
+            x, _ = self.asr_transform(x[None, ...], None)
+            # 1 x C x T x ... or 1 x T x F
+            inp_len = x.shape[-2]
+            enc_out, _ = self.encoder(x, None)
+        else:
+            if x.dim() != 2:
+                raise RuntimeError("Now only support for one utterance")
+            # Ti x F
+            inp_len = x.shape[0]
+            enc_out, _ = self.encoder(x[None, ...], None)
+        # Ti x N x D => N x Ti x D
+        if self.is_xfmr_encoder:
+            enc_out = enc_out.transpose(0, 1)
+        return inp_len, enc_out
+
     def greedy_search(self,
                       x: th.Tensor,
                       max_len: int = -1,
@@ -117,19 +172,7 @@ class AttASR(nn.Module):
             x: audio samples or acoustic features, S or Ti x F
         """
         with th.no_grad():
-            if self.asr_transform:
-                if x.dim() != 1:
-                    raise RuntimeError("Now only support for one utterance")
-                x, _ = self.asr_transform(x[None, ...], None)
-                # 1 x C x T x ... or 1 x T x F
-                inp_len = x.shape[-2]
-                enc_out, _ = self.encoder(x, None)
-            else:
-                if x.dim() != 2:
-                    raise RuntimeError("Now only support for one utterance")
-                # Ti x F
-                inp_len = x.shape[0]
-                enc_out, _ = self.encoder(x[None, ...], None)
+            inp_len, enc_out = self._dec_prep(x)
             max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
             return att_api.greedy_search(self.decoder,
                                          self.att_net,
@@ -154,19 +197,7 @@ class AttASR(nn.Module):
             x (Tensor): audio samples or acoustic features, S or Ti x F
         """
         with th.no_grad():
-            if self.asr_transform:
-                if x.dim() != 1:
-                    raise RuntimeError("Now only support for one utterance")
-                x, _ = self.asr_transform(x[None, ...], None)
-                # 1 x C x T x ... or 1 x T x F
-                inp_len = x.shape[-2]
-                enc_out, _ = self.encoder(x, None)
-            else:
-                if x.dim() != 2:
-                    raise RuntimeError("Now only support for one utterance")
-                # Ti x F
-                inp_len = x.shape[0]
-                enc_out, _ = self.encoder(x[None, ...], None)
+            inp_len, enc_out = self._dec_prep(x)
             max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
             return att_api.beam_search(self.decoder,
                                        self.att_net,
@@ -210,6 +241,9 @@ class AttASR(nn.Module):
                 else:
                     inp = inp[None, ...]
                 enc_out, _ = self.encoder(inp, None)
+                # Ti x N x D => N x Ti x D
+                if self.is_xfmr_encoder:
+                    enc_out = enc_out.transpose(0, 1)
                 outs.append(enc_out[0])
             lens = [out.shape[-2] for out in outs]
             max_len = max(lens) if max_len <= 0 else min(max(lens), max_len)
@@ -232,7 +266,7 @@ class AttASR(nn.Module):
 
 
 @ApsRegisters.asr.register("transformer")
-class TransformerASR(nn.Module):
+class TransformerASR(EncDecASRBase):
     """
     Attention based ASR model with (Non-)Transformer encoder + Transformer decoder
     """
@@ -249,29 +283,22 @@ class TransformerASR(nn.Module):
                  enc_kwargs: Dict = {},
                  dec_type: str = "transformer",
                  dec_kwargs: Dict = {}) -> None:
-        super(TransformerASR, self).__init__()
-        if eos < 0 or sos < 0:
-            raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
-        xfmr_encoder_cls = support_xfmr_encoder(enc_type)
-        if xfmr_encoder_cls:
-            self.encoder = xfmr_encoder_cls(input_size, **enc_kwargs)
-        else:
-            if enc_proj is None:
-                raise ValueError("For non-transformer encoder, "
-                                 "enc_proj can not be None")
-            if enc_proj != dec_kwargs["att_dim"]:
-                raise ValueError("enc_proj should be equal to att_dim")
-            self.encoder = encoder_instance(enc_type, input_size, enc_proj,
-                                            enc_kwargs)
+        super(TransformerASR, self).__init__(input_size=input_size,
+                                             vocab_size=vocab_size,
+                                             sos=sos,
+                                             eos=eos,
+                                             ctc=ctc,
+                                             asr_transform=asr_transform,
+                                             enc_type=enc_type,
+                                             enc_proj=enc_proj,
+                                             enc_kwargs=enc_kwargs)
         if dec_type != "transformer":
             raise ValueError(
                 "TransformerASR: currently decoder must be transformer")
+        if not self.is_xfmr_encoder and enc_proj != dec_kwargs["att_dim"]:
+            raise ValueError("enc_proj should be equal to att_dim")
         self.decoder = TorchTransformerDecoder(
             vocab_size - 1 if ctc else vocab_size, **dec_kwargs)
-        self.sos = sos
-        self.eos = eos
-        self.asr_transform = asr_transform
-        self.ctc = nn.Linear(dec_kwargs["att_dim"], vocab_size) if ctc else None
 
     def forward(self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
                 y_pad: th.Tensor) -> XfmrASROutputType:
@@ -288,6 +315,9 @@ class TransformerASR(nn.Module):
             x_pad, x_len = self.asr_transform(x_pad, x_len)
         # Ti x N x D
         enc_out, enc_len = self.encoder(x_pad, x_len)
+        # N x Ti x D => Ti x N x D
+        if not self.is_xfmr_encoder:
+            enc_out = enc_out.transpose(0, 1)
         # CTC
         if self.ctc:
             enc_ctc = self.ctc(enc_out)
@@ -328,6 +358,9 @@ class TransformerASR(nn.Module):
                 x = x[None, ...]
             # Ti x N x D
             enc_out, _ = self.encoder(x, None)
+            # N x Ti x D => Ti x N x D
+            if not self.is_xfmr_encoder:
+                enc_out = enc_out.transpose(0, 1)
             # beam search
             return xfmr_api.beam_search(self.decoder,
                                         enc_out,
@@ -369,6 +402,9 @@ class TransformerASR(nn.Module):
                 else:
                     inp = inp[None, ...]
                 enc_out, _ = self.encoder(inp, None)
+                # N x Ti x D => Ti x N x D
+                if not self.is_xfmr_encoder:
+                    enc_out = enc_out.transpose(0, 1)
                 outs.append(enc_out[:, 0])
 
             lens = [out.shape[0] for out in outs]

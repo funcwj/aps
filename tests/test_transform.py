@@ -37,7 +37,7 @@ def test_forward_inverse_stft(wav, frame_len, frame_hop, window, center):
     th.testing.assert_allclose(out[..., :trunc], wav[..., :trunc])
 
 
-@pytest.mark.parametrize("wav", [egs1_wav, egs2_wav[0]])
+@pytest.mark.parametrize("wav", [egs1_wav, egs2_wav[0].copy()])
 @pytest.mark.parametrize("frame_len, frame_hop", [(512, 256), (1024, 256),
                                                   (400, 160)])
 @pytest.mark.parametrize("window", ["hann", "hamm"])

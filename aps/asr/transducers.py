@@ -16,8 +16,39 @@ from aps.libs import ApsRegisters
 TransducerOutputType = Tuple[th.Tensor, Optional[th.Tensor]]
 
 
+class TransducerASRBase(nn.Module):
+    """
+    Base class for Transducer ASR
+    """
+
+    def __init__(self,
+                 input_size: int = 80,
+                 vocab_size: int = 40,
+                 blank: int = -1,
+                 asr_transform: Optional[nn.Module] = None,
+                 enc_type: str = "transformer",
+                 enc_proj: Optional[int] = None,
+                 enc_kwargs: Dict = {}) -> None:
+        super(TransducerASRBase, self).__init__()
+        if blank < 0:
+            raise RuntimeError(f"Unsupported blank value: {blank}")
+        self.blank = blank
+        self.asr_transform = asr_transform
+        xfmr_encoder_cls = support_xfmr_encoder(enc_type)
+        if xfmr_encoder_cls:
+            self.is_xfmr_encoder = True
+            self.encoder = xfmr_encoder_cls(input_size, **enc_kwargs)
+        else:
+            self.is_xfmr_encoder = False
+            if enc_proj is None:
+                raise ValueError(
+                    "For non-transformer encoder, enc_proj can not be None")
+            self.encoder = encoder_instance(enc_type, input_size, enc_proj,
+                                            enc_kwargs)
+
+
 @ApsRegisters.asr.register("transducer")
-class TorchTransducerASR(nn.Module):
+class TorchTransducerASR(TransducerASRBase):
     """
     Transducer based ASR model with (Non-)Transformer encoder + RNN decoder
     """
@@ -29,27 +60,24 @@ class TorchTransducerASR(nn.Module):
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "transformer",
                  enc_proj: Optional[int] = None,
+                 dec_type: str = "rnn",
                  enc_kwargs: Dict = {},
                  dec_kwargs: Dict = {}) -> None:
-        super(TorchTransducerASR, self).__init__()
-        if blank < 0:
-            raise RuntimeError(f"Unsupported blank value: {blank}")
-        xfmr_encoder_cls = support_xfmr_encoder(enc_type)
-        if xfmr_encoder_cls:
-            self.is_xfmr_encoder = True
-            self.encoder = xfmr_encoder_cls(input_size, **enc_kwargs)
+        super(TorchTransducerASR, self).__init__(input_size=input_size,
+                                                 vocab_size=vocab_size,
+                                                 blank=blank,
+                                                 asr_transform=asr_transform,
+                                                 enc_type=enc_type,
+                                                 enc_proj=enc_proj,
+                                                 enc_kwargs=enc_kwargs)
+        if dec_type != "rnn":
+            raise ValueError(
+                "TorchTransducerASR: currently decoder must be rnn")
+        if self.is_xfmr_encoder:
             dec_kwargs["enc_dim"] = enc_kwargs["att_dim"]
         else:
-            self.is_xfmr_encoder = False
-            if enc_proj is None:
-                raise ValueError("For non-transformer encoder, "
-                                 "enc_proj can not be None")
-            self.encoder = encoder_instance(enc_type, input_size, enc_proj,
-                                            enc_kwargs)
             dec_kwargs["enc_dim"] = enc_proj
         self.decoder = PyTorchRNNDecoder(vocab_size, **dec_kwargs)
-        self.blank = blank
-        self.asr_transform = asr_transform
 
     def forward(self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
                 y_pad: th.Tensor,
@@ -130,7 +158,7 @@ class TorchTransducerASR(nn.Module):
 
 
 @ApsRegisters.asr.register("transformer_transducer")
-class TransformerTransducerASR(nn.Module):
+class TransformerTransducerASR(TransducerASRBase):
     """
     Transducer based ASR model with (Non-)Transformer encoder + Transformer decoder
     """
@@ -143,26 +171,22 @@ class TransformerTransducerASR(nn.Module):
                  enc_type: str = "transformer",
                  enc_proj: Optional[int] = None,
                  enc_kwargs: Dict = {},
+                 dec_type: str = "transformer",
                  dec_kwargs: Dict = {}) -> None:
-        super(TransformerTransducerASR, self).__init__()
-        if blank < 0:
-            raise RuntimeError(f"Unsupported blank value: {blank}")
-        xfmr_encoder_cls = support_xfmr_encoder(enc_type)
-        if xfmr_encoder_cls:
-            self.is_xfmr_encoder = True
-            self.encoder = xfmr_encoder_cls(input_size, **enc_kwargs)
-        else:
-            self.is_xfmr_encoder = False
-            if enc_proj is None:
-                raise ValueError("For non-transformer encoder, "
-                                 "enc_proj can not be None")
-            if enc_proj != dec_kwargs["att_dim"]:
-                raise ValueError("enc_proj should be equal to att_dim")
-            self.encoder = encoder_instance(enc_type, input_size, enc_proj,
-                                            enc_kwargs)
+        super(TransformerTransducerASR,
+              self).__init__(input_size=input_size,
+                             vocab_size=vocab_size,
+                             blank=blank,
+                             asr_transform=asr_transform,
+                             enc_type=enc_type,
+                             enc_proj=enc_proj,
+                             enc_kwargs=enc_kwargs)
+        if dec_type != "transformer":
+            raise ValueError("TransformerTransducerASR: currently decoder "
+                             "must be transformer")
+        if not self.is_xfmr_encoder and enc_proj != dec_kwargs["att_dim"]:
+            raise ValueError("enc_proj should be equal to att_dim")
         self.decoder = TorchTransformerDecoder(vocab_size, **dec_kwargs)
-        self.blank = blank
-        self.asr_transform = asr_transform
 
     def forward(self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
                 y_pad: th.Tensor,

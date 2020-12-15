@@ -77,12 +77,12 @@ A package to handle distributed training and provide an unified interface. Now w
 
 The submodule for language model & acoustic model. Currently the implemented AM are:
 
-* `AttASR`: Attention based encoder-decoder AM with RNN based decoder
+* `AttASR`: Attention based encoder-decoder AM with RNN decoders
 * `EnhAttASR`: `AttASR` with multi-channel front-end
-* `TransformerASR`: Attention based encoder-decoder AM with tran sformer as decoder
+* `TransformerASR`: Attention based encoder-decoder AM with transformer decoders
 * `EnhTransformerASR`: `TransformerASR` with multi-channel front-end
-* `TorchTransducerASR`: RNNT AM with RNN based decoder
-* `TransformerTransducerASR`: RNNT AM with Transformer based decoder
+* `TorchTransducerASR`: RNNT AM with RNN decoders
+* `TransformerTransducerASR`: RNNT AM with Transformer decoders
 
 The transformer implementation is kept similar style with `torch.nn` package and each network should have function `beam_search()` for decoding. Variants of encoder are provided in `aps.asr.base.encoder`:
 
