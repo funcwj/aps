@@ -25,9 +25,9 @@ for metric in sdr pesq stoi sisnr; do
 done
 
 ../cmd/compute_gmvn.py --transform asr --sr 16000 \
-  data/dataloader/ss/wav.1.scp data/transform/transform.yaml /dev/null
-../utils/wav_duration.py --output sample data/dataloader/ss/wav.1.scp -
-../utils/archive_wav.py data/dataloader/ss/wav.1.scp /dev/null
+  data/dataloader/se/wav.1.scp data/transform/transform.yaml /dev/null
+../utils/wav_duration.py --output sample data/dataloader/se/wav.1.scp -
+../utils/archive_wav.py data/dataloader/se/wav.1.scp /dev/null
 
 head data/metric/asr/ref.en.text | ../utils/tokenizer.pl --space "<space>" -
 ../utils/tokenizer.py --space "<space>" --unit char --dump-vocab - \
