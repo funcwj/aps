@@ -10,6 +10,9 @@ import torch.nn.functional as tf
 
 from torch.nn import TransformerEncoderLayer
 from typing import Optional, Tuple, List
+from aps.libs import Register
+
+TransformerEncoderLayers = Register("xfmr_encoder_layer")
 
 
 class Swish(nn.Module):
@@ -25,6 +28,9 @@ class Swish(nn.Module):
 
 
 def _get_activation_fn(activation: str) -> nn.Module:
+    """
+    Return activation function for self-attention
+    """
     if activation == "relu":
         return nn.ReLU()
     elif activation == "gelu":
@@ -36,7 +42,7 @@ def _get_activation_fn(activation: str) -> nn.Module:
 
 class ApsMultiheadAttention(nn.Module):
     """
-    NOTE: my own MultiheadAttention and make sure it's same as torch.nn.MultiheadAttention
+    My own MultiheadAttention and make sure it's same as torch.nn.MultiheadAttention
     """
 
     def __init__(self,
@@ -345,6 +351,7 @@ class XlMultiheadAttention(ApsMultiheadAttention):
         return self.wrap_out(context, weight)
 
 
+@TransformerEncoderLayers.register("xfmr")
 class TransformerTorchEncoderLayer(TransformerEncoderLayer):
     """
     Wrapper for TransformerEncoderLayer (add pre-norm)
@@ -427,6 +434,7 @@ class ApsTransformerEncoderLayer(nn.Module):
         super(ApsTransformerEncoderLayer, self).__setstate__(state)
 
 
+@TransformerEncoderLayers.register("xfmr_rel")
 class TransformerRelEncoderLayer(ApsTransformerEncoderLayer):
     """
     TransformerEncoderLayer using relative position encodings
@@ -473,6 +481,7 @@ class TransformerRelEncoderLayer(ApsTransformerEncoderLayer):
         return src
 
 
+@TransformerEncoderLayers.register("xfmr_xl")
 class TransformerXLEncoderLayer(ApsTransformerEncoderLayer):
     """
     TransformerEncoderLayer using relative position encodings
@@ -523,6 +532,7 @@ class TransformerXLEncoderLayer(ApsTransformerEncoderLayer):
         return src
 
 
+@TransformerEncoderLayers.register("conformer")
 class ConformerEncoderLayer(nn.Module):
     """
     Conformer encoder layer proposed by Google in
@@ -633,6 +643,59 @@ class ApsTransformerEncoder(nn.Module):
         return output
 
 
+def get_xfmr_encoder(name: str,
+                     num_layers: int,
+                     att_dim: int,
+                     nhead: int,
+                     dim_feedforward: int = 1024,
+                     dropout: float = 0.0,
+                     kernel_size: int = 16,
+                     pre_norm: bool = True,
+                     untie_rel: bool = True) -> nn.Module:
+    """
+    Return transformer based encoders
+    """
+    if name not in TransformerEncoderLayers:
+        raise ValueError(f"Unknown type of the encoders: {name}")
+    final_norm = nn.LayerNorm(att_dim) if pre_norm else None
+    enc_layer_cls = TransformerEncoderLayers[name]
+    if name in ["xfmr", "xfmr_rel"]:
+        encoder_layer = enc_layer_cls(att_dim,
+                                      nhead,
+                                      dim_feedforward=dim_feedforward,
+                                      dropout=dropout,
+                                      pre_norm=pre_norm)
+    else:
+        # init for xfmr_xl
+        if not untie_rel:
+            rel_u = nn.Parameter(th.Tensor(nhead, att_dim // nhead))
+            rel_v = nn.Parameter(th.Tensor(nhead, att_dim // nhead))
+            nn.init.normal_(rel_u, std=0.02)
+            nn.init.normal_(rel_v, std=0.02)
+        else:
+            rel_u, rel_v = None, None
+        if name == "xfmr_xl":
+            encoder_layer = enc_layer_cls(att_dim,
+                                          nhead,
+                                          dim_feedforward=dim_feedforward,
+                                          dropout=dropout,
+                                          pre_norm=pre_norm,
+                                          rel_u=rel_u,
+                                          rel_v=rel_v)
+        else:
+            if pre_norm:
+                raise RuntimeError("for Conformer we disable pre_norm")
+            encoder_layer = enc_layer_cls(att_dim,
+                                          nhead,
+                                          dim_feedforward=dim_feedforward,
+                                          kernel_size=kernel_size,
+                                          dropout=dropout,
+                                          rel_u=rel_u,
+                                          rel_v=rel_v)
+    return ApsTransformerEncoder(encoder_layer, num_layers, norm=final_norm)
+
+
+# ----------------------------------------------------------------------------
 def padding_mask(vec, device=None):
     N = vec.nelement()
     M = vec.max().item()

@@ -1,37 +1,49 @@
-nnet: transformer
+# WER (%) Report:
+# Total (2620 utterances): 2690/52576 = 5.12%, SUB/INS/DEL = 1985/330/375
+# WER (%) Report:
+# Total (2939 utterances): 6117/52343 = 11.69%, SUB/INS/DEL = 4697/706/714
+
+nnet: xfmr
 
 nnet_conf:
-  ctc: true
+  input_size: 80
+  enc_type: xfmr_rel
+  enc_kwargs:
+    att_dim: 512
+    att_dropout: 0.2
+    feedforward_dim: 2048
+    proj_layer: conv2d
+    k_dim: 256
+    nhead: 8
+    num_layers: 16
+    pos_dropout: 0.2
+    post_norm: false
+    scale_embed: false
   dec_kwargs:
     att_dim: 512
     att_dropout: 0.2
     feedforward_dim: 2048
     nhead: 8
-    num_layers: 6
+    num_layers: 8
     pos_dropout: 0.2
-  enc_kwargs:
-    att_dim: 512
-    att_dropout: 0.2
-    feedforward_dim: 2048
-    input_embed: conv2d
-    nhead: 8
-    num_layers: 10
-    pos_dropout: 0.2
-    post_norm: false
-  enc_type: transformer
-  input_size: 80
+    scale_embed: false
 
 asr_transform:
-  feats: fbank-log-cmvn-aug
+  aug_mask_zero: false
+  aug_max_frame: 100
+  aug_prob: 1
+  feats: perturb-emph-fbank-log-aug
   frame_hop: 160
   frame_len: 400
-  norm_mean: true
-  norm_var: true
+  min_freq: 20
+  num_aug_bands: 1
+  num_aug_frame: 1
   num_mels: 80
+  pre_emphasis: 0.97
   round_pow_of_two: true
   sr: 16000
+  use_power: true
   window: hamm
-  aug_prob: 0.3
 
 task: ctc_xent
 task_conf:
@@ -44,16 +56,16 @@ trainer_conf:
   lr_scheduler_kwargs:
     factor: 1
     transformer_dim: 512
-    warmup: 20000
+    warmup: 10000
   lr_scheduler_period: step
   no_impr: 6
   no_impr_thres: 0.2
   optimizer: adam
   optimizer_kwargs:
-    lr: 0.0001
+    lr: 0.0
     weight_decay: 1.0e-05
   report_metrics: ["loss", "accu", "@ctc"]
-  stop_criterion: "accu"
+  stop_criterion: accu
 
 data_conf:
   fmt: am_raw

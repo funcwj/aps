@@ -11,13 +11,13 @@ import torch.nn.functional as tf
 from torch.nn.utils.rnn import pad_sequence
 
 import aps.asr.beam_search.att as att_api
-import aps.asr.beam_search.transformer as xfmr_api
+import aps.asr.beam_search.xfmr as xfmr_api
 
 from typing import Optional, Dict, Tuple, List
 from aps.asr.base.decoder import PyTorchRNNDecoder
 from aps.asr.base.encoder import encoder_instance
-from aps.asr.transformer.encoder import support_xfmr_encoder
-from aps.asr.transformer.decoder import TorchTransformerDecoder
+from aps.asr.xfmr.encoder import support_xfmr_encoder
+from aps.asr.xfmr.decoder import TorchTransformerDecoder
 from aps.asr.base.attention import att_instance
 from aps.libs import ApsRegisters
 
@@ -79,9 +79,9 @@ class AttASR(EncDecASRBase):
                  att_type: str = "ctx",
                  att_kwargs: Dict = {},
                  enc_type: str = "common",
+                 dec_type: str = "rnn",
                  enc_proj: Optional[int] = None,
                  enc_kwargs: Dict = {},
-                 dec_type: str = "rnn",
                  dec_dim: int = 512,
                  dec_kwargs: Dict = {}) -> None:
         super(AttASR, self).__init__(input_size=input_size,
@@ -265,8 +265,8 @@ class AttASR(EncDecASRBase):
                                              temperature=temperature)
 
 
-@ApsRegisters.asr.register("transformer")
-class TransformerASR(EncDecASRBase):
+@ApsRegisters.asr.register("xfmr")
+class XfmrASR(EncDecASRBase):
     """
     Attention based ASR model with (Non-)Transformer encoder + Transformer decoder
     """
@@ -278,23 +278,22 @@ class TransformerASR(EncDecASRBase):
                  eos: int = -1,
                  ctc: bool = False,
                  asr_transform: Optional[nn.Module] = None,
-                 enc_type: str = "transformer",
+                 enc_type: str = "xfmr",
+                 dec_type: str = "xfmr",
                  enc_proj: Optional[int] = None,
                  enc_kwargs: Dict = {},
-                 dec_type: str = "transformer",
                  dec_kwargs: Dict = {}) -> None:
-        super(TransformerASR, self).__init__(input_size=input_size,
-                                             vocab_size=vocab_size,
-                                             sos=sos,
-                                             eos=eos,
-                                             ctc=ctc,
-                                             asr_transform=asr_transform,
-                                             enc_type=enc_type,
-                                             enc_proj=enc_proj,
-                                             enc_kwargs=enc_kwargs)
-        if dec_type != "transformer":
-            raise ValueError(
-                "TransformerASR: currently decoder must be transformer")
+        super(XfmrASR, self).__init__(input_size=input_size,
+                                      vocab_size=vocab_size,
+                                      sos=sos,
+                                      eos=eos,
+                                      ctc=ctc,
+                                      asr_transform=asr_transform,
+                                      enc_type=enc_type,
+                                      enc_proj=enc_proj,
+                                      enc_kwargs=enc_kwargs)
+        if dec_type != "xfmr":
+            raise ValueError("XfmrASR: currently decoder must be xfmr")
         if not self.is_xfmr_encoder and enc_proj != dec_kwargs["att_dim"]:
             raise ValueError("enc_proj should be equal to att_dim")
         self.decoder = TorchTransformerDecoder(

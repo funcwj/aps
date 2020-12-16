@@ -170,3 +170,12 @@ class ChannelAttention(nn.Module):
         gvec = self.gvec(th.tanh(proj))
         # N x C
         return F.softmax(gvec.squeeze(-1), -1)
+
+
+class RNNMaskMvdr(nn.Module):
+    """
+    Mask based MVDR method. The masks are estimated using simple RNN networks
+    """
+
+    def __init__(self):
+        pass

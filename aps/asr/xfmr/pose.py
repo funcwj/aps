@@ -7,7 +7,21 @@ import math
 import torch as th
 import torch.nn as nn
 
+from aps.libs import Register
 
+PosEncodings = Register("pos_encodings")
+
+
+def get_xfmr_pose(pose_name: str, embed_dim: int, **kwargs) -> nn.Module:
+    """
+    Return position encodings layer
+    """
+    if pose_name not in PosEncodings:
+        raise ValueError(f"Unsupported position encoding layer: {pose_name}")
+    return PosEncodings[pose_name](embed_dim, **kwargs)
+
+
+@PosEncodings.register("sin")
 class SinPosEncoding(nn.Module):
     """
     Sinusoidals positional encoding
@@ -50,6 +64,7 @@ class SinPosEncoding(nn.Module):
         return self.dropout(sin_enc)
 
 
+@PosEncodings.register("rel")
 class RelPosEncoding(nn.Module):
     """
     Relative positional encoding
@@ -79,6 +94,7 @@ class RelPosEncoding(nn.Module):
         return self.dropout(self.embed(mat + self.radius))
 
 
+@PosEncodings.register("inp_sin")
 class InputSinPosEncoding(SinPosEncoding):
     """
     Add sinusoidals positional encodings to input features

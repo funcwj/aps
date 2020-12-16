@@ -10,10 +10,9 @@ import torch.nn.functional as tf
 from queue import PriorityQueue
 from typing import List, Dict, Optional, Union, Tuple
 
-from aps.asr.transformer.decoder import prep_sub_mask
-from aps.asr.transformer.encoder import ApsTransformerEncoder
-from aps.asr.transformer.impl import TransformerTorchEncoderLayer
-from aps.asr.transformer.pose import InputSinPosEncoding
+from aps.asr.xfmr.decoder import prep_sub_mask
+from aps.asr.xfmr.impl import get_xfmr_encoder
+from aps.asr.xfmr.pose import get_xfmr_pose
 from aps.asr.base.attention import padding_mask
 from aps.asr.base.layer import OneHotEmbedding, PyTorchRNN
 
@@ -273,19 +272,17 @@ class TorchTransformerDecoder(nn.Module):
                  post_norm: bool = True) -> None:
         super(TorchTransformerDecoder, self).__init__()
         self.vocab_embed = nn.Embedding(vocab_size, att_dim)
-        self.abs_pos_enc = InputSinPosEncoding(att_dim,
-                                               dropout=pos_dropout,
-                                               scale_embed=scale_embed)
-        decoder_layer = TransformerTorchEncoderLayer(
-            att_dim,
-            nhead,
-            dim_feedforward=feedforward_dim,
-            dropout=att_dropout,
-            pre_norm=not post_norm)
-        final_norm = None if post_norm else nn.LayerNorm(att_dim)
-        self.decoder = ApsTransformerEncoder(decoder_layer,
-                                             num_layers,
-                                             norm=final_norm)
+        self.abs_pos_enc = get_xfmr_pose("inp_sin",
+                                         att_dim,
+                                         dropout=pos_dropout,
+                                         scale_embed=scale_embed)
+        self.decoder = get_xfmr_encoder("xfmr",
+                                        num_layers,
+                                        att_dim,
+                                        nhead,
+                                        dim_feedforward=feedforward_dim,
+                                        dropout=att_dropout,
+                                        pre_norm=not post_norm)
         self.enc_proj = nn.Linear(enc_dim if enc_dim else att_dim,
                                   jot_dim,
                                   bias=False)

@@ -7,13 +7,13 @@ import torch as th
 import torch.nn as nn
 
 from typing import Optional, List, Union, NoReturn
-from aps.asr.transformer.encoder import RelTransformerEncoder
+from aps.asr.xfmr.encoder import RelTransformerEncoder
 from aps.sse.utils import MaskNonLinear
 from aps.libs import ApsRegisters
 
 
-@ApsRegisters.sse.register("freq_rel_transformer")
-class FreqRelTransformer(RelTransformerEncoder):
+@ApsRegisters.sse.register("freq_xfmr_rel")
+class FreqRelXfmr(RelTransformerEncoder):
     """
     Frequency domain Transformer model
     """
@@ -34,19 +34,18 @@ class FreqRelTransformer(RelTransformerEncoder):
                  num_layers: int = 6,
                  non_linear: str = "sigmoid",
                  training_mode: str = "freq") -> None:
-        super(FreqRelTransformer,
-              self).__init__(input_size,
-                             proj_layer="linear",
-                             att_dim=att_dim,
-                             k_dim=k_dim,
-                             nhead=nhead,
-                             feedforward_dim=feedforward_dim,
-                             scale_embed=False,
-                             pos_dropout=0,
-                             att_dropout=att_dropout,
-                             post_norm=post_norm,
-                             num_layers=num_layers,
-                             value_rel_pose=value_rel_pose)
+        super(FreqRelXfmr, self).__init__(input_size,
+                                          proj_layer="linear",
+                                          att_dim=att_dim,
+                                          k_dim=k_dim,
+                                          nhead=nhead,
+                                          feedforward_dim=feedforward_dim,
+                                          scale_embed=False,
+                                          pos_dropout=0,
+                                          att_dropout=att_dropout,
+                                          post_norm=post_norm,
+                                          num_layers=num_layers,
+                                          value_rel_pose=value_rel_pose)
         if enh_transform is None:
             raise RuntimeError("enh_transform can not be None")
         self.enh_transform = enh_transform

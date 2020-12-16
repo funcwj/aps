@@ -6,14 +6,15 @@ import torch.nn as nn
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 
 from typing import Optional, Tuple
-from aps.asr.transformer.pose import InputSinPosEncoding
-from aps.asr.transformer.decoder import prep_sub_mask
+from aps.asr.xfmr.pose import get_xfmr_pose
+from aps.asr.xfmr.impl import get_xfmr_encoder
+from aps.asr.xfmr.decoder import prep_sub_mask
 from aps.asr.base.attention import padding_mask
 from aps.libs import ApsRegisters
 
 
-@ApsRegisters.asr.register("transformer_lm")
-class TorchTransformerLM(nn.Module):
+@ApsRegisters.asr.register("xfmr_lm")
+class TorchXfmrLM(nn.Module):
     """
     Torch Transformer LM
     """
@@ -28,18 +29,20 @@ class TorchTransformerLM(nn.Module):
                  pos_dropout: float = 0.1,
                  att_dropout: float = 0.1,
                  num_layers: int = 6) -> None:
-        super(TorchTransformerLM, self).__init__()
+        super(TorchXfmrLM, self).__init__()
         if embed_size != att_dim:
             raise ValueError("Need embed_size == att_dim")
         self.vocab_embed = nn.Embedding(vocab_size, att_dim)
-        self.abs_pos_enc = InputSinPosEncoding(att_dim,
-                                               dropout=pos_dropout,
-                                               scale_embed=scale_embed)
-        encoder_layer = TransformerEncoderLayer(att_dim,
-                                                nhead,
-                                                dim_feedforward=feedforward_dim,
-                                                dropout=att_dropout)
-        self.encoder = TransformerEncoder(encoder_layer, num_layers)
+        self.abs_pos_enc = get_xfmr_pose("inp_sin",
+                                         att_dim,
+                                         dropout=pos_dropout,
+                                         scale_embed=scale_embed)
+        self.encoder = get_xfmr_encoder("xfmr",
+                                        num_layers,
+                                        att_dim,
+                                        nhead,
+                                        dim_feedforward=feedforward_dim,
+                                        dropout=att_dropout)
         # output distribution
         self.dist = nn.Linear(att_dim, vocab_size)
         self.vocab_size = vocab_size

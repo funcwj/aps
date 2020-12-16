@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Optional, Dict, Tuple, List
-from aps.asr.transformer.encoder import support_xfmr_encoder
+from aps.asr.xfmr.encoder import support_xfmr_encoder
 from aps.asr.transducer.decoder import TorchTransformerDecoder, PyTorchRNNDecoder
 from aps.asr.base.encoder import encoder_instance
 from aps.libs import ApsRegisters
@@ -26,7 +26,7 @@ class TransducerASRBase(nn.Module):
                  vocab_size: int = 40,
                  blank: int = -1,
                  asr_transform: Optional[nn.Module] = None,
-                 enc_type: str = "transformer",
+                 enc_type: str = "xfmr",
                  enc_proj: Optional[int] = None,
                  enc_kwargs: Dict = {}) -> None:
         super(TransducerASRBase, self).__init__()
@@ -58,7 +58,7 @@ class TorchTransducerASR(TransducerASRBase):
                  vocab_size: int = 40,
                  blank: int = -1,
                  asr_transform: Optional[nn.Module] = None,
-                 enc_type: str = "transformer",
+                 enc_type: str = "xfmr",
                  enc_proj: Optional[int] = None,
                  dec_type: str = "rnn",
                  enc_kwargs: Dict = {},
@@ -157,7 +157,7 @@ class TorchTransducerASR(TransducerASRBase):
                                             normalized=normalized)
 
 
-@ApsRegisters.asr.register("transformer_transducer")
+@ApsRegisters.asr.register("xfmr_transducer")
 class TransformerTransducerASR(TransducerASRBase):
     """
     Transducer based ASR model with (Non-)Transformer encoder + Transformer decoder
@@ -168,10 +168,10 @@ class TransformerTransducerASR(TransducerASRBase):
                  vocab_size: int = 40,
                  blank: int = -1,
                  asr_transform: Optional[nn.Module] = None,
-                 enc_type: str = "transformer",
+                 enc_type: str = "xfmr",
                  enc_proj: Optional[int] = None,
                  enc_kwargs: Dict = {},
-                 dec_type: str = "transformer",
+                 dec_type: str = "xfmr",
                  dec_kwargs: Dict = {}) -> None:
         super(TransformerTransducerASR,
               self).__init__(input_size=input_size,
@@ -181,9 +181,9 @@ class TransformerTransducerASR(TransducerASRBase):
                              enc_type=enc_type,
                              enc_proj=enc_proj,
                              enc_kwargs=enc_kwargs)
-        if dec_type != "transformer":
+        if dec_type != "xfmr":
             raise ValueError("TransformerTransducerASR: currently decoder "
-                             "must be transformer")
+                             "must be xfmr")
         if not self.is_xfmr_encoder and enc_proj != dec_kwargs["att_dim"]:
             raise ValueError("enc_proj should be equal to att_dim")
         self.decoder = TorchTransformerDecoder(vocab_size, **dec_kwargs)

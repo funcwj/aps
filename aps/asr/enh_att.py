@@ -9,7 +9,7 @@ import torch.nn as nn
 from typing import Optional, Dict, Tuple, List
 from torch_complex import ComplexTensor
 
-from aps.asr.att import AttASR, TransformerASR, AttASROutputType, XfmrASROutputType
+from aps.asr.att import AttASR, XfmrASR, AttASROutputType, XfmrASROutputType
 from aps.asr.base.encoder import PyTorchRNNEncoder
 from aps.asr.filter.mvdr import MvdrBeamformer
 from aps.asr.filter.google import CLPFsBeamformer  # same as TimeInvariantFilter
@@ -38,6 +38,7 @@ class EnhAttASR(nn.Module):
             att_kwargs: Dict = {},
             # encoder
             enc_type: str = "common",
+            dec_type: str = "rnn",
             enc_proj: int = 256,
             enc_kwargs: Dict = {},
             # decoder
@@ -151,7 +152,7 @@ class EnhAttASR(nn.Module):
                                                   temperature=temperature)
 
 
-class EnhTransformerASR(nn.Module):
+class EnhXfmrASR(nn.Module):
     """
     Transformer with enhancement front-end
     """
@@ -166,26 +167,26 @@ class EnhTransformerASR(nn.Module):
             asr_transform: Optional[nn.Module] = None,
             asr_cpt: str = "",
             ctc: bool = False,
-            enc_type: str = "transformer",
+            enc_type: str = "xfmr",
+            dec_type: str = "xfmr",
             enc_proj: Optional[int] = None,
             enc_kwargs: Dict = {},
-            dec_type: str = "transformer",
             dec_kwargs: Dict = {}) -> None:
-        super(EnhTransformerASR, self).__init__()
+        super(EnhXfmrASR, self).__init__()
         # Back-end feature transform
         self.asr_transform = asr_transform
         # LAS-based ASR
-        self.transformer_asr = TransformerASR(input_size=asr_input_size,
-                                              vocab_size=vocab_size,
-                                              sos=sos,
-                                              eos=eos,
-                                              ctc=ctc,
-                                              asr_transform=None,
-                                              enc_type=enc_type,
-                                              enc_proj=enc_proj,
-                                              enc_kwargs=enc_kwargs,
-                                              dec_type=dec_type,
-                                              dec_kwargs=dec_kwargs)
+        self.transformer_asr = XfmrASR(input_size=asr_input_size,
+                                       vocab_size=vocab_size,
+                                       sos=sos,
+                                       eos=eos,
+                                       ctc=ctc,
+                                       asr_transform=None,
+                                       enc_type=enc_type,
+                                       enc_proj=enc_proj,
+                                       enc_kwargs=enc_kwargs,
+                                       dec_type=dec_type,
+                                       dec_kwargs=dec_kwargs)
         if asr_cpt:
             transformer_cpt = th.load(asr_cpt, map_location="cpu")
             self.transformer_asr.load_state_dict(transformer_cpt, strict=False)
@@ -357,8 +358,8 @@ class BeamAttASR(EnhAttASR):
         return x_enh, x_len
 
 
-@ApsRegisters.asr.register("beam_transformer")
-class BeamTransformerASR(EnhTransformerASR):
+@ApsRegisters.asr.register("beam_xfmr")
+class BeamXfmrASR(EnhXfmrASR):
     """
     Beamformer-based front-end + LAS ASR
     """
@@ -368,7 +369,7 @@ class BeamTransformerASR(EnhTransformerASR):
                  enh_transform: Optional[nn.Module] = None,
                  enh_conf: Optional[Dict] = None,
                  **kwargs) -> None:
-        super(BeamTransformerASR, self).__init__(**kwargs)
+        super(MvdrXfmrASR, self).__init__(**kwargs)
         conv_enh = {
             "ti": TimeInvariantFilter,
             "tv": TimeVariantFilter,
@@ -394,8 +395,8 @@ class BeamTransformerASR(EnhTransformerASR):
         return x_enh, x_len
 
 
-@ApsRegisters.asr.register("mvdr_transformer")
-class MvdrTransformerASR(EnhTransformerASR):
+@ApsRegisters.asr.register("mvdr_xfmr")
+class MvdrXfmrASR(EnhAttASR):
     """
     Mvdr beamformer + Transformer-based ASR model
     """
@@ -410,7 +411,7 @@ class MvdrTransformerASR(EnhTransformerASR):
             mask_net_noise=False,
             mvdr_kwargs=None,
             **kwargs):
-        super(MvdrTransformerASR, self).__init__(**kwargs)
+        super(MvdrXfmrASR, self).__init__(**kwargs)
         if enh_transform is None:
             raise RuntimeError("Enhancement feature transform can not be None")
         # Front-end feature extraction

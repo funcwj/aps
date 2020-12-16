@@ -120,7 +120,7 @@ conv1d_fsmn_enc_kwargs = {
     }
 }
 
-transformer_enc_kwargs = {
+xfmr_enc_kwargs = {
     "proj_layer": "conv2d",
     "att_dim": 512,
     "nhead": 8,
@@ -131,7 +131,7 @@ transformer_enc_kwargs = {
     "num_layers": 2
 }
 
-transformer_rel_enc_kwargs = {
+xfmr_rel_enc_kwargs = {
     "proj_layer": "conv2d",
     "att_dim": 512,
     "nhead": 8,
@@ -144,7 +144,7 @@ transformer_rel_enc_kwargs = {
     "value_rel_pose": True
 }
 
-transformer_rel_xl_enc_kwargs = {
+xfmr_xl_enc_kwargs = {
     "proj_layer": "conv2d",
     "att_dim": 512,
     "nhead": 8,
@@ -378,9 +378,13 @@ def test_beam_att(mode, enh_kwargs):
     pytest.param("fsmn", fsmn_enc_kwargs),
     pytest.param("concat", conv1d_rnn_enc_kwargs),
     pytest.param("concat", conv1d_fsmn_enc_kwargs),
-    pytest.param("concat", conv2d_rnn_enc_kwargs)
+    pytest.param("concat", conv2d_rnn_enc_kwargs),
+    pytest.param("xfmr", xfmr_enc_kwargs),
+    pytest.param("xfmr_rel", xfmr_rel_enc_kwargs),
+    pytest.param("xfmr_xl", xfmr_xl_enc_kwargs),
+    pytest.param("conformer", conformer_enc_kwargs)
 ])
-def test_common_encoder(enc_type, enc_kwargs):
+def test_att_encoder(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("att")
     vocab_size = 100
     batch_size = 4
@@ -399,6 +403,7 @@ def test_common_encoder(enc_type, enc_kwargs):
                        enc_type=enc_type,
                        enc_proj=256,
                        enc_kwargs=enc_kwargs,
+                       dec_type="rnn",
                        dec_dim=512,
                        dec_kwargs=default_rnn_dec_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size)
@@ -413,19 +418,20 @@ def test_common_encoder(enc_type, enc_kwargs):
     pytest.param("concat", conv1d_rnn_enc_kwargs),
     pytest.param("concat", conv1d_fsmn_enc_kwargs),
     pytest.param("concat", conv2d_rnn_enc_kwargs),
-    pytest.param("transformer", transformer_enc_kwargs),
-    pytest.param("transformer_rel", transformer_rel_enc_kwargs),
-    pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs),
+    pytest.param("xfmr", xfmr_enc_kwargs),
+    pytest.param("xfmr_rel", xfmr_rel_enc_kwargs),
+    pytest.param("xfmr_xl", xfmr_xl_enc_kwargs),
     pytest.param("conformer", conformer_enc_kwargs)
 ])
-def test_transformer_encoder(enc_type, enc_kwargs):
-    nnet_cls = aps_asr_nnet("transformer")
+def test_xfmr_encoder(enc_type, enc_kwargs):
+    nnet_cls = aps_asr_nnet("xfmr")
     vocab_size = 100
     batch_size = 4
     asr_transform = AsrTransform(feats="fbank-log-cmvn",
                                  frame_len=400,
                                  frame_hop=160,
                                  window="hamm")
+    xfmr_encoders = ["xfmr", "xfmr_rel", "xfmr_xl", "conformer"]
     xfmr_asr = nnet_cls(input_size=80,
                         vocab_size=vocab_size,
                         sos=0,
@@ -433,9 +439,9 @@ def test_transformer_encoder(enc_type, enc_kwargs):
                         ctc=True,
                         asr_transform=asr_transform,
                         enc_type=enc_type,
-                        enc_proj=512 if "transformer" not in enc_type else None,
+                        enc_proj=512 if enc_type not in xfmr_encoders else None,
                         enc_kwargs=enc_kwargs,
-                        dec_type="transformer",
+                        dec_type="xfmr",
                         dec_kwargs=default_xfmr_dec_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size)
     z, _, _, _ = xfmr_asr(x, x_len, y)
@@ -448,9 +454,9 @@ def test_transformer_encoder(enc_type, enc_kwargs):
     pytest.param("fsmn", fsmn_enc_kwargs),
     pytest.param("concat", conv1d_rnn_enc_kwargs),
     pytest.param("concat", conv1d_fsmn_enc_kwargs),
-    pytest.param("transformer", transformer_enc_kwargs),
-    pytest.param("transformer_rel", transformer_rel_enc_kwargs),
-    pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs),
+    pytest.param("xfmr", xfmr_enc_kwargs),
+    pytest.param("xfmr_rel", xfmr_rel_enc_kwargs),
+    pytest.param("xfmr_xl", xfmr_xl_enc_kwargs),
     pytest.param("conformer", conformer_enc_kwargs)
 ])
 def test_common_transducer(enc_type, enc_kwargs):
@@ -470,12 +476,13 @@ def test_common_transducer(enc_type, enc_kwargs):
                                  frame_len=400,
                                  frame_hop=160,
                                  window="hamm")
+    xfmr_encoders = ["xfmr", "xfmr_rel", "xfmr_xl", "conformer"]
     rnnt = nnet_cls(input_size=80,
                     vocab_size=vocab_size,
                     blank=vocab_size - 1,
                     asr_transform=asr_transform,
                     enc_type=enc_type,
-                    enc_proj=None if "transformer" in enc_type else 512,
+                    enc_proj=None if enc_type in xfmr_encoders else 512,
                     enc_kwargs=enc_kwargs,
                     dec_kwargs=dec_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size)
@@ -490,13 +497,13 @@ def test_common_transducer(enc_type, enc_kwargs):
     pytest.param("fsmn", fsmn_enc_kwargs),
     pytest.param("concat", conv1d_rnn_enc_kwargs),
     pytest.param("concat", conv1d_fsmn_enc_kwargs),
-    pytest.param("transformer", transformer_enc_kwargs),
-    pytest.param("transformer_rel", transformer_rel_enc_kwargs),
-    pytest.param("transformer_rel_xl", transformer_rel_xl_enc_kwargs),
+    pytest.param("xfmr", xfmr_enc_kwargs),
+    pytest.param("xfmr_rel", xfmr_rel_enc_kwargs),
+    pytest.param("xfmr_xl", xfmr_xl_enc_kwargs),
     pytest.param("conformer", conformer_enc_kwargs)
 ])
-def test_transformer_transducer(enc_type, enc_kwargs):
-    nnet_cls = aps_asr_nnet("transformer_transducer")
+def test_xfmr_transducer(enc_type, enc_kwargs):
+    nnet_cls = aps_asr_nnet("xfmr_transducer")
     vocab_size = 100
     batch_size = 4
     dec_kwargs = {

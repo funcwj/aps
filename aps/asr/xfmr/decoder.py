@@ -8,7 +8,7 @@ import torch.nn as nn
 
 from torch.nn import TransformerDecoder, TransformerDecoderLayer
 from typing import Union, Tuple, Optional
-from aps.asr.transformer.pose import InputSinPosEncoding
+from aps.asr.xfmr.pose import InputSinPosEncoding
 from aps.asr.base.attention import padding_mask
 
 
