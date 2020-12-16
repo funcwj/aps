@@ -110,6 +110,7 @@ def beam_search(decoder: nn.Module,
                                eos=eos,
                                device=device,
                                penalty=penalty,
+                               lm_weight=lm_weight,
                                normalized=normalized)
 
     lm_state = None
@@ -130,15 +131,16 @@ def beam_search(decoder: nn.Module,
                                                              proj=proj,
                                                              point=point)
         # compute prob: beam x V, nagetive
-        prob = tf.log_softmax(pred / temperature, dim=-1)
+        am_prob = tf.log_softmax(pred / temperature, dim=-1)
 
         if lm:
-            lm_prob, lm_state = lm_score(lm, point, pre_out, lm_state)
             # beam x V
-            prob += lm_prob * lm_weight
+            lm_prob, lm_state = lm_score(lm, point, pre_out, lm_state)
+        else:
+            lm_prob = 0
 
         # local pruning
-        beam_tracker.prune_beam(prob)
+        beam_tracker.prune_beam(am_prob, lm_prob)
         # continue flags
         hyp_ended = beam_tracker.trace_back(final=False)
 
@@ -207,6 +209,7 @@ def beam_search_batch(decoder: nn.Module,
                                     eos=eos,
                                     device=device,
                                     penalty=penalty,
+                                    lm_weight=lm_weight,
                                     normalized=normalized)
 
     # for each utterance
@@ -229,15 +232,16 @@ def beam_search_batch(decoder: nn.Module,
                                                              proj=proj,
                                                              point=point)
         # compute prob: N*beam x V, nagetive
-        prob = tf.log_softmax(pred / temperature, dim=-1)
+        am_prob = tf.log_softmax(pred / temperature, dim=-1)
 
         if lm:
-            lm_prob, lm_state = lm_score(lm, point, pre_out, lm_state)
             # beam x V
-            prob += lm_prob * lm_weight
+            lm_prob, lm_state = lm_score(lm, point, pre_out, lm_state)
+        else:
+            lm_prob = 0
 
         # local pruning: N*beam x beam
-        beam_tracker.prune_beam(prob)
+        beam_tracker.prune_beam(am_prob, lm_prob)
 
         # process eos nodes
         for u in range(N):

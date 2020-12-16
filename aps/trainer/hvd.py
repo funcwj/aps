@@ -102,6 +102,10 @@ class HvdTrainer(Trainer):
         """
         self.optimizer.zero_grad()
 
+        # add noise if needed
+        if self.weight_noise_adder:
+            self.weight_noise_adder(self.task)
+
         stats = self.task(egs)
         loss = dist.all_reduce(stats["loss"])
         loss = loss.item()
@@ -118,10 +122,6 @@ class HvdTrainer(Trainer):
             # for horovod
             self.optimizer.synchronize()
             norm = clip_grad_norm_(self.task.parameters(), self.clip_gradient)
-
-        # add noise if needed
-        if self.weight_noise_adder:
-            self.weight_noise_adder(self.task)
 
         # step optimizer and update statistics
         if math.isfinite(norm):

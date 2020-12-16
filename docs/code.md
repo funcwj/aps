@@ -4,7 +4,7 @@ Providing a simple description of the code structure and design here.
 
 ## `aps.transform`
 
-Customized feature transform module in aps. The feature transform layer from `aps.transform` is stacked as the feature extractor for ASR or enhancement/separation tasks, e.g., a stack of `SpectrogramTransform-AbsTransform-MelTransform-LogTransform` can used to extract log mel filter-bank features. Currently the supported feature transform layers are shown in the following:
+Customized feature transform module in aps. The feature transform layer from `aps.transform` is stacked as the feature extractor for ASR or enhancement/separation tasks, e.g., a stack of `SpectrogramTransform, AbsTransform, MelTransform, LogTransform` can used to extract log mel filter-bank features. Currently the supported feature transform layers are shown in the following:
 
 * `SpeedPerturbTransform`
 * `PreEmphasisTransform`
@@ -60,10 +60,10 @@ The supported data loader in aps. For acoustic model training, we have two optio
 * `am_raw`: Raw waveform data loader which do not need us to prepare acoustic features beforehead (recommended way).
 * `am_kaldi`: A data loader that supports the Kaldi's feature.
 
-For enhancement/separation model training, we also have two options
+For separation/enhancement model training, we also have two options
 
-* `ss_chunk`: Raw waveform data loader and also no need to prepare features.
-* `ss_online`: A data loader performed in an online manner which generates training audio (noisy, single/multi-speaker, close-talk/far-field) on-the-fly.
+* `se_chunk`: Raw waveform data loader and also no need to prepare features.
+* `se_online`: A data loader performed in an online manner which generates training audio (noisy, single/multi-speaker, close-talk/far-field) on-the-fly.
 
 For language model (target at ASR task), we have
 
@@ -77,18 +77,19 @@ A package to handle distributed training and provide an unified interface. Now w
 
 The submodule for language model & acoustic model. Currently the implemented AM are:
 
-* `AttASR`: Attention based encoder-decoder AM with RNN based decoder
+* `AttASR`: Encoder/decoder AM with RNN decoders
 * `EnhAttASR`: `AttASR` with multi-channel front-end
-* `TransformerASR`: Attention based encoder-decoder AM with tran sformer as decoder
-* `EnhTransformerASR`: `TransformerASR` with multi-channel front-end
-* `TorchTransducerASR`: RNNT AM with RNN based decoder
-* `TransformerTransducerASR`: RNNT AM with Transformer based decoder
+* `XfmrASR`: Encoder/decoder AM with transformer decoders
+* `EnhXfmrASR`: `XfmrASR` with multi-channel front-end
+* `TransducerASR`: RNNT AM with RNN decoders
+* `XfmrTransducerASR`: RNNT AM with Transformer decoders
 
 The transformer implementation is kept similar style with `torch.nn` package and each network should have function `beam_search()` for decoding. Variants of encoder are provided in `aps.asr.base.encoder`:
 
 * `VanillaRNNEncoder`: stack of vanilla RNNs as encoder
 * `VariantRNNEncoder`: RNNs with customized features
 * `FSMNEncoder`: stack of FSMN as encoder
+* `JitLSTMEncoder`: customized LSTM layers implemented with torch.jit
 * `Conv1dEncoder`: stack of TDNN (conv1d) layers as encoder (can also be used for subsampling, following with other encoders).
 * `Conv2dEncoder`: stack of conv2d layers (used for subsampling, following with other encoders)
 

@@ -128,13 +128,21 @@ class BatchSampler(dat.Sampler):
         toks_len = [len(toks) for toks in subset]
         desc_idx = np.argsort(toks_len)
         kept_desc_idx = []
+        filter_sutt, filter_lutt = 0, 0
         for i in range(len(desc_idx)):
             tok_len = toks_len[desc_idx[i]]
-            if self.const["min"] <= tok_len <= self.const["max"]:
+            if tok_len < self.const["min"]:
+                filter_sutt += 1
+            elif tok_len > self.const["max"]:
+                filter_lutt += 1
+            else:
                 kept_desc_idx.append(i)
-        pass_utts = len(desc_idx) - len(kept_desc_idx)
-        if pass_utts:
-            warnings.warn(f"Pass {pass_utts} long/short utterances...")
+        if filter_lutt or filter_sutt:
+            ratio_lutt = filter_lutt * 100.0 / len(desc_idx)
+            ratio_sutt = filter_sutt * 100.0 / len(desc_idx)
+            warnings.warn(
+                f"Filter {ratio_lutt:.2f}/{ratio_sutt:.2f}% long/short utterances..."
+            )
         batches = []
         beg, cur_bz = 0, batch_size
         while beg + cur_bz <= len(kept_desc_idx):

@@ -1,13 +1,13 @@
 # WER (%) Report:
 # Total (7176 utterances): 7362/104765 = 7.03%, SUB/INS/DEL = 6914/251/197
 
-nnet: "transformer"
+nnet: "xfmr"
 
 nnet_conf:
   input_size: 80
-  enc_type: "transformer_rel"
+  enc_type: "xfmr_rel"
   enc_kwargs:
-    input_embed: "conv2d"
+    proj_layer: "conv2d"
     att_dim: 512
     k_dim: 256
     nhead: 8

@@ -8,7 +8,7 @@ import torch.nn as nn
 
 from torch.nn import TransformerDecoder, TransformerDecoderLayer
 from typing import Union, Tuple, Optional
-from aps.asr.transformer.embedding import IOEmbedding
+from aps.asr.xfmr.pose import InputSinPosEncoding
 from aps.asr.base.attention import padding_mask
 
 
@@ -46,12 +46,10 @@ class TorchTransformerDecoder(nn.Module):
                  pos_enc: bool = True,
                  num_layers: int = 6) -> None:
         super(TorchTransformerDecoder, self).__init__()
-        self.tgt_embed = IOEmbedding("sparse",
-                                     vocab_size,
-                                     embed_dim=att_dim,
-                                     dropout=pos_dropout,
-                                     pos_enc=pos_enc,
-                                     scale_embed=scale_embed)
+        self.vocab_embed = nn.Embedding(vocab_size, att_dim)
+        self.abs_pos_enc = InputSinPosEncoding(att_dim,
+                                               dropout=pos_dropout,
+                                               scale_embed=scale_embed)
         decoder_layer = TransformerDecoderLayer(att_dim,
                                                 nhead,
                                                 dim_feedforward=feedforward_dim,
@@ -82,15 +80,16 @@ class TorchTransformerDecoder(nn.Module):
         memory_mask = None if enc_len is None else (padding_mask(enc_len) == 1)
         tgt_mask = prep_sub_mask(tgt_pad.shape[-1] + offset,
                                  device=tgt_pad.device)
+        tgt_emb = self.vocab_embed(tgt_pad)
         if offset:
             # T + T' x N x E
-            tgt_emb = self.tgt_embed(tgt_pad, t=offset)
+            tgt_emb = self.abs_pos_enc(tgt_emb, t=offset)
             if point is not None:
                 pre_emb = pre_emb[:, point]
             tgt_emb = th.cat([pre_emb, tgt_emb], dim=0)
         else:
             # T x N x E
-            tgt_emb = self.tgt_embed(tgt_pad)
+            tgt_emb = self.abs_pos_enc(tgt_emb)
         # To+1 x N x D
         dec_out = self.decoder(tgt_emb,
                                enc_out,

@@ -15,7 +15,7 @@ from aps.loader.se.chunk import WaveChunkDataLoader
 from aps.libs import ApsRegisters
 
 
-@ApsRegisters.loader.register("ss_online")
+@ApsRegisters.loader.register("se_online")
 def DataLoader(train: bool = True,
                sr: int = 16000,
                simu_cfg: str = "",

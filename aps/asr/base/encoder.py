@@ -14,7 +14,7 @@ from aps.asr.base.layer import var_len_rnn_forward, rnn_output_nonlinear
 from aps.asr.base.jit import LSTM
 from aps.libs import Register
 
-AsrEncoder = Register("asr_encoder")
+BaseEncoder = Register("base_encoder")
 EncRetType = Tuple[th.Tensor, Optional[th.Tensor]]
 
 
@@ -25,9 +25,9 @@ def encoder_instance(enc_type: str, inp_features: int, out_features: int,
     """
 
     def encoder(enc_type, inp_features, **kwargs):
-        if enc_type not in AsrEncoder:
+        if enc_type not in BaseEncoder:
             raise RuntimeError(f"Unknown encoder type: {enc_type}")
-        enc_cls = AsrEncoder[enc_type]
+        enc_cls = BaseEncoder[enc_type]
         return enc_cls(inp_features, **kwargs)
 
     if enc_type != "concat":
@@ -58,7 +58,7 @@ def encoder_instance(enc_type: str, inp_features: int, out_features: int,
 
 class ConcatEncoder(nn.Module):
     """
-    Concatenation of the encoders
+    Concatenation of the encoders (similar to nn.Sequential)
     """
 
     def __init__(self, enc_list: List[nn.Module]) -> None:
@@ -91,7 +91,7 @@ class EncoderBase(nn.Module):
         self.out_features = out_features
 
 
-@AsrEncoder.register("pytorch_rnn")
+@BaseEncoder.register("pytorch_rnn")
 class PyTorchRNNEncoder(EncoderBase):
     """
     PyTorch's RNN encoder
@@ -155,7 +155,7 @@ class PyTorchRNNEncoder(EncoderBase):
         return out, inp_len
 
 
-@AsrEncoder.register("jit_lstm")
+@BaseEncoder.register("jit_lstm")
 class JitLSTMEncoder(EncoderBase):
     """
     LSTM encoder (see aps.asr.base.jit)
@@ -217,7 +217,7 @@ class JitLSTMEncoder(EncoderBase):
         return out, inp_len
 
 
-@AsrEncoder.register("variant_rnn")
+@BaseEncoder.register("variant_rnn")
 class VariantRNNEncoder(EncoderBase):
     """
     Variant RNN layer (e.g., with pyramid style, layernrom, projection, .etc)
@@ -309,7 +309,7 @@ class VariantRNNEncoder(EncoderBase):
         return inp, inp_len
 
 
-@AsrEncoder.register("conv1d")
+@BaseEncoder.register("conv1d")
 class Conv1dEncoder(EncoderBase):
     """
     The stack of TDNN (conv1d) layers with optional time reduction
@@ -359,7 +359,7 @@ class Conv1dEncoder(EncoderBase):
         return inp, inp_len
 
 
-@AsrEncoder.register("conv2d")
+@BaseEncoder.register("conv2d")
 class Conv2dEncoder(EncoderBase):
     """
     The stack of conv2d layers with optional time reduction
@@ -432,7 +432,7 @@ class Conv2dEncoder(EncoderBase):
         return inp, inp_len
 
 
-@AsrEncoder.register("fsmn")
+@BaseEncoder.register("fsmn")
 class FSMNEncoder(EncoderBase):
     """
     Stack of FSMN layers, with optional residual connection

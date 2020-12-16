@@ -113,7 +113,6 @@ class PyTorchRNNDecoder(nn.Module):
                 enc_pad: th.Tensor,
                 enc_len: Optional[th.Tensor],
                 tgt_pad: th.Tensor,
-                sos: int = -1,
                 schedule_sampling: float = 0) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args
@@ -140,19 +139,16 @@ class PyTorchRNNDecoder(nn.Module):
         #   0   1   2   3   ... T
         # SOS   t0  t1  t2  ... t{T-1}
         #  t0   t1  t2  t3  ... EOS
-        for t in range(tgt_pad.shape[-1] + 1):
+        for t in range(tgt_pad.shape[-1]):
             # using output at previous time step
             # out: N
             if t and random.random() < schedule_sampling:
-                out_pre = th.argmax(outs[-1].detach(), dim=1)
+                tok_pre = th.argmax(outs[-1].detach(), dim=1)
             else:
-                if t == 0:
-                    out_pre = th.tensor([sos] * N, device=device)
-                else:
-                    out_pre = tgt_pad[:, t - 1]
+                tok_pre = tgt_pad[:, t]
             # step forward
             pred, att_ctx, dec_hid, att_ali, proj = self.step(att_net,
-                                                              out_pre,
+                                                              tok_pre,
                                                               enc_pad,
                                                               att_ctx,
                                                               dec_hid=dec_hid,

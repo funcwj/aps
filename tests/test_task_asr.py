@@ -116,9 +116,9 @@ def test_lm_xent():
     rnnlm = nnet_cls(embed_size=256,
                      vocab_size=vocab_size,
                      rnn="lstm",
-                     rnn_layers=2,
-                     rnn_hidden=512,
-                     rnn_dropout=0.2,
+                     num_layers=2,
+                     hidden_size=512,
+                     dropout=0.2,
                      tie_weights=False)
     task = aps_task("lm", rnnlm)
     U = th.randint(10, 20, (1,)).item()

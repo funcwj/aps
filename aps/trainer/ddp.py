@@ -34,6 +34,7 @@ class DdpTrainer(Trainer):
                  ss_scheduler: str = "const",
                  ss_scheduler_kwargs: Optional[Dict] = None,
                  clip_gradient: Optional[float] = None,
+                 acmu_gradient: int = -1,
                  weight_noise_std: Optional[float] = None,
                  prog_interval: int = 100,
                  save_interval: int = -1,
@@ -59,6 +60,7 @@ class DdpTrainer(Trainer):
                              ss_scheduler=ss_scheduler,
                              ss_scheduler_kwargs=ss_scheduler_kwargs,
                              clip_gradient=clip_gradient,
+                             acmu_gradient=acmu_gradient,
                              weight_noise_std=weight_noise_std,
                              prog_interval=prog_interval,
                              save_interval=save_interval,
@@ -100,6 +102,10 @@ class DdpTrainer(Trainer):
         """
         self.optimizer.zero_grad()
 
+        # add noise if needed
+        if self.weight_noise_adder:
+            self.weight_noise_adder(self.task)
+
         stats = self.task(egs)
         # use all reduce to check loss
         if self.distributed:
@@ -117,10 +123,6 @@ class DdpTrainer(Trainer):
         norm = -1
         if self.clip_gradient:
             norm = clip_grad_norm_(self.task.parameters(), self.clip_gradient)
-
-        # add noise if needed
-        if self.weight_noise_adder:
-            self.weight_noise_adder(self.task)
 
         # step optimizer and update statistics
         if math.isfinite(norm):

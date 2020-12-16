@@ -173,9 +173,10 @@ class TransducerTask(Task):
         # tgt_pad: N x To (replace ignore_id with blank)
         ignore_mask = egs["tgt_pad"] == IGNORE_ID
         tgt_pad = egs["tgt_pad"].masked_fill(ignore_mask, self.blank)
+        tgt_len = egs["tgt_len"]
         # N x Ti x To+1 x V
         outs, enc_len = self.nnet(egs["src_pad"], egs["src_len"], tgt_pad,
-                                  egs["tgt_len"])
+                                  tgt_len)
         rnnt_kwargs = {"blank": self.blank, "reduction": "mean"}
         # add log_softmax if use https://github.com/1ytic/warp-rnnt
         if self.interface == "warp_rnnt":
@@ -183,7 +184,7 @@ class TransducerTask(Task):
             rnnt_kwargs["gather"] = True
         # compute loss
         loss = self.rnnt_objf(outs, tgt_pad.to(th.int32), enc_len.to(th.int32),
-                              egs["tgt_len"].to(th.int32), **rnnt_kwargs)
+                              tgt_len.to(th.int32), **rnnt_kwargs)
         return {"loss": loss}
 
 

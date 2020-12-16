@@ -148,8 +148,8 @@ class AudioDataLoader(dat.DataLoader):
 
         super(AudioDataLoader, self).__init__(dataset,
                                               batch_sampler=sampler,
-                                              num_workers=num_workers,
-                                              collate_fn=egs_collate)
+                                              collate_fn=egs_collate,
+                                              num_workers=num_workers)
 
     def set_epoch(self, epoch: int) -> NoReturn:
         self.batch_sampler.set_epoch(epoch)

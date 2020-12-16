@@ -13,6 +13,9 @@ from torch_complex.tensor import ComplexTensor
 
 from aps.transform.utils import init_melfilter
 from aps.asr.base.encoder import PyTorchRNNEncoder
+from aps.libs import Register
+
+EnhFrontEnds = Register("enh_filter")
 
 
 class ComplexConvXd(nn.Module):
@@ -57,6 +60,7 @@ class ComplexConv2d(ComplexConvXd):
         super(ComplexConv2d, self).__init__(nn.Conv2d, *args, **kwargs)
 
 
+@EnhFrontEnds.register("time_invar")
 class TimeInvariantFilter(nn.Module):
     """
     Time invariant convolutional front-end (eq beamformer)
@@ -146,6 +150,7 @@ class TimeInvariantFilter(nn.Module):
         return f
 
 
+@EnhFrontEnds.register("time_invar_att")
 class TimeInvariantAttFilter(nn.Module):
     """
     Time invariant convolutional front-end with attention
@@ -267,6 +272,7 @@ class TimeInvariantAttFilter(nn.Module):
         return f
 
 
+@EnhFrontEnds.register("time_variant")
 class TimeVariantFilter(nn.Module):
     """
     Time variant convolutional front-end

@@ -9,6 +9,7 @@ import torch.nn.functional as F
 
 from aps.transform.utils import init_melfilter
 from aps.transform.enh import FixedBeamformer
+from aps.asr.filter.conv import EnhFrontEnds
 
 from torch_complex.tensor import ComplexTensor
 from typing import Optional
@@ -179,6 +180,7 @@ class ComplexLinear(nn.Module):
         return ComplexTensor(r, i)
 
 
+@EnhFrontEnds.register("google_clp")
 class CLPFsBeamformer(nn.Module):
     """
     Complex Linear Projection (CLP) model on frequency-domain
