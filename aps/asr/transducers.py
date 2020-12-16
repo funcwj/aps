@@ -48,7 +48,7 @@ class TransducerASRBase(nn.Module):
 
 
 @ApsRegisters.asr.register("transducer")
-class TorchTransducerASR(TransducerASRBase):
+class TransducerASR(TransducerASRBase):
     """
     Transducer based ASR model with (Non-)Transformer encoder + RNN decoder
     """
@@ -63,13 +63,13 @@ class TorchTransducerASR(TransducerASRBase):
                  dec_type: str = "rnn",
                  enc_kwargs: Dict = {},
                  dec_kwargs: Dict = {}) -> None:
-        super(TorchTransducerASR, self).__init__(input_size=input_size,
-                                                 vocab_size=vocab_size,
-                                                 blank=blank,
-                                                 asr_transform=asr_transform,
-                                                 enc_type=enc_type,
-                                                 enc_proj=enc_proj,
-                                                 enc_kwargs=enc_kwargs)
+        super(TransducerASR, self).__init__(input_size=input_size,
+                                            vocab_size=vocab_size,
+                                            blank=blank,
+                                            asr_transform=asr_transform,
+                                            enc_type=enc_type,
+                                            enc_proj=enc_proj,
+                                            enc_kwargs=enc_kwargs)
         if dec_type != "rnn":
             raise ValueError(
                 "TorchTransducerASR: currently decoder must be rnn")
@@ -158,7 +158,7 @@ class TorchTransducerASR(TransducerASRBase):
 
 
 @ApsRegisters.asr.register("xfmr_transducer")
-class TransformerTransducerASR(TransducerASRBase):
+class XfmrTransducerASR(TransducerASRBase):
     """
     Transducer based ASR model with (Non-)Transformer encoder + Transformer decoder
     """
@@ -173,14 +173,13 @@ class TransformerTransducerASR(TransducerASRBase):
                  enc_kwargs: Dict = {},
                  dec_type: str = "xfmr",
                  dec_kwargs: Dict = {}) -> None:
-        super(TransformerTransducerASR,
-              self).__init__(input_size=input_size,
-                             vocab_size=vocab_size,
-                             blank=blank,
-                             asr_transform=asr_transform,
-                             enc_type=enc_type,
-                             enc_proj=enc_proj,
-                             enc_kwargs=enc_kwargs)
+        super(XfmrTransducerASR, self).__init__(input_size=input_size,
+                                                vocab_size=vocab_size,
+                                                blank=blank,
+                                                asr_transform=asr_transform,
+                                                enc_type=enc_type,
+                                                enc_proj=enc_proj,
+                                                enc_kwargs=enc_kwargs)
         if dec_type != "xfmr":
             raise ValueError("TransformerTransducerASR: currently decoder "
                              "must be xfmr")

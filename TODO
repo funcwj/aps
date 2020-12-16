@@ -1,4 +1,4 @@
-1. Beam search optimization and batch mode implementation
+1. RNN LM fusion issues (beam search)
 2. Add recipes (speaker tasks, hybrid AM training)
 4. Add SOTA models
 5. TorchScript/JIT features
