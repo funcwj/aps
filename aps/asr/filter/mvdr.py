@@ -6,10 +6,12 @@
 import torch as th
 import torch.nn as nn
 
-import torch.nn.functional as F
-import torch_complex.functional as cF
+import torch.nn.functional as tf
+import torch_complex.functional as cf
 
 from aps.asr.base.attention import padding_mask
+from aps.asr.base.encoder import PyTorchRNNEncoder
+from aps.asr.filter.conv import EnhFrontEnds
 from aps.const import EPSILON
 from torch_complex import ComplexTensor
 from typing import Optional
@@ -52,7 +54,7 @@ def estimate_covar(mask: th.Tensor,
     # N x F x 1 x T
     mask = mask.unsqueeze(-2)
     # N x F x C x C
-    nominator = cF.einsum("...it,...jt->...ij", [spec * mask, spec.conj()])
+    nominator = cf.einsum("...it,...jt->...ij", [spec * mask, spec.conj()])
     # N x F x 1 x 1
     denominator = th.clamp(mask.sum(-1, keepdims=True), min=EPSILON)
     # N x F x C x C
@@ -89,23 +91,23 @@ class MvdrBeamformer(nn.Module):
         # N x F x C x C
         Rn_inv = Rn.inverse()
         # N x F x C x C
-        Rn_inv_Rs = cF.einsum("...ij,...jk->...ik", [Rn_inv, Rs])
+        Rn_inv_Rs = cf.einsum("...ij,...jk->...ik", [Rn_inv, Rs])
         # N x F
         tr_Rn_inv_Rs = trace(Rn_inv_Rs) + eps
         # N x F x C
-        Rn_inv_Rs_u = cF.einsum("...fnc,...c->...fn", [Rn_inv_Rs, u])
+        Rn_inv_Rs_u = cf.einsum("...fnc,...c->...fn", [Rn_inv_Rs, u])
         # N x F x C
         weight = Rn_inv_Rs_u / tr_Rn_inv_Rs[..., None]
         return weight
 
-    def _process_mask(self, mask: th.Tensor, xlen: th.Tensor) -> th.Tensor:
+    def _process_mask(self, mask: th.Tensor, x_len: th.Tensor) -> th.Tensor:
         """
         Process mask estimated by networks
         """
         if mask is None:
             return mask
-        if xlen is not None:
-            zero_mask = padding_mask(xlen)  # N x T
+        if x_len is not None:
+            zero_mask = padding_mask(x_len)  # N x T
             mask = th.masked_fill(mask, zero_mask[..., None], 0)
         if self.mask_norm:
             max_abs = th.norm(mask, float("inf"), dim=1, keepdim=True)
@@ -117,7 +119,7 @@ class MvdrBeamformer(nn.Module):
                 mask_s: th.Tensor,
                 x: ComplexTensor,
                 mask_n: Optional[th.Tensor] = None,
-                xlen: Optional[th.Tensor] = None) -> ComplexTensor:
+                x_len: Optional[th.Tensor] = None) -> ComplexTensor:
         """
         Args:
             mask_s: real TF-masks (speech), N x T x F
@@ -127,8 +129,8 @@ class MvdrBeamformer(nn.Module):
             y: enhanced complex spectrogram N x T x F
         """
         # N x F x T
-        mask_s = self._process_mask(mask_s, xlen=xlen)
-        mask_n = self._process_mask(mask_n, xlen=xlen)
+        mask_s = self._process_mask(mask_s, x_len=x_len)
+        mask_n = self._process_mask(mask_n, x_len=x_len)
         # N x F x C x C
         Rs = estimate_covar(mask_s, x)
         Rn = estimate_covar(1 - mask_s if mask_n is None else mask_n, x)
@@ -169,13 +171,64 @@ class ChannelAttention(nn.Module):
         # N x C x 1
         gvec = self.gvec(th.tanh(proj))
         # N x C
-        return F.softmax(gvec.squeeze(-1), -1)
+        return tf.softmax(gvec.squeeze(-1), -1)
 
 
+@EnhFrontEnds.register("rnn_mask_mvdr")
 class RNNMaskMvdr(nn.Module):
     """
     Mask based MVDR method. The masks are estimated using simple RNN networks
     """
 
-    def __init__(self):
-        pass
+    def __init__(self,
+                 enh_input_size: int,
+                 num_bins: int = 257,
+                 rnn_inp_proj: int = None,
+                 rnn: str = "lstm",
+                 num_layers: int = 3,
+                 dropout: float = 0.0,
+                 hidden_size: int = 640,
+                 bidirectional: bool = True,
+                 mask_net_noise: bool = True,
+                 mvdr_att_dim: int = 512,
+                 mask_norm: bool = True):
+        super(RNNMaskMvdr, self).__init__()
+        # TF-mask estimation network
+        self.mask_net = PyTorchRNNEncoder(enh_input_size,
+                                          num_bins *
+                                          2 if mask_net_noise else num_bins,
+                                          input_project=rnn_inp_proj,
+                                          rnn=rnn,
+                                          num_layers=num_layers,
+                                          hidden=hidden_size,
+                                          dropout=dropout,
+                                          bidirectional=bidirectional,
+                                          non_linear="sigmoid")
+        # MVDR beamformer
+        self.mvdr_net = MvdrBeamformer(num_bins,
+                                       att_dim=mvdr_att_dim,
+                                       mask_norm=mask_norm)
+        self.mask_net_noise = mask_net_noise
+
+    def forward(self,
+                feats: th.Tensor,
+                cstft: ComplexTensor,
+                eps: float = 1e-5,
+                inp_len: Optional[th.Tensor] = None) -> ComplexTensor:
+        """
+        Args:
+            inp (Tensor, ComplexTensor):
+                1) features for mask estimation, N x T x F
+                2) Complex STFT for doing mvdr, N x C x F x T
+        Return:
+            enh (ComplexTensor): N x T x F
+        """
+        # TF-mask estimation: N x T x F
+        mask, _ = self.mask_net(feats, inp_len)
+        if self.mask_net_noise:
+            mask_s, mask_n = th.chunk(mask, 2, dim=-1)
+        else:
+            mask_s, mask_n = mask, None
+        # mvdr beamforming: N x T x F
+        enh = self.mvdr_net(mask_s, cstft, x_len=inp_len, mask_n=mask_n)
+        return enh

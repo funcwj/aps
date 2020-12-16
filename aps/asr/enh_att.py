@@ -7,92 +7,77 @@ import torch as th
 import torch.nn as nn
 
 from typing import Optional, Dict, Tuple, List
-from torch_complex import ComplexTensor
-
 from aps.asr.att import AttASR, XfmrASR, AttASROutputType, XfmrASROutputType
-from aps.asr.base.encoder import PyTorchRNNEncoder
-from aps.asr.filter.mvdr import MvdrBeamformer
-from aps.asr.filter.google import CLPFsBeamformer  # same as TimeInvariantFilter
-from aps.asr.filter.conv import (TimeInvariantFilter, TimeVariantFilter,
-                                 TimeInvariantAttFilter)
+from aps.asr.filter.conv import EnhFrontEnds
 from aps.libs import ApsRegisters
 
+EnhOutputType = Tuple[th.Tensor, Optional[th.Tensor]]
 
-class EnhAttASR(nn.Module):
+
+def get_enh_net(enh_type: str,
+                enh_kwargs: Dict,
+                enh_input_size: Optional[int] = None) -> nn.Module:
     """
-    AttASR with enhancement front-end
+    Return enhancement front-end
+    """
+    if enh_type not in EnhFrontEnds:
+        raise ValueError(f"Unknown enhancement front-end: {enh_type}")
+    enh_net_cls = EnhFrontEnds[enh_type]
+    if enh_type[-4:] == "mvdr":
+        if enh_input_size is None:
+            enh_input_size = enh_kwargs["num_bins"]
+        return enh_net_cls(enh_input_size, **enh_kwargs)
+    else:
+        return enh_net_cls(**enh_kwargs)
+
+
+class EnhASRBase(nn.Module):
+    """
+    Base class for multi-channel enhancement + ASR
     """
 
     def __init__(
             self,
-            asr_input_size: int = 80,
-            vocab_size: int = 30,
-            sos: int = -1,
-            eos: int = -1,
-            # feature transform
-            asr_transform: Optional[nn.Module] = None,
+            asr: nn.Module,
             asr_cpt: str = "",
-            ctc: bool = False,
-            # attention
-            att_type: str = "ctx",
-            att_kwargs: Dict = {},
-            # encoder
-            enc_type: str = "common",
-            dec_type: str = "rnn",
-            enc_proj: int = 256,
-            enc_kwargs: Dict = {},
-            # decoder
-            dec_dim: int = 512,
-            dec_kwargs: Dict = {}) -> None:
-        super(EnhAttASR, self).__init__()
+            enh_input_size: Optional[int] = None,
+            # feature transform
+            enh_transform: Optional[nn.Module] = None,
+            asr_transform: Optional[nn.Module] = None,
+            # enhancement
+            enh_type: str = "google_clp",
+            enh_kwargs: Dict = {}) -> None:
+        super(EnhASRBase, self).__init__()
+        # Front-end feature transform
+        self.enh_transform = enh_transform
         # Back-end feature transform
         self.asr_transform = asr_transform
-        # LAS-based ASR
-        self.las_asr = AttASR(input_size=asr_input_size,
-                              vocab_size=vocab_size,
-                              eos=eos,
-                              sos=sos,
-                              ctc=ctc,
-                              asr_transform=None,
-                              att_type=att_type,
-                              att_kwargs=att_kwargs,
-                              enc_type=enc_type,
-                              enc_proj=enc_proj,
-                              enc_kwargs=enc_kwargs,
-                              dec_dim=dec_dim,
-                              dec_kwargs=dec_kwargs)
+        # ASR
+        self.asr = asr
         if asr_cpt:
             las_cpt = th.load(asr_cpt, map_location="cpu")
-            self.las_asr.load_state_dict(las_cpt, strict=False)
-        self.sos = sos
-        self.eos = eos
+            self.asr.load_state_dict(las_cpt, strict=False)
+        # ENH
+        self.enh_net = get_enh_net(enh_type,
+                                   enh_kwargs,
+                                   enh_input_size=enh_input_size)
+        self.enh_type = enh_type
 
-    def _enhance(self, x_pad, x_len):
+    def _enhance(self, x_pad: th.Tensor,
+                 x_len: Optional[th.Tensor]) -> EnhOutputType:
         """
-        Enhancement and asr feature transform
+        Perform enhancement and asr feature transform
         """
-        raise NotImplementedError
-
-    def forward(self,
-                x_pad: th.Tensor,
-                x_len: Optional[th.Tensor],
-                y_pad: th.Tensor,
-                ssr: float = 0) -> AttASROutputType:
-        """
-        Args:
-            x_pad: N x Ti x D or N x S
-            x_len: N or None
-            y_pad: N x To
-            ssr: schedule sampling rate
-        Return:
-            outs: N x (To+1) x V
-            alis: N x (To+1) x T
-            ...
-        """
-        # mvdr beamforming: N x Ti x F
-        x_enh, x_len = self._enhance(x_pad, x_len)
-        # outs, alis, ctc_branch, ...
-        return self.las_asr(x_enh, x_len, y_pad, ssr=ssr)
+        # feature for enhancement
+        feats, cstft, seq_len = self.enh_transform(x_pad, x_len)
+        if self.enh_type[-4:] == "mvdr":
+            enh = self.enh_net(feats, cstft, inp_len=seq_len)
+        else:
+            enh = self.enh_net(cstft)
+        # N x T x D, feature for ASR if needed
+        if self.asr_transform:
+            enh, _ = self.asr_transform(enh, None)
+        return enh, seq_len
 
     def beam_search(self,
                     x: th.Tensor,
@@ -112,15 +97,15 @@ class EnhAttASR(nn.Module):
             if x.dim() != 2:
                 raise RuntimeError("Now only support for one utterance")
             x_enh, _ = self._enhance(x[None, ...], None)
-            return self.las_asr.beam_search(x_enh[0],
-                                            lm=lm,
-                                            lm_weight=lm_weight,
-                                            beam=beam,
-                                            nbest=nbest,
-                                            max_len=max_len,
-                                            penalty=penalty,
-                                            normalized=normalized,
-                                            temperature=temperature)
+            return self.asr.beam_search(x_enh[0],
+                                        lm=lm,
+                                        lm_weight=lm_weight,
+                                        beam=beam,
+                                        nbest=nbest,
+                                        max_len=max_len,
+                                        penalty=penalty,
+                                        normalized=normalized,
+                                        temperature=temperature)
 
     def beam_search_batch(self,
                           batch: List[th.Tensor],
@@ -141,18 +126,94 @@ class EnhAttASR(nn.Module):
             for inp in batch:
                 x_enh, _ = self._enhance(inp, None)
                 batch_enh.append(x_enh[0])
-            return self.las_asr.beam_search_batch(batch_enh,
-                                                  lm=lm,
-                                                  lm_weight=lm_weight,
-                                                  beam=beam,
-                                                  nbest=nbest,
-                                                  max_len=max_len,
-                                                  penalty=penalty,
-                                                  normalized=normalized,
-                                                  temperature=temperature)
+            return self.asr.beam_search_batch(batch_enh,
+                                              lm=lm,
+                                              lm_weight=lm_weight,
+                                              beam=beam,
+                                              nbest=nbest,
+                                              max_len=max_len,
+                                              penalty=penalty,
+                                              normalized=normalized,
+                                              temperature=temperature)
 
 
-class EnhXfmrASR(nn.Module):
+@ApsRegisters.asr.register("enh_att")
+class EnhAttASR(EnhASRBase):
+    """
+    AttASR with enhancement front-end
+    """
+
+    def __init__(
+            self,
+            asr_input_size: int = 80,
+            enh_input_size: Optional[int] = None,
+            vocab_size: int = 30,
+            sos: int = -1,
+            eos: int = -1,
+            ctc: bool = False,
+            # feature transform
+            enh_transform: Optional[nn.Module] = None,
+            asr_transform: Optional[nn.Module] = None,
+            # enhancement
+            enh_type: str = "google_clp",
+            enh_kwargs: Dict = {},
+            asr_cpt: str = "",
+            # attention
+            att_type: str = "ctx",
+            att_kwargs: Dict = {},
+            # encoder & decoder
+            enc_type: str = "common",
+            dec_type: str = "rnn",
+            enc_proj: int = 256,
+            dec_dim: int = 512,
+            enc_kwargs: Dict = {},
+            dec_kwargs: Dict = {}) -> None:
+        # LAS-based ASR
+        las_asr = AttASR(input_size=asr_input_size,
+                         vocab_size=vocab_size,
+                         eos=eos,
+                         sos=sos,
+                         ctc=ctc,
+                         asr_transform=None,
+                         att_type=att_type,
+                         att_kwargs=att_kwargs,
+                         enc_type=enc_type,
+                         enc_proj=enc_proj,
+                         enc_kwargs=enc_kwargs,
+                         dec_dim=dec_dim,
+                         dec_kwargs=dec_kwargs)
+        super(EnhAttASR, self).__init__(las_asr,
+                                        asr_cpt=asr_cpt,
+                                        enh_input_size=enh_input_size,
+                                        enh_transform=enh_transform,
+                                        asr_transform=asr_transform,
+                                        enh_type=enh_type,
+                                        enh_kwargs=enh_kwargs)
+
+    def forward(self,
+                x_pad: th.Tensor,
+                x_len: Optional[th.Tensor],
+                y_pad: th.Tensor,
+                ssr: float = 0) -> AttASROutputType:
+        """
+        Args:
+            x_pad: N x Ti x D or N x S
+            x_len: N or None
+            y_pad: N x To
+            ssr: schedule sampling rate
+        Return:
+            outs: N x (To+1) x V
+            alis: N x (To+1) x T
+            ...
+        """
+        # mvdr beamforming: N x Ti x F
+        x_enh, x_len = self._enhance(x_pad, x_len)
+        # outs, alis, ctc_branch, ...
+        return self.asr(x_enh, x_len, y_pad, ssr=ssr)
+
+
+@ApsRegisters.asr.register("enh_xfmr")
+class EnhXfmrASR(EnhASRBase):
     """
     Transformer with enhancement front-end
     """
@@ -160,44 +221,43 @@ class EnhXfmrASR(nn.Module):
     def __init__(
             self,
             asr_input_size: int = 80,
+            enh_input_size: Optional[int] = None,
             vocab_size: int = 30,
             sos: int = -1,
             eos: int = -1,
-            # feature transform
-            asr_transform: Optional[nn.Module] = None,
-            asr_cpt: str = "",
             ctc: bool = False,
+            # feature transform
+            enh_transform: Optional[nn.Module] = None,
+            asr_transform: Optional[nn.Module] = None,
+            # enhancement
+            enh_type: str = "google_clp",
+            enh_kwargs: Dict = {},
+            asr_cpt: str = "",
+            # encoder & decoder
             enc_type: str = "xfmr",
             dec_type: str = "xfmr",
             enc_proj: Optional[int] = None,
             enc_kwargs: Dict = {},
             dec_kwargs: Dict = {}) -> None:
-        super(EnhXfmrASR, self).__init__()
-        # Back-end feature transform
-        self.asr_transform = asr_transform
-        # LAS-based ASR
-        self.transformer_asr = XfmrASR(input_size=asr_input_size,
-                                       vocab_size=vocab_size,
-                                       sos=sos,
-                                       eos=eos,
-                                       ctc=ctc,
-                                       asr_transform=None,
-                                       enc_type=enc_type,
-                                       enc_proj=enc_proj,
-                                       enc_kwargs=enc_kwargs,
-                                       dec_type=dec_type,
-                                       dec_kwargs=dec_kwargs)
-        if asr_cpt:
-            transformer_cpt = th.load(asr_cpt, map_location="cpu")
-            self.transformer_asr.load_state_dict(transformer_cpt, strict=False)
-        self.sos = sos
-        self.eos = eos
-
-    def _enhance(self, x_pad, x_len):
-        """
-        Enhancement and asr feature transform
-        """
-        raise NotImplementedError
+        # xfmr based ASR
+        transformer_asr = XfmrASR(input_size=asr_input_size,
+                                  vocab_size=vocab_size,
+                                  sos=sos,
+                                  eos=eos,
+                                  ctc=ctc,
+                                  asr_transform=None,
+                                  enc_type=enc_type,
+                                  enc_proj=enc_proj,
+                                  enc_kwargs=enc_kwargs,
+                                  dec_type=dec_type,
+                                  dec_kwargs=dec_kwargs)
+        super(EnhXfmrASR, self).__init__(transformer_asr,
+                                         asr_cpt=asr_cpt,
+                                         enh_input_size=enh_input_size,
+                                         enh_transform=enh_transform,
+                                         asr_transform=asr_transform,
+                                         enh_type=enh_type,
+                                         enh_kwargs=enh_kwargs)
 
     def forward(self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
                 y_pad: th.Tensor) -> XfmrASROutputType:
@@ -213,263 +273,4 @@ class EnhXfmrASR(nn.Module):
         # mvdr beamforming: N x Ti x F
         x_enh, x_len = self._enhance(x_pad, x_len)
         # outs, alis, ctc_branch, ...
-        return self.transformer_asr(x_enh, x_len, y_pad)
-
-    def beam_search(self,
-                    x: th.Tensor,
-                    beam: int = 16,
-                    lm: Optional[nn.Module] = None,
-                    lm_weight: float = 0,
-                    nbest: int = 8,
-                    max_len: int = -1,
-                    penalty: float = 0,
-                    normalized: bool = True,
-                    temperature: float = 1) -> List[Dict]:
-        """
-        Args
-            x: C x S
-        """
-        with th.no_grad():
-            if x.dim() != 2:
-                raise RuntimeError("Now only support for one utterance")
-            x_enh, _ = self._enhance(x[None, ...], None)
-            return self.transformer_asr.beam_search(x_enh[0],
-                                                    beam=beam,
-                                                    lm=lm,
-                                                    lm_weight=lm_weight,
-                                                    nbest=nbest,
-                                                    max_len=max_len,
-                                                    penalty=penalty,
-                                                    normalized=normalized,
-                                                    temperature=temperature)
-
-
-@ApsRegisters.asr.register("mvdr_att")
-class MvdrAttASR(EnhAttASR):
-    """
-    Mvdr beamformer + Att-based ASR model
-    """
-
-    def __init__(
-            self,
-            enh_input_size: int = 257,
-            num_bins: int = 257,
-            # beamforming
-            enh_transform: Optional[nn.Module] = None,
-            mask_net_kwargs: Optional[Dict] = None,
-            mask_net_noise: bool = False,
-            mvdr_kwargs: Optional[Dict] = None,
-            **kwargs) -> None:
-        super(MvdrAttASR, self).__init__(**kwargs)
-        if enh_transform is None:
-            raise RuntimeError("Enhancement feature transform can not be None")
-        # Front-end feature extraction
-        self.enh_transform = enh_transform
-        # TF-mask estimation network
-        self.mask_net = PyTorchRNNEncoder(
-            enh_input_size, num_bins * 2 if mask_net_noise else num_bins,
-            **mask_net_kwargs)
-        self.mask_net_noise = mask_net_noise
-        # MVDR beamformer
-        self.mvdr_net = MvdrBeamformer(num_bins, **mvdr_kwargs)
-
-    def _enhance(
-            self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
-        """
-        Mvdr beamforming and asr feature transform
-        """
-        # mvdr beamforming: N x Ti x F
-        x_beam, x_len = self.mvdr_beam(x_pad, x_len)
-        # asr feature transform
-        x_beam, _ = self.asr_transform(x_beam, None)
-        return x_beam, x_len
-
-    def mvdr_beam(
-            self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
-        """
-        Mvdr beamforming and asr feature transform
-        Args:
-            x_pad: Tensor, N x C x S
-            x_len: Tensor, N or None
-        """
-        # TF-mask
-        mask_s, mask_n, x_len, x_cplx = self.pred_mask(x_pad, x_len)
-        # mvdr beamforming: N x Ti x F
-        x_beam = self.mvdr_net(mask_s, x_cplx, xlen=x_len, mask_n=mask_n)
-        return x_beam, x_len
-
-    def pred_mask(
-        self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor], Optional[th.Tensor],
-               ComplexTensor]:
-        """
-        Output TF masks
-        Args:
-            x_pad: Tensor, N x C x S
-            x_len: Tensor, N or None
-        """
-        # enhancement feature transform
-        x_pad, x_cplx, x_len = self.enh_transform(x_pad, x_len)
-        # TF-mask estimation: N x T x F
-        x_mask, x_len = self.mask_net(x_pad, x_len)
-        if self.mask_net_noise:
-            mask_s, mask_n = th.chunk(x_mask, 2, dim=-1)
-        else:
-            mask_s, mask_n = x_mask, None
-        return mask_s, mask_n, x_len, x_cplx
-
-
-@ApsRegisters.asr.register("beam_att")
-class BeamAttASR(EnhAttASR):
-    """
-    Beamformer-based front-end + AttASR
-    """
-
-    def __init__(self,
-                 mode: str = "tv",
-                 enh_transform: Optional[nn.Module] = None,
-                 enh_kwargs: Optional[Dict] = None,
-                 **kwargs) -> None:
-        super(BeamAttASR, self).__init__(**kwargs)
-        conv_enh = {
-            "ti": TimeInvariantFilter,
-            "tv": TimeVariantFilter,
-            "ti_att": TimeInvariantAttFilter,
-            "clp": CLPFsBeamformer
-        }
-        if mode not in conv_enh:
-            raise RuntimeError(f"Unknown fs mode: {mode}")
-        if enh_transform is None:
-            raise RuntimeError("enh_transform can not be None")
-        self.enh = conv_enh[mode](**enh_kwargs)
-        self.enh_transform = enh_transform
-
-    def _enhance(
-            self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
-        """
-        FE processing
-        """
-        _, x_pad, x_len = self.enh_transform(x_pad, x_len)
-        # N x T x D
-        x_enh = self.enh(x_pad)
-        return x_enh, x_len
-
-
-@ApsRegisters.asr.register("beam_xfmr")
-class BeamXfmrASR(EnhXfmrASR):
-    """
-    Beamformer-based front-end + LAS ASR
-    """
-
-    def __init__(self,
-                 mode: str = "tv",
-                 enh_transform: Optional[nn.Module] = None,
-                 enh_conf: Optional[Dict] = None,
-                 **kwargs) -> None:
-        super(MvdrXfmrASR, self).__init__(**kwargs)
-        conv_enh = {
-            "ti": TimeInvariantFilter,
-            "tv": TimeVariantFilter,
-            "ti_att": TimeInvariantAttFilter,
-            "clp": CLPFsBeamformer
-        }
-        if mode not in conv_enh:
-            raise RuntimeError(f"Unknown fs mode: {mode}")
-        if enh_transform is None:
-            raise RuntimeError("enh_transform can not be None")
-        self.enh = conv_enh[mode](**enh_conf)
-        self.enh_transform = enh_transform
-
-    def _enhance(
-            self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
-        """
-        FE processing
-        """
-        _, x_pad, x_len = self.enh_transform(x_pad, x_len)
-        # N x B x T x ...
-        x_enh = self.enh(x_pad)
-        return x_enh, x_len
-
-
-@ApsRegisters.asr.register("mvdr_xfmr")
-class MvdrXfmrASR(EnhAttASR):
-    """
-    Mvdr beamformer + Transformer-based ASR model
-    """
-
-    def __init__(
-            self,
-            enh_input_size=257,
-            num_bins=257,
-            # beamforming
-            enh_transform=None,
-            mask_net_kwargs=None,
-            mask_net_noise=False,
-            mvdr_kwargs=None,
-            **kwargs):
-        super(MvdrXfmrASR, self).__init__(**kwargs)
-        if enh_transform is None:
-            raise RuntimeError("Enhancement feature transform can not be None")
-        # Front-end feature extraction
-        self.enh_transform = enh_transform
-        # TF-mask estimation network
-        self.mask_net = PyTorchRNNEncoder(
-            enh_input_size, num_bins * 2 if mask_net_noise else num_bins,
-            **mask_net_kwargs)
-        self.mask_net_noise = mask_net_noise
-        # MVDR beamformer
-        self.mvdr_net = MvdrBeamformer(num_bins, **mvdr_kwargs)
-
-    def _enhance(
-            self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
-        """
-        Mvdr beamforming and asr feature transform
-        Args:
-            x_pad: Tensor, N x C x S
-            x_len: Tensor, N or None
-        """
-        # mvdr beamforming: N x Ti x F
-        x_beam, x_len = self.mvdr_beam(x_pad, x_len)
-        # asr feature transform
-        x_beam, _ = self.asr_transform(x_beam, None)
-        return x_beam, x_len
-
-    def mvdr_beam(
-            self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
-        """
-        Mvdr beamforming and asr feature transform
-        Args:
-            x_pad: Tensor, N x C x S
-            x_len: Tensor, N or None
-        """
-        # TF-mask
-        mask_s, mask_n, x_len, x_cplx = self.pred_mask(x_pad, x_len)
-        # mvdr beamforming: N x Ti x F
-        x_beam = self.mvdr_net(mask_s, x_cplx, xlen=x_len, mask_n=mask_n)
-        return x_beam, x_len
-
-    def pred_mask(
-        self, x_pad: th.Tensor, x_len: Optional[th.Tensor]
-    ) -> Tuple[th.Tensor, Optional[th.Tensor], Optional[th.Tensor],
-               ComplexTensor]:
-        """
-        Output TF masks
-        Args:
-            x_pad: Tensor, N x C x S
-            x_len: Tensor, N or None
-        """
-        # enhancement feature transform
-        x_pad, x_cplx, x_len = self.enh_transform(x_pad, x_len)
-        # TF-mask estimation: N x T x F
-        x_mask, x_len = self.mask_net(x_pad, x_len)
-        if self.mask_net_noise:
-            mask_s, mask_n = th.chunk(x_mask, 2, dim=-1)
-        else:
-            mask_s, mask_n = x_mask, None
-        return mask_s, mask_n, x_len, x_cplx
+        return self.asr(x_enh, x_len, y_pad)

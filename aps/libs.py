@@ -65,7 +65,10 @@ class ApsModules(object):
     """
     Maintain modules in aps package
     """
-    asr_submodules = ["att", "enh_att", "transducers", "lm.rnn", "lm.xfmr"]
+    asr_submodules = [
+        "att", "enh_att", "transducers", "lm.rnn", "lm.xfmr", "filter.mvdr",
+        "filter.conv", "filter.google"
+    ]
     sse_submodules = [
         "toy", "unsuper.rnn", "enh.crn", "enh.phasen", "enh.dcunet",
         "bss.dccrn", "bss.dprnn", "bss.tasnet", "bss.xfmr", "bss.dense_unet"

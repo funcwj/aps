@@ -269,19 +269,21 @@ def test_att(att_type, att_kwargs):
     })
 ])
 def test_mvdr_att(att_type, att_kwargs):
-    nnet_cls = aps_asr_nnet("mvdr_att")
+    nnet_cls = aps_asr_nnet("enh_att")
     vocab_size = 100
     batch_size = 4
     num_channels = 4
-    mask_net_kwargs = {
+    enh_kwargs = {
         "rnn": "lstm",
         "num_layers": 2,
-        "hidden": 512,
+        "rnn_inp_proj": 512,
+        "hidden_size": 512,
         "dropout": 0.2,
         "bidirectional": False,
-        "non_linear": "sigmoid"
+        "mvdr_att_dim": 512,
+        "mask_norm": True,
+        "num_bins": 257
     }
-    mvdr_kwargs = {"att_dim": 512, "mask_norm": True, "eps": 1e-5}
     asr_transform = AsrTransform(feats="abs-mel-log-cmvn",
                                  frame_len=400,
                                  frame_hop=160,
@@ -297,8 +299,8 @@ def test_mvdr_att(att_type, att_kwargs):
                             sos=0,
                             eos=1,
                             ctc=True,
-                            mvdr_kwargs=mvdr_kwargs,
-                            mask_net_kwargs=mask_net_kwargs,
+                            enh_type="rnn_mask_mvdr",
+                            enh_kwargs=enh_kwargs,
                             asr_transform=asr_transform,
                             enh_transform=enh_transform,
                             att_type=att_type,
@@ -313,9 +315,9 @@ def test_mvdr_att(att_type, att_kwargs):
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
-@pytest.mark.parametrize("mode,enh_kwargs", [
+@pytest.mark.parametrize("enh_type,enh_kwargs", [
     pytest.param(
-        "clp", {
+        "google_clp", {
             "num_bins": 257,
             "batchnorm": True,
             "num_channels": 4,
@@ -324,7 +326,7 @@ def test_mvdr_att(att_type, att_kwargs):
             "spectra_complex": True
         }),
     pytest.param(
-        "ti", {
+        "time_invar", {
             "num_bins": 257,
             "batchnorm": True,
             "num_channels": 4,
@@ -333,7 +335,7 @@ def test_mvdr_att(att_type, att_kwargs):
             "apply_log": True
         }),
     pytest.param(
-        "ti_att", {
+        "time_invar_att", {
             "num_bins": 257,
             "batchnorm": True,
             "num_channels": 4,
@@ -342,8 +344,8 @@ def test_mvdr_att(att_type, att_kwargs):
             "apply_log": True
         })
 ])
-def test_beam_att(mode, enh_kwargs):
-    nnet_cls = aps_asr_nnet("beam_att")
+def test_beam_att(enh_type, enh_kwargs):
+    nnet_cls = aps_asr_nnet("enh_att")
     vocab_size = 100
     batch_size = 4
     num_channels = 4
@@ -351,22 +353,23 @@ def test_beam_att(mode, enh_kwargs):
                                  frame_len=512,
                                  frame_hop=256,
                                  window="sqrthann")
-    beam_att_asr = nnet_cls(vocab_size=vocab_size,
-                            asr_input_size=640 if mode != "ti_att" else 128,
-                            sos=0,
-                            eos=1,
-                            ctc=True,
-                            mode=mode,
-                            enh_kwargs=enh_kwargs,
-                            asr_transform=None,
-                            enh_transform=enh_transform,
-                            att_type="dot",
-                            att_kwargs={"att_dim": 512},
-                            enc_type="pytorch_rnn",
-                            enc_proj=256,
-                            enc_kwargs=default_rnn_enc_kwargs,
-                            dec_dim=512,
-                            dec_kwargs=default_rnn_dec_kwargs)
+    beam_att_asr = nnet_cls(
+        vocab_size=vocab_size,
+        asr_input_size=640 if enh_type != "time_invar_att" else 128,
+        sos=0,
+        eos=1,
+        ctc=True,
+        enh_type=enh_type,
+        enh_kwargs=enh_kwargs,
+        asr_transform=None,
+        enh_transform=enh_transform,
+        att_type="dot",
+        att_kwargs={"att_dim": 512},
+        enc_type="pytorch_rnn",
+        enc_proj=256,
+        enc_kwargs=default_rnn_enc_kwargs,
+        dec_dim=512,
+        dec_kwargs=default_rnn_dec_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size, num_channels=num_channels)
     z, _, _, _ = beam_att_asr(x, x_len, y)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])

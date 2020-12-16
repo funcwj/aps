@@ -3,7 +3,6 @@
 
 import torch as th
 import torch.nn as nn
-from torch.nn import TransformerEncoder, TransformerEncoderLayer
 
 from typing import Optional, Tuple
 from aps.asr.xfmr.pose import get_xfmr_pose
