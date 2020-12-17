@@ -152,7 +152,7 @@ def test_freq_xfmr_rel(num_spks):
                     num_bins=257,
                     att_dim=256,
                     nhead=4,
-                    k_dim=256,
+                    radius=256,
                     feedforward_dim=512,
                     att_dropout=0.1,
                     proj_dropout=0.1,

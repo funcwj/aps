@@ -11,7 +11,7 @@ class Task(nn.Module):
     """
 
     def __init__(self,
-                 nnet: nn.ModuleDict,
+                 nnet: nn.Module,
                  ctx: Optional[nn.Module] = None,
                  description: str = "unknown") -> None:
         super(Task, self).__init__()

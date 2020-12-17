@@ -57,7 +57,7 @@ RUN git clone https://github.com/HawkAaron/warp-transducer.git && cd warp-transd
     mkdir build && cd build && cmake .. && make -j $(nproc) && make install && ldconfig -v && \
     cd ../pytorch_binding && python setup.py install && cd ../../ && rm -rf warp-transducer
 
-# install apex
+# install apex (may abort)
 RUN git clone https://github.com/NVIDIA/apex && cd apex && \
     pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./ && \
     cd .. && rm -rf apex

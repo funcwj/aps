@@ -648,10 +648,7 @@ class Trainer(object):
         egs = load_obj(egs, self.default_device)
         # use ssr = 0 when in eval mode
         if self.ss_scheduler:
-            if self.task.training:
-                egs["ssr"] = self.ssr
-            else:
-                egs["ssr"] = 0
+            egs["ssr"] = self.ssr if self.task.training else 0
         return egs
 
     def prep_run(self, dev_loader: Iterable[Dict]) -> int:

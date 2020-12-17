@@ -2,17 +2,20 @@
 
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
-
+"""
+Implementaion of multi-head attention & transformer encoder variants
+"""
 import copy
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
 from torch.nn import TransformerEncoderLayer
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 from aps.libs import Register
 
 TransformerEncoderLayers = Register("xfmr_encoder_layer")
+MHSAReturnType = Tuple[th.Tensor, Optional[th.Tensor]]
 
 
 class Swish(nn.Module):
@@ -66,28 +69,50 @@ class ApsMultiheadAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=True)
         self.dropout = nn.Dropout(p=dropout)
 
-    def inp_proj(self, inps: List[th.Tensor]) -> List[th.Tensor]:
+    def inp_proj(self, query: th.Tensor, key: th.Tensor,
+                 value: th.Tensor) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
         """
         Args:
-            inps (list[Tensor]): T x N x E
+            query (Tensor): L x N x E
+            key (Tensor): S x N x E
+            value (Tensor): S x N x E
         Return:
-            outs (list[Tensor]): T x N x H x D
+        Args:
+            query (Tensor): T x N x H x D
+            key (Tensor): S x N x H x D
+            value (Tensor): S x N x H x D
         """
+        if th.equal(query, key) and th.equal(value, key):
+            # T x N x HD*3
+            stack = tf.linear(query, self.in_proj_weight, self.in_proj_bias)
+            query, key, value = th.chunk(stack, 3, dim=-1)
+        else:
+            query = tf.linear(query, self.in_proj_weight[:self.embed_dim],
+                              self.in_proj_bias[:self.embed_dim])
+            if th.equal(key, value):
+                stack = tf.linear(key, self.in_proj_weight[self.embed_dim:],
+                                  self.in_proj_bias[self.embed_dim:])
+                key, value = th.chunk(stack, 2, dim=-1)
+            else:
+                base = self.embed_dim
+                key = tf.linear(key,
+                                self.in_proj_weight[base:base + self.embed_dim],
+                                self.in_proj_bias[base:base + self.embed_dim])
+                base += self.embed_dim
+                value = tf.linear(
+                    value, self.in_proj_weight[base:base + self.embed_dim],
+                    self.in_proj_bias[base:base + self.embed_dim])
+        query, key, value = [
+            m.view(m.shape[0], -1, self.num_heads, self.head_dim)
+            for m in [query, key, value]
+        ]
+        return query, key, value
 
-        def _proj(base: int, mat: th.Tensor) -> th.Tensor:
-            idx = slice(base * self.embed_dim, (base + 1) * self.embed_dim)
-            mat = tf.linear(mat, self.in_proj_weight[idx],
-                            self.in_proj_bias[idx])
-            return mat.view(mat.size(0), -1, self.num_heads, self.head_dim)
-
-        return [_proj(i, inp) for i, inp in enumerate(inps)]
-
-    def context_weight(
-            self,
-            logit: th.Tensor,
-            value: th.Tensor,
-            key_padding_mask: Optional[th.Tensor] = None,
-            attn_mask: Optional[th.Tensor] = None) -> Tuple[th.Tensor]:
+    def context_weight(self,
+                       logit: th.Tensor,
+                       value: th.Tensor,
+                       key_padding_mask: Optional[th.Tensor] = None,
+                       attn_mask: Optional[th.Tensor] = None) -> MHSAReturnType:
         """
         Return self-attention weight and context
         Args:
@@ -109,14 +134,43 @@ class ApsMultiheadAttention(nn.Module):
         context = th.einsum("lnhs,snhd->lnhd", weight, value)
         return context, weight
 
-    def torch_forward(
-            self,
-            query: th.Tensor,
-            key: th.Tensor,
-            value: th.Tensor,
-            key_padding_mask: Optional[th.Tensor] = None,
-            attn_mask: Optional[th.Tensor] = None
-    ) -> Tuple[th.Tensor, th.Tensor]:
+    def dot_att(self, query: th.Tensor, key: th.Tensor) -> th.Tensor:
+        """
+        Compute dot attention logits
+        Args:
+            query (Tensor): L x N x H x D
+            key (tensor): S x N x H x D
+        Return:
+            logit (Tensor): L x N x H x S
+        """
+        return th.einsum("lnhd,snhd->lnhs", query, key)
+
+    def wrap_out(self, context: th.Tensor, weight: th.Tensor) -> MHSAReturnType:
+        """
+        Return context & weight tensor
+        Args:
+            context (Tensor): L x N x H x D
+            weight (Tensor): L x N x H x S
+        Return:
+            context (Tensor): L x N x E
+            weight (Tensor): N x L x S
+        """
+        # L x N x HD
+        context = context.contiguous().view(context.shape[0], -1,
+                                            self.embed_dim)
+        # L x N x E
+        context = self.out_proj(context)
+        # L x N x S => N x L x S
+        weight = weight.mean(-2).transpose(0, 1)
+        # return
+        return context, weight
+
+    def torch_forward(self,
+                      query: th.Tensor,
+                      key: th.Tensor,
+                      value: th.Tensor,
+                      key_padding_mask: Optional[th.Tensor] = None,
+                      attn_mask: Optional[th.Tensor] = None) -> MHSAReturnType:
         """
         Args:
             query (Tensor): L x N x E
@@ -125,8 +179,8 @@ class ApsMultiheadAttention(nn.Module):
             key_padding_mask (Tensor): N x S
             attn_mask (Tensor): L x S, additional mask
         Return:
-            output (Tensor): L x N x E
-            att_weights (Tensor): N x L x S
+            context (Tensor): L x N x E
+            weight (Tensor): N x L x S
         """
         return tf.multi_head_attention_forward(
             query,
@@ -147,35 +201,12 @@ class ApsMultiheadAttention(nn.Module):
             need_weights=True,
             attn_mask=attn_mask)
 
-    def wrap_out(self, context: th.Tensor,
-                 weight: th.Tensor) -> Tuple[th.Tensor]:
-        """
-        Return context & weight tensor
-        Args:
-            context (Tensor): L x N x H x D
-            weight (Tensor): L x N x H x S
-        Return:
-            context (Tensor): L x N x E
-            weight (Tensor): N x L x S
-        """
-        L, _, _, _ = context.shape
-        # L x N x HD
-        context = context.contiguous().view(L, -1, self.embed_dim)
-        # L x N x E
-        context = self.out_proj(context)
-        # L x N x S => N x L x S
-        weight = weight.mean(-2).transpose(0, 1)
-        # return
-        return context, weight
-
-    def forward(
-            self,
-            query: th.Tensor,
-            key: th.Tensor,
-            value: th.Tensor,
-            key_padding_mask: Optional[th.Tensor] = None,
-            attn_mask: Optional[th.Tensor] = None
-    ) -> Tuple[th.Tensor, th.Tensor]:
+    def forward(self,
+                query: th.Tensor,
+                key: th.Tensor,
+                value: th.Tensor,
+                key_padding_mask: Optional[th.Tensor] = None,
+                attn_mask: Optional[th.Tensor] = None) -> MHSAReturnType:
         """
         Args:
             query (Tensor): L x N x E
@@ -189,9 +220,10 @@ class ApsMultiheadAttention(nn.Module):
         """
         # query: L x N x H x D
         # key, value: S x N x H x D
-        query, key, value = self.inp_proj([query, key, value])
+        query, key, value = self.inp_proj(query, key, value)
         # L x N x H x S
-        logit = th.einsum("lnhd,snhd->lnhs", query, key)
+        logit = self.dot_att(query, key)
+        # L x N x E, N x L x S
         context, weight = self.context_weight(logit,
                                               value,
                                               attn_mask=attn_mask,
@@ -215,16 +247,32 @@ class RelMultiheadAttention(ApsMultiheadAttention):
                                                     dropout=dropout,
                                                     bias=bias)
 
-    def forward(
-            self,
-            query: th.Tensor,
-            key: th.Tensor,
-            value: th.Tensor,
-            key_rel_pose: th.Tensor,
-            value_rel_pose: Optional[th.Tensor],
-            key_padding_mask: Optional[th.Tensor] = None,
-            attn_mask: Optional[th.Tensor] = None
-    ) -> Tuple[th.Tensor, th.Tensor]:
+    def dot_att(self, query: th.Tensor, key: th.Tensor,
+                key_rel_pose: th.Tensor) -> th.Tensor:
+        """
+        Compute dot attention logits
+        Args:
+            query (Tensor): L x N x H x D
+            key (tensor): S x N x H x D
+            key_rel_pose (Tensor): L x S x D
+        Return:
+            logit (Tensor): L x N x H x S
+        """
+        term_a = th.einsum("lnhd,snhd->lnhs", query, key)
+        # TODO: avoid repeat_interleave?
+        term_b = th.einsum(
+            "...hd,...sd->...hs", query,
+            th.repeat_interleave(key_rel_pose[:, None], query.shape[1], dim=1))
+        return term_a + term_b
+
+    def forward(self,
+                query: th.Tensor,
+                key: th.Tensor,
+                value: th.Tensor,
+                key_rel_pose: th.Tensor,
+                value_rel_pose: Optional[th.Tensor],
+                key_padding_mask: Optional[th.Tensor] = None,
+                attn_mask: Optional[th.Tensor] = None) -> MHSAReturnType:
         """
         Args:
             query (Tensor): L x N x E
@@ -240,22 +288,19 @@ class RelMultiheadAttention(ApsMultiheadAttention):
         """
         # query: L x N x H x D
         # key, value: S x N x H x D
-        query, key, value = self.inp_proj([query, key, value])
+        query, key, value = self.inp_proj(query, key, value)
         # L x N x H x S
-        term_a = th.einsum("lnhd,snhd->lnhs", query, key)
-        L, N, H, D = query.shape
-        query = query.view(L, N * H, D)
-        term_b = th.einsum("...hd,...sd->...hs", query, key_rel_pose)
-        term_b = term_b.view(L, N, H, -1)
-        logit = term_a + term_b
+        logit = self.dot_att(query, key, key_rel_pose)
         context, weight = self.context_weight(logit,
                                               value,
                                               attn_mask=attn_mask,
                                               key_padding_mask=key_padding_mask)
         if value_rel_pose is not None:
-            weights = weight.view(L, N * H, -1)
-            to_add = th.einsum("...hs,...sd->...hd", weights, value_rel_pose)
-            context += to_add.view(L, N, H, -1)
+            context += th.einsum(
+                "...hs,...sd->...hd", weight,
+                th.repeat_interleave(value_rel_pose[:, None],
+                                     query.shape[1],
+                                     dim=1))
         return self.wrap_out(context, weight)
 
 
@@ -288,62 +333,78 @@ class XlMultiheadAttention(ApsMultiheadAttention):
             self.rel_v = rel_v
         self.rel_proj = nn.Linear(embed_dim, embed_dim, bias=False)
 
-    def _rel_shift(self, rel_pos: th.Tensor) -> th.Tensor:
+    def tune(self, term: th.Tensor) -> th.Tensor:
         """
+        Got L x N x H x S from tensor L x N x H x 2S-1
         Args:
-            rel_pos (Tensor): L x N x H x S
+            term (Tensor): L x N x H x 2S(L)-1
         Return:
-            rel_pos (Tensor): L x N x H x S
+            term (Tensor): L x N x H x S(L)
         """
-        L, N, H, S = rel_pos.shape
-        zero_pad = th.zeros((L, N, H, 1),
-                            device=rel_pos.device,
-                            dtype=rel_pos.dtype)
-        # L x N x H x S+1
-        rel_pos_pad = th.cat([rel_pos, zero_pad], dim=-1)
-        # L x S+1 x N x H
-        rel_pos_pad = th.einsum("lnhs->lsnh", rel_pos_pad).contiguous()
-        # S+1 x L x N x H
-        rel_pos_pad = rel_pos_pad.view([S + 1, L, N, H])[:1]
-        # S x L x N x H
-        rel_pos_pad = th.einsum("slnh->lnhs", rel_pos_pad).contiguous()
-        return rel_pos_pad
+        L, N, H, X = term.shape
+        if L * 2 - 1 != X:
+            raise RuntimeError(
+                "XlMultiheadAttention: tensor shape should be: " +
+                f"L x N x H x 2L-1, but got {term.shape}")
+        # L x N x H x 2L
+        term_pad = tf.pad(term, (1, 0))
+        # L x 2L x H x N
+        term_pad = term_pad.transpose(1, -1).contiguous()
+        # 2L x L x H x N
+        term_pad = term_pad.view(2 * L, L, H, N)
+        # L x 2L-1 x H x N
+        term = term_pad[1:].view(L, 2 * L - 1, H, N)
+        # L x L x H x N
+        term = term[:, :L]
+        # L x N x H x L
+        return term.transpose(1, -1)
 
-    def forward(
-            self,
-            query: th.Tensor,
-            key: th.Tensor,
-            value: th.Tensor,
-            sin_pose: th.Tensor,
-            key_padding_mask: Optional[th.Tensor] = None,
-            attn_mask: Optional[th.Tensor] = None
-    ) -> Tuple[th.Tensor, th.Tensor]:
+    def dot_att(self, query: th.Tensor, key: th.Tensor,
+                sin_pose: th.Tensor) -> th.Tensor:
+        """
+        Compute dot attention logits
+        Args:
+            query (Tensor): L x N x H x D
+            key (tensor): S(L) x N x H x D
+            sin_pose (Tensor): 2L-1 x E
+        Return:
+            logit (Tensor): L x N x H x S(L)
+        """
+        # L x N x H x S
+        term_ac = th.einsum("lnhd,snhd->lnhs", query + self.rel_u, key)
+        # 2S-1 x E => 2S-1 x H x D
+        rel_pos = self.rel_proj(sin_pose)
+        rel_pos = rel_pos.view(-1, self.num_heads, self.head_dim)
+        # L x N x H x 2S-1
+        term_bd = th.einsum("lnhd,shd->lnhs", query + self.rel_v, rel_pos)
+        term_bd = self.tune(term_bd)
+        # L x N x H x S
+        return term_ac + term_bd
+
+    def forward(self,
+                query: th.Tensor,
+                key: th.Tensor,
+                value: th.Tensor,
+                sin_pose: th.Tensor,
+                key_padding_mask: Optional[th.Tensor] = None,
+                attn_mask: Optional[th.Tensor] = None) -> MHSAReturnType:
         """
         Args:
             query (Tensor): L x N x E
             key (Tensor): S x N x E
             value (Tensor): S x N x E
-            sin_pose (Tensor): S x E
+            sin_pose (Tensor): 2S-1 x E
             key_padding_mask (Tensor): N x S
             attn_mask (Tensor): L x S, additional mask
         Return:
-            output (Tensor): L x N x E
-            att_weights (Tensor): N x L x S
+            context (Tensor): L x N x E
+            weight (Tensor): N x L x S
         """
         # query: L x N x H x D
         # key, value: S x N x H x D
-        query, key, value = self.inp_proj([query, key, value])
-        # S x E
-        rel_pos = self.rel_proj(sin_pose)
-        # S x H x D
-        rel_pos = rel_pos.view(rel_pos.size(0), self.num_heads, self.head_dim)
+        query, key, value = self.inp_proj(query, key, value)
         # L x N x H x S
-        term_ac = th.einsum("lnhd,snhd->lnhs", query + self.rel_u, key)
-        # L x N x H x S
-        term_bd = th.einsum("lnhd,shd->lnhs", query + self.rel_v, rel_pos)
-        term_bd = self._rel_shift(term_bd)
-        # L x N x H x S
-        logit = term_ac + term_bd
+        logit = self.dot_att(value, key, sin_pose)
         context, weight = self.context_weight(logit,
                                               value,
                                               attn_mask=attn_mask,
@@ -710,13 +771,19 @@ def prep_sub_mask(T, device="cpu"):
     return mask
 
 
-def check_self_attn(round):
+def check_self_attn(index):
     S, L, N, E = 100, 100, 8, 256
     self_attn = ApsMultiheadAttention(E, 4, dropout=0)
     self_attn.train()
-    key = th.rand(S, N, E)
-    value = th.rand(S, N, E)
     query = th.rand(L, N, E)
+    if index == 0:
+        key, value = query, query
+    elif index == 1:
+        key = th.rand(S, N, E)
+        value = key
+    else:
+        key = th.rand(S, N, E)
+        value = th.rand(S, N, E)
 
     key_len = th.randint(S // 2, S, (N,))
     key_len[0] = S
@@ -737,9 +804,9 @@ def check_self_attn(round):
     assert my2.shape == th2.shape
     th.testing.assert_allclose(my2, th2)
     th.testing.assert_allclose(my1, th1)
-    print(f"Test ApsMultiheadAttention Pass - round: {round}")
+    print(f"Test ApsMultiheadAttention Pass - round: {index}")
 
 
 if __name__ == "__main__":
-    for i in range(4):
+    for i in range(3):
         check_self_attn(i)

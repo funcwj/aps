@@ -86,7 +86,7 @@ class BeamTracker(BaseBeamTracker):
         Args:
             log_prob (Tensor): N x V, log prob
         """
-        # local pruning: beam x beam
+        # local pruning: beam x V => beam x beam
         topk_score, topk_token = th.topk(am_prob + self.lm_weight * lm_prob,
                                          self.beam_size,
                                          dim=-1)
