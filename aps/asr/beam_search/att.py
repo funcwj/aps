@@ -238,7 +238,7 @@ def beam_search_batch(decoder: nn.Module,
             # beam x V
             lm_prob, lm_state = lm_score(lm, point, pre_out, lm_state)
         else:
-            lm_prob = 0
+            lm_prob = None
 
         # local pruning: N*beam x beam
         beam_tracker.prune_beam(am_prob, lm_prob)

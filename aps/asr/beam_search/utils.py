@@ -80,16 +80,26 @@ class BeamTracker(BaseBeamTracker):
             hyp = self._trace_back_hypos(idx, final=True)
         return hyp
 
-    def prune_beam(self, am_prob: th.Tensor, lm_prob: th.Tensor):
+    def prune_beam(self, am_prob: th.Tensor, lm_prob: Optional[th.Tensor]):
         """
         Prune and update score & token & backward point
         Args:
             log_prob (Tensor): N x V, log prob
         """
         # local pruning: beam x V => beam x beam
-        topk_score, topk_token = th.topk(am_prob + self.lm_weight * lm_prob,
-                                         self.beam_size,
-                                         dim=-1)
+        topk_score, topk_token = th.topk(am_prob, self.beam_size, dim=-1)
+        # add lm score
+        if lm_prob is not None:
+            # beam x beam
+            lm_score = th.gather(lm_prob, 1, topk_token)
+            # beam x beam
+            topk_score, sort_index = th.sort(topk_score +
+                                             lm_score * self.lm_weight,
+                                             dim=-1,
+                                             descending=True)
+            # beam x beam
+            topk_token = th.gather(topk_token, 1, sort_index)
+
         if len(self.point) == 1:
             self.score += topk_score[0]
             self.token.append(topk_token[0])
