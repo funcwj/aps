@@ -74,16 +74,15 @@ class RelPosEncoding(nn.Module):
         self.embed = nn.Embedding(radius * 2 + 1, embed_dim)
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, len1: int, len2: int) -> th.Tensor:
+    def forward(self, seq_len) -> th.Tensor:
         """
         Args:
-            len1 (int): length of the sequence1
-            len2 (int): length of the sequence2
+            seq_len (int): length of the sequence
         Return:
             encodings (Tensor): T1 x T2 x D, learnt encodings
         """
-        pos_vec = th.arange(max(len1, len2), device=self.embed.weight.device)
-        rel_mat = pos_vec[:len1, None] - pos_vec[None, :len2]
+        pos_vec = th.arange(seq_len, device=self.embed.weight.device)
+        rel_mat = pos_vec[:, None] - pos_vec[None, :]
         rel_mat = th.clamp(rel_mat, max=self.radius, min=-self.radius)
         return self.dropout(self.embed(rel_mat + self.radius))
 

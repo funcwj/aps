@@ -131,9 +131,8 @@ class RelTransformerEncoder(nn.Module):
         Return relative embeddings
         """
         nframes = inp.shape[0]
-        key_rel_enc = self.key_rel_pose(nframes, nframes)
-        val_rel_enc = self.val_rel_pose(nframes,
-                                        nframes) if self.val_rel_pose else None
+        key_rel_enc = self.key_rel_pose(nframes)
+        val_rel_enc = self.val_rel_pose(nframes) if self.val_rel_pose else None
         return key_rel_enc, val_rel_enc
 
     def forward(self, inp_pad: th.Tensor,

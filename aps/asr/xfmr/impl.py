@@ -259,10 +259,10 @@ class RelMultiheadAttention(ApsMultiheadAttention):
             logit (Tensor): L x N x H x S
         """
         term_a = th.einsum("lnhd,snhd->lnhs", query, key)
-        # TODO: avoid repeat_interleave?
-        term_b = th.einsum(
-            "...hd,...sd->...hs", query,
-            th.repeat_interleave(key_rel_pose[:, None], query.shape[1], dim=1))
+        # term_b = th.einsum(
+        #     "...hd,...sd->...hs", query,
+        #     th.repeat_interleave(key_rel_pose[:, None], query.shape[1], dim=1))
+        term_b = th.matmul(query, key_rel_pose[:, None].transpose(-1, -2))
         return term_a + term_b
 
     def forward(self,
@@ -291,16 +291,14 @@ class RelMultiheadAttention(ApsMultiheadAttention):
         query, key, value = self.inp_proj(query, key, value)
         # L x N x H x S
         logit = self.dot_att(query, key, key_rel_pose)
+        # context: L x N x H x D
+        # weight: L x N x H x S
         context, weight = self.context_weight(logit,
                                               value,
                                               attn_mask=attn_mask,
                                               key_padding_mask=key_padding_mask)
         if value_rel_pose is not None:
-            context += th.einsum(
-                "...hs,...sd->...hd", weight,
-                th.repeat_interleave(value_rel_pose[:, None],
-                                     query.shape[1],
-                                     dim=1))
+            context += th.matmul(weight, value_rel_pose[:, None])
         return self.wrap_out(context, weight)
 
 
@@ -333,7 +331,7 @@ class XlMultiheadAttention(ApsMultiheadAttention):
             self.rel_v = rel_v
         self.rel_proj = nn.Linear(embed_dim, embed_dim, bias=False)
 
-    def tune(self, term: th.Tensor) -> th.Tensor:
+    def shift(self, term: th.Tensor) -> th.Tensor:
         """
         Got L x N x H x S from tensor L x N x H x 2S-1
         Args:
@@ -377,7 +375,7 @@ class XlMultiheadAttention(ApsMultiheadAttention):
         rel_pos = rel_pos.view(-1, self.num_heads, self.head_dim)
         # L x N x H x 2S-1
         term_bd = th.einsum("lnhd,shd->lnhs", query + self.rel_v, rel_pos)
-        term_bd = self.tune(term_bd)
+        term_bd = self.shift(term_bd)
         # L x N x H x S
         return term_ac + term_bd
 
