@@ -68,7 +68,7 @@ class TorchTransformerEncoder(nn.Module):
             inp_pad: N x Ti x F
             inp_len: N or None
         Return:
-            enc_out: Ti x N x D
+            enc_out: N x Ti x D (keep same as aps.asr.base.encoder)
         """
         inp_len = self.src_proj.num_frames(inp_len)
         # inp_sub: N x Ti x D => Ti x N x D
@@ -79,7 +79,8 @@ class TorchTransformerEncoder(nn.Module):
         enc_out = self.encoder(inp_sub,
                                src_mask=None,
                                src_key_padding_mask=src_pad_mask)
-        return enc_out, inp_len
+        # N x Ti x D
+        return enc_out.transpose(0, 1), inp_len
 
 
 @TransformerEncoders.register("xfmr_rel")
@@ -142,7 +143,7 @@ class RelTransformerEncoder(nn.Module):
             inp_pad: N x Ti x F
             inp_len: N or None
         Return:
-            enc_out: Ti x N x D
+            enc_out: N x Ti x D (keep same as aps.asr.base.encoder)
         """
         # inp_sub: N x Ti x D => Ti x N x D
         inp_sub = self.src_proj(inp_pad).transpose(0, 1)
@@ -157,7 +158,8 @@ class RelTransformerEncoder(nn.Module):
                                key_rel_pose=key_rel_enc,
                                value_rel_pose=value_rel_enc,
                                src_key_padding_mask=src_pad_mask)
-        return enc_out, inp_len
+        # N x Ti x D
+        return enc_out.transpose(0, 1), inp_len
 
 
 class XLTransformerEncoderBase(nn.Module):
@@ -185,7 +187,7 @@ class XLTransformerEncoderBase(nn.Module):
             inp_pad: N x Ti x F
             inp_len: N or None
         Return:
-            enc_out: Ti x N x D
+            enc_out: N x Ti x D (keep same as aps.asr.base.encoder)
         """
         # x_emb: N x Ti x D => Ti x N x D
         inp_sub = self.src_proj(inp_pad).transpose(0, 1)
@@ -202,7 +204,8 @@ class XLTransformerEncoderBase(nn.Module):
                                sin_pose=sin_pos_enc,
                                src_mask=None,
                                src_key_padding_mask=src_pad_mask)
-        return enc_out, inp_len
+        # N x Ti x D
+        return enc_out.transpose(0, 1), inp_len
 
 
 @TransformerEncoders.register("xfmr_xl")

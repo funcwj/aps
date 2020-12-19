@@ -95,8 +95,6 @@ class FreqRelXfmr(RelTransformerEncoder):
         feats, stft, _ = self.enh_transform(mix, None)
         # stft: N x F x T
         out, _ = super().forward(feats, None)
-        # T x N x F => N x T x F
-        out = out.transpose(0, 1)
         # N x T x F
         mask = self.non_linear(self.mask(out))
         # N x F x T

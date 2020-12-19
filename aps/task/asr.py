@@ -115,10 +115,10 @@ class CtcXentHybridTask(Task):
     def forward(self, egs: Dict) -> Dict:
         """
         Compute CTC & Attention loss, egs contains:
-            src_pad (Tensor): N x Ti x F
-            src_len (Tensor): N
-            tgt_pad (Tensor): N x To
-            tgt_len (Tensor): N
+            src_pad: N x Ti x F
+            src_len: N
+            tgt_pad: N x To
+            tgt_len: N
             ssr (float): const if needed
         """
         # tgt_pad: N x To (replace ignore_id with eos)
@@ -199,10 +199,10 @@ class TransducerTask(Task):
     def forward(self, egs: Dict) -> Dict:
         """
         Compute transducer loss, egs contains:
-            src_pad (Tensor): N x Ti x F
-            src_len (Tensor): N
-            tgt_pad (Tensor): N x To
-            tgt_len (Tensor): N
+            src_pad: N x Ti x F
+            src_len: N
+            tgt_pad: N x To
+            tgt_len: N
         """
         # tgt_pad: N x To (replace ignore_id with blank)
         ignore_mask = egs["tgt_pad"] == IGNORE_ID
@@ -237,9 +237,9 @@ class LmXentTask(Task):
     def forward(self, egs: Dict) -> Dict:
         """
         Compute CE loss, egs contains
-            src (Tensor): N x T+1
-            tgt (Tensor): N x T+1
-            len (Tensor): N
+            src: N x T+1
+            tgt: N x T+1
+            len: N
         """
         # pred: N x T+1 x V
         if self.repackage_hidden:

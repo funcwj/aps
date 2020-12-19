@@ -45,7 +45,7 @@ def ls_objf(outs: th.Tensor,
     Return
         loss (Tensor): (1)
     """
-    if method not in ["uniform", "unigram", "neighborhood"]:
+    if method not in ["uniform", "unigram", "temporal"]:
         raise ValueError(f"Unknown label smoothing method: {method}")
     _, _, V = outs.shape
     # NT x V

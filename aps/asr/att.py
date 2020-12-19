@@ -57,10 +57,90 @@ class EncDecASRBase(nn.Module):
             if enc_proj is None:
                 raise ValueError(
                     "For non-transformer encoder, enc_proj can not be None")
-            self.is_xfmr_encoder = False
             self.encoder = encoder_instance(enc_type, input_size, enc_proj,
                                             enc_kwargs)
+            self.is_xfmr_encoder = False
         self.ctc = nn.Linear(enc_proj, vocab_size) if ctc else None
+
+    def _batch_decoding_prep(self,
+                             batch: List[th.Tensor],
+                             max_len: int = -1) -> Tuple[th.Tensor]:
+        """
+        Prepare data for batch decoding
+        """
+        # raw wave
+        if len(batch) == 1:
+            warnings.warn("Got one utterance, use beam_search (...) instead")
+        # NOTE: If we do zero padding on the input features/signals and form them as a batch,
+        #       the output may slightly differ with the non-padding version. Thus we use for loop here
+        outs = []
+        for inp in batch:
+            if self.asr_transform:
+                inp, _ = self.asr_transform(inp[None, ...], None)
+            else:
+                inp = inp[None, ...]
+            # N x Ti x D
+            enc_out, _ = self.encoder(inp, None)
+            outs.append(enc_out[0])
+
+        lens = [out.shape[0] for out in outs]
+        max_len = max(lens) if max_len <= 0 else min(max(lens), max_len)
+        # T x N x D
+        enc_out = pad_sequence(outs, batch_first=False)
+        enc_len = th.tensor(lens, device=enc_out.device)
+        return enc_out, enc_len
+
+    def _decoding_prep(self,
+                       x: th.Tensor,
+                       max_len: int = -1) -> Tuple[int, th.Tensor]:
+        """
+        Prepare data for decoding
+        """
+        # raw waveform
+        if self.asr_transform:
+            if x.dim() != 1:
+                raise RuntimeError("Now only support for one utterance")
+            # 1 x C x T x ... or 1 x T x F
+            x, _ = self.asr_transform(x[None, ...], None)
+        # already feature
+        else:
+            if x.dim() not in [2, 3]:
+                raise RuntimeError(
+                    f"Expect 2/3D(multi-channel) tensor, but got {x.dim()}")
+            x = x[None, ...]
+        # Ti x F
+        inp_len = x.shape[-2]
+        #  N x Ti x D
+        enc_out, _ = self.encoder(x, None)
+        # work out max_len
+        max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
+        return max_len, enc_out
+
+    def _training_prep(
+        self, x_pad: th.Tensor, x_len: Optional[th.Tensor], y_pad: th.Tensor
+    ) -> Tuple[th.Tensor, Optional[th.Tensor], th.Tensor, th.Tensor]:
+        """
+        Args:
+            x_pad: N x Ti x D or N x S
+            x_len: N or None
+            y_pad: N x To
+        Return:
+            enc_out: N x Ti x D
+            enc_len: N or None
+            tgt_pad: N x To+1
+        """
+        # asr feature transform
+        if self.asr_transform:
+            x_pad, x_len = self.asr_transform(x_pad, x_len)
+        # N x Ti x D
+        enc_out, enc_len = self.encoder(x_pad, x_len)
+        # N x To+1
+        tgt_pad = tf.pad(y_pad, (1, 0), value=self.sos)
+        # CTC branch
+        enc_ctc = None
+        if self.ctc:
+            enc_ctc = self.ctc(enc_out)
+        return enc_out, enc_len, enc_ctc, tgt_pad
 
 
 @ApsRegisters.asr.register("att")
@@ -118,48 +198,18 @@ class AttASR(EncDecASRBase):
             outs: N x (To+1) x V
             alis: N x (To+1) x T
         """
-        # asr feature transform
-        if self.asr_transform:
-            x_pad, x_len = self.asr_transform(x_pad, x_len)
-        # N x Ti x D
-        enc_out, enc_len = self.encoder(x_pad, x_len)
-        # Ti x N x D => N x Ti x D
-        if self.is_xfmr_encoder:
-            enc_out = enc_out.transpose(0, 1)
         # clear status
         self.att_net.clear()
-        # N x To+1
-        y_pad = tf.pad(y_pad, (1, 0), value=self.sos)
+        # go through feature extractor & encoder
+        enc_out, enc_len, enc_ctc, tgt_pad = self._training_prep(
+            x_pad, x_len, y_pad)
         # N x (To+1), pad SOS
         outs, alis = self.decoder(self.att_net,
                                   enc_out,
                                   enc_len,
-                                  y_pad,
+                                  tgt_pad,
                                   schedule_sampling=ssr)
-        enc_ctc = self.ctc(enc_out) if self.ctc else None
         return outs, alis, enc_ctc, enc_len
-
-    def _dec_prep(self, x: th.Tensor) -> Tuple[th.Tensor]:
-        """
-        Prepare data for decoding
-        """
-        if self.asr_transform:
-            if x.dim() != 1:
-                raise RuntimeError("Now only support for one utterance")
-            x, _ = self.asr_transform(x[None, ...], None)
-            # 1 x C x T x ... or 1 x T x F
-            inp_len = x.shape[-2]
-            enc_out, _ = self.encoder(x, None)
-        else:
-            if x.dim() != 2:
-                raise RuntimeError("Now only support for one utterance")
-            # Ti x F
-            inp_len = x.shape[0]
-            enc_out, _ = self.encoder(x[None, ...], None)
-        # Ti x N x D => N x Ti x D
-        if self.is_xfmr_encoder:
-            enc_out = enc_out.transpose(0, 1)
-        return inp_len, enc_out
 
     def greedy_search(self,
                       x: th.Tensor,
@@ -172,8 +222,7 @@ class AttASR(EncDecASRBase):
             x: audio samples or acoustic features, S or Ti x F
         """
         with th.no_grad():
-            inp_len, enc_out = self._dec_prep(x)
-            max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
+            max_len, enc_out = self._decoding_prep(x, max_len=max_len)
             return att_api.greedy_search(self.decoder,
                                          self.att_net,
                                          enc_out,
@@ -183,86 +232,42 @@ class AttASR(EncDecASRBase):
 
     def beam_search(self,
                     x: th.Tensor,
-                    lm: Optional[nn.Module] = None,
-                    lm_weight: float = 0,
-                    beam: int = 16,
-                    nbest: int = 8,
                     max_len: int = -1,
-                    penalty: float = 0,
-                    normalized: bool = True,
-                    temperature: float = 1) -> List[Dict]:
+                    **kwargs) -> List[Dict]:
         """
         Vectorized beam search
         Args
             x (Tensor): audio samples or acoustic features, S or Ti x F
         """
         with th.no_grad():
-            inp_len, enc_out = self._dec_prep(x)
-            max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
+            max_len, enc_out = self._decoding_prep(x, max_len=max_len)
             return att_api.beam_search(self.decoder,
                                        self.att_net,
                                        enc_out,
-                                       beam=beam,
-                                       lm=lm,
-                                       lm_weight=lm_weight,
-                                       nbest=nbest,
                                        max_len=max_len,
                                        sos=self.sos,
                                        eos=self.eos,
-                                       penalty=penalty,
-                                       normalized=normalized,
-                                       temperature=temperature)
+                                       **kwargs)
 
     def beam_search_batch(self,
                           batch: List[th.Tensor],
-                          lm: Optional[nn.Module] = None,
-                          lm_weight: float = 0,
-                          beam: int = 16,
-                          nbest: int = 8,
                           max_len: int = -1,
-                          penalty: float = 0,
-                          normalized=True,
-                          temperature: float = 1) -> List[Dict]:
+                          **kwargs) -> List[Dict]:
         """
         Batch version of beam search
         Args
             batch (list[Tensor]): audio samples or acoustic features, S or Ti x F
         """
         with th.no_grad():
-            if len(batch) == 1:
-                warnings.warn(
-                    "Got one utterance, use beam_search (...) instead")
-            outs = []
-            # NOTE: if we do zero padding on the input features/signals and form them as a batch,
-            #       the output may slightly differ with the non-padding version. Thus we use for loop here
-            for inp in batch:
-                if self.asr_transform:
-                    inp, _ = self.asr_transform(inp[None, ...], None)
-                else:
-                    inp = inp[None, ...]
-                enc_out, _ = self.encoder(inp, None)
-                # Ti x N x D => N x Ti x D
-                if self.is_xfmr_encoder:
-                    enc_out = enc_out.transpose(0, 1)
-                outs.append(enc_out[0])
-            lens = [out.shape[-2] for out in outs]
-            max_len = max(lens) if max_len <= 0 else min(max(lens), max_len)
-            enc_out = pad_sequence(outs, batch_first=True)
-            enc_len = th.tensor(lens, device=enc_out.device)
+            enc_out, enc_len = self._batch_decoding_prep(batch, max_len=max_len)
             return att_api.beam_search_batch(self.decoder,
                                              self.att_net,
                                              enc_out,
                                              enc_len,
-                                             lm=lm,
-                                             lm_weight=lm_weight,
-                                             beam=beam,
-                                             nbest=nbest,
                                              max_len=max_len,
                                              sos=self.sos,
                                              eos=self.eos,
-                                             penalty=penalty,
-                                             normalized=normalized,
-                                             temperature=temperature)
+                                             **kwargs)
 
 
 @ApsRegisters.asr.register("xfmr")
@@ -309,118 +314,45 @@ class XfmrASR(EncDecASRBase):
         Return:
             outs: N x (To+1) x V
         """
-        # feature transform
-        if self.asr_transform:
-            x_pad, x_len = self.asr_transform(x_pad, x_len)
-        # Ti x N x D
-        enc_out, enc_len = self.encoder(x_pad, x_len)
-        # N x Ti x D => Ti x N x D
-        if not self.is_xfmr_encoder:
-            enc_out = enc_out.transpose(0, 1)
-        # CTC
-        if self.ctc:
-            enc_ctc = self.ctc(enc_out)
-            enc_ctc = enc_ctc.transpose(0, 1)
-        else:
-            enc_ctc = None
-        # N x To+1
-        y_pad = tf.pad(y_pad, (1, 0), value=self.sos)
-        # To+1 x N x D
-        dec_out = self.decoder(enc_out, enc_len, y_pad)
+        # go through feature extractor & encoder
+        enc_out, enc_len, enc_ctc, tgt_pad = self._training_prep(
+            x_pad, x_len, y_pad)
         # N x To+1 x D
-        dec_out = dec_out.transpose(0, 1).contiguous()
+        dec_out = self.decoder(enc_out, enc_len, tgt_pad)
         return dec_out, None, enc_ctc, enc_len
 
     def beam_search(self,
                     x: th.Tensor,
                     beam: int = 16,
-                    lm: Optional[nn.Module] = None,
-                    lm_weight: float = 0,
-                    nbest: int = 8,
                     max_len: int = -1,
-                    penalty: float = 0,
-                    normalized: bool = True,
-                    temperature: float = 1) -> List[Dict]:
+                    **kwargs) -> List[Dict]:
         """
         Beam search for Transformer
         """
         with th.no_grad():
-            # raw wave
-            if self.asr_transform:
-                if x.dim() != 1:
-                    raise RuntimeError("Now only support for one utterance")
-                x, _ = self.asr_transform(x[None, ...], None)
-            else:
-                # T x F or Beam x T x F
-                if x.dim() not in [2, 3]:
-                    raise RuntimeError(f"Expect 2/3D tensor, but got {x.dim()}")
-                x = x[None, ...]
-            # Ti x N x D
-            enc_out, _ = self.encoder(x, None)
-            # N x Ti x D => Ti x N x D
-            if not self.is_xfmr_encoder:
-                enc_out = enc_out.transpose(0, 1)
+            max_len, enc_out = self._decoding_prep(x, max_len=max_len)
             # beam search
             return xfmr_api.beam_search(self.decoder,
                                         enc_out,
-                                        lm=lm,
-                                        lm_weight=lm_weight,
                                         sos=self.sos,
                                         eos=self.eos,
-                                        beam=beam,
-                                        nbest=nbest,
                                         max_len=max_len,
-                                        penalty=penalty,
-                                        normalized=normalized,
-                                        temperature=temperature)
+                                        **kwargs)
 
     def beam_search_batch(self,
                           batch: List[th.Tensor],
-                          beam: int = 16,
-                          lm: Optional[nn.Module] = None,
-                          lm_weight: float = 0,
-                          nbest: int = 8,
                           max_len: int = -1,
-                          penalty: float = 0,
-                          normalized: bool = True,
-                          temperature: float = 1) -> List[Dict]:
+                          **kwargs) -> List[Dict]:
         """
         Beam search for Transformer (batch version)
         """
         with th.no_grad():
-            # raw wave
-            if len(batch) == 1:
-                warnings.warn(
-                    "Got one utterance, use beam_search (...) instead")
-            # NOTE: If we do zero padding on the input features/signals and form them as a batch,
-            #       the output may slightly differ with the non-padding version. Thus we use for loop here
-            outs = []
-            for inp in batch:
-                if self.asr_transform:
-                    inp, _ = self.asr_transform(inp[None, ...], None)
-                else:
-                    inp = inp[None, ...]
-                enc_out, _ = self.encoder(inp, None)
-                # N x Ti x D => Ti x N x D
-                if not self.is_xfmr_encoder:
-                    enc_out = enc_out.transpose(0, 1)
-                outs.append(enc_out[:, 0])
-
-            lens = [out.shape[0] for out in outs]
-            # T x N x D
-            enc_out = pad_sequence(outs, batch_first=False)
-            enc_len = th.tensor(lens, device=enc_out.device)
+            enc_out, enc_len = self._batch_decoding_prep(batch, max_len=max_len)
             # beam search
             return xfmr_api.beam_search_batch(self.decoder,
                                               enc_out,
                                               enc_len,
-                                              lm=lm,
-                                              lm_weight=lm_weight,
                                               sos=self.sos,
                                               eos=self.eos,
-                                              beam=beam,
-                                              nbest=nbest,
                                               max_len=max_len,
-                                              penalty=penalty,
-                                              normalized=normalized,
-                                              temperature=temperature)
+                                              **kwargs)

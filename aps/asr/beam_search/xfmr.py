@@ -25,6 +25,7 @@ def beam_search(decoder: nn.Module,
                 sos: int = -1,
                 eos: int = -1,
                 penalty: float = 0,
+                coverage: float = 0,
                 normalized: bool = True,
                 temperature: float = 1) -> List[Dict]:
     """
@@ -112,8 +113,9 @@ def beam_search_batch(decoder: nn.Module,
                       max_len: int = -1,
                       sos: int = -1,
                       eos: int = -1,
-                      normalized: bool = True,
                       penalty: float = 0,
+                      coverage: float = 0,
+                      normalized: bool = True,
                       temperature: float = 1) -> List[Dict]:
     """
     Batch level vectorized beam search algothrim

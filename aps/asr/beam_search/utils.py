@@ -22,6 +22,7 @@ class BaseBeamTracker(object):
                  lm_weight: float = 0,
                  device: Union[th.device, str] = "cpu",
                  penalty: float = 0,
+                 coverage: float = 0,
                  normalized: bool = True) -> None:
         self.beam_size = beam_size
         self.batch_size = batch_size
@@ -29,6 +30,7 @@ class BaseBeamTracker(object):
         self.eos = eos
         self.device = device
         self.penalty = penalty
+        self.coverage = coverage
         self.lm_weight = lm_weight
         self.normalized = normalized
 
@@ -45,12 +47,14 @@ class BeamTracker(BaseBeamTracker):
                  lm_weight: float = 0,
                  device: Union[th.device, str] = "cpu",
                  penalty: float = 0,
+                 coverage: float = 0,
                  normalized: bool = True) -> None:
         super(BeamTracker, self).__init__(beam_size,
                                           sos=sos,
                                           eos=eos,
                                           device=device,
                                           penalty=penalty,
+                                          coverage=coverage,
                                           lm_weight=lm_weight,
                                           normalized=normalized)
         self.token = [th.tensor([sos] * beam_size, device=device)]
@@ -80,14 +84,22 @@ class BeamTracker(BaseBeamTracker):
             hyp = self._trace_back_hypos(idx, final=True)
         return hyp
 
-    def prune_beam(self, am_prob: th.Tensor, lm_prob: Union[th.Tensor, float]):
+    def prune_beam(self,
+                   am_prob: th.Tensor,
+                   lm_prob: Union[th.Tensor, float],
+                   att_ali: Optional[th.Tensor] = None):
         """
         Prune and update score & token & backward point
         Args:
             log_prob (Tensor): N x V, log prob
         """
+        if att_ali is None:
+            cov = 0
+        else:
+            cov = th.sum(att_ali > 0.5, -1, keepdim=True)
         # local pruning: beam x V => beam x beam
-        topk_score, topk_token = th.topk(am_prob + lm_prob * self.lm_weight,
+        topk_score, topk_token = th.topk(am_prob + lm_prob * self.lm_weight +
+                                         cov * self.coverage,
                                          self.beam_size,
                                          dim=-1)
 
@@ -143,6 +155,7 @@ class BatchBeamTracker(BaseBeamTracker):
                  eos: int = 2,
                  device: Union[th.device, str] = "cpu",
                  penalty: float = 0,
+                 coverage: float = 0,
                  lm_weight: float = 0,
                  normalized: bool = True) -> None:
         super(BatchBeamTracker, self).__init__(beam_size,
@@ -151,6 +164,7 @@ class BatchBeamTracker(BaseBeamTracker):
                                                eos=eos,
                                                device=device,
                                                penalty=penalty,
+                                               coverage=coverage,
                                                lm_weight=lm_weight,
                                                normalized=normalized)
         self.token = [
@@ -190,14 +204,22 @@ class BatchBeamTracker(BaseBeamTracker):
             hyp = self._trace_back_hypos(batch, idx, final=True)
         return hyp
 
-    def prune_beam(self, am_prob: th.Tensor, lm_prob: th.Tensor):
+    def prune_beam(self,
+                   am_prob: th.Tensor,
+                   lm_prob: Union[th.Tensor, float],
+                   att_ali: Optional[th.Tensor] = None):
         """
         Prune and update score & token & backward point
         Args:
             log_prob (Tensor): N x V, log prob
         """
+        if att_ali is None:
+            cov = 0
+        else:
+            cov = th.sum(att_ali > 0.5, -1, keepdim=True)
         # local pruning: N*beam x beam
-        topk_score, topk_token = th.topk(am_prob + self.lm_weight * lm_prob,
+        topk_score, topk_token = th.topk(am_prob + self.lm_weight * lm_prob +
+                                         self.coverage * cov,
                                          self.beam_size,
                                          dim=-1)
         if len(self.point) == 1:

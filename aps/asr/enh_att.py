@@ -79,16 +79,7 @@ class EnhASRBase(nn.Module):
             enh, _ = self.asr_transform(enh, None)
         return enh, seq_len
 
-    def beam_search(self,
-                    x: th.Tensor,
-                    lm: Optional[nn.Module] = None,
-                    lm_weight: float = 0,
-                    beam: int = 16,
-                    nbest: int = 8,
-                    max_len: int = -1,
-                    penalty: float = 0,
-                    normalized: bool = True,
-                    temperature: float = 1) -> List[Dict]:
+    def beam_search(self, x: th.Tensor, **kwargs) -> List[Dict]:
         """
         Args
             x (Tensor): C x S
@@ -97,26 +88,9 @@ class EnhASRBase(nn.Module):
             if x.dim() != 2:
                 raise RuntimeError("Now only support for one utterance")
             x_enh, _ = self._enhance(x[None, ...], None)
-            return self.asr.beam_search(x_enh[0],
-                                        lm=lm,
-                                        lm_weight=lm_weight,
-                                        beam=beam,
-                                        nbest=nbest,
-                                        max_len=max_len,
-                                        penalty=penalty,
-                                        normalized=normalized,
-                                        temperature=temperature)
+            return self.asr.beam_search(x_enh[0], **kwargs)
 
-    def beam_search_batch(self,
-                          batch: List[th.Tensor],
-                          lm: Optional[nn.Module] = None,
-                          lm_weight: float = 0,
-                          beam: int = 16,
-                          nbest: int = 8,
-                          max_len: int = -1,
-                          penalty: float = 0,
-                          normalized: bool = True,
-                          temperature: float = 1) -> List[Dict]:
+    def beam_search_batch(self, batch: List[th.Tensor], **kwargs) -> List[Dict]:
         """
         Args
             batch (list[Tensor]): [C x S, ...]
@@ -126,15 +100,7 @@ class EnhASRBase(nn.Module):
             for inp in batch:
                 x_enh, _ = self._enhance(inp, None)
                 batch_enh.append(x_enh[0])
-            return self.asr.beam_search_batch(batch_enh,
-                                              lm=lm,
-                                              lm_weight=lm_weight,
-                                              beam=beam,
-                                              nbest=nbest,
-                                              max_len=max_len,
-                                              penalty=penalty,
-                                              normalized=normalized,
-                                              temperature=temperature)
+            return self.asr.beam_search_batch(batch_enh, **kwargs)
 
 
 @ApsRegisters.asr.register("enh_att")
