@@ -62,11 +62,10 @@ def ls_objf(outs: th.Tensor,
         dist = th.full_like(outs, lsm_factor / (V - 1))
     elif method == "unigram":
         if label_count.size(-1) != V:
-            raise RuntimeError(
-                f"#label_count do not match with the #vacab_size")
+            raise RuntimeError("#label_count do not match with the #vacab_size")
         dist = th.zeros_like(outs)
         # copy to each row
-        dist[:,] = label_count
+        dist[:] = label_count
         dist = dist.scatter_(1, tgts[:, None], 0)
         # normalize
         dist = dist * lsm_factor / th.sum(dist, -1, keepdim=True)

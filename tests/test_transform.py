@@ -6,9 +6,7 @@
 import math
 import pytest
 import librosa
-
 import torch as th
-import numpy as np
 
 from torch_complex import ComplexTensor
 from aps.transform.utils import forward_stft, inverse_stft

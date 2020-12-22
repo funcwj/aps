@@ -105,7 +105,7 @@ class CtcXentHybridTask(Task):
             nnet, description="CTC + Xent multi-task training for ASR")
         if lsm_method == "unigram" and not label_count:
             raise RuntimeError(
-                f"Missing label_count to use unigram label smoothing")
+                "Missing label_count to use unigram label smoothing")
         self.ctc_blank = blank
         self.ctc_weight = ctc_weight
         self.lsm_factor = lsm_factor
