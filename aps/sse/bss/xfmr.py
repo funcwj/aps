@@ -25,7 +25,7 @@ class FreqRelXfmr(RelTransformerEncoder):
                  num_bins: int = 257,
                  att_dim: int = 512,
                  nhead: int = 8,
-                 k_dim: int = 256,
+                 radius: int = 256,
                  feedforward_dim: int = 2048,
                  att_dropout: float = 0.1,
                  proj_dropout: float = 0.1,
@@ -37,7 +37,7 @@ class FreqRelXfmr(RelTransformerEncoder):
         super(FreqRelXfmr, self).__init__(input_size,
                                           proj_layer="linear",
                                           att_dim=att_dim,
-                                          k_dim=k_dim,
+                                          radius=radius,
                                           nhead=nhead,
                                           feedforward_dim=feedforward_dim,
                                           scale_embed=False,
@@ -95,8 +95,6 @@ class FreqRelXfmr(RelTransformerEncoder):
         feats, stft, _ = self.enh_transform(mix, None)
         # stft: N x F x T
         out, _ = super().forward(feats, None)
-        # T x N x F => N x T x F
-        out = out.transpose(0, 1)
         # N x T x F
         mask = self.non_linear(self.mask(out))
         # N x F x T

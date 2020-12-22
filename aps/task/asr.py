@@ -6,6 +6,7 @@
 For ASR task
 """
 import math
+import warnings
 import torch as th
 import torch.nn as nn
 
@@ -25,7 +26,7 @@ try:
 except ImportError:
     warprnnt_pt_available = False
 
-from typing import Tuple, Dict, NoReturn
+from typing import Tuple, Dict, NoReturn, Optional
 from aps.task.base import Task
 from aps.task.objf import ce_objf, ls_objf, ctc_objf
 from aps.const import IGNORE_ID
@@ -65,6 +66,28 @@ def prep_asr_target(tgt_pad: th.Tensor,
     return tgt_v1, tgt_v2
 
 
+def load_label_count(label_count: str) -> Optional[th.Tensor]:
+    """
+    Load tensor from a label count file
+    """
+    if not label_count:
+        return None
+    counts = []
+    with open(label_count, "r") as lc_fd:
+        for raw_line in lc_fd:
+            toks = raw_line.strip().split()
+            num_toks = len(toks)
+            if num_toks not in [1, 2]:
+                raise RuntimeError(
+                    f"Detect format error in label count file: {raw_line}")
+            counts.append(float(toks[0] if num_toks == 1 else toks[1]))
+    counts = th.tensor(counts)
+    num_zeros = th.sum(counts == 0).item()
+    if num_zeros:
+        warnings.warn(f"Got {num_zeros} labels for zero counting")
+    return th.clamp_min(counts, 1)
+
+
 @ApsRegisters.task.register("ctc_xent")
 class CtcXentHybridTask(Task):
     """
@@ -73,22 +96,29 @@ class CtcXentHybridTask(Task):
 
     def __init__(self,
                  nnet: nn.Module,
+                 blank: int = 0,
                  lsm_factor: float = 0,
+                 lsm_method: str = "uniform",
                  ctc_weight: float = 0,
-                 blank: int = 0) -> None:
+                 label_count: str = "") -> None:
         super(CtcXentHybridTask, self).__init__(
             nnet, description="CTC + Xent multi-task training for ASR")
+        if lsm_method == "unigram" and not label_count:
+            raise RuntimeError(
+                "Missing label_count to use unigram label smoothing")
         self.ctc_blank = blank
         self.ctc_weight = ctc_weight
         self.lsm_factor = lsm_factor
+        self.lsm_method = lsm_method
+        self.label_count = load_label_count(label_count)
 
     def forward(self, egs: Dict) -> Dict:
         """
         Compute CTC & Attention loss, egs contains:
-            src_pad (Tensor): N x Ti x F
-            src_len (Tensor): N
-            tgt_pad (Tensor): N x To
-            tgt_len (Tensor): N
+            src_pad: N x Ti x F
+            src_len: N
+            tgt_pad: N x To
+            tgt_len: N
             ssr (float): const if needed
         """
         # tgt_pad: N x To (replace ignore_id with eos)
@@ -109,7 +139,11 @@ class CtcXentHybridTask(Task):
                                                   egs["src_len"], tgt_pad)
         # compute loss
         if self.lsm_factor > 0:
-            loss = ls_objf(outs, tgts, lsm_factor=self.lsm_factor)
+            loss = ls_objf(outs,
+                           tgts,
+                           method=self.lsm_method,
+                           lsm_factor=self.lsm_factor,
+                           label_count=self.label_count)
         else:
             loss = ce_objf(outs, tgts)
 
@@ -165,10 +199,10 @@ class TransducerTask(Task):
     def forward(self, egs: Dict) -> Dict:
         """
         Compute transducer loss, egs contains:
-            src_pad (Tensor): N x Ti x F
-            src_len (Tensor): N
-            tgt_pad (Tensor): N x To
-            tgt_len (Tensor): N
+            src_pad: N x Ti x F
+            src_len: N
+            tgt_pad: N x To
+            tgt_len: N
         """
         # tgt_pad: N x To (replace ignore_id with blank)
         ignore_mask = egs["tgt_pad"] == IGNORE_ID
@@ -203,9 +237,9 @@ class LmXentTask(Task):
     def forward(self, egs: Dict) -> Dict:
         """
         Compute CE loss, egs contains
-            src (Tensor): N x T+1
-            tgt (Tensor): N x T+1
-            len (Tensor): N
+            src: N x T+1
+            tgt: N x T+1
+            len: N
         """
         # pred: N x T+1 x V
         if self.repackage_hidden:

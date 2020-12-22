@@ -46,6 +46,41 @@ class TransducerASRBase(nn.Module):
             self.encoder = encoder_instance(enc_type, input_size, enc_proj,
                                             enc_kwargs)
 
+    def _decoding_prep(self, x: th.Tensor) -> th.Tensor:
+        """
+        Parepare data for decoding
+        """
+        # raw wave
+        if self.asr_transform:
+            if x.dim() != 1:
+                raise RuntimeError("Now only support for one utterance")
+            x, _ = self.asr_transform(x[None, ...], None)
+        else:
+            # T x F or Beam x T x F
+            if x.dim() not in [2, 3]:
+                raise RuntimeError(
+                    f"Expect 2/3D(multi-channel) tensor, but got {x.dim()}")
+            x = x[None, ...]
+        # N x Ti x D
+        enc_out, _ = self.encoder(x, None)
+        return enc_out
+
+    def _training_prep(
+            self, x_pad: th.Tensor, x_len: Optional[th.Tensor], y_pad: th.Tensor
+    ) -> Tuple[th.Tensor, Optional[th.Tensor], th.Tensor]:
+        """
+        Parepare data for training
+        """
+        # feature transform
+        if self.asr_transform:
+            x_pad, x_len = self.asr_transform(x_pad, x_len)
+        # N x Ti x D
+        enc_out, enc_len = self.encoder(x_pad, x_len)
+        # N x To+1
+        tgt_pad = tf.pad(y_pad, (1, 0), value=self.blank)
+        # return
+        return enc_out, enc_len, tgt_pad
+
 
 @ApsRegisters.asr.register("transducer")
 class TransducerASR(TransducerASRBase):
@@ -91,47 +126,18 @@ class TransducerASR(TransducerASRBase):
         Return:
             dec_out: N x Ti x To+1 x V
         """
-        # feature transform
-        if self.asr_transform:
-            x_pad, x_len = self.asr_transform(x_pad, x_len)
-        # Ti x N x D or N x Ti x D
-        enc_out, enc_len = self.encoder(x_pad, x_len)
-        # Ti x N x D => N x Ti x D
-        if self.is_xfmr_encoder:
-            enc_out = enc_out.transpose(0, 1)
-        # N x To+1
-        y_pad = tf.pad(y_pad, (1, 0), value=self.blank)
+        # go through feature extractor & encoder
+        enc_out, enc_len, tgt_pad = self._training_prep(x_pad, x_len, y_pad)
         # N x Ti x To+1 x V
-        dec_out = self.decoder(enc_out, y_pad)
+        dec_out = self.decoder(enc_out, tgt_pad)
         return dec_out, enc_len
-
-    def _dec_prep(self, x: th.Tensor) -> th.Tensor:
-        """
-        Parepare data for decoding
-        """
-        # raw wave
-        if self.asr_transform:
-            if x.dim() != 1:
-                raise RuntimeError("Now only support for one utterance")
-            x, _ = self.asr_transform(x[None, ...], None)
-        else:
-            # T x F or Beam x T x F
-            if x.dim() not in [2, 3]:
-                raise RuntimeError(f"Expect 2/3D tensor, but got {x.dim()}")
-            x = x[None, ...]
-        # Ti x N x D
-        enc_out, _ = self.encoder(x, None)
-        # Ti x N x D => N x Ti x D
-        if self.is_xfmr_encoder:
-            enc_out = enc_out.transpose(0, 1)
-        return enc_out
 
     def greedy_search(self, x: th.Tensor) -> List[Dict]:
         """
         Beam search for TorchTransducerASR
         """
         with th.no_grad():
-            enc_out = self._dec_prep(x)
+            enc_out = self._decoding_prep(x)
             return self.decoder.greedy_search(enc_out, blank=self.blank)
 
     def beam_search(self,
@@ -141,13 +147,12 @@ class TransducerASR(TransducerASRBase):
                     beam: int = 16,
                     nbest: int = 8,
                     normalized: bool = True,
-                    max_len: int = -1,
-                    vectorized: bool = True) -> List[Dict]:
+                    max_len: int = -1) -> List[Dict]:
         """
         Beam search for TorchTransducerASR
         """
         with th.no_grad():
-            enc_out = self._dec_prep(x)
+            enc_out = self._decoding_prep(x)
             return self.decoder.beam_search(enc_out,
                                             beam=beam,
                                             blank=self.blank,
@@ -199,46 +204,18 @@ class XfmrTransducerASR(TransducerASRBase):
         Return:
             dec_out: N x Ti x To+1 x V
         """
-        # feature transform
-        if self.asr_transform:
-            x_pad, x_len = self.asr_transform(x_pad, x_len)
-        # Ti x N x D or N x Ti x D
-        enc_out, enc_len = self.encoder(x_pad, x_len)
-        # N x Ti x D => Ti x N x D
-        if not self.is_xfmr_encoder:
-            enc_out = enc_out.transpose(0, 1)
-        # N x To+1
-        y_pad = tf.pad(y_pad, (1, 0), value=self.blank)
+        # go through feature extractor & encoder
+        enc_out, enc_len, tgt_pad = self._training_prep(x_pad, x_len, y_pad)
         # N x Ti x To+1 x V
-        dec_out = self.decoder(enc_out, y_pad, y_len)
+        dec_out = self.decoder(enc_out, tgt_pad, y_len)
         return dec_out, enc_len
-
-    def _dec_prep(self, x: th.Tensor) -> th.Tensor:
-        """
-        Prepare data for decoding
-        """
-        # raw wave
-        if self.asr_transform:
-            if x.dim() != 1:
-                raise RuntimeError("Now only support for one utterance")
-            x, _ = self.asr_transform(x[None, ...], None)
-        else:
-            if x.dim() not in [2, 3]:
-                raise RuntimeError(f"Expect 2/3D tensor, but got {x.dim()}")
-            x = x[None, ...]
-        # Ti x N x D
-        enc_out, _ = self.encoder(x, None)
-        # N x Ti x D => Ti x N x D
-        if not self.is_xfmr_encoder:
-            enc_out = enc_out.transpose(0, 1)
-        return enc_out
 
     def greedy_search(self, x: th.Tensor) -> List[Dict]:
         """
         Greedy search for TransformerTransducerASR
         """
         with th.no_grad():
-            enc_out = self._dec_prep(x)
+            enc_out = self._decoding_prep(x)
             return self.decoder.greedy_search(enc_out, blank=self.blank)
 
     def beam_search(self,
@@ -248,13 +225,12 @@ class XfmrTransducerASR(TransducerASRBase):
                     beam: int = 16,
                     nbest: int = 8,
                     normalized: bool = True,
-                    max_len: int = -1,
-                    vectorized: bool = True) -> List[Dict]:
+                    max_len: int = -1) -> List[Dict]:
         """
         Beam search for TransformerTransducerASR
         """
         with th.no_grad():
-            enc_out = self._dec_prep(x)
+            enc_out = self._decoding_prep(x)
             return self.decoder.beam_search(enc_out,
                                             beam=beam,
                                             blank=self.blank,

@@ -6,9 +6,7 @@
 import math
 import pytest
 import librosa
-
 import torch as th
-import numpy as np
 
 from torch_complex import ComplexTensor
 from aps.transform.utils import forward_stft, inverse_stft
@@ -49,17 +47,16 @@ def test_with_librosa(wav, frame_len, frame_hop, window, center):
                               window=window,
                               center=center,
                               output="complex")
-
-    torch_mag = (real**2 + imag**2)**0.5
-    librosa_mag = np.abs(
-        librosa.stft(wav,
-                     n_fft=2**math.ceil(math.log2(frame_len)),
-                     hop_length=frame_hop,
-                     win_length=frame_len,
-                     window=window,
-                     center=center)).astype("float32")
-    librosa_mag = th.from_numpy(librosa_mag)
-    th.testing.assert_allclose(torch_mag[0], librosa_mag)
+    librosa_stft = librosa.stft(wav,
+                                n_fft=2**math.ceil(math.log2(frame_len)),
+                                hop_length=frame_hop,
+                                win_length=frame_len,
+                                window=window,
+                                center=center)
+    librosa_real = th.tensor(librosa_stft.real, dtype=th.float32)
+    librosa_imag = th.tensor(librosa_stft.imag, dtype=th.float32)
+    th.testing.assert_allclose(real[0], librosa_real)
+    th.testing.assert_allclose(imag[0], librosa_imag)
 
 
 @pytest.mark.parametrize("wav", [egs1_wav])
@@ -146,10 +143,11 @@ def test_df_transform(num_bins, num_doas):
 
 
 def debug_visualize_feature():
-    transform = AsrTransform(feats="fbank-log-aug",
+    transform = AsrTransform(feats="spectrogram-log-aug",
                              frame_len=400,
                              frame_hop=160,
                              use_power=True,
+                             pre_emphasis=0.97,
                              aug_prob=1,
                              aug_max_frame=100,
                              aug_max_bands=40,
@@ -169,4 +167,5 @@ def debug_speed_perturb():
 
 
 if __name__ == "__main__":
-    debug_speed_perturb()
+    # debug_speed_perturb()
+    debug_visualize_feature()

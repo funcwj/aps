@@ -38,9 +38,9 @@ def run(args):
     ngram = kenlm.Model(args.lm)
 
     stdout, top1 = io_wrapper(args.top1, "w")
-    for key, nbest in nbest_hypos.items():
+    for key, nbest_dict in nbest_hypos.items():
         rescore = []
-        for hyp in nbest:
+        for hyp in nbest_dict:
             am_score, trans = hyp
             lm_score = ngram.score(trans, bos=True, eos=True)
             if args.normalized:

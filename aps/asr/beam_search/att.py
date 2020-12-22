@@ -75,6 +75,7 @@ def beam_search(decoder: nn.Module,
                 sos: int = -1,
                 eos: int = -1,
                 penalty: float = 0,
+                coverage: float = 0,
                 normalized: bool = True,
                 temperature: float = 1) -> List[Dict]:
     """
@@ -110,6 +111,7 @@ def beam_search(decoder: nn.Module,
                                eos=eos,
                                device=device,
                                penalty=penalty,
+                               coverage=coverage,
                                lm_weight=lm_weight,
                                normalized=normalized)
 
@@ -140,7 +142,7 @@ def beam_search(decoder: nn.Module,
             lm_prob = 0
 
         # local pruning
-        beam_tracker.prune_beam(am_prob, lm_prob)
+        beam_tracker.prune_beam(am_prob, lm_prob, att_ali=att_ali)
         # continue flags
         hyp_ended = beam_tracker.trace_back(final=False)
 
@@ -172,6 +174,7 @@ def beam_search_batch(decoder: nn.Module,
                       max_len: int = -1,
                       sos: int = -1,
                       eos: int = -1,
+                      coverage: float = 0,
                       normalized: bool = True,
                       penalty: float = 0,
                       temperature: float = 1) -> List[Dict]:
@@ -209,6 +212,7 @@ def beam_search_batch(decoder: nn.Module,
                                     eos=eos,
                                     device=device,
                                     penalty=penalty,
+                                    coverage=coverage,
                                     lm_weight=lm_weight,
                                     normalized=normalized)
 
@@ -241,7 +245,7 @@ def beam_search_batch(decoder: nn.Module,
             lm_prob = 0
 
         # local pruning: N*beam x beam
-        beam_tracker.prune_beam(am_prob, lm_prob)
+        beam_tracker.prune_beam(am_prob, lm_prob, att_ali=att_ali)
 
         # process eos nodes
         for u in range(N):

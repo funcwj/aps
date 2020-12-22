@@ -57,12 +57,6 @@ class NoamLR(lr._LRScheduler):
         self.const = factor * transformer_dim**(-0.5)
         super(NoamLR, self).__init__(optimizer, last_epoch=last_epoch)
 
-    def info(self) -> str:
-        beg_lr = self.get_lr(1)[0]
-        top_lr = self.get_lr(self.warmup)[0]
-        return f"learning rate at step 1: {beg_lr:.3e} and " + \
-            f"step {self.warmup:d}: {top_lr:.3e}"
-
     def get_lr(self, step: Optional[int] = None) -> List[float]:
         """
         const = factor * transformer_dim^{-0.5}
@@ -98,7 +92,7 @@ class ExponentialLR(lr._LRScheduler):
     def get_lr(self, step: Optional[int] = None) -> List[float]:
         """
         1) 0 < cur_step <= sr: ramp up (use sr == 0 can skip this stage)
-        2) sr < cur_step <= si: hold on
+        2) sr < cur_step <= si: hold on (use si == sr can skip this stage)
         2) si < cur_step <= sf: exponential decay
         3) cur_step > sf: hold on
         """
@@ -109,4 +103,38 @@ class ExponentialLR(lr._LRScheduler):
         else:
             cur_lr = self.peak_lr * math.exp(self.gamma *
                                              (min(step, self.sf) - self.si))
+        return [cur_lr for _ in self.optimizer.param_groups]
+
+
+@LrScheduler.register("linear_lr")
+class LinearLR(lr._LRScheduler):
+    """
+    Linear warmup scheduler (using linear decay in ExponentialLR)
+    """
+
+    def __init__(self,
+                 optimizer: Optimizer,
+                 time_stamps: List[int] = [1000, 4000, 16000],
+                 peak_lr: float = 1e-3,
+                 stop_lr: float = 1e-8,
+                 last_epoch: int = -1) -> None:
+        self.peak_lr = peak_lr
+        self.sr, self.si, self.sf = time_stamps
+        self.gamma = (stop_lr - peak_lr) / (self.sf - self.si)
+        super(LinearLR, self).__init__(optimizer, last_epoch=last_epoch)
+
+    def get_lr(self, step: Optional[int] = None) -> List[float]:
+        """
+        1) 0 < cur_step <= sr: ramp up (use sr == 0 can skip this stage)
+        2) sr < cur_step <= si: hold on (use si == sr can skip this stage)
+        2) si < cur_step <= sf: linear decay
+        3) cur_step > sf: hold on
+        """
+        if step is None:
+            step = self._step_count
+        if step <= self.si:
+            cur_lr = min(self.sr, step) * 1.0 * self.peak_lr / self.sr
+        else:
+            cur_lr = self.peak_lr + (self.gamma *
+                                     (min(step, self.sf) - self.si))
         return [cur_lr for _ in self.optimizer.param_groups]

@@ -21,7 +21,7 @@ def ce_objf(outs: th.Tensor, tgts: th.Tensor) -> th.Tensor:
     """
     _, _, V = outs.shape
     # N(To+1) x V
-    outs = outs.view(-1, V)
+    outs = outs.contiguous().view(-1, V)
     # N(To+1)
     tgts = tgts.view(-1)
     ce_loss = tf.cross_entropy(outs,
@@ -33,7 +33,9 @@ def ce_objf(outs: th.Tensor, tgts: th.Tensor) -> th.Tensor:
 
 def ls_objf(outs: th.Tensor,
             tgts: th.Tensor,
-            lsm_factor: float = 0.1) -> th.Tensor:
+            method: str = "uniform",
+            lsm_factor: float = 0.1,
+            label_count: Optional[th.Tensor] = None) -> th.Tensor:
     """
     Label smooth loss function (using KL)
     Args:
@@ -43,19 +45,33 @@ def ls_objf(outs: th.Tensor,
     Return
         loss (Tensor): (1)
     """
+    if method not in ["uniform", "unigram", "temporal"]:
+        raise ValueError(f"Unknown label smoothing method: {method}")
     _, _, V = outs.shape
     # NT x V
-    outs = outs.view(-1, V)
+    outs = outs.contiguous().view(-1, V)
     # NT
     tgts = tgts.view(-1)
     mask = (tgts != IGNORE_ID)
     # M x V
-    outs = th.masked_select(outs, mask.unsqueeze(-1)).view(-1, V)
+    outs = th.masked_select(outs, mask[:, None]).view(-1, V)
     # M
     tgts = th.masked_select(tgts, mask)
     # M x V
-    dist = th.full_like(outs, lsm_factor / (V - 1))
-    dist = dist.scatter_(1, tgts.unsqueeze(-1), 1 - lsm_factor)
+    if method == "uniform":
+        dist = th.full_like(outs, lsm_factor / (V - 1))
+    elif method == "unigram":
+        if label_count.size(-1) != V:
+            raise RuntimeError("#label_count do not match with the #vacab_size")
+        dist = th.zeros_like(outs)
+        # copy to each row
+        dist[:] = label_count
+        dist = dist.scatter_(1, tgts[:, None], 0)
+        # normalize
+        dist = dist * lsm_factor / th.sum(dist, -1, keepdim=True)
+    else:
+        raise NotImplementedError
+    dist = dist.scatter_(1, tgts[:, None], 1 - lsm_factor)
     # KL distance
     loss = tf.kl_div(tf.log_softmax(outs, -1), dist, reduction="batchmean")
     return loss

@@ -45,6 +45,7 @@ def test_am_raw_loader_const(batch_size, num_workers):
                             vocab_dict=load_dict(f"{egs_dir}/dict"),
                             train=False,
                             sr=16000,
+                            audio_norm=False,
                             batch_size=batch_size,
                             batch_mode="constraint",
                             num_workers=num_workers)

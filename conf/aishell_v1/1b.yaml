@@ -1,5 +1,5 @@
 # WER (%) Report:
-# Total (7176 utterances): 7362/104765 = 7.03%, SUB/INS/DEL = 6914/251/197
+# Total (7176 utterances): 7242/104765 = 6.91%, SUB/INS/DEL = 6815/229/198
 
 nnet: "xfmr"
 
@@ -9,7 +9,7 @@ nnet_conf:
   enc_kwargs:
     proj_layer: "conv2d"
     att_dim: 512
-    k_dim: 256
+    radius: 256
     nhead: 8
     feedforward_dim: 1024
     pos_dropout: 0.2
@@ -43,7 +43,9 @@ task: "ctc_xent"
 
 task_conf:
   lsm_factor: 0.1
+  lsm_method: "unigram"
   ctc_weight: 0.2
+  label_count: "data/aishell_v1/label_count"
 
 trainer_conf:
   optimizer: "adam"

@@ -135,7 +135,7 @@ xfmr_rel_enc_kwargs = {
     "proj_layer": "conv2d",
     "att_dim": 512,
     "nhead": 8,
-    "k_dim": 128,
+    "radius": 128,
     "feedforward_dim": 2048,
     "pos_dropout": 0.1,
     "att_dropout": 0.1,

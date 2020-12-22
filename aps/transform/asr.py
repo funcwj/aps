@@ -122,7 +122,7 @@ class TFTransposeTransform(nn.Module):
 
 class PreEmphasisTransform(nn.Module):
     """
-    Do audio level preemphasis
+    Do utterance level preemphasis
     """
 
     def __init__(self, pre_emphasis: float = 0) -> None:
@@ -156,6 +156,7 @@ class SpectrogramTransform(STFT):
                  window: str = "hamm",
                  round_pow_of_two: bool = True,
                  normalized: bool = False,
+                 pre_emphasis: float = 0.97,
                  onesided: bool = True,
                  mode: str = "librosa",
                  use_power: bool = False) -> None:
@@ -165,6 +166,7 @@ class SpectrogramTransform(STFT):
                              center=center,
                              window=window,
                              round_pow_of_two=round_pow_of_two,
+                             pre_emphasis=pre_emphasis,
                              normalized=normalized,
                              onesided=onesided,
                              mode=mode)
@@ -394,7 +396,7 @@ class CmvnTransform(nn.Module):
     def extra_repr(self) -> str:
         return (
             f"norm_mean={self.norm_mean}, norm_var={self.norm_var}, per_band={self.per_band}"
-            + f"gcmvn_stats={self.gcmvn}, eps={self.eps:.3e}")
+            + f", gcmvn_stats={self.gcmvn}, eps={self.eps:.3e}")
 
     def dim_scale(self) -> int:
         return 1
@@ -414,7 +416,7 @@ class CmvnTransform(nn.Module):
             if self.norm_var:
                 feats = feats / self.gstd
         else:
-            axis = (-1, -2) if self.per_band else -2
+            axis = -2 if self.per_band else (-1, -2)
             if self.norm_mean:
                 feats = feats - th.mean(feats, axis, keepdim=True)
             if self.norm_var:
@@ -628,6 +630,7 @@ class FeatureTransform(nn.Module):
             "window": window,
             "center": center,
             "use_power": use_power,
+            "pre_emphasis": pre_emphasis,
             "normalized": stft_normalized,
             "round_pow_of_two": round_pow_of_two
         }

@@ -294,7 +294,7 @@ class TorchTransformerDecoder(nn.Module):
                 tgt_len: Optional[th.Tensor]) -> th.Tensor:
         """
         Args:
-            enc_out (Tensor): Ti x N x D
+            enc_out (Tensor): N x Ti x D
             tgt_pad (Tensor): N x To+1 (padding blank at time = 1)
             tgt_len (Tensor): N or None
         Return:
@@ -310,28 +310,27 @@ class TorchTransformerDecoder(nn.Module):
         dec_out = self.decoder(tgt_pad,
                                src_mask=tgt_mask,
                                src_key_padding_mask=pad_mask)
-        return self._pred_joint(enc_out, dec_out)
+        return self._pred_joint(enc_out, dec_out.transpose(0, 1))
 
     def _pred_joint(self, enc_out: th.Tensor, dec_out: th.Tensor) -> th.Tensor:
         """
         Joint network prediction
         Args:
-            enc_out: Ti x N x D or 1 x D
-            dec_out: To+1 x N x D or 1 x D
+            enc_out: N x Ti x D or 1 x D
+            dec_out: N x To+1 x D or 1 x D
         Return:
-            output: N x Ti x To+1 x V or N x 1 x V
+            output: N x Ti x To+1 x V or 1 x 1 x V
         """
         enc_out = self.enc_proj(enc_out)
         dec_out = self.dec_proj(dec_out)
-        # To+1 x Ti x N x J or 1 x 1 x J
-        add_out = th.tanh(enc_out[None, ...] + dec_out[:, None])
-        # To+1 x Ti x N x J or 1 x 1 x V
-        output = self.output(add_out)
+        # N x Ti x To+1 x J or 1 x 1 x J
+        if enc_out.dim() == 2:
+            add_out = enc_out[None, ...] + dec_out[:, None]
+        else:
+            add_out = enc_out[..., None, :] + dec_out[:, None]
+        # N x Ti x To+1 x J or 1 x 1 x J
+        output = self.output(th.tanh(add_out))
         # N x Ti x To+1 x V or 1 x 1 x V
-        if output.dim() == 4:
-            output = output.transpose(0, 2)
-        if not output.is_contiguous():
-            output = output.contiguous()
         return output
 
     def _step_decoder(self,

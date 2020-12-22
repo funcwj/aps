@@ -35,31 +35,26 @@ class SinPosEncoding(nn.Module):
                                      requires_grad=False)
         self.dropout = nn.Dropout(p=dropout)
 
-    def _get_sin_pos_enc(self, num_frames: int, base: int = 0) -> th.Tensor:
+    def _get_sin_pos_enc(self, position: th.Tensor) -> th.Tensor:
         """
         Return sinusoidals encoding matrices
         """
-        # T
-        sequence = th.arange(base,
-                             base + num_frames,
-                             1.0,
-                             device=self.div_term.device)
         # T x D//2
-        sequence = sequence[:, None] * self.div_term
+        sequence = position[:, None] * self.div_term
         # T x D//2 x 2
         sin_enc = th.stack([th.sin(sequence), th.cos(sequence)], dim=-1)
         # T x D
-        return sin_enc.view(num_frames, -1)
+        return sin_enc.view(position.shape[0], -1)
 
-    def forward(self, length: int, t: int = 0) -> th.Tensor:
+    def forward(self, position: th.Tensor) -> th.Tensor:
         """
         Args:
-            length (int): length of sequence
+            position (Tensor): N
         Return:
             out: T x D
         """
         # T x D
-        sin_enc = self._get_sin_pos_enc(length, base=t)
+        sin_enc = self._get_sin_pos_enc(position)
         # add dropout
         return self.dropout(sin_enc)
 
@@ -79,19 +74,17 @@ class RelPosEncoding(nn.Module):
         self.embed = nn.Embedding(radius * 2 + 1, embed_dim)
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, num_frames: int) -> th.Tensor:
+    def forward(self, seq_len) -> th.Tensor:
         """
         Args:
-            num_frames (int): length of the sequence
+            seq_len (int): length of the sequence
         Return:
-            enc (Tensor): T x T x D, learnt encodings
+            encodings (Tensor): T1 x T2 x D, learnt encodings
         """
-        # T => T x T
-        vec = th.arange(num_frames, device=self.embed.weight.device)
-        mat = th.clamp(vec[:, None] - vec[None, :],
-                       max=self.radius,
-                       min=-self.radius)
-        return self.dropout(self.embed(mat + self.radius))
+        pos_vec = th.arange(seq_len, device=self.embed.weight.device)
+        rel_mat = pos_vec[:, None] - pos_vec[None, :]
+        rel_mat = th.clamp(rel_mat, max=self.radius, min=-self.radius)
+        return self.dropout(self.embed(rel_mat + self.radius))
 
 
 @PosEncodings.register("inp_sin")
@@ -110,12 +103,14 @@ class InputSinPosEncoding(SinPosEncoding):
     def forward(self, inp: th.Tensor, t: int = 0) -> th.Tensor:
         """
         Args:
-            inp: N x T x D
+            inp (Tensor): N x T x D
         Return:
-            out: N x T x D
+            out (Tensor): N x T x D
         """
+        # T
+        pos = th.arange(t, t + inp.shape[1], 1.0, device=inp.device)
         # T x D
-        sin_enc = self._get_sin_pos_enc(inp.shape[1], base=t)
+        sin_enc = self._get_sin_pos_enc(pos)
         # add dropout
         out = self.dropout(inp * self.embed_scale + sin_enc)
         # T x N x D

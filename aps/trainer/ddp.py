@@ -35,6 +35,7 @@ class DdpTrainer(Trainer):
                  ss_scheduler_kwargs: Optional[Dict] = None,
                  clip_gradient: Optional[float] = None,
                  acmu_gradient: int = -1,
+                 weight_noise_cfg: List[int] = [0, 1, -1],
                  weight_noise_std: Optional[float] = None,
                  prog_interval: int = 100,
                  save_interval: int = -1,
@@ -61,6 +62,7 @@ class DdpTrainer(Trainer):
                              ss_scheduler_kwargs=ss_scheduler_kwargs,
                              clip_gradient=clip_gradient,
                              acmu_gradient=acmu_gradient,
+                             weight_noise_cfg=weight_noise_cfg,
                              weight_noise_std=weight_noise_std,
                              prog_interval=prog_interval,
                              save_interval=save_interval,
@@ -104,7 +106,7 @@ class DdpTrainer(Trainer):
 
         # add noise if needed
         if self.weight_noise_adder:
-            self.weight_noise_adder(self.task)
+            self.weight_noise_adder(self.task, self.cur_step)
 
         stats = self.task(egs)
         # use all reduce to check loss

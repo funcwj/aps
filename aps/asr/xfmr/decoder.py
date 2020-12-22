@@ -107,12 +107,14 @@ class TorchTransformerDecoder(nn.Module):
                 tgt_pad: th.Tensor) -> th.Tensor:
         """
         Args:
-            enc_out (Tensor): T x N x D
+            enc_out (Tensor): N x T x D
             enc_len (Tensor): N or None
             tgt_pad (Tensor): N x To
         Return:
-            dec_out (Tensor): T x N x D
+            dec_out (Tensor): N x T x D
         """
         # T x N x V
-        dec_out, _ = self.step(enc_out, tgt_pad, enc_len=enc_len)
-        return dec_out
+        dec_out, _ = self.step(enc_out.transpose(0, 1),
+                               tgt_pad,
+                               enc_len=enc_len)
+        return dec_out.transpose(0, 1)

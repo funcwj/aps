@@ -3,6 +3,7 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
+import pprint
 import argparse
 
 import torch as th
@@ -55,6 +56,7 @@ class FasterDecoder(Computer):
 
 
 def run(args):
+    print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     # build dictionary
     if args.dict:
         vocab = load_dict(args.dict, reverse=True)
