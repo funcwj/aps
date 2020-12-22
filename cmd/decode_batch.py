@@ -3,6 +3,7 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
+import pprint
 import argparse
 import warnings
 
@@ -34,6 +35,7 @@ class BatchDecoder(Computer):
 
 
 def run(args):
+    print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     if args.batch_size == 1:
         warnings.warn("can use decode.py instead as batch_size == 1")
     # build dictionary

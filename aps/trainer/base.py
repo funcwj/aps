@@ -26,15 +26,23 @@ class WeightNoiseAdder(object):
     Add gaussian noise to updated weights
     """
 
-    def __init__(self, std: float = 0.075) -> None:
-        # D(cX) = c^2 * D(X)
-        self.factor = std**2
+    def __init__(self, cfg: List[int], std: float = 0.075) -> None:
+        self.std = std
+        self.beg, self.step, self.end = cfg
 
-    def __call__(self, nnet: th.nn.Module) -> NoReturn:
+    def __call__(self, nnet: th.nn.Module, step: int) -> NoReturn:
+        if step < self.beg:
+            return
+        if self.end > 0 and step > self.end:
+            return
+        if step - self.beg % self.step:
+            return
         for p in nnet.parameters():
             if p.requires_grad:
-                p.data += th.randn(p.data.shape,
-                                   device=p.data.device) * self.factor
+                p.data += th.normal(0,
+                                    self.std,
+                                    size=p.data.shape,
+                                    device=p.data.device)
 
 
 class ProgressReporter(object):
@@ -300,6 +308,7 @@ class Trainer(object):
                  ss_scheduler_kwargs: Optional[Dict] = None,
                  clip_gradient: Optional[float] = None,
                  acmu_gradient: int = -1,
+                 weight_noise_cfg: List[int] = [0, 1, -1],
                  weight_noise_std: Optional[float] = None,
                  prog_interval: int = 100,
                  save_interval: int = -1,
@@ -356,7 +365,8 @@ class Trainer(object):
         if weight_noise_std is None:
             self.weight_noise_adder = None
         else:
-            self.weight_noise_adder = WeightNoiseAdder(weight_noise_std)
+            self.weight_noise_adder = WeightNoiseAdder(weight_noise_cfg,
+                                                       std=weight_noise_std)
 
         self.clip_gradient = clip_gradient
         self.acmu_gradient = acmu_gradient

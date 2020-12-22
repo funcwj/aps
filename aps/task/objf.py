@@ -21,7 +21,7 @@ def ce_objf(outs: th.Tensor, tgts: th.Tensor) -> th.Tensor:
     """
     _, _, V = outs.shape
     # N(To+1) x V
-    outs = outs.view(-1, V)
+    outs = outs.contiguous().view(-1, V)
     # N(To+1)
     tgts = tgts.view(-1)
     ce_loss = tf.cross_entropy(outs,
@@ -49,7 +49,7 @@ def ls_objf(outs: th.Tensor,
         raise ValueError(f"Unknown label smoothing method: {method}")
     _, _, V = outs.shape
     # NT x V
-    outs = outs.view(-1, V)
+    outs = outs.contiguous().view(-1, V)
     # NT
     tgts = tgts.view(-1)
     mask = (tgts != IGNORE_ID)

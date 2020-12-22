@@ -143,6 +143,7 @@ def _forward_stft(
         wav: th.Tensor,
         kernel: th.Tensor,
         output: str = "polar",
+        pre_emphasis: float = 0,
         frame_hop: int = 256,
         onesided: bool = False,
         center: bool = False) -> Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]:
@@ -176,7 +177,16 @@ def _forward_stft(
         # NOTE: match with librosa
         wav = tf.pad(wav, (pad, pad), mode="reflect")
     # STFT
-    packed = tf.conv1d(wav, kernel, stride=frame_hop, padding=0)
+    if pre_emphasis > 0:
+        # NC x W x T
+        frames = tf.unfold(wav[:, None], (1, kernel.shape[-1]),
+                           stride=frame_hop,
+                           padding=0)
+        frames[:, 1:] = frames[:, 1:] - pre_emphasis * frames[:, :-1]
+        # 1 x 2B x W, NC x W x T,  NC x 2B x T
+        packed = th.matmul(kernel[:, 0][None, ...], frames)
+    else:
+        packed = tf.conv1d(wav, kernel, stride=frame_hop, padding=0)
     # NC x 2B x T => N x C x 2B x T
     if wav_dim == 3:
         packed = packed.view(N, -1, packed.shape[-2], packed.shape[-1])
@@ -277,6 +287,7 @@ def forward_stft(
         output: str = "complex",
         window: str = "sqrthann",
         round_pow_of_two: bool = True,
+        pre_emphasis: float = 0,
         normalized: bool = False,
         onesided: bool = True,
         center: bool = False,
@@ -295,6 +306,7 @@ def forward_stft(
                          K.to(wav.device),
                          output=output,
                          frame_hop=frame_hop,
+                         pre_emphasis=pre_emphasis,
                          onesided=onesided,
                          center=center)
 
@@ -343,6 +355,7 @@ class STFTBase(nn.Module):
                  window: str = "sqrthann",
                  round_pow_of_two: bool = True,
                  normalized: bool = False,
+                 pre_emphasis: float = 0,
                  onesided: bool = True,
                  inverse: bool = False,
                  center: bool = False,
@@ -360,13 +373,15 @@ class STFTBase(nn.Module):
         self.frame_len = frame_len
         self.frame_hop = frame_hop
         self.onesided = onesided
+        self.pre_emphasis = pre_emphasis
         self.center = center
         self.mode = mode
         self.num_bins = self.K.shape[0] // 4 + 1
         self.expr = (
             f"window={window}, stride={frame_hop}, onesided={onesided}, " +
-            f"normalized={normalized}, center={self.center}, mode={self.mode}, "
-            + f"kernel_size={self.num_bins}x{self.K.shape[2]}")
+            f"pre_emphasis={self.pre_emphasis}, normalized={normalized}, " +
+            f"center={self.center}, mode={self.mode}, " +
+            f"kernel_size={self.num_bins}x{self.K.shape[2]}")
 
     def num_frames(self, num_samples: th.Tensor) -> th.Tensor:
         """
@@ -408,6 +423,7 @@ class STFT(STFTBase):
                              self.K,
                              output=output,
                              frame_hop=self.frame_hop,
+                             pre_emphasis=self.pre_emphasis,
                              onesided=self.onesided,
                              center=self.center)
 
