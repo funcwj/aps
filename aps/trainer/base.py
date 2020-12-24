@@ -722,7 +722,7 @@ class Trainer(object):
                 egs = self.prep_egs(egs)
                 succ = self.train_one_step(egs)
                 if succ:
-                    self.cur_step = (self.cur_step + 1) % eval_interval
+                    self.cur_step += 1
                 if self.error_detector.step(succ):
                     self.reporter.log(
                         f"Stop training as detecting {self.stop_on_errors} " +

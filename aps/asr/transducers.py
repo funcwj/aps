@@ -11,6 +11,7 @@ from typing import Optional, Dict, Tuple, List
 from aps.asr.xfmr.encoder import support_xfmr_encoder
 from aps.asr.transducer.decoder import TorchTransformerDecoder, PyTorchRNNDecoder
 from aps.asr.base.encoder import encoder_instance
+from aps.asr.beam_search.transducer import greedy_search, beam_search
 from aps.libs import ApsRegisters
 
 TransducerOutputType = Tuple[th.Tensor, Optional[th.Tensor]]
@@ -134,11 +135,11 @@ class TransducerASR(TransducerASRBase):
 
     def greedy_search(self, x: th.Tensor) -> List[Dict]:
         """
-        Beam search for TorchTransducerASR
+        Beam search for TransducerASR
         """
         with th.no_grad():
             enc_out = self._decoding_prep(x)
-            return self.decoder.greedy_search(enc_out, blank=self.blank)
+            return greedy_search(self.decoder, enc_out, blank=self.blank)
 
     def beam_search(self,
                     x: th.Tensor,
@@ -149,17 +150,18 @@ class TransducerASR(TransducerASRBase):
                     normalized: bool = True,
                     max_len: int = -1) -> List[Dict]:
         """
-        Beam search for TorchTransducerASR
+        Beam search for TransducerASR
         """
         with th.no_grad():
             enc_out = self._decoding_prep(x)
-            return self.decoder.beam_search(enc_out,
-                                            beam=beam,
-                                            blank=self.blank,
-                                            nbest=nbest,
-                                            lm=lm,
-                                            lm_weight=lm_weight,
-                                            normalized=normalized)
+            return beam_search(self.decoder,
+                               enc_out,
+                               beam=beam,
+                               blank=self.blank,
+                               nbest=nbest,
+                               lm=lm,
+                               lm_weight=lm_weight,
+                               normalized=normalized)
 
 
 @ApsRegisters.asr.register("xfmr_transducer")
@@ -216,7 +218,7 @@ class XfmrTransducerASR(TransducerASRBase):
         """
         with th.no_grad():
             enc_out = self._decoding_prep(x)
-            return self.decoder.greedy_search(enc_out, blank=self.blank)
+            return greedy_search(self.decoder, enc_out, blank=self.blank)
 
     def beam_search(self,
                     x: th.Tensor,
@@ -231,10 +233,11 @@ class XfmrTransducerASR(TransducerASRBase):
         """
         with th.no_grad():
             enc_out = self._decoding_prep(x)
-            return self.decoder.beam_search(enc_out,
-                                            beam=beam,
-                                            blank=self.blank,
-                                            nbest=nbest,
-                                            lm=lm,
-                                            lm_weight=lm_weight,
-                                            normalized=normalized)
+            return beam_search(self.decoder,
+                               enc_out,
+                               beam=beam,
+                               blank=self.blank,
+                               nbest=nbest,
+                               lm=lm,
+                               lm_weight=lm_weight,
+                               normalized=normalized)

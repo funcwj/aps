@@ -626,7 +626,7 @@ class ConformerEncoderLayer(nn.Module):
                       kernel_size * 2 + 1,
                       groups=d_model,
                       stride=1,
-                      padding=kernel_size), nn.BatchNorm1d(d_model), nn.ReLU(),
+                      padding=kernel_size), nn.BatchNorm1d(d_model), Swish(),
             nn.Conv1d(d_model, d_model, 1), nn.Dropout(p=dropout))
         self.feedforward2 = nn.Sequential(nn.LayerNorm(d_model),
                                           nn.Linear(d_model, dim_feedforward),
