@@ -67,7 +67,7 @@ For separation/enhancement model training, we also have two options
 
 For language model (target at ASR task), we have
 
-* `lm_utt`: A utterance corpus data loader.
+* `lm_utt`: The utterance corpus data loader.
 
 ## `aps.distributed`
 

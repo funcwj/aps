@@ -22,6 +22,9 @@ class Node(object):
         self.score = score
         self.stats = stats
 
+    def __getitem__(self, key):
+        return self.stats[key]
+
     def __lt__(self, other):
         return self.score >= other.score
 
@@ -35,13 +38,11 @@ def _prep_nbest(container: Union[List, PriorityQueue],
     """
     # get nbest
     if isinstance(container, PriorityQueue):
-        beam_hypos = []
-        while not container.empty():
-            node = container.get_nowait()
-            trans = [t.item() for t in node.stats["trans"]]
-            beam_hypos.append({"score": node.score, "trans": trans + [blank]})
-    else:
-        beam_hypos = container
+        container = container.queue
+    beam_hypos = []
+    for node in container:
+        trans = [t.item() for t in node["token"]]
+        beam_hypos.append({"score": node.score, "trans": trans + [blank]})
     # return best
     nbest_hypos = sorted(beam_hypos,
                          key=lambda n: n["score"] / (len(n["trans"]) - 1
@@ -94,9 +95,10 @@ def beam_search(decoder: nn.Module,
                 nbest: int = 8,
                 normalized: bool = True) -> List[Dict]:
     """
-    Beam search (best first) algorithm for RNN-T
+    Beam search (not prefix beam search) algorithm for RNN-T
     Args:
         enc_out: N(=1) x Ti x D
+        blank: #vocab_size - 1
     """
     if blank < 0:
         raise RuntimeError(f"Invalid blank ID: {blank:d}")
@@ -113,64 +115,84 @@ def beam_search(decoder: nn.Module,
     if lm and lm.vocab_size < decoder.vocab_size:
         raise RuntimeError("lm.vocab_size < am.vocab_size, "
                            "seems different dictionary is used")
+    if blank != decoder.vocab_size - 1:
+        raise RuntimeError("Hard code for blank = self.vocab_size - 1 here")
 
     nbest = min(beam, nbest)
 
-    dev = enc_out.device
-    blk = th.tensor([[blank]], dtype=th.int64, device=dev)
-    beam_queue = PriorityQueue()
-    init_node = Node(0.0, {"trans": [blk], "hidden": None, "lm_state": None})
-    beam_queue.put_nowait(init_node)
-
+    device = enc_out.device
+    blk = th.tensor([blank], dtype=th.int64, device=device)
+    # B in Sequence Transduction with Recurrent Neural Networks: Algorithm 1
+    list_b = []
+    init_node = Node(0.0, {
+        "token": [blk],
+        "trans": f"{blank}",
+        "hidden": None,
+        "lm_state": None
+    })
+    list_b.append(init_node)
+    stats = {}
     _, T, _ = enc_out.shape
     for t in range(T):
-        queue_t = beam_queue
-        beam_queue = PriorityQueue()
-        for _ in range(beam):
-            # pop one (queue_t is updated)
-            cur_node = queue_t.get_nowait()
-            trans = cur_node.stats["trans"]
+        # A in Sequence Transduction with Recurrent Neural Networks: Algorithm 1
+        list_b = sorted(list_b, key=lambda n: n.score, reverse=True)[:beam]
+
+        queue_a = PriorityQueue()
+        for node in list_b:
+            queue_a.put_nowait(node)
+        list_b = []
+        while len(list_b) < beam:
+            # pop one (queue_a is updated)
+            cur_node = queue_a.get_nowait()
+            token = cur_node["token"]
             # make a step
-            # cur_inp = th.tensor([[trans[-1]]], dtype=th.int64, device=dev)
-            dec_out, hidden = decoder.step(trans[-1],
-                                           hidden=cur_node.stats["hidden"])
-            # predition: 1 x V
-            prob = tf.log_softmax(decoder.pred(enc_out[:, t], dec_out)[0],
-                                  dim=-1).squeeze()
+            if cur_node["trans"] in stats:
+                dec_out, hidden = stats[cur_node["trans"]]
+            else:
+                dec_out, hidden = decoder.step(token[-1][..., None],
+                                               hidden=cur_node["hidden"])
+                stats[cur_node["trans"]] = (dec_out, hidden)
+
+            # prediction: N x 1 x V => V
+            pred = decoder.pred(enc_out[:, t], dec_out)[0, 0]
+            prob = tf.log_softmax(pred, dim=-1)
 
             # add terminal node (end with blank)
             score = cur_node.score + prob[blank].item()
             blank_node = Node(
                 score, {
-                    "trans": trans,
-                    "lm_state": cur_node.stats["lm_state"],
-                    "hidden": cur_node.stats["hidden"]
+                    "token": token,
+                    "trans": cur_node["trans"],
+                    "hidden": cur_node["hidden"],
+                    "lm_state": cur_node["lm_state"]
                 })
-            beam_queue.put_nowait(blank_node)
+            list_b.append(blank_node)
 
             lm_state = None
             if lm and t:
                 # 1 x 1 x V (without blank)
-                lm_prob, lm_state = lm(trans[-1], cur_node.stats["lm_state"])
-                if blank != decoder.vocab_size - 1:
-                    raise RuntimeError(
-                        "Hard code for blank = self.vocab_size - 1 here")
-                prob[:-1] += tf.log_softmax(lm_prob[:, -1].squeeze(),
-                                            dim=-1) * lm_weight
+                lm_prob, lm_state = lm(token[-1][..., None],
+                                       cur_node["lm_state"])
+                prob[:-1] += tf.log_softmax(lm_prob[0, -1], dim=-1) * lm_weight
 
             # extend other nodes
-            topk_score, topk_index = th.topk(prob, beam + 1)
-            topk = topk_index.tolist()
-            for i in range(beam + 1 if blank in topk else beam):
-                if topk[i] == blank:
-                    continue
+            topk_score, topk_index = th.topk(prob[:-1], beam)
+            for i in range(beam):
                 score = cur_node.score + topk_score[i].item()
                 node = Node(
                     score, {
-                        "trans": trans + [topk_index[None, i][..., None]],
-                        "hidden": hidden,
-                        "lm_state": lm_state
+                        "token":
+                            token + [topk_index[None, i]],
+                        "trans":
+                            cur_node["trans"] + "," + str(topk_index[i].item()),
+                        "hidden":
+                            hidden,
+                        "lm_state":
+                            lm_state
                     })
-                queue_t.put_nowait(node)
+                queue_a.put_nowait(node)
 
-    return _prep_nbest(beam_queue, nbest, normalized=normalized, blank=blank)
+            best_score = queue_a.queue[0].score
+            list_b = [n for n in list_b if n.score > best_score]
+
+    return _prep_nbest(list_b, nbest, normalized=normalized, blank=blank)

@@ -51,14 +51,16 @@ class TokenReader(object):
                  max_token_num: int = 400,
                  min_token_num: int = 2,
                  max_dur: float = 3000,
-                 min_dur: float = 40):
+                 min_dur: float = 40,
+                 skip_utts: str = ""):
         self.vocab_dict = vocab_dict
         self.token_list = self._pre_process(text,
                                             utt2dur,
-                                            max_token_num=max_token_num,
-                                            min_token_num=min_token_num,
                                             max_dur=max_dur,
-                                            min_dur=min_dur)
+                                            min_dur=min_dur,
+                                            skip_utts=skip_utts,
+                                            max_token_num=max_token_num,
+                                            min_token_num=min_token_num)
         if len(self.token_list) < 10:
             raise RuntimeError(
                 f"Too less utterances: {len(self.token_list)}, " +
@@ -69,11 +71,17 @@ class TokenReader(object):
                      utt2dur: str,
                      max_token_num: int = 400,
                      min_token_num: int = 2,
+                     skip_utts: str = "",
                      max_dur: float = 3000,
                      min_dur: float = 40) -> List[Dict]:
         """
         Preprocess the transcriptions
         """
+        if skip_utts:
+            with open(skip_utts, "r") as skip_fd:
+                skip_keys = [k.strip() for k in skip_fd.readlines()]
+        else:
+            skip_keys = []
         utt2dur = BaseReader(utt2dur, value_processor=float)
         if self.vocab_dict:
             text_reader = BaseReader(text, num_tokens=-1, restrict=False)
@@ -92,6 +100,8 @@ class TokenReader(object):
                 continue
             if key not in utt2dur:
                 drop_utts += 1
+                continue
+            if key in skip_keys:
                 continue
             num_frames = utt2dur[key]
             if num_frames < min_dur or num_frames > max_dur:

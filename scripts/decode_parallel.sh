@@ -14,6 +14,7 @@ channel=-1
 max_len=100
 penalty=0
 beam_size=16
+function="beam_search"
 temperature=1
 normalized=true
 lm=""
@@ -59,6 +60,7 @@ $cmd JOB=1:$nj $log_dir/decode.JOB.log \
   --nbest $nbest \
   --dump-nbest $log_dir/beam${beam_size}.JOB.${nbest}best \
   --max-len $max_len \
+  --function $function \
   --normalized $normalized
 
 cat $log_dir/beam${beam_size}.*.decode | \

@@ -369,6 +369,7 @@ class Trainer(object):
                                                        std=weight_noise_std)
 
         self.clip_gradient = clip_gradient
+        # TODO: acmu_gradient
         self.acmu_gradient = acmu_gradient
         self.cur_epoch = 0  # zero based
         self.cur_step = 0

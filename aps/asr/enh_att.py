@@ -46,7 +46,7 @@ class EnhASRBase(nn.Module):
             asr_transform: Optional[nn.Module] = None,
             # enhancement
             enh_type: str = "google_clp",
-            enh_kwargs: Dict = {}) -> None:
+            enh_kwargs: Optional[Dict] = None) -> None:
         super(EnhASRBase, self).__init__()
         # Front-end feature transform
         self.enh_transform = enh_transform
@@ -122,18 +122,18 @@ class EnhAttASR(EnhASRBase):
             asr_transform: Optional[nn.Module] = None,
             # enhancement
             enh_type: str = "google_clp",
-            enh_kwargs: Dict = {},
+            enh_kwargs: Optional[Dict] = None,
             asr_cpt: str = "",
             # attention
             att_type: str = "ctx",
-            att_kwargs: Dict = {},
+            att_kwargs: Optional[Dict] = None,
             # encoder & decoder
             enc_type: str = "common",
             dec_type: str = "rnn",
             enc_proj: int = 256,
             dec_dim: int = 512,
-            enc_kwargs: Dict = {},
-            dec_kwargs: Dict = {}) -> None:
+            enc_kwargs: Optional[Dict] = None,
+            dec_kwargs: Optional[Dict] = None) -> None:
         # LAS-based ASR
         las_asr = AttASR(input_size=asr_input_size,
                          vocab_size=vocab_size,
@@ -197,14 +197,14 @@ class EnhXfmrASR(EnhASRBase):
             asr_transform: Optional[nn.Module] = None,
             # enhancement
             enh_type: str = "google_clp",
-            enh_kwargs: Dict = {},
+            enh_kwargs: Optional[Dict] = None,
             asr_cpt: str = "",
             # encoder & decoder
             enc_type: str = "xfmr",
             dec_type: str = "xfmr",
             enc_proj: Optional[int] = None,
-            enc_kwargs: Dict = {},
-            dec_kwargs: Dict = {}) -> None:
+            enc_kwargs: Optional[Dict] = None,
+            dec_kwargs: Optional[Dict] = None) -> None:
         # xfmr based ASR
         transformer_asr = XfmrASR(input_size=asr_input_size,
                                   vocab_size=vocab_size,

@@ -35,7 +35,7 @@ E.g., running
 ```bash
 ./scripts/train_am.sh --batch-size 32 --gpu 0 aishell_v1 1a
 ```
-will load `.yaml` configuration from `conf/aishell_v1/1a.yaml` and create checkpoint directory in `exp/aishell_v1/1a`. After one epoch is done, the directory looks like:
+will load `.yaml` configuration from `conf/aishell_v1/1a.yaml` and create checkpoint directory in `exp/aishell_v1/1a` (The feature extraction is performed on GPU so there is no need to prepare features for all the tasks). After one epoch is done, the directory looks like:
 ```
 .
 ├── cmd -> ../aps/cmd

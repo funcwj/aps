@@ -17,13 +17,16 @@ XfmrProjLayer = Register("xfmr_proj_layer")
 def get_xfmr_proj(proj_name: str,
                   in_features: int,
                   att_dim: int,
-                  kwargs: Dict = {}) -> nn.Module:
+                  kwargs: Optional[Dict] = None) -> nn.Module:
     """
     Return projection layers
     """
     if proj_name not in XfmrProjLayer:
         raise ValueError(f"Unsupported projection layer: {proj_name}")
-    return XfmrProjLayer[proj_name](in_features, att_dim, **kwargs)
+    if kwargs is None:
+        return XfmrProjLayer[proj_name](in_features, att_dim)
+    else:
+        return XfmrProjLayer[proj_name](in_features, att_dim, **kwargs)
 
 
 @XfmrProjLayer.register("linear")

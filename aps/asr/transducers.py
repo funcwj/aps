@@ -29,7 +29,7 @@ class TransducerASRBase(nn.Module):
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "xfmr",
                  enc_proj: Optional[int] = None,
-                 enc_kwargs: Dict = {}) -> None:
+                 enc_kwargs: Optional[Dict] = None) -> None:
         super(TransducerASRBase, self).__init__()
         if blank < 0:
             raise RuntimeError(f"Unsupported blank value: {blank}")
@@ -46,6 +46,7 @@ class TransducerASRBase(nn.Module):
                     "For non-transformer encoder, enc_proj can not be None")
             self.encoder = encoder_instance(enc_type, input_size, enc_proj,
                                             enc_kwargs)
+        self.decoder = None
 
     def _decoding_prep(self, x: th.Tensor) -> th.Tensor:
         """
@@ -82,6 +83,37 @@ class TransducerASRBase(nn.Module):
         # return
         return enc_out, enc_len, tgt_pad
 
+    def greedy_search(self, x: th.Tensor) -> List[Dict]:
+        """
+        Greedy search for TransducerASR
+        """
+        with th.no_grad():
+            enc_out = self._decoding_prep(x)
+            return greedy_search(self.decoder, enc_out, blank=self.blank)
+
+    def beam_search(self,
+                    x: th.Tensor,
+                    lm: Optional[nn.Module] = None,
+                    lm_weight: float = 0,
+                    beam: int = 16,
+                    nbest: int = 8,
+                    normalized: bool = True,
+                    max_len: int = -1,
+                    **kwargs) -> List[Dict]:
+        """
+        Beam search for TransducerASR
+        """
+        with th.no_grad():
+            enc_out = self._decoding_prep(x)
+            return beam_search(self.decoder,
+                               enc_out,
+                               beam=beam,
+                               blank=self.blank,
+                               nbest=nbest,
+                               lm=lm,
+                               lm_weight=lm_weight,
+                               normalized=normalized)
+
 
 @ApsRegisters.asr.register("transducer")
 class TransducerASR(TransducerASRBase):
@@ -97,8 +129,8 @@ class TransducerASR(TransducerASRBase):
                  enc_type: str = "xfmr",
                  enc_proj: Optional[int] = None,
                  dec_type: str = "rnn",
-                 enc_kwargs: Dict = {},
-                 dec_kwargs: Dict = {}) -> None:
+                 enc_kwargs: Optional[Dict] = None,
+                 dec_kwargs: Optional[Dict] = None) -> None:
         super(TransducerASR, self).__init__(input_size=input_size,
                                             vocab_size=vocab_size,
                                             blank=blank,
@@ -133,36 +165,6 @@ class TransducerASR(TransducerASRBase):
         dec_out = self.decoder(enc_out, tgt_pad)
         return dec_out, enc_len
 
-    def greedy_search(self, x: th.Tensor) -> List[Dict]:
-        """
-        Beam search for TransducerASR
-        """
-        with th.no_grad():
-            enc_out = self._decoding_prep(x)
-            return greedy_search(self.decoder, enc_out, blank=self.blank)
-
-    def beam_search(self,
-                    x: th.Tensor,
-                    lm: Optional[nn.Module] = None,
-                    lm_weight: float = 0,
-                    beam: int = 16,
-                    nbest: int = 8,
-                    normalized: bool = True,
-                    max_len: int = -1) -> List[Dict]:
-        """
-        Beam search for TransducerASR
-        """
-        with th.no_grad():
-            enc_out = self._decoding_prep(x)
-            return beam_search(self.decoder,
-                               enc_out,
-                               beam=beam,
-                               blank=self.blank,
-                               nbest=nbest,
-                               lm=lm,
-                               lm_weight=lm_weight,
-                               normalized=normalized)
-
 
 @ApsRegisters.asr.register("xfmr_transducer")
 class XfmrTransducerASR(TransducerASRBase):
@@ -177,9 +179,9 @@ class XfmrTransducerASR(TransducerASRBase):
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "xfmr",
                  enc_proj: Optional[int] = None,
-                 enc_kwargs: Dict = {},
+                 enc_kwargs: Optional[Dict] = None,
                  dec_type: str = "xfmr",
-                 dec_kwargs: Dict = {}) -> None:
+                 dec_kwargs: Optional[Dict] = None) -> None:
         super(XfmrTransducerASR, self).__init__(input_size=input_size,
                                                 vocab_size=vocab_size,
                                                 blank=blank,
@@ -211,33 +213,3 @@ class XfmrTransducerASR(TransducerASRBase):
         # N x Ti x To+1 x V
         dec_out = self.decoder(enc_out, tgt_pad, y_len)
         return dec_out, enc_len
-
-    def greedy_search(self, x: th.Tensor) -> List[Dict]:
-        """
-        Greedy search for TransformerTransducerASR
-        """
-        with th.no_grad():
-            enc_out = self._decoding_prep(x)
-            return greedy_search(self.decoder, enc_out, blank=self.blank)
-
-    def beam_search(self,
-                    x: th.Tensor,
-                    lm: Optional[nn.Module] = None,
-                    lm_weight: float = 0,
-                    beam: int = 16,
-                    nbest: int = 8,
-                    normalized: bool = True,
-                    max_len: int = -1) -> List[Dict]:
-        """
-        Beam search for TransformerTransducerASR
-        """
-        with th.no_grad():
-            enc_out = self._decoding_prep(x)
-            return beam_search(self.decoder,
-                               enc_out,
-                               beam=beam,
-                               blank=self.blank,
-                               nbest=nbest,
-                               lm=lm,
-                               lm_weight=lm_weight,
-                               normalized=normalized)

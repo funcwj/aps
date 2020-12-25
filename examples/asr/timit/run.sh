@@ -26,7 +26,7 @@ num_workers=2
 prog_interval=100
 
 # decoding
-beam_size=24
+beam_size=8
 nbest=8
 
 . ./utils/parse_options.sh || exit 1
@@ -55,6 +55,7 @@ if [ $stage -le 3 ]; then
     --nbest $nbest \
     --max-len 75 \
     --dict data/timit/dict \
+    --function "beam_search" \
     "timit" $exp \
     data/timit/test/wav.scp \
     exp/timit/$exp/dec

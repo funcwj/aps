@@ -39,9 +39,9 @@ class EncDecASRBase(nn.Module):
                  eos: int = -1,
                  ctc: bool = False,
                  asr_transform: Optional[nn.Module] = None,
-                 enc_type: str = "common",
+                 enc_type: str = "pytorch_rnn",
                  enc_proj: Optional[int] = None,
-                 enc_kwargs: Dict = {}) -> None:
+                 enc_kwargs: Optional[Dict] = None) -> None:
         super(EncDecASRBase, self).__init__()
         if eos < 0 or sos < 0:
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
@@ -157,13 +157,13 @@ class AttASR(EncDecASRBase):
                  ctc: bool = False,
                  asr_transform: Optional[nn.Module] = None,
                  att_type: str = "ctx",
-                 att_kwargs: Dict = {},
+                 att_kwargs: Optional[Dict] = None,
                  enc_type: str = "common",
                  dec_type: str = "rnn",
                  enc_proj: Optional[int] = None,
-                 enc_kwargs: Dict = {},
+                 enc_kwargs: Optional[Dict] = None,
                  dec_dim: int = 512,
-                 dec_kwargs: Dict = {}) -> None:
+                 dec_kwargs: Optional[Dict] = None) -> None:
         super(AttASR, self).__init__(input_size=input_size,
                                      vocab_size=vocab_size,
                                      sos=sos,
@@ -286,8 +286,8 @@ class XfmrASR(EncDecASRBase):
                  enc_type: str = "xfmr",
                  dec_type: str = "xfmr",
                  enc_proj: Optional[int] = None,
-                 enc_kwargs: Dict = {},
-                 dec_kwargs: Dict = {}) -> None:
+                 enc_kwargs: Optional[Dict] = None,
+                 dec_kwargs: Optional[Dict] = None) -> None:
         super(XfmrASR, self).__init__(input_size=input_size,
                                       vocab_size=vocab_size,
                                       sos=sos,
