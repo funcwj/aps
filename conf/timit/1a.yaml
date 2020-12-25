@@ -1,3 +1,6 @@
+# WER(%) Report:
+# Total: 26.86%, 192 utterances (1938 errors, 7215 units in total)
+
 nnet: "att"
 
 nnet_conf:

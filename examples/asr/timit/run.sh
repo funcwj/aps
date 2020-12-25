@@ -3,13 +3,6 @@
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-# 1a.yaml
-#   WER(%) Report:
-#   Total: 26.86%, 192 utterances (1938 errors, 7215 units in total)
-# 1b.yaml (beam-size/4)
-#   WER(%) Report:
-#   Total WER: 25.68%, 192 utterances
-
 set -eu
 
 timit_data=/scratch/jwu/TIMIT-LDC93S1/TIMIT

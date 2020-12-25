@@ -1,6 +1,6 @@
 # Usage overview
 
-There is no `setup.py` script for installing the package in the repository and actually I don't suggest the reader doing that. The following shows the recommended way to use the aps package.
+There is no `setup.py` script for installing the package in the repository and actually I don't suggest readers doing that. The following shows the recommended way to use the APS package.
 
 A typical working directory looks like:
 ```bash
