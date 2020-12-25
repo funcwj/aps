@@ -14,6 +14,7 @@ git clone https://github.com/funcwj/aps
 # set up the python environments
 # 1) using "pip install -r requirements.txt" or
 # 2) create conda enviroments based on requirements.txt (see docker/*.Dockerfile)
+# horovod is optional if you don't want to use that.
 cd aps && pip install -r requirements.txt
 ```
 For developers (who want to make commits or PRs), contiune running
