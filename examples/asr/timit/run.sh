@@ -29,7 +29,7 @@ if [ $stage -le 1 ]; then
 fi
 
 if [ $stage -le 2 ]; then
-  ./scripts/train_am.sh \
+  ./scripts/train.sh \
     --seed $seed \
     --gpu $gpu \
     --epochs $epochs \
@@ -37,7 +37,7 @@ if [ $stage -le 2 ]; then
     --batch-size $batch_size \
     --tensorboard $tensorboard \
     --prog-interval $prog_interval \
-    "timit" $exp
+    am $dataset $exp
 fi
 
 if [ $stage -le 3 ]; then
@@ -49,7 +49,7 @@ if [ $stage -le 3 ]; then
     --max-len 75 \
     --dict data/timit/dict \
     --function "beam_search" \
-    "timit" $exp \
+    $dataset $exp \
     data/timit/test/wav.scp \
     exp/timit/$exp/dec
   # wer

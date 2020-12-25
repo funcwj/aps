@@ -70,9 +70,6 @@ for reader_dir in $(find -L $src -mindepth 1 -maxdepth 1 -type d | sort); do
   done
 done
 
-spk2utt=$dst/spk2utt
-utils/utt2spk_to_spk2utt.pl <$utt2spk >$spk2utt || exit 1
-
 ntrans=$(wc -l <$trans)
 nutt2spk=$(wc -l <$utt2spk)
 ! [ "$ntrans" -eq "$nutt2spk" ] && \

@@ -36,7 +36,7 @@ if [ $stage -le 1 ]; then
 fi
 
 if [ $stage -le 2 ]; then
-  ./scripts/train_am.sh \
+  ./scripts/train.sh \
     --seed $seed \
     --gpu $gpu \
     --epochs $epochs \
@@ -44,7 +44,7 @@ if [ $stage -le 2 ]; then
     --batch-size $batch_size \
     --tensorboard $tensorboard \
     --prog-interval $prog_interval \
-    $dataset $exp
+    am $dataset $exp
 fi
 
 if [ $stage -le 3 ]; then

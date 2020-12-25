@@ -9,7 +9,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Optional, Tuple, Union, List, Dict
+from typing import Optional, Tuple, Union
 from aps.asr.base.layer import OneHotEmbedding, PyTorchRNN
 from aps.asr.beam_search.lm import adjust_hidden
 

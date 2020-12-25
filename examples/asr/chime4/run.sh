@@ -28,11 +28,11 @@ if [ $stage -le 1 ]; then
 fi
 
 if [ $stage -le 2 ]; then
-  ./scripts/train_am.sh \
+  ./scripts/train.sh \
     --batch-size $batch_size \
     --num-workers $num_workers \
     --gpu $gpu \
-    $dataset $exp
+    am $dataset $exp
 fi
 
 if [ $stage -le 3 ]; then
