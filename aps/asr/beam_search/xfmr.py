@@ -31,13 +31,13 @@ def beam_search(decoder: nn.Module,
     """
     Vectorized beam search algothrim for transformer decoder
     Args
-        enc_out (Tensor): T x 1 x F, encoder output
+        enc_out (Tensor): 1 x T x F, encoder output
     """
     if sos < 0 or eos < 0:
         raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
     if max_len <= 0:
         raise RuntimeError(f"Invalid max_len: {max_len:d}")
-    _, N, _ = enc_out.shape
+    N, _, _ = enc_out.shape
     if N != 1:
         raise RuntimeError(
             f"Got batch size {N:d}, now only support one utterance")
@@ -120,7 +120,7 @@ def beam_search_batch(decoder: nn.Module,
     """
     Batch level vectorized beam search algothrim
     Args
-        enc_out (Tensor): T x N x F, encoder output
+        enc_out (Tensor): N x T x F, encoder output
         enc_len (Tensor): N, length of the encoder output
     """
     if sos < 0 or eos < 0:
@@ -132,7 +132,7 @@ def beam_search_batch(decoder: nn.Module,
     if beam > decoder.vocab_size:
         raise RuntimeError(f"Beam size({beam}) > vocabulary size")
 
-    _, N, _ = enc_out.shape
+    N, _, _ = enc_out.shape
     nbest = min(beam, nbest)
     device = enc_out.device
     # N x T x F => N*beam x T x F

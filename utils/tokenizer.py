@@ -76,7 +76,7 @@ def run(args):
             else:
                 toks = [tok]
             kept_tokens += toks
-            if vocab:
+            if vocab is not None:
                 add_to_vocab(vocab, toks)
         if args.unit == "subword":
             kept_tokens = spm_mdl.encode(" ".join(kept_tokens), out_type=str)

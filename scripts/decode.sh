@@ -13,6 +13,7 @@ channel=-1
 max_len=100
 beam_size=16
 batch_size=""
+function="beam_search"
 penalty=0
 normalized=true
 temperature=1
@@ -58,6 +59,7 @@ if [ -z $batch_size ]; then
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
     --max-len $max_len \
     --normalized $normalized \
+    --function $function \
     > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
 else
   cmd/decode_batch.py \

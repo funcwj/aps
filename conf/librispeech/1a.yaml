@@ -13,7 +13,7 @@ nnet_conf:
     att_dropout: 0.2
     feedforward_dim: 2048
     proj_layer: conv2d
-    k_dim: 256
+    radius: 256
     nhead: 8
     num_layers: 16
     pos_dropout: 0.2

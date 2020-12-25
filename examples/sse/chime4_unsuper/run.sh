@@ -26,7 +26,7 @@ prog_interval=50
 [ $stage -le 1 ] && local/prep_data.sh --dataset $dataset $chime4_data $cache_dir
 
 if [ $stage -le 2 ]; then
-  ./scripts/train_ss.sh \
+  ./scripts/train.sh \
     --gpu $gpu --seed $seed \
     --epochs $epochs --batch-size $batch_size \
     --num-workers $num_workers \
@@ -34,7 +34,7 @@ if [ $stage -le 2 ]; then
     --save-interval $save_interval \
     --prog-interval $prog_interval \
     --tensorboard $tensorboard \
-    $dataset $exp
+    ss $dataset $exp
   echo "$0: Train model done under exp/$dataset/$exp"
 fi
 

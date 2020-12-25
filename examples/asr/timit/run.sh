@@ -3,13 +3,6 @@
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-# 1a.yaml
-#   WER(%) Report:
-#   Total: 26.86%, 192 utterances (1938 errors, 7215 units in total)
-# 1b.yaml (beam-size/4)
-#   WER(%) Report:
-#   Total WER: 25.68%, 192 utterances
-
 set -eu
 
 timit_data=/scratch/jwu/TIMIT-LDC93S1/TIMIT
@@ -26,7 +19,7 @@ num_workers=2
 prog_interval=100
 
 # decoding
-beam_size=24
+beam_size=8
 nbest=8
 
 . ./utils/parse_options.sh || exit 1
@@ -36,7 +29,7 @@ if [ $stage -le 1 ]; then
 fi
 
 if [ $stage -le 2 ]; then
-  ./scripts/train_am.sh \
+  ./scripts/train.sh \
     --seed $seed \
     --gpu $gpu \
     --epochs $epochs \
@@ -44,7 +37,7 @@ if [ $stage -le 2 ]; then
     --batch-size $batch_size \
     --tensorboard $tensorboard \
     --prog-interval $prog_interval \
-    "timit" $exp
+    am $dataset $exp
 fi
 
 if [ $stage -le 3 ]; then
@@ -55,7 +48,8 @@ if [ $stage -le 3 ]; then
     --nbest $nbest \
     --max-len 75 \
     --dict data/timit/dict \
-    "timit" $exp \
+    --function "beam_search" \
+    $dataset $exp \
     data/timit/test/wav.scp \
     exp/timit/$exp/dec
   # wer

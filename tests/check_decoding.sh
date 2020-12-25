@@ -39,7 +39,7 @@ cpt_dir=data/checkpoint/aishell_att_1a
     --channel -1 \
     --dict $cpt_dir/dict \
     --max-len 50 \
-    --normalized true
+#     --normalized true
 
 # test decoding for rnnt
 cpt_dir=data/checkpoint/timit_rnnt_1a

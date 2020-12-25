@@ -46,7 +46,7 @@ RUN conda install -y -c conda-forge tensorboard pysoundfile librosa pre-commit &
 RUN pip install torch_complex kaldi_python_io edit-distance museval sentencepiece pystoi pypesq pytest flake8 warp_rnnt
 RUN pip install https://github.com/kpu/kenlm/archive/master.zip
 
-# install hovorod
+# install hovorod (optional)
 RUN ldconfig /usr/local/cuda/targets/x86_64-linux/lib/stubs && \
     HOROVOD_GPU_ALLREDUCE=NCCL HOROVOD_WITH_PYTORCH=1 pip install --no-cache-dir horovod && \
     ldconfig && horovodrun --check-build
@@ -57,7 +57,7 @@ RUN git clone https://github.com/HawkAaron/warp-transducer.git && cd warp-transd
     mkdir build && cd build && cmake .. && make -j $(nproc) && make install && ldconfig -v && \
     cd ../pytorch_binding && python setup.py install && cd ../../ && rm -rf warp-transducer
 
-# install apex (may abort)
+# install apex (may abort, optional)
 RUN git clone https://github.com/NVIDIA/apex && cd apex && \
     pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./ && \
     cd .. && rm -rf apex
@@ -67,5 +67,5 @@ RUN git clone https://github.com/google/sentencepiece.git && cd sentencepiece &&
     cmake .. && make -j $(nproc) && make install && ldconfig -v && cd ../../ && rm -rf sentencepiece
 
 # test
-RUN python -m warp_rnnt.test
+# RUN python -m warp_rnnt.test
 RUN python -c "from warprnnt_pytorch import rnnt_loss"

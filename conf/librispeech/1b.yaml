@@ -1,8 +1,8 @@
-# 4 GPU, DDP, 128 batch size
+# 8 GPU, DDP, 256 batch size
 # WER (%) Report:
-# Total (2620 utterances): 2762/52576 = 5.25%, SUB/INS/DEL = 2136/178/448
+# Total (2620 utterances): 2356/52576 = 4.48%, SUB/INS/DEL = 1899/158/299
 # WER (%) Report:
-# Total (2939 utterances): 6815/52343 = 13.02%, SUB/INS/DEL = 5391/482/942
+# Total (2939 utterances): 6035/52343 = 11.53%, SUB/INS/DEL = 4834/432/769
 
 nnet: "att"
 
@@ -13,19 +13,16 @@ nnet_conf:
   enc_kwargs:
     conv2d:
       out_features: -1
-      channel: 48
+      channel: 32
       num_layers: 2
       stride: 2
       padding: 1
       kernel_size: 3
-    variant_rnn:
-      num_layers: 4
-      hidden: 1024
-      project: 512
-      dropout: 0.3
-      norm: "BN"
+    pytorch_rnn:
       bidirectional: true
-      non_linear: "relu"
+      dropout: 0.3
+      hidden: 1024
+      num_layers: 4
   dec_dim: 1024
   dec_kwargs:
     dec_rnn: "lstm"
@@ -43,8 +40,10 @@ nnet_conf:
 task: "ctc_xent"
 
 task_conf:
-  lsm_factor: 0.1
   ctc_weight: 0.2
+  label_count: data/librispeech/16k.train.label_count
+  lsm_factor: 0.1
+  lsm_method: unigram
 
 asr_transform:
   feats: "perturb-emph-fbank-log-aug"
@@ -59,11 +58,13 @@ asr_transform:
   min_freq: 20
   norm_mean: true
   norm_var: true
+  norm_per_band: false
   aug_prob: 1
+  aug_max_bands: 27
   aug_max_frame: 100
-  aug_mask_zero: false
-  num_aug_bands: 1
-  num_aug_frame: 1
+  aug_mask_zero: true
+  num_aug_bands: 2
+  num_aug_frame: 2
 
 trainer_conf:
   optimizer: "adam"
@@ -73,7 +74,7 @@ trainer_conf:
   lr_scheduler: "exp_lr"
   lr_scheduler_period: "step"
   lr_scheduler_kwargs:
-    time_stamps: [500, 40000, 100000]
+    time_stamps: [500, 40000, 160000]
     peak_lr: 1.0e-3
     stop_lr: 1.0e-5
   no_impr: 6

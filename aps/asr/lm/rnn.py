@@ -60,7 +60,7 @@ class TorchRNNLM(nn.Module):
 
         # tie_weights
         if tie_weights and embed_size == hidden_size:
-            self.dist.weight = self.vocab_embed.weight
+            self.dist.weight = self.embed.weight
 
     def init_weights(self, initrange: float = 0.1) -> NoReturn:
         init.zeros_(self.dist.bias)
