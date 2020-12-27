@@ -132,6 +132,11 @@ def get_aps_decode_parser():
                         type=str,
                         default="",
                         help="Dictionary file (not needed)")
+    parser.add_argument("--spm",
+                        type=str,
+                        default="",
+                        help="Path of the sentencepiece's model "
+                        "if we choose subword unit")
     parser.add_argument("--device-id",
                         type=int,
                         default=-1,

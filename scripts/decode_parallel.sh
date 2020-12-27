@@ -19,6 +19,7 @@ temperature=1
 normalized=true
 lm=""
 lm_weight=0
+spm=""
 
 echo "$0 $*"
 
@@ -53,6 +54,7 @@ $cmd JOB=1:$nj $log_dir/decode.JOB.log \
   --channel $channel \
   --dict "$dict" \
   --lm "$lm" \
+  --spm "$spm" \
   --lm-weight $lm_weight \
   --penalty $penalty \
   --temperature $temperature \

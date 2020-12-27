@@ -62,6 +62,13 @@ def run(args):
         vocab = load_dict(args.dict, reverse=True)
     else:
         vocab = None
+
+    if args.spm:
+        import sentencepiece as spm
+        spm_mdl = spm.SentencePieceProcessor(model_file=args.spm)
+    else:
+        spm_mdl = None
+
     decoder = FasterDecoder(args.checkpoint,
                             function=args.function,
                             device_id=args.device_id)
@@ -108,10 +115,17 @@ def run(args):
                 trans = [vocab[idx] for idx in hyp["trans"][1:-1]]
             else:
                 trans = [str(idx) for idx in hyp["trans"][1:-1]]
-            if vocab and args.space:
-                trans = "".join(trans).replace(args.space, " ")
+            # char sequence
+            if vocab:
+                if spm_mdl:
+                    trans = spm_mdl.decode(trans)[0]
+                if args.space:
+                    trans = "".join(trans).replace(args.space, " ")
+            # ID sequence
             else:
                 trans = " ".join(trans)
+            if spm_mdl:
+                pass
             nbest.append(f"{score:.3f}\t{trans}\n")
             if idx == 0:
                 top1.write(f"{key}\t{trans}\n")

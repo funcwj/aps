@@ -212,10 +212,7 @@ class XLTransformerEncoderBase(TransformerEncoderBase):
         enc_inp = enc_inp.transpose(0, 1)
         # 2Ti-1 x D
         sin_pos_enc = self.sin_pose(
-            th.arange(-enc_inp.shape[0] + 1,
-                      enc_inp.shape[0],
-                      1.0,
-                      device=enc_inp.device))
+            th.arange(0, 2 * enc_inp.shape[0] - 1, 1.0, device=enc_inp.device))
         # Ti x N x D
         enc_out = self.encoder(enc_inp,
                                sin_pose=sin_pos_enc,

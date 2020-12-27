@@ -19,6 +19,7 @@ normalized=true
 temperature=1
 lm=""
 lm_weight=0
+spm=""
 log_suffix=""
 
 echo "$0 $*"
@@ -51,6 +52,7 @@ if [ -z $batch_size ]; then
     --channel $channel \
     --dict "$dict" \
     --lm "$lm" \
+    --spm "$spm" \
     --penalty $penalty \
     --temperature $temperature \
     --lm-weight $lm_weight \
@@ -71,9 +73,12 @@ else
     --device-id $gpu \
     --channel $channel \
     --dict "$dict" \
+    --lm "$lm" \
+    --spm "$spm" \
     --space "$space" \
     --penalty $penalty \
     --temperature $temperature \
+    --lm-weight $lm_weight \
     --nbest $nbest \
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
     --max-len $max_len \
