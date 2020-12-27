@@ -140,8 +140,7 @@ xfmr_rel_enc_kwargs = {
     "pos_dropout": 0.1,
     "att_dropout": 0.1,
     "post_norm": True,
-    "num_layers": 2,
-    "value_rel_pose": True
+    "num_layers": 2
 }
 
 xfmr_xl_enc_kwargs = {
