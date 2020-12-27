@@ -8,9 +8,8 @@ import argparse
 
 import torch as th
 
-from aps.eval import Computer
+from aps.eval import NnetEvaluator, TextPostProcessor
 from aps.opts import DecodingParser
-from aps.conf import load_dict
 from aps.utils import get_logger, io_wrapper, SimpleTimer
 from aps.loader import AudioReader
 
@@ -21,18 +20,18 @@ logger = get_logger(__name__)
 Nbest format:
 Number: n
 key1
-score-1 hyp-1
+score-1 num-tok-in-hyp-1 hyp-1
 ...
-score-n hyp-n
+score-n num-tok-in-hyp-n hyp-n
 ...
 keyM
-score-1 hyp-1
+score-1 num-tok-in-hyp-1 hyp-1
 ...
-score-n hyp-n
+score-n num-tok-in-hyp-n hyp-n
 """
 
 
-class FasterDecoder(Computer):
+class FasterDecoder(NnetEvaluator):
     """
     Decoder wrapper
     """
@@ -57,17 +56,6 @@ class FasterDecoder(Computer):
 
 def run(args):
     print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
-    # build dictionary
-    if args.dict:
-        vocab = load_dict(args.dict, reverse=True)
-    else:
-        vocab = None
-
-    if args.spm:
-        import sentencepiece as spm
-        spm_mdl = spm.SentencePieceProcessor(model_file=args.spm)
-    else:
-        spm_mdl = None
 
     decoder = FasterDecoder(args.checkpoint,
                             function=args.function,
@@ -80,13 +68,17 @@ def run(args):
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
     if args.lm:
-        lm = Computer(args.lm, device_id=args.device_id)
+        lm = NnetEvaluator(args.lm, device_id=args.device_id)
         logger.info(f"Load lm from {args.lm}: epoch {lm.epoch}, " +
                     f"weight = {args.lm_weight}")
         lm = lm.nnet
     else:
         lm = None
 
+    processor = TextPostProcessor(args.dict,
+                                  space=args.space,
+                                  show_unk=args.show_unk,
+                                  spm=args.spm)
     stdout_top1, top1 = io_wrapper(args.best, "w")
     topn = None
     if args.dump_nbest:
@@ -109,24 +101,11 @@ def run(args):
                                   temperature=args.temperature)
         nbest = [f"{key}\n"]
         for idx, hyp in enumerate(nbest_hypos):
-            score = hyp["score"]
             # remove SOS/EOS
-            if vocab:
-                trans = [vocab[idx] for idx in hyp["trans"][1:-1]]
-            else:
-                trans = [str(idx) for idx in hyp["trans"][1:-1]]
-            # char sequence
-            if vocab:
-                if spm_mdl:
-                    trans = spm_mdl.decode(trans)[0]
-                if args.space:
-                    trans = "".join(trans).replace(args.space, " ")
-            # ID sequence
-            else:
-                trans = " ".join(trans)
-            if spm_mdl:
-                pass
-            nbest.append(f"{score:.3f}\t{trans}\n")
+            token = hyp["trans"][1:-1]
+            trans = processor.run(token)
+            score = hyp["score"]
+            nbest.append(f"{score:.3f}\t{len(token):d}\t{trans}\n")
             if idx == 0:
                 top1.write(f"{key}\t{trans}\n")
         if topn:

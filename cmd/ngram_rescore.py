@@ -15,6 +15,9 @@ logger = get_logger(__name__)
 
 
 def read_nbest(nbest_fd: str) -> Tuple[int, Dict]:
+    """
+    Load nbest list
+    """
     hypos = {}
     nbest = 1
     with codecs.open(nbest_fd, "r", encoding="utf-8") as f:
@@ -27,8 +30,9 @@ def read_nbest(nbest_fd: str) -> Tuple[int, Dict]:
             for _ in range(nbest):
                 items = f.readline().strip().split()
                 score = float(items[0])
-                trans = " ".join(items[1:])
-                topk.append((score, trans))
+                num_tokens = int(items[1])
+                trans = " ".join(items[2:])
+                topk.append((score, num_tokens, trans))
             hypos[key] = topk
     return (nbest, hypos)
 
@@ -41,10 +45,10 @@ def run(args):
     for key, nbest_dict in nbest_hypos.items():
         rescore = []
         for hyp in nbest_dict:
-            am_score, trans = hyp
+            am_score, num_tokens, trans = hyp
             lm_score = ngram.score(trans, bos=True, eos=True)
             if args.normalized:
-                am_score /= len(trans)
+                am_score /= num_tokens
             score = am_score + args.alpha * lm_score
             rescore.append((score, trans))
         rescore = sorted(rescore, key=lambda n: n[0], reverse=True)

@@ -8,10 +8,12 @@ import torch as th
 import torch.nn as nn
 
 from aps.libs import aps_transform, aps_asr_nnet, aps_sse_nnet
-from typing import Dict, Tuple
+from aps.conf import load_dict
+from aps.const import UNK_TOKEN
+from typing import Dict, List, Tuple
 
 
-class Computer(object):
+class NnetEvaluator(object):
     """
     A simple wrapper for model evaluation
     """
@@ -70,3 +72,44 @@ class Computer(object):
 
     def run(self, *args, **kwargs):
         raise NotImplementedError
+
+
+class TextPostProcessor(object):
+    """
+    The class for post processing of decoding sequence
+    """
+
+    def __init__(self,
+                 dict_str: str,
+                 space: str = "",
+                 show_unk: str = "<unk>",
+                 spm: str = "") -> None:
+        self.spm = None
+        self.unk = show_unk
+        self.space = space
+        self.vocab = None
+        if dict_str:
+            self.vocab = load_dict(dict_str, reverse=True)
+        if spm:
+            import sentencepiece as spm
+            self.spm_mdl = spm.SentencePieceProcessor(model_file=spm)
+
+    def run(self, int_seq: List[int]) -> str:
+        if self.vocab:
+            trans = [self.vocab[idx] for idx in int_seq]
+        else:
+            trans = [str(idx) for idx in int_seq]
+        # char sequence
+        if self.vocab:
+            if self.spm_mdl:
+                trans = self.spm_mdl.decode(trans)
+            else:
+                trans = "".join(trans)
+            if self.space:
+                trans = trans.replace(self.space, " ")
+            if self.unk != UNK_TOKEN:
+                trans = trans.replace(UNK_TOKEN, self.unk)
+        # ID sequence
+        else:
+            trans = " ".join(trans)
+        return trans

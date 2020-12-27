@@ -137,6 +137,10 @@ def get_aps_decode_parser():
                         default="",
                         help="Path of the sentencepiece's model "
                         "if we choose subword unit")
+    parser.add_argument("--show-unk",
+                        type=str,
+                        default="<unk>",
+                        help="Which symbol to show when <unk> exists")
     parser.add_argument("--device-id",
                         type=int,
                         default=-1,

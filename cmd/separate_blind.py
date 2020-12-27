@@ -11,12 +11,12 @@ import numpy as np
 
 from aps.loader import AudioReader, write_audio
 from aps.utils import get_logger, SimpleTimer
-from aps.eval import Computer
+from aps.eval import NnetEvaluator
 
 logger = get_logger(__name__)
 
 
-class Separator(Computer):
+class Separator(NnetEvaluator):
     """
     Decoder wrapper
     """
