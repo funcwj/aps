@@ -12,7 +12,6 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 import torch.nn.init as init
-
 import torch.jit as jit
 
 from typing import Optional, Tuple, List

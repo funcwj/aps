@@ -44,6 +44,22 @@ def _get_activation_fn(activation: str) -> nn.Module:
     raise RuntimeError(f"activation should be relu/gelu, not {activation}")
 
 
+def _get_relative_uv(shape: Tuple[int],
+                     init: str = "xavier",
+                     std: float = 0.02) -> nn.Parameter:
+    """
+    Return rel_{u,v} used in transformer-XL's MHSA
+    """
+    if init not in ["xavier", "uniform"]:
+        raise ValueError(f"Unknown init method: {init}")
+    rel_mat = nn.Parameter(th.Tensor(*shape))
+    if init == "xavier":
+        nn.init.xavier_normal_(rel_mat)
+    if init == "uniform":
+        nn.init.normal_(rel_mat, std=std)
+    return rel_mat
+
+
 class ApsMultiheadAttention(nn.Module):
     """
     My own MultiheadAttention and make sure it's same as torch.nn.MultiheadAttention
@@ -322,10 +338,8 @@ class XlMultiheadAttention(ApsMultiheadAttention):
                                                    dropout=dropout,
                                                    bias=bias)
         if rel_u is None or rel_v is None:
-            self.rel_u = nn.Parameter(th.Tensor(self.num_heads, self.head_dim))
-            self.rel_v = nn.Parameter(th.Tensor(self.num_heads, self.head_dim))
-            nn.init.normal_(self.rel_u, std=0.02)
-            nn.init.normal_(self.rel_v, std=0.02)
+            self.rel_u = _get_relative_uv((self.num_heads, self.head_dim))
+            self.rel_v = _get_relative_uv((self.num_heads, self.head_dim))
         else:
             self.rel_u = rel_u
             self.rel_v = rel_v
@@ -619,7 +633,7 @@ class ConformerEncoderLayer(nn.Module):
         out = self.convolution(src)
         # N x F x T => T x N x F
         out = th.einsum("nft->tnf", out)
-        return out + inp
+        return out
 
     def forward(self,
                 src: th.Tensor,
@@ -639,7 +653,7 @@ class ConformerEncoderLayer(nn.Module):
                              key_padding_mask=src_key_padding_mask)[0]
         src = src1 + self.dropout(att)
         # conv
-        src = self.conv(src)
+        src = self.conv(src) + src
         # 2) FFN
         src = self.feedforward2(src) * 0.5 + src
         # layernorm
@@ -699,10 +713,8 @@ def get_xfmr_encoder(name: str,
     else:
         # init for xfmr_xl
         if not untie_rel:
-            rel_u = nn.Parameter(th.Tensor(nhead, att_dim // nhead))
-            rel_v = nn.Parameter(th.Tensor(nhead, att_dim // nhead))
-            nn.init.normal_(rel_u, std=0.02)
-            nn.init.normal_(rel_v, std=0.02)
+            rel_u = _get_relative_uv((nhead, att_dim // nhead))
+            rel_v = _get_relative_uv((nhead, att_dim // nhead))
         else:
             rel_u, rel_v = None, None
         if name == "xfmr_xl":

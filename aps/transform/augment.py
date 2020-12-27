@@ -12,6 +12,7 @@ from typing import Tuple, Union
 
 def tf_mask(batch: int,
             shape: Tuple[int],
+            p: float = 1.0,
             max_bands: int = 30,
             max_frame: int = 40,
             num_freq_masks: int = 2,
@@ -26,8 +27,8 @@ def tf_mask(batch: int,
         masks (Tensor): 0,1 masks, N x T x F
     """
     T, F = shape
-    max_frame = min(max_frame, T // 2)
-    max_bands = min(max_bands, F // 2)
+    max_frame = min(max_frame, int(T * p))
+    max_bands = min(max_bands, F)
     mask = []
     for _ in range(batch):
         fmask = random_mask(shape,

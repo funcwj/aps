@@ -34,4 +34,4 @@ to setup the development environments.
 
 ## Acknowledge
 
-The project was started at 2019.03 when the author was a master student of the Audio, Speech and Language Processing Group (ASLP) in Northwestern Polytechnical University (NWPU), Xi'an, China.
+The project was started at early 2019 when the author was a master student of the Audio, Speech and Language Processing Group (ASLP) in Northwestern Polytechnical University (NWPU), Xi'an, China.
