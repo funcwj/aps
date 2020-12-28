@@ -84,15 +84,15 @@ class TextPostProcessor(object):
                  space: str = "",
                  show_unk: str = "<unk>",
                  spm: str = "") -> None:
-        self.spm = None
         self.unk = show_unk
         self.space = space
         self.vocab = None
+        self.sp_mdl = None
         if dict_str:
             self.vocab = load_dict(dict_str, reverse=True)
         if spm:
-            import sentencepiece as spm
-            self.spm_mdl = spm.SentencePieceProcessor(model_file=spm)
+            import sentencepiece as sp
+            self.sp_mdl = sp.SentencePieceProcessor(model_file=spm)
 
     def run(self, int_seq: List[int]) -> str:
         if self.vocab:
@@ -101,8 +101,8 @@ class TextPostProcessor(object):
             trans = [str(idx) for idx in int_seq]
         # char sequence
         if self.vocab:
-            if self.spm_mdl:
-                trans = self.spm_mdl.decode(trans)
+            if self.sp_mdl:
+                trans = self.sp_mdl.decode(trans)
             else:
                 trans = "".join(trans)
             if self.space:

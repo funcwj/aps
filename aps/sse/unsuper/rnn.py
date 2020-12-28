@@ -7,11 +7,11 @@ import numpy as np
 import torch as th
 import torch.nn as nn
 
-from torch_complex import ComplexTensor
 from typing import Union, NoReturn, Optional
 from aps.asr.base.encoder import PyTorchRNNEncoder
 from aps.const import EPSILON
 from aps.libs import ApsRegisters
+from aps.cplx import ComplexTensor
 
 from scipy.optimize import linear_sum_assignment
 
@@ -142,10 +142,9 @@ class UnsupervisedRNNEnh(PyTorchRNNEncoder):
         Normalize complex-valued STFTs
         """
         mag = obs.abs()
-        pha = obs.angle()
         mag_norm = th.norm(mag, p=2, dim=1, keepdim=True)
         mag = mag / th.clamp(mag_norm, min=EPSILON)
-        obs = ComplexTensor(mag * th.cos(pha), mag * th.sin(pha))
+        obs = ComplexTensor(mag, obs.angle(), polar=True)
         return obs
 
     def forward(self, noisy: th.Tensor) -> Union[ComplexTensor, th.Tensor]:

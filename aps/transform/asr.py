@@ -22,9 +22,9 @@ from aps.transform.utils import STFT, init_melfilter, speed_perturb_filter
 from aps.transform.augment import tf_mask, perturb_speed
 from aps.const import EPSILON
 from aps.libs import ApsRegisters
+from aps.cplx import ComplexTensor
 
 from scipy.fftpack import dct
-from torch_complex import ComplexTensor
 from kaldi_python_io.functional import read_kaldi_mat
 
 AsrReturnType = Union[th.Tensor, Optional[th.Tensor]]

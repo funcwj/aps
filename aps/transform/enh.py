@@ -10,7 +10,6 @@ import math
 import torch as th
 import torch.nn as nn
 
-from torch_complex.tensor import ComplexTensor
 from typing import Union, List, Optional, Tuple
 from aps.transform.utils import STFT, iSTFT
 from aps.transform.asr import (TFTransposeTransform, LogTransform,
@@ -18,6 +17,7 @@ from aps.transform.asr import (TFTransposeTransform, LogTransform,
 from aps.transform.asr import detect_nan
 from aps.const import MATH_PI, EPSILON
 from aps.libs import ApsRegisters
+from aps.cplx import ComplexTensor
 
 EnhReturnType = Tuple[th.Tensor, ComplexTensor, Optional[th.Tensor]]
 
@@ -289,7 +289,7 @@ class FixedBeamformer(nn.Module):
 
     def forward(
             self,
-            x: th.Tensor,
+            x: ComplexTensor,
             beam: Optional[th.Tensor] = None,
             squeeze: bool = False,
             trans: bool = False,
@@ -462,7 +462,7 @@ class FeatureTransform(nn.Module):
         # magnitude & phase: N x C x F x T
         mag, pha = self.forward_stft(wav_pad)
         # STFT coefficients: N x C x F x T
-        cplx = ComplexTensor(mag * th.cos(pha), mag * th.sin(pha))
+        cplx = ComplexTensor(mag, pha, polar=True)
 
         feats = []
         # magnitude transform
