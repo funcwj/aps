@@ -153,7 +153,7 @@ class ApexTrainer(Trainer):
             if norm != -1:
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
-            stats["loss"] = stats["loss"].item()
+            self.reporter.update(egs, ["#utt", "#tok"])
             self.reporter.update(stats)
             self.lr_scheduler_step(None, end_at="step")
             return True

@@ -117,16 +117,23 @@ class ProgressReporter(object):
         self.stats = defaultdict(list)
         self.timer = SimpleTimer()
 
-    def update(self, dict_obj: Dict) -> NoReturn:
+    def update(self,
+               dict_obj: Dict,
+               keys: Optional[List[str]] = None) -> NoReturn:
         """
         Track the recording items (multiple)
         """
         if dict_obj is None:
             return
-        for key, value in dict_obj.items():
-            if isinstance(value, th.Tensor):
-                value = value.item()
-            self.add(key, value)
+        if keys is None:
+            for key, value in dict_obj.items():
+                if isinstance(value, th.Tensor):
+                    value = value.item()
+                self.add(key, value)
+        else:
+            for key in keys:
+                if key in dict_obj:
+                    self.add(key, dict_obj[key])
 
     def add(self, key: str, value: float) -> NoReturn:
         """
@@ -375,7 +382,8 @@ class Trainer(object):
                                          report_metrics,
                                          rank=rank,
                                          period=prog_interval,
-                                         tensorboard=tensorboard)
+                                         tensorboard=tensorboard,
+                                         report_reduction=report_reduction)
         if weight_noise_std is None:
             self.weight_noise_adder = None
         else:
@@ -676,9 +684,6 @@ class Trainer(object):
         """
         Prepare training egs
         """
-        if "size" not in egs:
-            raise RuntimeError(
-                f"Missing \'size\' in egs, please check dataloader")
         egs = load_obj(egs, self.default_device)
         # use ssr = 0 when in eval mode
         if self.ss_scheduler:
@@ -747,7 +752,6 @@ class Trainer(object):
                 succ = self.train_one_step(egs)
                 if succ:
                     self.cur_step += 1
-                    self.reporter.add("@bsz", egs["bsz"])
                 if self.error_detector.step(succ):
                     self.reporter.log(
                         f"Stop training as detecting {self.stop_on_errors} " +
