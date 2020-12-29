@@ -134,14 +134,14 @@ The beam search algothrim is provided in `aps.asr.beam_search`.
 
 The submodule for speech enhancement/separation model. The provided model are shown below:
 
-* `TimeConvTasNet`: Time domain Conv-TasNet
+* `TimeConvTasNet`: Time domain [Conv-TasNet](https://arxiv.org/pdf/1809.07454.pdf)
 * `FreqConvTasNet`: Frequency domain TCN (Temporal Convolutional Network)
 * `DCUNet`: Deep Complexed Unet
-* `DCCRN`: Deep Complexed Convolutional Recurrent Network
-* `DenseUnet`: Unet boosted using DenseBlocks
-* `Phasen`: Phasen network
+* `DCCRN`: [Deep Complexed Convolutional Recurrent Network](https://arxiv.org/pdf/2008.00264.pdf)
+* `DenseUnet`: [Unet boosted using DenseBlocks](https://arxiv.org/abs/2010.01703)
+* `Phasen`: [Phasen network](https://arxiv.org/abs/1911.04697)
 * `CRNet`: Convolutional Recurrent Network for speech enhancement
-* `TimeDPRNN`: Time domain DPRNN
+* `TimeDPRNN`: Time domain [DPRNN](https://arxiv.org/abs/1910.06379)
 * `FreqDPRNN`: Frequency domain DPRNN
 * `ToyRNN`: Basic RNN model
 * `FreqRelXfmr`: A simple transformer model for enhancement/separation
