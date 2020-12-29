@@ -163,11 +163,16 @@ def get_aps_decode_parser():
                         type=str,
                         default="",
                         help="If not empty, dump n-best hypothesis")
-    parser.add_argument("--normalized",
+    parser.add_argument("--len-norm",
                         action=StrToBoolAction,
                         default="false",
                         help="If ture, using length normalized "
                         "when sort nbest hypos")
+    parser.add_argument("--wav-norm",
+                        action=StrToBoolAction,
+                        default="false",
+                        help="If true, do not normalize "
+                        "audio samples to [-1.0, 1.0]")
     return parser
 
 

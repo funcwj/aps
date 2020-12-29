@@ -343,7 +343,7 @@ class XlMultiheadAttention(ApsMultiheadAttention):
         else:
             self.rel_u = rel_u
             self.rel_v = rel_v
-        self.rel_proj = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.rel_proj = nn.Conv1d(1, embed_dim, embed_dim, bias=False)
 
     def dot_att(self, query: th.Tensor, key: th.Tensor,
                 sin_pose: th.Tensor) -> th.Tensor:
@@ -736,59 +736,3 @@ def get_xfmr_encoder(name: str,
                                           rel_u=rel_u,
                                           rel_v=rel_v)
     return ApsTransformerEncoder(encoder_layer, num_layers, norm=final_norm)
-
-
-# ----------------------------------------------------------------------------
-def padding_mask(vec, device=None):
-    N = vec.nelement()
-    M = vec.max().item()
-    templ = th.arange(M, device=vec.device).repeat([N, 1])
-    mask = (templ >= vec.unsqueeze(1))
-    return mask.to(device) if device is not None else mask
-
-
-def prep_sub_mask(T, device="cpu"):
-    mask = (th.triu(th.ones(T, T, device=device), diagonal=1) == 1).float()
-    mask = mask.masked_fill(mask == 1, float("-inf"))
-    return mask
-
-
-def check_self_attn(index):
-    S, L, N, E = 100, 100, 8, 256
-    self_attn = ApsMultiheadAttention(E, 4, dropout=0)
-    self_attn.train()
-    query = th.rand(L, N, E)
-    if index == 0:
-        key, value = query, query
-    elif index == 1:
-        key = th.rand(S, N, E)
-        value = key
-    else:
-        key = th.rand(S, N, E)
-        value = th.rand(S, N, E)
-
-    key_len = th.randint(S // 2, S, (N,))
-    key_len[0] = S
-    key_padding_mask = padding_mask(key_len)
-    attn_mask = prep_sub_mask(S)
-
-    my1, my2 = self_attn(query,
-                         key,
-                         value,
-                         key_padding_mask=key_padding_mask,
-                         attn_mask=attn_mask)
-    th1, th2 = self_attn.torch_forward(query,
-                                       key,
-                                       value,
-                                       key_padding_mask=key_padding_mask,
-                                       attn_mask=attn_mask)
-    assert my1.shape == th1.shape
-    assert my2.shape == th2.shape
-    th.testing.assert_allclose(my2, th2)
-    th.testing.assert_allclose(my1, th1)
-    print(f"Test ApsMultiheadAttention Pass - round: {index}")
-
-
-if __name__ == "__main__":
-    for i in range(3):
-        check_self_attn(i)

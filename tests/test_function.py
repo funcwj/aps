@@ -10,6 +10,9 @@ import torch.nn as nn
 from aps.libs import dynamic_importlib, ApsRegisters, ApsModules
 from aps.conf import load_dict
 from aps.asr.xfmr.pose import digit_shift
+from aps.asr.xfmr.decoder import prep_sub_mask
+from aps.asr.xfmr.impl import ApsMultiheadAttention
+from aps.asr.base.attention import padding_mask
 
 
 @pytest.mark.parametrize(
@@ -58,3 +61,39 @@ def test_rel_pose(N, H, T, D, K):
     # T x N x H x T
     ans2 = digit_shift(ans2)
     th.testing.assert_allclose(ans1, ans2)
+
+
+@pytest.mark.parametrize("index", [0, 1, 2])
+def test_aps_selfattn(index):
+    S, L, N, E = 100, 100, 8, 256
+    self_attn = ApsMultiheadAttention(E, 4, dropout=0)
+    self_attn.train()
+    query = th.rand(L, N, E)
+    if index == 0:
+        key, value = query, query
+    elif index == 1:
+        key = th.rand(S, N, E)
+        value = key
+    else:
+        key = th.rand(S, N, E)
+        value = th.rand(S, N, E)
+
+    key_len = th.randint(S // 2, S, (N,))
+    key_len[0] = S
+    key_padding_mask = padding_mask(key_len)
+    attn_mask = prep_sub_mask(S)
+
+    my1, my2 = self_attn(query,
+                         key,
+                         value,
+                         key_padding_mask=key_padding_mask,
+                         attn_mask=attn_mask)
+    th1, th2 = self_attn.torch_forward(query,
+                                       key,
+                                       value,
+                                       key_padding_mask=key_padding_mask,
+                                       attn_mask=attn_mask)
+    assert my1.shape == th1.shape
+    assert my2.shape == th2.shape
+    th.testing.assert_allclose(my2, th2)
+    th.testing.assert_allclose(my1, th1)

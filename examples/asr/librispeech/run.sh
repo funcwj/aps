@@ -60,17 +60,17 @@ fi
 
 if [ $stage -le 3 ]; then
   # training am
-	./scripts/distributed_train.sh \
-		--seed $am_seed \
-		--gpu "0,1,2,3" \
+  ./scripts/distributed_train.sh \
+    --seed $am_seed \
+    --gpu "0,1,2,3" \
     --num-process 4 \
     --distributed "torch" \
-		--epochs $am_epochs \
-		--num-workers $am_num_workers \
-		--batch-size $am_batch_size \
-		--prog-interval $am_prog_interval \
+    --epochs $am_epochs \
+    --num-workers $am_num_workers \
+    --batch-size $am_batch_size \
+    --prog-interval $am_prog_interval \
     --eval-interval $am_eval_interval \
-		am librispeech $am_exp
+    am librispeech $am_exp
 fi
 
 if [ $stage -le 4 ]; then
@@ -112,13 +112,13 @@ fi
 
 if [ $stage -le 6 ]; then
   # training lm
-	./scripts/train.sh \
-		--seed $lm_seed \
-		--epochs $lm_epochs \
-		--num-workers $lm_num_workers \
-		--batch-size $lm_batch_size \
+  ./scripts/train.sh \
+    --seed $lm_seed \
+    --epochs $lm_epochs \
+    --num-workers $lm_num_workers \
+    --batch-size $lm_batch_size \
     --eval-interval $lm_eval_interval \
-		lm librispeech $lm_exp
+    lm librispeech $lm_exp
 fi
 
 if [ $stage -le 7 ]; then

@@ -47,7 +47,7 @@ def run(args):
         for hyp in nbest_dict:
             am_score, num_tokens, trans = hyp
             lm_score = ngram.score(trans, bos=True, eos=True)
-            if args.normalized:
+            if args.len_norm:
                 am_score /= num_tokens
             score = am_score + args.alpha * lm_score
             rescore.append((score, trans))
@@ -69,7 +69,7 @@ if __name__ == "__main__":
                         type=float,
                         default=0.1,
                         help="Language model weight")
-    parser.add_argument("--normalized",
+    parser.add_argument("--len-norm",
                         action=StrToBoolAction,
                         default="true",
                         help="If ture, using length normalized "

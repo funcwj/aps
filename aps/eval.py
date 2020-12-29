@@ -104,9 +104,10 @@ class TextPostProcessor(object):
             if self.sp_mdl:
                 trans = self.sp_mdl.decode(trans)
             else:
-                trans = "".join(trans)
-            if self.space:
-                trans = trans.replace(self.space, " ")
+                if self.space:
+                    trans = "".join(trans).replace(self.space, " ")
+                else:
+                    trans = " ".join(trans)
             if self.unk != UNK_TOKEN:
                 trans = trans.replace(UNK_TOKEN, self.unk)
         # ID sequence
