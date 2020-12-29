@@ -22,9 +22,9 @@ from aps.transform.utils import STFT, init_melfilter, speed_perturb_filter
 from aps.transform.augment import tf_mask, perturb_speed
 from aps.const import EPSILON
 from aps.libs import ApsRegisters
+from aps.cplx import ComplexTensor
 
 from scipy.fftpack import dct
-from torch_complex import ComplexTensor
 from kaldi_python_io.functional import read_kaldi_mat
 
 AsrReturnType = Union[th.Tensor, Optional[th.Tensor]]
@@ -435,6 +435,7 @@ class SpecAugTransform(nn.Module):
 
     def __init__(self,
                  p: float = 0.5,
+                 p_time: float = 1.0,
                  max_bands: int = 30,
                  max_frame: int = 40,
                  num_freq_masks: int = 2,
@@ -444,12 +445,16 @@ class SpecAugTransform(nn.Module):
         self.fnum, self.tnum = num_freq_masks, num_time_masks
         self.mask_zero = mask_zero
         self.F, self.T = max_bands, max_frame
+        # prob to do spec-augment
         self.p = p
+        # max portion constraint on time axis
+        self.p_time = p_time
 
     def extra_repr(self) -> str:
-        return (f"max_bands={self.F}, max_frame={self.T}, " +
-                f"p={self.p}, mask_zero={self.mask_zero}, "
-                f"num_freq_masks={self.fnum}, num_time_masks={self.tnum}")
+        return (
+            f"max_bands={self.F}, max_frame={self.T}, " +
+            f"p={self.p}, p_time={self.p_time}, mask_zero={self.mask_zero}, "
+            f"num_freq_masks={self.fnum}, num_time_masks={self.tnum}")
 
     def forward(self, x: th.Tensor) -> th.Tensor:
         """
@@ -465,6 +470,7 @@ class SpecAugTransform(nn.Module):
                 N, T, F = x.shape
             # N x T x F
             mask = tf_mask(N, (T, F),
+                           p=self.p_time,
                            max_bands=self.F,
                            max_frame=self.T,
                            num_freq_masks=self.fnum,
@@ -603,6 +609,7 @@ class FeatureTransform(nn.Module):
                  max_freq: Optional[int] = None,
                  lifter: float = 0,
                  aug_prob: float = 0,
+                 aug_maxp_time: float = 1.0,
                  aug_max_bands: int = 30,
                  aug_max_frame: int = 40,
                  aug_mask_zero: bool = True,
@@ -710,6 +717,7 @@ class FeatureTransform(nn.Module):
             elif tok == "aug":
                 transform.append(
                     SpecAugTransform(p=aug_prob,
+                                     p_time=aug_maxp_time,
                                      max_bands=aug_max_bands,
                                      max_frame=aug_max_frame,
                                      mask_zero=aug_mask_zero,

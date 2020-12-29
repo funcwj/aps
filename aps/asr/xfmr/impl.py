@@ -13,6 +13,7 @@ import torch.nn.functional as tf
 from torch.nn import TransformerEncoderLayer
 from typing import Optional, Tuple
 from aps.libs import Register
+from aps.asr.xfmr.pose import digit_shift
 
 TransformerEncoderLayers = Register("xfmr_encoder_layer")
 MHSAReturnType = Tuple[th.Tensor, Optional[th.Tensor]]
@@ -41,6 +42,22 @@ def _get_activation_fn(activation: str) -> nn.Module:
     elif activation == "swish":
         return Swish()
     raise RuntimeError(f"activation should be relu/gelu, not {activation}")
+
+
+def _get_relative_uv(shape: Tuple[int],
+                     init: str = "xavier",
+                     std: float = 0.02) -> nn.Parameter:
+    """
+    Return rel_{u,v} used in transformer-XL's MHSA
+    """
+    if init not in ["xavier", "uniform"]:
+        raise ValueError(f"Unknown init method: {init}")
+    rel_mat = nn.Parameter(th.Tensor(*shape))
+    if init == "xavier":
+        nn.init.xavier_normal_(rel_mat)
+    if init == "uniform":
+        nn.init.normal_(rel_mat, std=std)
+    return rel_mat
 
 
 class ApsMultiheadAttention(nn.Module):
@@ -254,23 +271,27 @@ class RelMultiheadAttention(ApsMultiheadAttention):
         Args:
             query (Tensor): L x N x H x D
             key (tensor): S x N x H x D
-            key_rel_pose (Tensor): L x S x D
+            key_rel_pose (Tensor): 2L(S)-1 x D
         Return:
             logit (Tensor): L x N x H x S
         """
         term_a = th.einsum("lnhd,snhd->lnhs", query, key)
-        # term_b = th.einsum(
-        #     "...hd,...sd->...hs", query,
-        #     th.repeat_interleave(key_rel_pose[:, None], query.shape[1], dim=1))
-        term_b = th.matmul(query, key_rel_pose[:, None].transpose(-1, -2))
-        return term_a + term_b
+        # 1) key_rel_pose is L x S x D
+        #   a)  term_b = th.einsum(
+        #           "...hd,...sd->...hs", query,
+        #       th.repeat_interleave(key_rel_pose[:, None], query.shape[1], dim=1))
+        #   b) term_b = th.matmul(query, key_rel_pose[:, None].transpose(-1, -2))
+        # 2) key_rel_pose is 2L-1 x D
+        # L x N x H x 2L-1
+        term_b = th.matmul(query, key_rel_pose.transpose(0, 1))
+        # L x N x H x S
+        return term_a + digit_shift(term_b)
 
     def forward(self,
                 query: th.Tensor,
                 key: th.Tensor,
                 value: th.Tensor,
                 key_rel_pose: th.Tensor,
-                value_rel_pose: Optional[th.Tensor],
                 key_padding_mask: Optional[th.Tensor] = None,
                 attn_mask: Optional[th.Tensor] = None) -> MHSAReturnType:
         """
@@ -278,8 +299,7 @@ class RelMultiheadAttention(ApsMultiheadAttention):
             query (Tensor): L x N x E
             key (Tensor): S x N x E
             value (Tensor): S x N x E
-            key_rel_pose (Tensor): L x S x D
-            value_rel_pose (Tensor): L x S x D
+            key_rel_pose (Tensor): 2L(S)-1 x D
             key_padding_mask (Tensor): N x S
             attn_mask (Tensor): L x S, additional mask
         Return:
@@ -297,8 +317,6 @@ class RelMultiheadAttention(ApsMultiheadAttention):
                                               value,
                                               attn_mask=attn_mask,
                                               key_padding_mask=key_padding_mask)
-        if value_rel_pose is not None:
-            context += th.matmul(weight, value_rel_pose[:, None])
         return self.wrap_out(context, weight)
 
 
@@ -306,8 +324,6 @@ class XlMultiheadAttention(ApsMultiheadAttention):
     """
     MultiheadAttention with relative position embedding described in:
         Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context
-    Reference code from "RelPartialLearnableMultiHeadAttn" in
-        https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py#L212
     """
 
     def __init__(self,
@@ -322,40 +338,12 @@ class XlMultiheadAttention(ApsMultiheadAttention):
                                                    dropout=dropout,
                                                    bias=bias)
         if rel_u is None or rel_v is None:
-            self.rel_u = nn.Parameter(th.Tensor(self.num_heads, self.head_dim))
-            self.rel_v = nn.Parameter(th.Tensor(self.num_heads, self.head_dim))
-            nn.init.normal_(self.rel_u, std=0.02)
-            nn.init.normal_(self.rel_v, std=0.02)
+            self.rel_u = _get_relative_uv((self.num_heads, self.head_dim))
+            self.rel_v = _get_relative_uv((self.num_heads, self.head_dim))
         else:
             self.rel_u = rel_u
             self.rel_v = rel_v
         self.rel_proj = nn.Linear(embed_dim, embed_dim, bias=False)
-
-    def shift(self, term: th.Tensor) -> th.Tensor:
-        """
-        Got L x N x H x S from tensor L x N x H x 2S-1
-        Args:
-            term (Tensor): L x N x H x 2S(L)-1
-        Return:
-            term (Tensor): L x N x H x S(L)
-        """
-        L, N, H, X = term.shape
-        if L * 2 - 1 != X:
-            raise RuntimeError(
-                "XlMultiheadAttention: tensor shape should be: " +
-                f"L x N x H x 2L-1, but got {term.shape}")
-        # L x N x H x 2L
-        term_pad = tf.pad(term, (1, 0))
-        # L x 2L x H x N
-        term_pad = term_pad.transpose(1, -1).contiguous()
-        # 2L x L x H x N
-        term_pad = term_pad.view(2 * L, L, H, N)
-        # L x 2L-1 x H x N
-        term = term_pad[1:].view(L, 2 * L - 1, H, N)
-        # L x L x H x N
-        term = term[:, :L]
-        # L x N x H x L
-        return term.transpose(1, -1)
 
     def dot_att(self, query: th.Tensor, key: th.Tensor,
                 sin_pose: th.Tensor) -> th.Tensor:
@@ -375,9 +363,8 @@ class XlMultiheadAttention(ApsMultiheadAttention):
         rel_pos = rel_pos.view(-1, self.num_heads, self.head_dim)
         # L x N x H x 2S-1
         term_bd = th.einsum("lnhd,shd->lnhs", query + self.rel_v, rel_pos)
-        term_bd = self.shift(term_bd)
         # L x N x H x S
-        return term_ac + term_bd
+        return term_ac + digit_shift(term_bd)
 
     def forward(self,
                 query: th.Tensor,
@@ -518,7 +505,6 @@ class TransformerRelEncoderLayer(ApsTransformerEncoderLayer):
     def forward(self,
                 src: th.Tensor,
                 key_rel_pose: Optional[th.Tensor] = None,
-                value_rel_pose: Optional[th.Tensor] = None,
                 src_mask: Optional[th.Tensor] = None,
                 src_key_padding_mask: Optional[th.Tensor] = None) -> th.Tensor:
         inp = src
@@ -528,7 +514,6 @@ class TransformerRelEncoderLayer(ApsTransformerEncoderLayer):
                              src,
                              src,
                              key_rel_pose,
-                             value_rel_pose,
                              attn_mask=src_mask,
                              key_padding_mask=src_key_padding_mask)[0]
         src = inp + self.dropout(att)
@@ -626,8 +611,9 @@ class ConformerEncoderLayer(nn.Module):
                       kernel_size * 2 + 1,
                       groups=d_model,
                       stride=1,
-                      padding=kernel_size), nn.BatchNorm1d(d_model), Swish(),
-            nn.Conv1d(d_model, d_model, 1), nn.Dropout(p=dropout))
+                      padding=kernel_size), nn.BatchNorm1d(d_model),
+            _get_activation_fn(activation), nn.Conv1d(d_model, d_model, 1),
+            nn.Dropout(p=dropout))
         self.feedforward2 = nn.Sequential(nn.LayerNorm(d_model),
                                           nn.Linear(d_model, dim_feedforward),
                                           _get_activation_fn(activation),
@@ -647,7 +633,7 @@ class ConformerEncoderLayer(nn.Module):
         out = self.convolution(src)
         # N x F x T => T x N x F
         out = th.einsum("nft->tnf", out)
-        return out + inp
+        return out
 
     def forward(self,
                 src: th.Tensor,
@@ -667,7 +653,7 @@ class ConformerEncoderLayer(nn.Module):
                              key_padding_mask=src_key_padding_mask)[0]
         src = src1 + self.dropout(att)
         # conv
-        src = self.conv(src)
+        src = self.conv(src) + src
         # 2) FFN
         src = self.feedforward2(src) * 0.5 + src
         # layernorm
@@ -727,10 +713,8 @@ def get_xfmr_encoder(name: str,
     else:
         # init for xfmr_xl
         if not untie_rel:
-            rel_u = nn.Parameter(th.Tensor(nhead, att_dim // nhead))
-            rel_v = nn.Parameter(th.Tensor(nhead, att_dim // nhead))
-            nn.init.normal_(rel_u, std=0.02)
-            nn.init.normal_(rel_v, std=0.02)
+            rel_u = _get_relative_uv((nhead, att_dim // nhead))
+            rel_v = _get_relative_uv((nhead, att_dim // nhead))
         else:
             rel_u, rel_v = None, None
         if name == "xfmr_xl":
@@ -752,59 +736,3 @@ def get_xfmr_encoder(name: str,
                                           rel_u=rel_u,
                                           rel_v=rel_v)
     return ApsTransformerEncoder(encoder_layer, num_layers, norm=final_norm)
-
-
-# ----------------------------------------------------------------------------
-def padding_mask(vec, device=None):
-    N = vec.nelement()
-    M = vec.max().item()
-    templ = th.arange(M, device=vec.device).repeat([N, 1])
-    mask = (templ >= vec.unsqueeze(1))
-    return mask.to(device) if device is not None else mask
-
-
-def prep_sub_mask(T, device="cpu"):
-    mask = (th.triu(th.ones(T, T, device=device), diagonal=1) == 1).float()
-    mask = mask.masked_fill(mask == 1, float("-inf"))
-    return mask
-
-
-def check_self_attn(index):
-    S, L, N, E = 100, 100, 8, 256
-    self_attn = ApsMultiheadAttention(E, 4, dropout=0)
-    self_attn.train()
-    query = th.rand(L, N, E)
-    if index == 0:
-        key, value = query, query
-    elif index == 1:
-        key = th.rand(S, N, E)
-        value = key
-    else:
-        key = th.rand(S, N, E)
-        value = th.rand(S, N, E)
-
-    key_len = th.randint(S // 2, S, (N,))
-    key_len[0] = S
-    key_padding_mask = padding_mask(key_len)
-    attn_mask = prep_sub_mask(S)
-
-    my1, my2 = self_attn(query,
-                         key,
-                         value,
-                         key_padding_mask=key_padding_mask,
-                         attn_mask=attn_mask)
-    th1, th2 = self_attn.torch_forward(query,
-                                       key,
-                                       value,
-                                       key_padding_mask=key_padding_mask,
-                                       attn_mask=attn_mask)
-    assert my1.shape == th1.shape
-    assert my2.shape == th2.shape
-    th.testing.assert_allclose(my2, th2)
-    th.testing.assert_allclose(my1, th1)
-    print(f"Test ApsMultiheadAttention Pass - round: {index}")
-
-
-if __name__ == "__main__":
-    for i in range(3):
-        check_self_attn(i)

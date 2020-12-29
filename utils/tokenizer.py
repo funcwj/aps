@@ -9,7 +9,6 @@ Python version of tokenizer.pl
 import sys
 import codecs
 import argparse
-import sentencepiece as spm
 
 
 def io_wrapper(io_str, mode):
@@ -39,13 +38,14 @@ def run(args):
             if unit not in vocab:
                 vocab[unit] = len(vocab)
 
-    spm_mdl = None
+    sp_mdl = None
     vocab = None
     add_units = None
     if args.unit == "subword":
         if not args.spm:
             raise RuntimeError("Missing --spm when choose subword unit")
-        spm_mdl = spm.SentencePieceProcessor(model_file=args.spm)
+        import sentencepiece as sp
+        sp_mdl = sp.SentencePieceProcessor(model_file=args.spm)
     else:
         if args.add_units:
             add_units = args.add_units.split(",")
@@ -79,7 +79,7 @@ def run(args):
             if vocab is not None:
                 add_to_vocab(vocab, toks)
         if args.unit == "subword":
-            kept_tokens = spm_mdl.encode(" ".join(kept_tokens), out_type=str)
+            kept_tokens = sp_mdl.encode(" ".join(kept_tokens), out_type=str)
         if args.space:
             dst.write(f" {args.space} ".join(kept_tokens) + "\n")
         else:

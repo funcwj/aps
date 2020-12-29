@@ -57,10 +57,18 @@ def gen_asr_egs(batch_size, vocab_size):
     y_len[0] = U
     for i, n in enumerate(y_len.tolist()):
         y[i, n:] = IGNORE_ID
-    return {"src_len": x_len, "src_pad": x, "tgt_len": y_len, "tgt_pad": y}
+    return {
+        "#utt": batch_size,
+        "#tok": th.sum(y_len).item() + batch_size,
+        "src_len": x_len,
+        "src_pad": x,
+        "tgt_len": y_len,
+        "tgt_pad": y
+    }
 
 
 def test_ctc_xent():
+    # th.random.manual_seed(666)
     nnet_cls = aps_asr_nnet("att")
     vocab_size = 100
     batch_size = 4
@@ -80,7 +88,7 @@ def test_ctc_xent():
     task = aps_task("ctc_xent",
                     att_asr,
                     lsm_factor=0.1,
-                    ctc_weight=0.2,
+                    ctc_weight=1,
                     blank=vocab_size - 1)
     egs = gen_asr_egs(batch_size, vocab_size)
     egs["ssr"] = 0.1
@@ -123,6 +131,12 @@ def test_lm_xent():
     task = aps_task("lm", rnnlm)
     U = th.randint(10, 20, (1,)).item()
     x = th.randint(0, vocab_size - 1, (batch_size, U + 1))
-    egs = {"src": x[:-1], "tgt": x[1:], "len": None}
+    egs = {
+        "#utt": batch_size,
+        "#tok": batch_size * U,
+        "src": x[:, :-1],
+        "tgt": x[:, 1:].contiguous(),
+        "len": None
+    }
     stats = task(egs)
     assert not th.isnan(stats["loss"])

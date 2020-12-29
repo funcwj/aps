@@ -10,8 +10,8 @@ import torch.nn.functional as F
 from aps.transform.utils import init_melfilter
 from aps.transform.enh import FixedBeamformer
 from aps.asr.filter.conv import EnhFrontEnds
+from aps.cplx import ComplexTensor
 
-from torch_complex.tensor import ComplexTensor
 from typing import Optional
 
 
@@ -165,16 +165,14 @@ class ComplexLinear(nn.Module):
         self.real = nn.Linear(in_features, out_features, bias=bias)
         self.imag = nn.Linear(in_features, out_features, bias=bias)
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
+    def forward(self, x: ComplexTensor) -> ComplexTensor:
         """
         args:
             x: complex tensor
         return:
             y: complex tensor
         """
-        if not isinstance(x, ComplexTensor):
-            raise RuntimeError(
-                f"Expect ComplexTensor object, got {type(x)} instead")
+        assert isinstance(x, ComplexTensor)
         r = self.real(x.real) - self.imag(x.imag)
         i = self.real(x.imag) + self.imag(x.real)
         return ComplexTensor(r, i)
@@ -215,16 +213,14 @@ class CLPFsBeamformer(nn.Module):
         self.spectra_complex = spectra_complex
         # self.spatial_maxpool = spatial_maxpool
 
-    def forward(self, x: th.Tensor, eps: float = 1e-5) -> th.Tensor:
+    def forward(self, x: ComplexTensor, eps: float = 1e-5) -> th.Tensor:
         """
         Args:
             x: complex tensor, N x C x F x T
         Return:
             y: enhanced features, N x P x G x T
         """
-        if not isinstance(x, ComplexTensor):
-            raise RuntimeError(
-                f"Expect ComplexTensor object, got {type(x)} instead")
+        assert isinstance(x, ComplexTensor)
         if x.dim() not in [3, 4]:
             raise RuntimeError(f"Expect 3/4D tensor, got {x.dim()} instead")
         if x.dim() == 3:

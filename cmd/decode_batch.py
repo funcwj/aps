@@ -9,18 +9,17 @@ import warnings
 
 import torch as th
 
-from aps.loader import AudioReader
-from aps.utils import get_logger, io_wrapper, SimpleTimer
 from aps.opts import DecodingParser
-from aps.conf import load_dict
-from aps.eval import Computer
+from aps.eval import NnetEvaluator, TextPostProcessor
+from aps.utils import get_logger, io_wrapper, SimpleTimer
+from aps.loader import AudioReader
 
 from kaldi_python_io import ScriptReader
 
 logger = get_logger(__name__)
 
 
-class BatchDecoder(Computer):
+class BatchDecoder(NnetEvaluator):
     """
     Decoder wrapper
     """
@@ -38,27 +37,27 @@ def run(args):
     print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     if args.batch_size == 1:
         warnings.warn("can use decode.py instead as batch_size == 1")
-    # build dictionary
-    if args.dict:
-        vocab = load_dict(args.dict, reverse=True)
-    else:
-        vocab = None
     decoder = BatchDecoder(args.checkpoint, device_id=args.device_id)
     if decoder.accept_raw:
         src_reader = AudioReader(args.feats_or_wav_scp,
                                  sr=args.sr,
+                                 norm=args.wav_norm,
                                  channel=args.channel)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
     if args.lm:
-        lm = Computer(args.lm, device_id=args.device_id)
+        lm = NnetEvaluator(args.lm, device_id=args.device_id)
         logger.info(f"Load lm from {args.lm}: epoch {lm.epoch}, " +
                     f"weight = {args.lm_weight}")
         lm = lm.nnet
     else:
         lm = None
 
+    processor = TextPostProcessor(args.dict,
+                                  space=args.space,
+                                  show_unk=args.show_unk,
+                                  spm=args.spm)
     stdout_top1, top1 = io_wrapper(args.best, "w")
     topn = None
     if args.dump_nbest:
@@ -88,24 +87,18 @@ def run(args):
                                   max_len=args.max_len,
                                   penalty=args.penalty,
                                   lm_weight=args.lm_weight,
-                                  normalized=args.normalized,
+                                  len_norm=args.len_norm,
                                   temperature=args.temperature)
         keys = [bz["key"] for bz in batches]
         for key, nbest in zip(keys, batch_nbest):
             logger.info(f"Decoding utterance {key}...")
             nbest_hypos = [f"{key}\n"]
             for idx, hyp in enumerate(nbest):
-                score = hyp["score"]
                 # remove SOS/EOS
-                if vocab:
-                    trans = [vocab[idx] for idx in hyp["trans"][1:-1]]
-                else:
-                    trans = [str(idx) for idx in hyp["trans"][1:-1]]
-                if vocab and args.space:
-                    trans = "".join(trans).replace(args.space, " ")
-                else:
-                    trans = " ".join(trans)
-                nbest_hypos.append(f"{score:.3f}\t{trans}\n")
+                token = hyp["trans"][1:-1]
+                trans = processor.run(token)
+                score = hyp["score"]
+                nbest.append(f"{score:.3f}\t{len(token):d}\t{trans}\n")
                 if idx == 0:
                     top1.write(f"{key}\t{trans}\n")
             if topn:

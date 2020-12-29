@@ -8,8 +8,8 @@ import pytest
 import librosa
 import torch as th
 
-from torch_complex import ComplexTensor
 from aps.transform.utils import forward_stft, inverse_stft
+from aps.cplx import ComplexTensor
 from aps.loader import read_audio
 from aps.transform import AsrTransform, EnhTransform, FixedBeamformer, DfTransform
 from aps.transform.asr import SpeedPerturbTransform

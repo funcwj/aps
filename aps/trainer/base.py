@@ -53,11 +53,16 @@ class ProgressReporter(object):
     def __init__(self,
                  checkpoint: Path,
                  metrics: List[str],
+                 rank: Optional[int] = None,
                  period: int = 100,
                  tensorboard: bool = True,
-                 rank: Optional[int] = None) -> None:
-        self.period = period
+                 reduction_tag: str = "none") -> None:
+        # NOTE on reduction_tag:
+        #   1) for asr tasks we use #tok (token level)
+        #   2) for sse tasks we use $utt (utterance level)
         self.rank = rank
+        self.period = period
+        self.reduction_tag = reduction_tag
         # mkdir
         checkpoint.mkdir(parents=True, exist_ok=True)
         if rank is None:
@@ -109,16 +114,23 @@ class ProgressReporter(object):
         self.stats = defaultdict(list)
         self.timer = SimpleTimer()
 
-    def update(self, dict_obj: Dict) -> NoReturn:
+    def update(self,
+               dict_obj: Dict,
+               keys: Optional[List[str]] = None) -> NoReturn:
         """
         Track the recording items (multiple)
         """
         if dict_obj is None:
             return
-        for key, value in dict_obj.items():
-            if isinstance(value, th.Tensor):
-                value = value.item()
-            self.add(key, value)
+        if keys is None:
+            for key, value in dict_obj.items():
+                if isinstance(value, th.Tensor):
+                    value = value.item()
+                self.add(key, value)
+        else:
+            for key in keys:
+                if key in dict_obj:
+                    self.add(key, dict_obj[key])
 
     def add(self, key: str, value: float) -> NoReturn:
         """
@@ -128,8 +140,13 @@ class ProgressReporter(object):
         N = len(self.stats[key])
         if not N % self.period:
             if key == "rate":
+                # current learning rate
                 cur = self.stats[key][-1]
                 self.log(f"Processed {N:.2e} batches ({key} = {cur:.3e}) ...")
+            elif key[0] == "#":
+                # averged token/utterance numbers in the past
+                cur = sum(self.stats[key][-self.period:]) // self.period
+                self.log(f"Processed {N:.2e} batches ({key} = {cur:d}) ...")
             else:
                 avg = self._report_metric(key, period=self.period)
                 self.log(f"Processed {N:.2e} batches ({key} = {avg:+.2f}) ...")
@@ -138,12 +155,25 @@ class ProgressReporter(object):
         """
         Return the averaged tracked metric
         """
-        stats = self.stats[key][-period:]
-        if isinstance(stats[0], float):
-            metric = sum(stats) / len(stats)
+        nors = self.stats[key][-period:]
+        # try to get denominator
+        if self.reduction_tag in self.stats:
+            dens = self.stats[self.reduction_tag][-period:]
         else:
-            metric = sum([p[0] for p in stats]) / sum([p[1] for p in stats])
-        return metric
+            dens = None
+            warnings.warn(f"{self.reduction_tag} not found in the tracked " +
+                          "statistics, using simple average")
+        if dens is None:
+            # simple average
+            avg = sum(nors) / len(nors)
+        else:
+            # weight sum and average
+            avg = sum(nors[i] * d for i, d in enumerate(dens)) / sum(dens)
+        if key == "accu":
+            avg *= 100
+        if key == "@ppl":
+            avg = math.exp(avg)
+        return avg
 
     def _report_metrics(self):
         """
@@ -155,8 +185,6 @@ class ProgressReporter(object):
                 raise RuntimeError(
                     f"Metric {metric} is not tracked by the reporter")
             reports[metric] = self._report_metric(metric)
-            if metric == "accu":
-                reports[metric] *= 100
         return reports
 
     def report(self, epoch: int, lr: float) -> Tuple[Dict, str]:
@@ -319,6 +347,7 @@ class Trainer(object):
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
                  report_metrics: List[str] = ["loss"],
+                 report_reduction: str = "none",
                  stop_on_errors: int = 10,
                  **kwargs) -> None:
         if not isinstance(task, Task):
@@ -361,7 +390,8 @@ class Trainer(object):
                                          report_metrics,
                                          rank=rank,
                                          period=prog_interval,
-                                         tensorboard=tensorboard)
+                                         tensorboard=tensorboard,
+                                         reduction_tag=report_reduction)
         if weight_noise_std is None:
             self.weight_noise_adder = None
         else:
@@ -442,7 +472,8 @@ class Trainer(object):
                 f"#param: {self.num_params:.2f}M")
 
         self.reporter.log(
-            f"Track the metrics during training: {report_metrics}")
+            f"Track the metrics during training: {report_metrics}, " +
+            f"reduction = {report_reduction}")
         self.reporter.log(f"Early stop detected on metric: {self.stop_on}")
         if clip_gradient:
             self.reporter.log(f"Clip gradient if over {clip_gradient} L2 norm")
@@ -452,6 +483,9 @@ class Trainer(object):
         if weight_noise_std:
             self.reporter.log("Add gaussian noise to gradient, with " +
                               f"std = {weight_noise_std}")
+        if save_interval > 0:
+            self.reporter.log("Will save model states only in #epoch.pt.tar " +
+                              f"(interval = {save_interval})")
 
     def create_optimizer(self,
                          optimizer: str,
@@ -541,7 +575,8 @@ class Trainer(object):
             self.reporter.log(
                 f"Save checkpoint ==> {self.checkpoint / cpt_name}")
             if self.save_interval > 0 and self.cur_epoch % self.save_interval == 0:
-                th.save(cpt, self.checkpoint / f"{self.cur_epoch}.pt.tar")
+                th.save(cpt.pop("optimizer_state"),
+                        self.checkpoint / f"{self.cur_epoch}.pt.tar")
 
     def train_one_step(self, egs: Dict) -> bool:
         """
@@ -603,6 +638,7 @@ class Trainer(object):
                 egs = self.prep_egs(egs)
                 stats = self.task(egs)
                 # update statistics
+                self.reporter.update(egs, ["#utt", "#tok"])
                 self.reporter.update(stats)
 
     def stop_detect(self, dev_loader: Iterable[Dict], lr: float) -> bool:

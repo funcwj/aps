@@ -8,12 +8,12 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Optional
-from torch_complex.tensor import ComplexTensor
+from typing import Optional, Union
 
 from aps.transform.utils import init_melfilter
 from aps.asr.base.encoder import PyTorchRNNEncoder
 from aps.libs import Register
+from aps.cplx import ComplexTensor
 
 EnhFrontEnds = Register("enh_filter")
 
@@ -28,11 +28,12 @@ class ComplexConvXd(nn.Module):
         self.real = conv_ins(*args, **kwargs)
         self.imag = conv_ins(*args, **kwargs)
 
-    def forward(self, x, add_abs=False, eps=1e-5):
+    def forward(self,
+                x: ComplexTensor,
+                add_abs: bool = False,
+                eps: float = 1e-5) -> Union[ComplexTensor, th.Tensor]:
         # x: complex tensor
-        if not isinstance(x, ComplexTensor):
-            raise RuntimeError(
-                f"Expect ComplexTensor object, got {type(x)} instead")
+        assert isinstance(x, ComplexTensor)
         xr, xi = x.real, x.imag
         br = self.real(xr) - self.imag(xi)
         bi = self.real(xi) + self.imag(xr)

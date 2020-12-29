@@ -5,7 +5,6 @@
 """
 For ASR task
 """
-import math
 import warnings
 import torch as th
 import torch.nn as nn
@@ -35,7 +34,7 @@ from aps.libs import ApsRegisters
 __all__ = ["CtcXentHybridTask", "TransducerTask", "LmXentTask"]
 
 
-def compute_accu(outs: th.Tensor, tgts: th.Tensor) -> float:
+def compute_accu(outs: th.Tensor, tgts: th.Tensor) -> Tuple[float]:
     """
     Compute frame-level accuracy
     """
@@ -48,21 +47,28 @@ def compute_accu(outs: th.Tensor, tgts: th.Tensor) -> float:
     # denumerator
     total = th.sum(mask)
     # return pair
-    return (ncorr.item(), total.item())
+    accu = ncorr / total
+    return (accu.item(), total.item())
 
 
-def prep_asr_target(tgt_pad: th.Tensor,
-                    tgt_len: th.Tensor,
-                    eos: int = 0) -> Tuple[th.Tensor, th.Tensor]:
+def prep_asr_target(
+        tgt_pad: th.Tensor,
+        tgt_len: th.Tensor,
+        pad_value: int,
+        eos_value: int = -1) -> Tuple[th.Tensor, Optional[th.Tensor]]:
     """
     Process asr targets for inference and loss computation
     """
     # N x To, -1 => EOS
-    tgt_v1 = tgt_pad.masked_fill(tgt_pad == IGNORE_ID, eos)
-    # N x (To+1), pad -1
-    tgt_v2 = tf.pad(tgt_pad, (0, 1), value=IGNORE_ID)
-    # add eos
-    tgt_v2 = tgt_v2.scatter(1, tgt_len[:, None], eos)
+    tgt_v1 = tgt_pad.masked_fill(tgt_pad == IGNORE_ID, pad_value)
+    # add eos if needed
+    if eos_value >= 0:
+        # N x (To+1), pad -1
+        tgt_v2 = tf.pad(tgt_pad, (0, 1), value=IGNORE_ID)
+        # add eos
+        tgt_v2 = tgt_v2.scatter(1, tgt_len[:, None], eos_value)
+    else:
+        tgt_v2 = None
     return tgt_v1, tgt_v2
 
 
@@ -106,6 +112,7 @@ class CtcXentHybridTask(Task):
         if lsm_method == "unigram" and not label_count:
             raise RuntimeError(
                 "Missing label_count to use unigram label smoothing")
+        self.eos = nnet.eos
         self.ctc_blank = blank
         self.ctc_weight = ctc_weight
         self.lsm_factor = lsm_factor
@@ -125,7 +132,8 @@ class CtcXentHybridTask(Task):
         # tgts: N x To+1 (add eos)
         tgt_pad, tgts = prep_asr_target(egs["tgt_pad"],
                                         egs["tgt_len"],
-                                        eos=self.nnet.eos)
+                                        pad_value=self.eos,
+                                        eos_value=self.eos)
         # outs: N x (To+1) x V
         # alis: N x (To+1) x Ti
         if "ssr" in egs:
@@ -158,7 +166,9 @@ class CtcXentHybridTask(Task):
             loss = self.ctc_weight * ctc_loss + (1 - self.ctc_weight) * loss
             stats["@ctc"] = ctc_loss.item()
         # compute accu
-        accu = compute_accu(outs, tgts)
+        accu, den = compute_accu(outs, tgts)
+        # check coding error
+        assert den == egs["#tok"]
         # add to reporter
         stats["accu"] = accu
         stats["loss"] = loss
@@ -205,13 +215,14 @@ class TransducerTask(Task):
             tgt_len: N
         """
         # tgt_pad: N x To (replace ignore_id with blank)
-        ignore_mask = egs["tgt_pad"] == IGNORE_ID
-        tgt_pad = egs["tgt_pad"].masked_fill(ignore_mask, self.blank)
+        tgt_pad, _ = prep_asr_target(egs["tgt_pad"],
+                                     egs["tgt_len"],
+                                     pad_value=self.blank)
         tgt_len = egs["tgt_len"]
         # N x Ti x To+1 x V
         outs, enc_len = self.nnet(egs["src_pad"], egs["src_len"], tgt_pad,
                                   tgt_len)
-        rnnt_kwargs = {"blank": self.blank, "reduction": "mean"}
+        rnnt_kwargs = {"blank": self.blank, "reduction": "sum"}
         # add log_softmax if use https://github.com/1ytic/warp-rnnt
         if self.interface == "warp_rnnt":
             outs = tf.log_softmax(outs, -1)
@@ -219,6 +230,7 @@ class TransducerTask(Task):
         # compute loss
         loss = self.rnnt_objf(outs, tgt_pad.to(th.int32), enc_len.to(th.int32),
                               tgt_len.to(th.int32), **rnnt_kwargs)
+        loss = loss / th.sum(tgt_len)
         return {"loss": loss}
 
 
@@ -247,6 +259,9 @@ class LmXentTask(Task):
         else:
             pred, _ = self.nnet(egs["src"], None, egs["len"])
         loss = ce_objf(pred, egs["tgt"])
-        accu = compute_accu(pred, egs["tgt"])
-        stats = {"accu": accu, "loss": loss, "@ppl": math.exp(loss.item())}
+        accu, den = compute_accu(pred, egs["tgt"])
+        # check coding error
+        assert den == egs["#tok"]
+        # ppl is derived from xent, so we pass loss to it
+        stats = {"accu": accu, "loss": loss, "@ppl": loss.item()}
         return stats

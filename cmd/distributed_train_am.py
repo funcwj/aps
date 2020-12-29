@@ -35,6 +35,7 @@ def train_worker(task, conf, vocab_dict, args):
                       save_interval=args.save_interval,
                       prog_interval=args.prog_interval,
                       tensorboard=args.tensorboard,
+                      report_reduction="#tok",
                       **conf["trainer_conf"])
 
     # dump configurations

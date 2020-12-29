@@ -214,7 +214,7 @@ class AttASR(EncDecASRBase):
     def greedy_search(self,
                       x: th.Tensor,
                       max_len: int = -1,
-                      normalized: bool = True,
+                      len_norm: bool = True,
                       **kwargs) -> List[Dict]:
         """
         Greedy search (numbers should be same as beam_search with #beam-size == 1)
@@ -228,7 +228,7 @@ class AttASR(EncDecASRBase):
                                          enc_out,
                                          sos=self.sos,
                                          eos=self.eos,
-                                         normalized=normalized)
+                                         len_norm=len_norm)
 
     def beam_search(self,
                     x: th.Tensor,

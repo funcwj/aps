@@ -1,12 +1,12 @@
 # Usage overview
 
-There is no `setup.py` script for installing the package in the repository and actually I don't suggest readers doing that. The following shows the recommended way to use the APS package.
+There is no `setup.py` script for installing the APS package in the repository and actually I don't suggest readers doing that. The following shows the recommended way to use the APS.
 
 A typical working directory looks like:
 ```bash
 cmd conf data exp scripts utils
 ```
-and it can be initialized using `scripts/init_workspace.sh`, e.g.,
+It tracks several experiments and could be initialized using `scripts/init_workspace.sh`, e.g.,
 ```bash
 export APS_ROOT=/path/to/aps
 $APS_ROOT/scripts/init_workspace.sh wsj0_2mix
@@ -26,10 +26,10 @@ will make directory current `workspace` like (`APS_ROOT=../aps`):
 └── utils -> ../aps/utils
 ```
 
-Assuming that we've prepared training & test data and experiment configurations under `data` and `conf` directory (see [Instruction](instruction.md) for details), the model training can be easily started by running the provided scripts under [scripts](../scripts):
+Assuming that we've prepared data and experiment configurations under directory `data` and `conf` (see [Instruction](instruction.md) for details), the model training can be easily kicked off by running the provided scripts under [scripts](../scripts):
 
-* `scripts/train_{am,lm,ss}.sh`: Single-GPU training for acoustic model, language model and speech enhancement/separation model, respectively.
-* `scripts/distributed_train_{am,ss}.sh`: Distributed training (currently single-node multi-GPU) for acoustic model and speech enhancement/separation model.
+* `scripts/train.sh`: Single-GPU training for acoustic model (AM), language model (LM) and speech separation/enhancement (SSE) model, respectively.
+* `scripts/distributed_train.sh`: Distributed training (currently single-node multi-GPU) for AM & SSE models.
 
 E.g., running
 ```bash
@@ -67,6 +67,6 @@ will load `.yaml` configuration from `conf/aishell_v1/1a.yaml` and create checkp
 ├── scripts -> ../aps/scripts
 └── utils -> ../aps/utils
 ```
-(the data directory `data/asr1/{train,dev,tst}` is a typical setup for acoustic model training)
+(the data directory `data/asr1/{train,dev,tst}` is a typical setup for AM training)
 
 After the end of the model training, we can start task dependent evaluation using the assets under checkpoint directory. Some recipes are available under [aps/examples](../examples).

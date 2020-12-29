@@ -1,7 +1,6 @@
 scipy==1.5.2
 kaldi_python_io==1.2.0
 torch==1.6.0
-torch_complex==0.2.0
 horovod==0.20.3
 museval==0.3.1
 pystoi==0.3.3

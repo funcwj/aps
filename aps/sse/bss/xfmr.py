@@ -30,7 +30,6 @@ class FreqRelXfmr(RelTransformerEncoder):
                  att_dropout: float = 0.1,
                  proj_dropout: float = 0.1,
                  post_norm: bool = True,
-                 value_rel_pose: bool = False,
                  num_layers: int = 6,
                  non_linear: str = "sigmoid",
                  training_mode: str = "freq") -> None:
@@ -44,8 +43,7 @@ class FreqRelXfmr(RelTransformerEncoder):
                                           pos_dropout=0,
                                           att_dropout=att_dropout,
                                           post_norm=post_norm,
-                                          num_layers=num_layers,
-                                          value_rel_pose=value_rel_pose)
+                                          num_layers=num_layers)
         if enh_transform is None:
             raise RuntimeError("enh_transform can not be None")
         self.enh_transform = enh_transform

@@ -8,7 +8,7 @@ import torch.nn as nn
 
 from torch.nn import TransformerDecoder, TransformerDecoderLayer
 from typing import Union, Tuple, Optional
-from aps.asr.xfmr.pose import InputSinPosEncoding
+from aps.asr.xfmr.pose import get_xfmr_pose
 from aps.asr.base.attention import padding_mask
 
 
@@ -47,9 +47,10 @@ class TorchTransformerDecoder(nn.Module):
                  num_layers: int = 6) -> None:
         super(TorchTransformerDecoder, self).__init__()
         self.vocab_embed = nn.Embedding(vocab_size, att_dim)
-        self.abs_pos_enc = InputSinPosEncoding(att_dim,
-                                               dropout=pos_dropout,
-                                               scale_embed=scale_embed)
+        self.abs_pos_enc = get_xfmr_pose("inp_sin",
+                                         att_dim,
+                                         dropout=pos_dropout,
+                                         scale_embed=scale_embed)
         decoder_layer = TransformerDecoderLayer(att_dim,
                                                 nhead,
                                                 dim_feedforward=feedforward_dim,

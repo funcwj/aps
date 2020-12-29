@@ -3,20 +3,19 @@
 
 import torch as th
 import torch.nn as nn
-import torch_complex.functional as cf
 
 from typing import Dict
-from torch_complex import ComplexTensor
 from aps.task.base import Task
 from aps.const import EPSILON
 from aps.libs import ApsRegisters
+from aps.cplx import ComplexTensor
 
 
-def hermitian_det(Bk: th.Tensor, eps: float = EPSILON) -> th.Tensor:
+def hermitian_det(Bk: ComplexTensor, eps: float = EPSILON) -> th.Tensor:
     """
     Compute determinant of the hermitian matrices
     Args:
-        Bk (Tensor): N x F x C x C
+        Bk (ComplexTensor): N x F x C x C
     Return:
         det (Tensor): N x F
     """
@@ -50,14 +49,14 @@ def estimate_covar(mask: th.Tensor,
     _, _, C, _ = obs.shape
     # N x F x 1 x T
     mask = mask.unsqueeze(-2)
-    # N x F x C x C
-    nominator = cf.einsum("...it,...jt->...ij", [obs * mask, obs.conj()])
+    # N x F x C x C: einsum("...it,...jt->...ij", spec * mask, spec.conj())
+    nominator = (obs * mask) @ obs.conj_transpose(-1, -2)
     # N x F x 1 x 1
     denominator = th.clamp(mask.sum(-1, keepdims=True), min=eps)
     # N x F x C x C
     Bk = C * nominator / denominator
     # N x F x C x C
-    Bk = (Bk + Bk.transpose(-1, -2).conj()) / 2
+    Bk = (Bk + Bk.conj_transpose(-1, -2)) / 2
     return Bk
 
 
@@ -91,8 +90,8 @@ class UnsuperEnhTask(Task):
         Dk = hermitian_det(Bk, eps=self.eps)
         # N x F x C x C
         Bk_inv = Bk.inverse()
-        # N x F x T
-        K = cf.einsum("...xt,...xy,...yt->...t", [obs.conj(), Bk_inv, obs])
+        # N x F x T: einsum("...xt,...xy,...yt->...t", obs.conj(), Bk_inv, obs)
+        K = (obs.conj() * (Bk_inv @ obs)).sum(-2)
         K = th.clamp(K.real, min=self.eps)
         # N x F x T
         log_pdf = -C * th.log(K) - th.log(Dk[..., None])

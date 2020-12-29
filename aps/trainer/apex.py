@@ -50,6 +50,7 @@ class ApexTrainer(Trainer):
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
                  report_metrics: List[str] = ["loss"],
+                 report_reduction: str = "none",
                  stop_on_errors: int = 10,
                  **kwargs) -> None:
         super(ApexTrainer,
@@ -76,7 +77,8 @@ class ApexTrainer(Trainer):
                              no_impr=no_impr,
                              no_impr_thres=no_impr_thres,
                              report_metrics=report_metrics,
-                             stop_on_errors=stop_on_errors)
+                             stop_on_errors=stop_on_errors,
+                             report_reduction=report_reduction)
         if dist.get_backend() not in ["torch", "none"]:
             raise ValueError(
                 "ApexTrainer should use torch/none as distributed backend")
@@ -126,7 +128,7 @@ class ApexTrainer(Trainer):
         stats = self.task(egs)
         # use all reduce to check loss
         if self.distributed:
-            loss = dist.all_reduce(stats["loss"].clone())
+            loss = dist.all_reduce(stats["loss"].clone()).item()
         else:
             loss = stats["loss"].item()
         # backward if not nan/inf
@@ -151,6 +153,7 @@ class ApexTrainer(Trainer):
             if norm != -1:
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
+            self.reporter.update(egs, ["#utt", "#tok"])
             self.reporter.update(stats)
             self.lr_scheduler_step(None, end_at="step")
             return True

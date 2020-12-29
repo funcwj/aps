@@ -17,7 +17,8 @@ __pycache__/
 /build/
 
 # examples
-/example/*/*/data
+/examples/*/*/data
+/examples/*/*/exp
 
 # pytest
 .pytest_cache/

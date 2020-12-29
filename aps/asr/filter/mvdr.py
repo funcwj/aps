@@ -7,13 +7,12 @@ import torch as th
 import torch.nn as nn
 
 import torch.nn.functional as tf
-import torch_complex.functional as cf
 
 from aps.asr.base.attention import padding_mask
 from aps.asr.base.encoder import PyTorchRNNEncoder
 from aps.asr.filter.conv import EnhFrontEnds
 from aps.const import EPSILON
-from torch_complex import ComplexTensor
+from aps.cplx import ComplexTensor
 from typing import Optional
 
 
@@ -22,8 +21,8 @@ def trace(cplx_mat: ComplexTensor) -> ComplexTensor:
     Return trace of a complex matrices
     """
     mat_size = cplx_mat.size()
-    E = th.eye(mat_size[-1], dtype=th.bool).expand(*mat_size)
-    return cplx_mat[E].view(*mat_size[:-1]).sum(-1)
+    diag_index = th.eye(mat_size[-1], dtype=th.bool).expand(*mat_size)
+    return cplx_mat.masked_select(diag_index).view(*mat_size[:-1]).sum(-1)
 
 
 def beamform(weight: ComplexTensor,
@@ -53,8 +52,8 @@ def estimate_covar(mask: th.Tensor,
     spec = spectrogram.transpose(1, 2)
     # N x F x 1 x T
     mask = mask.unsqueeze(-2)
-    # N x F x C x C
-    nominator = cf.einsum("...it,...jt->...ij", [spec * mask, spec.conj()])
+    # N x F x C x C: einsum("...it,...jt->...ij", spec * mask, spec.conj())
+    nominator = (spec * mask) @ spec.conj_transpose(-1, -2)
     # N x F x 1 x 1
     denominator = th.clamp(mask.sum(-1, keepdims=True), min=EPSILON)
     # N x F x C x C
@@ -90,12 +89,12 @@ class MvdrBeamformer(nn.Module):
         Rn = Rn + I * eps
         # N x F x C x C
         Rn_inv = Rn.inverse()
-        # N x F x C x C
-        Rn_inv_Rs = cf.einsum("...ij,...jk->...ik", [Rn_inv, Rs])
+        # N x F x C x C: einsum("...ij,...jk->...ik", Rn_inv, Rs)
+        Rn_inv_Rs = Rn_inv @ Rs
         # N x F
         tr_Rn_inv_Rs = trace(Rn_inv_Rs) + eps
-        # N x F x C
-        Rn_inv_Rs_u = cf.einsum("...fnc,...c->...fn", [Rn_inv_Rs, u])
+        # N x F x C: einsum("...fnc,...c->...fn", Rn_inv_Rs, u)
+        Rn_inv_Rs_u = (Rn_inv_Rs * u).sum(-1)
         # N x F x C
         weight = Rn_inv_Rs_u / tr_Rn_inv_Rs[..., None]
         return weight

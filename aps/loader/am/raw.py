@@ -96,6 +96,15 @@ class Dataset(AsrDataset):
 
 
 def egs_collate(egs: Dict) -> Dict:
+    """
+    Batch collate, return with:
+        #utt: batch size, int
+        #tok: token size, int
+        src_pad: raw waveforms, N x (C) S
+        tgt_pad: N x T
+        src_len: number of the frames, N
+        tgt_len: length of the tokens, N
+    """
 
     def pad_seq(seq, value=0):
         peek_dim = seq[0].dim()
@@ -112,16 +121,16 @@ def egs_collate(egs: Dict) -> Dict:
         return pad_mat
 
     egs = {
-        # N x S or N x C x S
+        "#utt":
+            len(egs),
+        "#tok":  # add 1 as during training we pad sos
+            sum([int(eg["len"]) + 1 for eg in egs]),
         "src_pad":
             pad_seq([th.from_numpy(eg["inp"]) for eg in egs], value=0),
-        # N x T
         "tgt_pad":
             pad_seq([th.as_tensor(eg["ref"]) for eg in egs], value=IGNORE_ID),
-        # N, number of the frames
         "src_len":
             th.tensor([eg["dur"] for eg in egs], dtype=th.int64),
-        # N, length of the tokens
         "tgt_len":
             th.tensor([eg["len"] for eg in egs], dtype=th.int64)
     }

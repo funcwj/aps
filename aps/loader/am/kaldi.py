@@ -81,21 +81,30 @@ class Dataset(AsrDataset):
 
 
 def egs_collate(egs: Dict) -> Dict:
+    """
+    Batch collate, return with keys:
+        #utt: batch size, int
+        #tok: token size, int
+        src_pad: kaldi features N x T x F
+        tgt_pad: target tokens, N x T
+        src_len: number of the frames, N
+        tgt_len: length of the tokens, N
+    """
 
     def pad_seq(olist, value=0):
         return pad_sequence(olist, batch_first=True, padding_value=value)
 
     return {
-        # N x S
+        "#utt":
+            len(egs),
+        "#tok":  # add 1 as during training we pad sos
+            sum([int(eg["len"]) + 1 for eg in egs]),
         "src_pad":
             pad_seq([th.from_numpy(eg["inp"].copy()) for eg in egs], value=0),
-        # N x T
         "tgt_pad":
             pad_seq([th.as_tensor(eg["ref"]) for eg in egs], value=IGNORE_ID),
-        # N, number of the frames
         "src_len":
             th.tensor([int(eg["dur"]) for eg in egs], dtype=th.int64),
-        # N, length of the tokens
         "tgt_len":
             th.tensor([eg["len"] for eg in egs], dtype=th.int64)
     }

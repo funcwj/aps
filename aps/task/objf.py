@@ -102,8 +102,10 @@ def ctc_objf(outs: th.Tensor,
                        out_len,
                        tgt_len,
                        blank=blank,
-                       reduction="mean",
+                       reduction="sum",
                        zero_infinity=True)
+    # average on each label
+    loss = loss / th.sum(tgt_len)
     return loss
 
 

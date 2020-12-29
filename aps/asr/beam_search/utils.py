@@ -23,7 +23,7 @@ class BaseBeamTracker(object):
                  device: Union[th.device, str] = "cpu",
                  penalty: float = 0,
                  coverage: float = 0,
-                 normalized: bool = True) -> None:
+                 len_norm: bool = True) -> None:
         self.beam_size = beam_size
         self.batch_size = batch_size
         self.sos = sos
@@ -32,7 +32,7 @@ class BaseBeamTracker(object):
         self.penalty = penalty
         self.coverage = coverage
         self.lm_weight = lm_weight
-        self.normalized = normalized
+        self.len_norm = len_norm
 
 
 class BeamTracker(BaseBeamTracker):
@@ -48,7 +48,7 @@ class BeamTracker(BaseBeamTracker):
                  device: Union[th.device, str] = "cpu",
                  penalty: float = 0,
                  coverage: float = 0,
-                 normalized: bool = True) -> None:
+                 len_norm: bool = True) -> None:
         super(BeamTracker, self).__init__(beam_size,
                                           sos=sos,
                                           eos=eos,
@@ -56,7 +56,7 @@ class BeamTracker(BaseBeamTracker):
                                           penalty=penalty,
                                           coverage=coverage,
                                           lm_weight=lm_weight,
-                                          normalized=normalized)
+                                          len_norm=len_norm)
         self.token = [th.tensor([sos] * beam_size, device=device)]
         self.point = [th.tensor(range(beam_size), device=device)]
         self.score = th.zeros(beam_size, device=device)
@@ -137,7 +137,7 @@ class BeamTracker(BaseBeamTracker):
             token_len = len(token) if final else len(token) - 1
             score = s + token_len * self.penalty
             hypos.append({
-                "score": score / (token_len if self.normalized else 1),
+                "score": score / (token_len if self.len_norm else 1),
                 "trans": token + [self.eos] if final else token
             })
         return hypos
@@ -157,7 +157,7 @@ class BatchBeamTracker(BaseBeamTracker):
                  penalty: float = 0,
                  coverage: float = 0,
                  lm_weight: float = 0,
-                 normalized: bool = True) -> None:
+                 len_norm: bool = True) -> None:
         super(BatchBeamTracker, self).__init__(beam_size,
                                                batch_size=batch_size,
                                                sos=sos,
@@ -166,7 +166,7 @@ class BatchBeamTracker(BaseBeamTracker):
                                                penalty=penalty,
                                                coverage=coverage,
                                                lm_weight=lm_weight,
-                                               normalized=normalized)
+                                               len_norm=len_norm)
         self.token = [
             th.tensor([[sos] * beam_size] * batch_size, device=device)
         ]
@@ -268,7 +268,7 @@ class BatchBeamTracker(BaseBeamTracker):
             token_len = len(token) if final else len(token) - 1
             score = s + token_len * self.penalty
             hypos.append({
-                "score": score / (token_len if self.normalized else 1),
+                "score": score / (token_len if self.len_norm else 1),
                 "trans": token + [self.eos] if final else token
             })
         return hypos

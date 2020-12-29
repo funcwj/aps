@@ -105,7 +105,11 @@ def get_aps_decode_parser():
     parser.add_argument("--checkpoint",
                         type=str,
                         required=True,
-                        help="Checkpoint of the E2E model")
+                        help="Checkpoint directory of the model")
+    parser.add_argument("--tag",
+                        type=str,
+                        default="best",
+                        help="Tag name to load the checkpoint: (tag).pt.tar")
     parser.add_argument("--beam-size",
                         type=int,
                         default=8,
@@ -132,6 +136,15 @@ def get_aps_decode_parser():
                         type=str,
                         default="",
                         help="Dictionary file (not needed)")
+    parser.add_argument("--spm",
+                        type=str,
+                        default="",
+                        help="Path of the sentencepiece's model "
+                        "if we choose subword unit")
+    parser.add_argument("--show-unk",
+                        type=str,
+                        default="<unk>",
+                        help="Which symbol to show when <unk> exists")
     parser.add_argument("--device-id",
                         type=int,
                         default=-1,
@@ -154,11 +167,16 @@ def get_aps_decode_parser():
                         type=str,
                         default="",
                         help="If not empty, dump n-best hypothesis")
-    parser.add_argument("--normalized",
+    parser.add_argument("--len-norm",
                         action=StrToBoolAction,
                         default="false",
                         help="If ture, using length normalized "
                         "when sort nbest hypos")
+    parser.add_argument("--wav-norm",
+                        action=StrToBoolAction,
+                        default="false",
+                        help="If true, do not normalize "
+                        "audio samples to [-1.0, 1.0]")
     return parser
 
 

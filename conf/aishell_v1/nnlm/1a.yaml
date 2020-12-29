@@ -1,0 +1,39 @@
+nnet: "rnn_lm"
+
+nnet_conf:
+  embed_size: 1024
+  tie_weights: true
+  rnn: lstm
+  dropout: 0.2
+  num_layers: 2
+  hidden_size: 1024
+
+task: "lm"
+
+trainer_conf:
+  optimizer: "adam"
+  optimizer_kwargs:
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+  lr_scheduler_kwargs:
+    min_lr: 1.0e-8
+    patience: 1
+    factor: 0.5
+  no_impr: 8
+  no_impr_thres: 0.0
+  clip_gradient: 10
+  report_metrics: ["loss", "accu", "@ppl"]
+  stop_criterion: "loss"
+
+data_conf:
+  fmt: "lm_utt"
+  loader:
+    min_token_num: 2
+    max_token_num: 300
+    min_batch_size: 8
+    adapt_token_num: 100
+    chunk_size_for_sort: 30000
+  train:
+    text: "data/aishell_v1/train/text"
+  valid:
+    text: "data/aishell_v1/dev/text"

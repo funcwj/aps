@@ -15,10 +15,12 @@ beam_size=16
 batch_size=""
 function="beam_search"
 penalty=0
-normalized=true
+wav_norm=true
+len_norm=true
 temperature=1
 lm=""
 lm_weight=0
+spm=""
 log_suffix=""
 
 echo "$0 $*"
@@ -51,6 +53,7 @@ if [ -z $batch_size ]; then
     --channel $channel \
     --dict "$dict" \
     --lm "$lm" \
+    --spm "$spm" \
     --penalty $penalty \
     --temperature $temperature \
     --lm-weight $lm_weight \
@@ -58,7 +61,8 @@ if [ -z $batch_size ]; then
     --nbest $nbest \
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
     --max-len $max_len \
-    --normalized $normalized \
+    --wav-norm $wav_norm \
+    --len-norm $len_norm \
     --function $function \
     > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
 else
@@ -71,13 +75,17 @@ else
     --device-id $gpu \
     --channel $channel \
     --dict "$dict" \
+    --lm "$lm" \
+    --spm "$spm" \
     --space "$space" \
     --penalty $penalty \
     --temperature $temperature \
+    --lm-weight $lm_weight \
     --nbest $nbest \
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
     --max-len $max_len \
-    --normalized $normalized \
+    --wav-norm $wav_norm \
+    --len-norm $len_norm \
     > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
 fi
 

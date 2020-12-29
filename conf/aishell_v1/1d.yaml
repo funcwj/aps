@@ -1,5 +1,3 @@
-# default conf
-
 nnet: "transducer"
 
 nnet_conf:
@@ -21,7 +19,7 @@ nnet_conf:
       dropout: 0.2
       project: 512
       hidden: 512
-      layernorm: true
+      norm: "LN"
   dec_kwargs:
     embed_size: 512
     jot_dim: 512

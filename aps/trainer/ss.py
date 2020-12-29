@@ -34,6 +34,26 @@ class ConstScheduler(BaseScheduler):
         return self.ssr
 
 
+@SsScheduler.register("epoch")
+class EpochScheduler(BaseScheduler):
+    """
+    Do schedule sampling during several epochs
+    """
+
+    def __init__(self,
+                 ssr: float = 0,
+                 epoch_beg: int = 10,
+                 epoch_end: int = 20) -> None:
+        super(EpochScheduler, self).__init__(ssr)
+        self.beg = epoch_beg
+        self.end = epoch_end
+
+    def step(self, epoch: int, accu: float) -> float:
+        if self.beg <= epoch and epoch <= self.end:
+            return self.ssr
+        return 0
+
+
 @SsScheduler.register("trigger")
 class TriggerScheduler(BaseScheduler):
     """

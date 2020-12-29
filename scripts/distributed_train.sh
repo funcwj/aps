@@ -29,9 +29,6 @@ task=$1
 data=$2
 exp_id=$3
 
-conf=conf/$data/$exp_id.yaml
-[ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
-
 opts=""
 case $task in
   "am" )
@@ -46,8 +43,17 @@ case $task in
     ;;
 esac
 
+if [ "$task" = "lm" ]; then
+  conf=conf/$data/nnlm/$exp_id.yaml
+  checkpoint=exp/$data/nnlm/$exp_id
+else
+  conf=conf/$data/$exp_id.yaml
+  checkpoint=exp/$data/$exp_id
+fi
+
+[ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
+
 export OMP_NUM_THREADS=4
-cmd=train_$task
 case $distributed in
   "torch" )
     python -m torch.distributed.launch \
@@ -55,43 +61,43 @@ case $distributed in
       --nproc_per_node $num_process \
       --master_port $port \
       --use_env \
-      cmd/distributed_$cmd.py $opts \
+      cmd/distributed_train_$task.py $opts \
       --conf $conf \
       --seed $seed \
       --epochs $epochs \
       --trainer $trainer \
       --batch-size $batch_size \
       --device-ids $gpu \
-      --checkpoint exp/$data/$exp_id \
+      --checkpoint $checkpoint \
       --num-workers $num_workers \
-      --distributed "torch" \
+      --distributed torch \
       --tensorboard $tensorboard \
       --save-interval $save_interval \
       --prog-interval $prog_interval \
       --eval-interval $eval_interval \
-      > $data.$cmd.$exp_id.log 2>&1
+      > $data.train_$task.$exp_id.log 2>&1
     ;;
   "horovod" )
     horovodrun -np $num_process -H localhost:$num_process \
-      python cmd/distributed_$cmd.py $opts \
-        --conf $conf \
-        --seed $seed \
-        --epochs $epochs \
-        --trainer $trainer \
-        --batch-size $batch_size \
-        --device-ids $gpu \
-        --checkpoint exp/$data/$exp_id \
-        --num-workers $num_workers \
-        --distributed "horovod" \
-        --tensorboard $tensorboard \
-        --save-interval $save_interval \
-        --prog-interval $prog_interval \
-        --eval-interval $eval_interval \
-        > $data.$cmd.$exp_id.log 2>&1
+      python cmd/distributed_train_$task.py $opts \
+      --conf $conf \
+      --seed $seed \
+      --epochs $epochs \
+      --trainer $trainer \
+      --batch-size $batch_size \
+      --device-ids $gpu \
+      --checkpoint $checkpoint \
+      --num-workers $num_workers \
+      --distributed torch \
+      --tensorboard $tensorboard \
+      --save-interval $save_interval \
+      --prog-interval $prog_interval \
+      --eval-interval $eval_interval \
+      > $data.train_$task.$exp_id.log 2>&1
     ;;
   * )
     echo "$0: Unknown --distributed $distributed" && exit 1
     ;;
 esac
 
-cp $data.$cmd.$exp_id.log exp/$data/$exp_id
+cp $data.train_$task.$exp_id.log exp/$data/$exp_id
