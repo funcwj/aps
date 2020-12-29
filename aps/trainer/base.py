@@ -139,11 +139,16 @@ class ProgressReporter(object):
         Return the averaged tracked metric
         """
         stats = self.stats[key][-period:]
-        if isinstance(stats[0], float):
-            metric = sum(stats) / len(stats)
+        peek = stats[0]
+        if isinstance(peek, float):
+            avg = sum(stats) / len(stats)
         else:
-            metric = sum([p[0] for p in stats]) / sum([p[1] for p in stats])
-        return metric
+            avg = sum([p[0] for p in stats]) / sum([p[1] for p in stats])
+        if key == "accu":
+            avg *= 100
+        if key == "@ppl":
+            avg = math.exp(avg)
+        return avg
 
     def _report_metrics(self):
         """
@@ -155,8 +160,6 @@ class ProgressReporter(object):
                 raise RuntimeError(
                     f"Metric {metric} is not tracked by the reporter")
             reports[metric] = self._report_metric(metric)
-            if metric == "accu":
-                reports[metric] *= 100
         return reports
 
     def report(self, epoch: int, lr: float) -> Tuple[Dict, str]:

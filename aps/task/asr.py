@@ -5,7 +5,6 @@
 """
 For ASR task
 """
-import math
 import warnings
 import torch as th
 import torch.nn as nn
@@ -35,7 +34,7 @@ from aps.libs import ApsRegisters
 __all__ = ["CtcXentHybridTask", "TransducerTask", "LmXentTask"]
 
 
-def compute_accu(outs: th.Tensor, tgts: th.Tensor) -> float:
+def compute_accu(outs: th.Tensor, tgts: th.Tensor) -> Tuple[float]:
     """
     Compute frame-level accuracy
     """
@@ -257,5 +256,9 @@ class LmXentTask(Task):
             pred, _ = self.nnet(egs["src"], None, egs["len"])
         loss = ce_objf(pred, egs["tgt"])
         accu = compute_accu(pred, egs["tgt"])
-        stats = {"accu": accu, "loss": loss, "@ppl": math.exp(loss.item())}
+        stats = {
+            "accu": accu,
+            "loss": loss,
+            "@ppl": (loss.item() * accu[-1], accu[-1])
+        }
         return stats

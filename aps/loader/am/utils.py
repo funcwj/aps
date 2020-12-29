@@ -197,7 +197,7 @@ class BatchSampler(dat.Sampler):
             self,
             dataset: dat.Dataset,
             adapt_dur: float,
-            adapt_token_num: int,
+            adapt_num: int,
             batch_size: int,
             min_batch_size: int = 4) -> List[Tuple[int, int]]:
         beg = 0
@@ -208,7 +208,7 @@ class BatchSampler(dat.Sampler):
             cur = dataset.token_reader[beg]
             cur_ilen = cur["dur"]
             cur_olen = cur["len"]
-            factor = max(cur_ilen // adapt_dur, cur_olen // adapt_token_num)
+            factor = max(cur_ilen // adapt_dur, (cur_olen - 1) // adapt_num)
             cur_bz = int(max(min_batch_size, batch_size // (1 + factor)))
             idx_bz.append((beg, beg + cur_bz))
             beg += cur_bz

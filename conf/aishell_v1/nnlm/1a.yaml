@@ -1,12 +1,12 @@
 nnet: "rnn_lm"
 
 nnet_conf:
-  embed_size: 2048
+  embed_size: 1024
   tie_weights: true
   rnn: lstm
-  dropout: 0.2
-  num_layers: 3
-  hidden_size: 2048
+  rnn_layers: 2
+  rnn_hidden: 1024
+  rnn_dropout: 0.2
 
 task: "lm"
 
@@ -20,7 +20,7 @@ trainer_conf:
     patience: 1
     factor: 0.5
   no_impr: 8
-  no_impr_thres: 0
+  no_impr_thres: 0.0
   clip_gradient: 10
   report_metrics: ["loss", "accu", "@ppl"]
   stop_criterion: "loss"
@@ -28,12 +28,12 @@ trainer_conf:
 data_conf:
   fmt: "lm_utt"
   loader:
-    min_token_num: 10
+    min_token_num: 2
     max_token_num: 300
-    min_batch_size: 4
-    adapt_token_num: 50
-    chunk_size_for_sort: 48000
+    min_batch_size: 8
+    adapt_token_num: 100
+    chunk_size_for_sort: 30000
   train:
-    text: "data/librispeech/lm/train.token"
+    text: "data/aishell_v1/train/text"
   valid:
-    text: "data/librispeech/lm/dev.token"
+    text: "data/aishell_v1/dev/text"

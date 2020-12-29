@@ -105,8 +105,8 @@ class BatchSampler(dat.Sampler):
         self.const = {
             "min": min_token_num,
             "max": max_token_num,
-            "adapt": adapt_token_num,
-            "floor": min_batch_size
+            "floor": min_batch_size,
+            "adapt": adapt_token_num
         }
         self.genfunc = th.randperm if shuffle else th.arange
         self.batches = []
@@ -114,15 +114,16 @@ class BatchSampler(dat.Sampler):
         total_utts = len(dataset)
         num_parts = total_utts // chunk_size + 1
         print(f"BatchSampler: sort indices ({num_parts} parts) ...", flush=True)
-        for i in range(0, total_utts, chunk_size):
-            indices = self._sort_indices(
-                [dataset[i] for i in range(i, min(i + chunk_size, total_utts))],
-                batch_size, i)
+        for base in range(0, total_utts, chunk_size):
+            indices = self._sort_indices([
+                dataset[i]
+                for i in range(base, min(base + chunk_size, total_utts))
+            ], batch_size, base)
             self.batches += indices
-            done = min(i + chunk_size, total_utts) * 100 / float(total_utts)
+            done = min(base + chunk_size, total_utts) * 100 / float(total_utts)
             print(f"BatchSampler: done {done:.2f}% ...", flush=True)
 
-    def _sort_indices(self, subset: List[int], batch_size: int,
+    def _sort_indices(self, subset: List[List], batch_size: int,
                       base: int) -> List[List[int]]:
         # short -> long
         toks_len = [len(toks) for toks in subset]
@@ -147,7 +148,7 @@ class BatchSampler(dat.Sampler):
         beg, cur_bz = 0, batch_size
         while beg + cur_bz <= len(kept_desc_idx):
             cur_len = toks_len[kept_desc_idx[beg]]
-            factor = cur_len // self.const["adapt"]
+            factor = (cur_len - 1) // self.const["adapt"]
             cur_bz = int(max(self.const["floor"], batch_size // (1 + factor)))
             batches.append([base + i for i in kept_desc_idx[beg:beg + cur_bz]])
             beg += cur_bz

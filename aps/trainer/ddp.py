@@ -114,6 +114,7 @@ class DdpTrainer(Trainer):
             loss = dist.all_reduce(stats["loss"].clone())
         else:
             loss = stats["loss"].item()
+
         # backward if not nan/inf
         if math.isfinite(loss):
             stats["loss"].backward()

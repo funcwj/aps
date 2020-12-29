@@ -27,9 +27,6 @@ task=$1
 data=$2
 exp_id=$3
 
-conf=conf/$data/$exp_id.yaml
-[ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
-
 opts=""
 case $task in
   "am" | "lm" )
@@ -43,6 +40,13 @@ case $task in
     echo "$0: Unknown task: $task" && exit 1
     ;;
 esac
+
+if [ "$task" = "lm" ]; then
+  conf=conf/$data/nnlm/$exp_id.yaml
+else
+  conf=conf/$data/$exp_id.yaml
+fi
+[ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
 
 cmd=train_$task
 
