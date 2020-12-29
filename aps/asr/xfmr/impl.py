@@ -343,7 +343,7 @@ class XlMultiheadAttention(ApsMultiheadAttention):
         else:
             self.rel_u = rel_u
             self.rel_v = rel_v
-        self.rel_proj = nn.Conv1d(1, embed_dim, embed_dim, bias=False)
+        self.rel_proj = nn.Linear(embed_dim, embed_dim, bias=False)
 
     def dot_att(self, query: th.Tensor, key: th.Tensor,
                 sin_pose: th.Tensor) -> th.Tensor:

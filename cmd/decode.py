@@ -105,7 +105,7 @@ def run(args):
                                   max_len=args.max_len,
                                   penalty=args.penalty,
                                   lm_weight=args.lm_weight,
-                                  normalized=args.len_norm,
+                                  len_norm=args.len_norm,
                                   temperature=args.temperature)
         nbest = [f"{key}\n"]
         for idx, hyp in enumerate(nbest_hypos):

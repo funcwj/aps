@@ -164,9 +164,11 @@ class ProgressReporter(object):
             warnings.warn(f"{self.reduction_tag} not found in the tracked " +
                           "statistics, using simple average")
         if dens is None:
+            # simple average
             avg = sum(nors) / len(nors)
         else:
-            avg = sum(d * nors[i] for i, d in enumerate(dens)) / sum(dens)
+            # weight sum and average
+            avg = sum(nors[i] * d for i, d in enumerate(dens)) / sum(dens)
         if key == "accu":
             avg *= 100
         if key == "@ppl":
