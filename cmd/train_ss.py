@@ -51,7 +51,6 @@ def run(args):
                       save_interval=args.save_interval,
                       prog_interval=args.prog_interval,
                       tensorboard=args.tensorboard,
-                      report_reduction="batchmean",
                       **conf["trainer_conf"])
 
     # dump configurations

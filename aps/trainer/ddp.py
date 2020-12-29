@@ -46,7 +46,7 @@ class DdpTrainer(Trainer):
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
                  report_metrics: List[str] = ["loss"],
-                 report_reduction: str = "mean",
+                 report_reduction: str = "none",
                  stop_on_errors: int = 10,
                  **kwargs) -> None:
         super(DdpTrainer,

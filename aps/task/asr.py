@@ -47,7 +47,8 @@ def compute_accu(outs: th.Tensor, tgts: th.Tensor) -> Tuple[float]:
     # denumerator
     total = th.sum(mask)
     # return pair
-    return (ncorr.item(), total.item())
+    accu = ncorr / total
+    return (accu.item(), total.item())
 
 
 def prep_asr_target(
@@ -166,6 +167,7 @@ class CtcXentHybridTask(Task):
             stats["@ctc"] = ctc_loss.item()
         # compute accu
         accu, den = compute_accu(outs, tgts)
+        # check coding error
         assert den == egs["#tok"]
         # add to reporter
         stats["accu"] = accu
@@ -258,6 +260,8 @@ class LmXentTask(Task):
             pred, _ = self.nnet(egs["src"], None, egs["len"])
         loss = ce_objf(pred, egs["tgt"])
         accu, den = compute_accu(pred, egs["tgt"])
+        # check coding error
         assert den == egs["#tok"]
-        stats = {"accu": accu, "loss": loss}
+        # ppl is derived from xent, so we pass loss to it
+        stats = {"accu": accu, "loss": loss, "@ppl": loss.item()}
         return stats

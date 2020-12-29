@@ -56,16 +56,13 @@ class ProgressReporter(object):
                  rank: Optional[int] = None,
                  period: int = 100,
                  tensorboard: bool = True,
-                 report_reduction: str = "mean") -> None:
-        # NOTE:
-        #   1) for asr tasks we use mean (token level)
-        #   2) for sse tasks we use batchmean (utterance level)
-        if report_reduction not in ["mean", "batchmean"]:
-            raise ValueError(
-                f"Unsupported report_reduction: {report_reduction}")
+                 reduction_tag: str = "none") -> None:
+        # NOTE on reduction_tag:
+        #   1) for asr tasks we use #tok (token level)
+        #   2) for sse tasks we use $utt (utterance level)
         self.rank = rank
         self.period = period
-        self.denkey = "#utt" if report_reduction == "batchmean" else "#tok"
+        self.reduction_tag = reduction_tag
         # mkdir
         checkpoint.mkdir(parents=True, exist_ok=True)
         if rank is None:
@@ -143,8 +140,13 @@ class ProgressReporter(object):
         N = len(self.stats[key])
         if not N % self.period:
             if key == "rate":
+                # current learning rate
                 cur = self.stats[key][-1]
                 self.log(f"Processed {N:.2e} batches ({key} = {cur:.3e}) ...")
+            elif key[0] == "#":
+                # averged token/utterance numbers in the past
+                cur = sum(self.stats[key][-self.period:]) // self.period
+                self.log(f"Processed {N:.2e} batches ({key} = {cur:d}) ...")
             else:
                 avg = self._report_metric(key, period=self.period)
                 self.log(f"Processed {N:.2e} batches ({key} = {avg:+.2f}) ...")
@@ -154,15 +156,19 @@ class ProgressReporter(object):
         Return the averaged tracked metric
         """
         nors = self.stats[key][-period:]
-        if key in ["loss", "accu", "@ppl", "@ctc"]:
-            assert self.denkey in self.stats
-            dens = self.stats[self.denkey][-period:]
-            if key == "accu":
-                avg = sum(nors) * 100 / sum(dens)
-            else:
-                avg = sum(d * nors[i] for i, d in enumerate(dens)) / sum(dens)
+        # try to get denominator
+        if self.reduction_tag in self.stats:
+            dens = self.stats[self.reduction_tag][-period:]
         else:
+            dens = None
+            warnings.warn(f"{self.reduction_tag} not found in the tracked " +
+                          "statistics, using simple average")
+        if dens is None:
             avg = sum(nors) / len(nors)
+        else:
+            avg = sum(d * nors[i] for i, d in enumerate(dens)) / sum(dens)
+        if key == "accu":
+            avg *= 100
         if key == "@ppl":
             avg = math.exp(avg)
         return avg
@@ -339,7 +345,7 @@ class Trainer(object):
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
                  report_metrics: List[str] = ["loss"],
-                 report_reduction: str = "mean",
+                 report_reduction: str = "none",
                  stop_on_errors: int = 10,
                  **kwargs) -> None:
         if not isinstance(task, Task):
@@ -383,7 +389,7 @@ class Trainer(object):
                                          rank=rank,
                                          period=prog_interval,
                                          tensorboard=tensorboard,
-                                         report_reduction=report_reduction)
+                                         reduction_tag=report_reduction)
         if weight_noise_std is None:
             self.weight_noise_adder = None
         else:
@@ -609,7 +615,6 @@ class Trainer(object):
             succ = self.train_one_step(egs)
             if succ:
                 self.cur_step += 1
-                self.reporter.add("@bsz", egs["bsz"])
             if self.error_detector.step(succ):
                 break
         stop = self.error_detector.stop()
@@ -631,6 +636,7 @@ class Trainer(object):
                 egs = self.prep_egs(egs)
                 stats = self.task(egs)
                 # update statistics
+                self.reporter.update(egs, ["#utt", "#tok"])
                 self.reporter.update(stats)
 
     def stop_detect(self, dev_loader: Iterable[Dict], lr: float) -> bool:
