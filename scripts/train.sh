@@ -43,26 +43,26 @@ esac
 
 if [ "$task" = "lm" ]; then
   conf=conf/$data/nnlm/$exp_id.yaml
+  checkpoint=exp/$data/nnlm/$exp_id
 else
   conf=conf/$data/$exp_id.yaml
+  checkpoint=exp/$data/$exp_id
 fi
 [ ! -f $conf ] && echo "$0: missing training configurations $conf" && exit 1
 
-cmd=train_$task
-
-cmd/$cmd.py $opts \
+cmd/train_$task.py $opts \
   --conf $conf \
   --seed $seed \
   --epochs $epochs \
   --trainer $trainer \
   --device-id $gpu \
   --batch-size $batch_size \
-  --checkpoint exp/$data/$exp_id \
+  --checkpoint $checkpoint \
   --num-workers $num_workers \
   --tensorboard $tensorboard \
   --save-interval $save_interval \
   --prog-interval $prog_interval \
   --eval-interval $eval_interval \
-  > $data.$cmd.$exp_id.log 2>&1
+  > $data.train_$task.$exp_id.log 2>&1
 
-cp $data.$cmd.$exp_id.log exp/$data/$exp_id
+cp $data.train_$task.$exp_id.log exp/$data/$exp_id

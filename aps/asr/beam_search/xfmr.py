@@ -26,7 +26,7 @@ def beam_search(decoder: nn.Module,
                 eos: int = -1,
                 penalty: float = 0,
                 coverage: float = 0,
-                normalized: bool = True,
+                len_norm: bool = True,
                 temperature: float = 1) -> List[Dict]:
     """
     Vectorized beam search algothrim for transformer decoder
@@ -55,7 +55,7 @@ def beam_search(decoder: nn.Module,
                                device=device,
                                penalty=penalty,
                                lm_weight=lm_weight,
-                               normalized=normalized)
+                               len_norm=len_norm)
     hypos = []
     pre_emb = None
     lm_state = None
@@ -115,7 +115,7 @@ def beam_search_batch(decoder: nn.Module,
                       eos: int = -1,
                       penalty: float = 0,
                       coverage: float = 0,
-                      normalized: bool = True,
+                      len_norm: bool = True,
                       temperature: float = 1) -> List[Dict]:
     """
     Batch level vectorized beam search algothrim
@@ -148,7 +148,7 @@ def beam_search_batch(decoder: nn.Module,
                                     device=device,
                                     penalty=penalty,
                                     lm_weight=lm_weight,
-                                    normalized=normalized)
+                                    len_norm=len_norm)
 
     # for each utterance
     hypos = [[] for _ in range(N)]

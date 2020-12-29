@@ -285,6 +285,7 @@ class WaveChunkDataLoader(object):
         blist = []
         for s in range(0, N - self.batch_size + 1, self.batch_size):
             batch = default_collate(chunk_list[s:s + self.batch_size])
+            batch["#utt"] = self.batch_size
             blist.append(batch)
         rn = N % self.batch_size
         return blist, chunk_list[-rn:] if rn else []

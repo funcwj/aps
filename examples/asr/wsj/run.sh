@@ -24,6 +24,7 @@ am_epochs=70
 am_prog_interval=100
 am_eval_interval=3000
 
+beam_size=16
 test_sets="test_dev93 test_eval92"
 
 . ./utils/parse_options.sh || exit 1

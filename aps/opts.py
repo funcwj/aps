@@ -105,7 +105,11 @@ def get_aps_decode_parser():
     parser.add_argument("--checkpoint",
                         type=str,
                         required=True,
-                        help="Checkpoint of the E2E model")
+                        help="Checkpoint directory of the model")
+    parser.add_argument("--tag",
+                        type=str,
+                        default="best",
+                        help="Tag name to load the checkpoint: (tag).pt.tar")
     parser.add_argument("--beam-size",
                         type=int,
                         default=8,

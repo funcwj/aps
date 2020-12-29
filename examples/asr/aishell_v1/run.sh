@@ -90,7 +90,7 @@ if [ $stage -le 5 ]; then
   name=dec_lm${lm_exp}_$lm_weight
   # decoding
   ./scripts/decode.sh \
-    --lm exp/librispeech/nnlm/$lm_exp \
+    --lm exp/aishell_v1/nnlm/$lm_exp \
     --gpu $gpu \
     --dict data/$dataset/dict \
     --nbest $nbest \

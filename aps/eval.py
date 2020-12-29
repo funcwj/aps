@@ -20,10 +20,13 @@ class NnetEvaluator(object):
 
     def __init__(self,
                  cpt_dir: str,
+                 cpt_tag: str = "best",
                  device_id: int = -1,
                  task: str = "asr") -> None:
         # load nnet
-        self.epoch, self.nnet, self.conf = self._load(cpt_dir, task=task)
+        self.epoch, self.nnet, self.conf = self._load(cpt_dir,
+                                                      cpt_tag=cpt_tag,
+                                                      task=task)
         # offload to device
         if device_id < 0:
             self.device = th.device("cpu")
@@ -35,12 +38,13 @@ class NnetEvaluator(object):
 
     def _load(self,
               cpt_dir: str,
+              cpt_tag: str = "best",
               task: str = "asr") -> Tuple[int, nn.Module, Dict]:
         if task not in ["asr", "enh"]:
             raise ValueError(f"Unknown task name: {task}")
         cpt_dir = pathlib.Path(cpt_dir)
         # load checkpoint
-        cpt = th.load(cpt_dir / "best.pt.tar", map_location="cpu")
+        cpt = th.load(cpt_dir / f"{cpt_tag}.pt.tar", map_location="cpu")
         with open(cpt_dir / "train.yaml", "r") as f:
             conf = yaml.full_load(f)
             if task == "asr":

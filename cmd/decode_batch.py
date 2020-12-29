@@ -41,7 +41,7 @@ def run(args):
     if decoder.accept_raw:
         src_reader = AudioReader(args.feats_or_wav_scp,
                                  sr=args.sr,
-                                 norm=args.audio_norm,
+                                 norm=args.wav_norm,
                                  channel=args.channel)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
@@ -87,7 +87,7 @@ def run(args):
                                   max_len=args.max_len,
                                   penalty=args.penalty,
                                   lm_weight=args.lm_weight,
-                                  normalized=args.length_norm,
+                                  normalized=args.len_norm,
                                   temperature=args.temperature)
         keys = [bz["key"] for bz in batches]
         for key, nbest in zip(keys, batch_nbest):

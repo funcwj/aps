@@ -19,7 +19,7 @@ def greedy_search(decoder: nn.Module,
                   enc_out: th.Tensor,
                   sos: int = -1,
                   eos: int = -1,
-                  normalized: bool = True) -> List[Dict]:
+                  len_norm: bool = True) -> List[Dict]:
     """
     Greedy search (for debugging, should equal to beam search with #beam-size == 1)
     """
@@ -59,7 +59,7 @@ def greedy_search(decoder: nn.Module,
         if dec_tok[-1] == eos:
             break
     return [{
-        "score": score / (len(dec_tok) - 1) if normalized else score,
+        "score": score / (len(dec_tok) - 1) if len_norm else score,
         "trans": dec_tok
     }]
 
@@ -76,7 +76,7 @@ def beam_search(decoder: nn.Module,
                 eos: int = -1,
                 penalty: float = 0,
                 coverage: float = 0,
-                normalized: bool = True,
+                len_norm: bool = True,
                 temperature: float = 1) -> List[Dict]:
     """
     Vectorized beam search algothrim (see batch version beam_search_batch)
@@ -113,7 +113,7 @@ def beam_search(decoder: nn.Module,
                                penalty=penalty,
                                coverage=coverage,
                                lm_weight=lm_weight,
-                               normalized=normalized)
+                               len_norm=len_norm)
 
     lm_state = None
     hypos = []
@@ -175,7 +175,7 @@ def beam_search_batch(decoder: nn.Module,
                       sos: int = -1,
                       eos: int = -1,
                       coverage: float = 0,
-                      normalized: bool = True,
+                      len_norm: bool = True,
                       penalty: float = 0,
                       temperature: float = 1) -> List[Dict]:
     """
@@ -214,7 +214,7 @@ def beam_search_batch(decoder: nn.Module,
                                     penalty=penalty,
                                     coverage=coverage,
                                     lm_weight=lm_weight,
-                                    normalized=normalized)
+                                    len_norm=len_norm)
 
     # for each utterance
     hypos = [[] for _ in range(N)]

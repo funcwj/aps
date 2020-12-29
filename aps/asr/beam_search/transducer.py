@@ -31,7 +31,7 @@ class Node(object):
 
 def _prep_nbest(container: Union[List, PriorityQueue],
                 nbest: int,
-                normalized: bool = True,
+                len_norm: bool = True,
                 blank: int = 0) -> List[Dict]:
     """
     Return nbest hypos from queue or list
@@ -46,7 +46,7 @@ def _prep_nbest(container: Union[List, PriorityQueue],
     # return best
     nbest_hypos = sorted(beam_hypos,
                          key=lambda n: n["score"] / (len(n["trans"]) - 1
-                                                     if normalized else 1),
+                                                     if len_norm else 1),
                          reverse=True)
     return nbest_hypos[:nbest]
 
@@ -93,7 +93,7 @@ def beam_search(decoder: nn.Module,
                 beam: int = 16,
                 blank: int = 0,
                 nbest: int = 8,
-                normalized: bool = True) -> List[Dict]:
+                len_norm: bool = True) -> List[Dict]:
     """
     Beam search (not prefix beam search) algorithm for RNN-T
     Args:
@@ -195,4 +195,4 @@ def beam_search(decoder: nn.Module,
             best_score = queue_a.queue[0].score
             list_b = [n for n in list_b if n.score > best_score]
 
-    return _prep_nbest(list_b, nbest, normalized=normalized, blank=blank)
+    return _prep_nbest(list_b, nbest, len_norm=len_norm, blank=blank)

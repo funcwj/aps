@@ -53,11 +53,19 @@ class ProgressReporter(object):
     def __init__(self,
                  checkpoint: Path,
                  metrics: List[str],
+                 rank: Optional[int] = None,
                  period: int = 100,
                  tensorboard: bool = True,
-                 rank: Optional[int] = None) -> None:
-        self.period = period
+                 report_reduction: str = "mean") -> None:
+        # NOTE:
+        #   1) for asr tasks we use mean (token level)
+        #   2) for sse tasks we use batchmean (utterance level)
+        if report_reduction not in ["mean", "batchmean"]:
+            raise ValueError(
+                f"Unsupported report_reduction: {report_reduction}")
         self.rank = rank
+        self.period = period
+        self.denkey = "#utt" if report_reduction == "batchmean" else "#tok"
         # mkdir
         checkpoint.mkdir(parents=True, exist_ok=True)
         if rank is None:
@@ -138,14 +146,16 @@ class ProgressReporter(object):
         """
         Return the averaged tracked metric
         """
-        stats = self.stats[key][-period:]
-        peek = stats[0]
-        if isinstance(peek, float):
-            avg = sum(stats) / len(stats)
+        nors = self.stats[key][-period:]
+        if key in ["loss", "accu", "@ppl", "@ctc"]:
+            assert self.denkey in self.stats
+            dens = self.stats[self.denkey][-period:]
+            if key == "accu":
+                avg = sum(nors) * 100 / sum(dens)
+            else:
+                avg = sum(d * nors[i] for i, d in enumerate(dens)) / sum(dens)
         else:
-            avg = sum([p[0] for p in stats]) / sum([p[1] for p in stats])
-        if key == "accu":
-            avg *= 100
+            avg = sum(nors) / len(nors)
         if key == "@ppl":
             avg = math.exp(avg)
         return avg
@@ -322,6 +332,7 @@ class Trainer(object):
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
                  report_metrics: List[str] = ["loss"],
+                 report_reduction: str = "mean",
                  stop_on_errors: int = 10,
                  **kwargs) -> None:
         if not isinstance(task, Task):
@@ -445,7 +456,8 @@ class Trainer(object):
                 f"#param: {self.num_params:.2f}M")
 
         self.reporter.log(
-            f"Track the metrics during training: {report_metrics}")
+            f"Track the metrics during training: {report_metrics}, " +
+            f"reduction = {report_reduction}")
         self.reporter.log(f"Early stop detected on metric: {self.stop_on}")
         if clip_gradient:
             self.reporter.log(f"Clip gradient if over {clip_gradient} L2 norm")
@@ -455,6 +467,9 @@ class Trainer(object):
         if weight_noise_std:
             self.reporter.log("Add gaussian noise to gradient, with " +
                               f"std = {weight_noise_std}")
+        if save_interval > 0:
+            self.reporter.log("Will save model states only in #epoch.pt.tar " +
+                              f"(interval = {save_interval})")
 
     def create_optimizer(self,
                          optimizer: str,
@@ -544,7 +559,8 @@ class Trainer(object):
             self.reporter.log(
                 f"Save checkpoint ==> {self.checkpoint / cpt_name}")
             if self.save_interval > 0 and self.cur_epoch % self.save_interval == 0:
-                th.save(cpt, self.checkpoint / f"{self.cur_epoch}.pt.tar")
+                th.save(cpt.pop("optimizer_state"),
+                        self.checkpoint / f"{self.cur_epoch}.pt.tar")
 
     def train_one_step(self, egs: Dict) -> bool:
         """
@@ -585,6 +601,7 @@ class Trainer(object):
             succ = self.train_one_step(egs)
             if succ:
                 self.cur_step += 1
+                self.reporter.add("@bsz", egs["bsz"])
             if self.error_detector.step(succ):
                 break
         stop = self.error_detector.stop()
@@ -659,6 +676,9 @@ class Trainer(object):
         """
         Prepare training egs
         """
+        if "size" not in egs:
+            raise RuntimeError(
+                f"Missing \'size\' in egs, please check dataloader")
         egs = load_obj(egs, self.default_device)
         # use ssr = 0 when in eval mode
         if self.ss_scheduler:
@@ -727,6 +747,7 @@ class Trainer(object):
                 succ = self.train_one_step(egs)
                 if succ:
                     self.cur_step += 1
+                    self.reporter.add("@bsz", egs["bsz"])
                 if self.error_detector.step(succ):
                     self.reporter.log(
                         f"Stop training as detecting {self.stop_on_errors} " +

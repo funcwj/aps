@@ -36,8 +36,14 @@ class FasterDecoder(NnetEvaluator):
     Decoder wrapper
     """
 
-    def __init__(self, cpt_dir, function="beam_search", device_id=-1):
-        super(FasterDecoder, self).__init__(cpt_dir, device_id=device_id)
+    def __init__(self,
+                 cpt_dir: str,
+                 cpt_tag: str = "best",
+                 function: str = "beam_search",
+                 device_id: int = -1) -> None:
+        super(FasterDecoder, self).__init__(cpt_dir,
+                                            cpt_tag=cpt_tag,
+                                            device_id=device_id)
         if not hasattr(self.nnet, function):
             raise RuntimeError(
                 f"AM doesn't have the decoding function: {function}")
@@ -58,12 +64,13 @@ def run(args):
     print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
 
     decoder = FasterDecoder(args.checkpoint,
+                            cpt_tag=args.tag,
                             function=args.function,
                             device_id=args.device_id)
     if decoder.accept_raw:
         src_reader = AudioReader(args.feats_or_wav_scp,
                                  sr=args.sr,
-                                 norm=args.audio_norm,
+                                 norm=args.wav_norm,
                                  channel=args.channel)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
@@ -98,7 +105,7 @@ def run(args):
                                   max_len=args.max_len,
                                   penalty=args.penalty,
                                   lm_weight=args.lm_weight,
-                                  normalized=args.length_norm,
+                                  normalized=args.len_norm,
                                   temperature=args.temperature)
         nbest = [f"{key}\n"]
         for idx, hyp in enumerate(nbest_hypos):

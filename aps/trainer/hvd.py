@@ -43,6 +43,7 @@ class HvdTrainer(Trainer):
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
                  report_metrics: List[str] = ["loss"],
+                 report_reduction: str = "mean",
                  stop_on_errors: int = 10,
                  **kwargs) -> None:
         super(HvdTrainer,
@@ -69,7 +70,8 @@ class HvdTrainer(Trainer):
                              no_impr=no_impr,
                              no_impr_thres=no_impr_thres,
                              report_metrics=report_metrics,
-                             stop_on_errors=stop_on_errors)
+                             stop_on_errors=stop_on_errors,
+                             report_reduction=report_reduction)
         if dist.get_backend() != "horovod":
             raise ValueError(
                 "HvdTrainer should use horovod as distributed backend")
@@ -136,6 +138,7 @@ class HvdTrainer(Trainer):
             if norm != -1:
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
+            stats["loss"] = stats["loss"].item()
             self.reporter.update(stats)
             self.lr_scheduler_step(None, end_at="step")
             return True

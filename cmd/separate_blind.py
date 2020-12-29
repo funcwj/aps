@@ -21,13 +21,21 @@ class Separator(NnetEvaluator):
     Decoder wrapper
     """
 
-    def __init__(self, cpt_dir, device_id=-1):
+    def __init__(self,
+                 cpt_dir,
+                 cpt_tag: str = "best",
+                 device_id: int = -1) -> None:
         super(Separator, self).__init__(cpt_dir,
+                                        cpt_tag=cpt_tag,
                                         device_id=device_id,
                                         task="enh")
         logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
 
-    def run(self, src, chunk_len=-1, chunk_hop=-1, mode="time"):
+    def run(self,
+            src: np.ndarray,
+            chunk_len: int = -1,
+            chunk_hop: int = -1,
+            mode: str = "time") -> th.Tensor:
         """
         Args:
             src (Array): (C) x S
@@ -69,7 +77,9 @@ class Separator(NnetEvaluator):
 def run(args):
     sep_dir = pathlib.Path(args.sep_dir)
     sep_dir.mkdir(parents=True, exist_ok=True)
-    separator = Separator(args.checkpoint, device_id=args.device_id)
+    separator = Separator(args.checkpoint,
+                          cpt_tag=args.tag,
+                          device_id=args.device_id)
     mix_reader = AudioReader(args.wav_scp, sr=args.sr, channel=args.channel)
 
     for key, mix in mix_reader:
@@ -112,6 +122,10 @@ if __name__ == "__main__":
                         choices=["time", "freq"],
                         default="time",
                         help="Inference mode of the bss model")
+    parser.add_argument("--tag",
+                        type=str,
+                        default="best",
+                        help="Tag name to load the checkpoint: (tag).pt.tar")
     parser.add_argument("--checkpoint",
                         type=str,
                         required=True,

@@ -201,6 +201,10 @@ class UttDataLoader(dat.DataLoader):
         sos_egs = [th.as_tensor([self.sos] + eg) for eg in egs]
         egs_eos = [th.as_tensor(eg + [self.eos]) for eg in egs]
         return {
+            "#utt":
+                len(egs),
+            "#tok":
+                sum([len(eg) + 1 for eg in egs]),
             "src":
                 pad_sequence(sos_egs, batch_first=True, padding_value=self.eos),
             "tgt":

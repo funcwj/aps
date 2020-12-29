@@ -165,7 +165,8 @@ class CtcXentHybridTask(Task):
             loss = self.ctc_weight * ctc_loss + (1 - self.ctc_weight) * loss
             stats["@ctc"] = ctc_loss.item()
         # compute accu
-        accu = compute_accu(outs, tgts)
+        accu, den = compute_accu(outs, tgts)
+        assert den == egs["#tok"]
         # add to reporter
         stats["accu"] = accu
         stats["loss"] = loss
@@ -219,7 +220,7 @@ class TransducerTask(Task):
         # N x Ti x To+1 x V
         outs, enc_len = self.nnet(egs["src_pad"], egs["src_len"], tgt_pad,
                                   tgt_len)
-        rnnt_kwargs = {"blank": self.blank, "reduction": "mean"}
+        rnnt_kwargs = {"blank": self.blank, "reduction": "sum"}
         # add log_softmax if use https://github.com/1ytic/warp-rnnt
         if self.interface == "warp_rnnt":
             outs = tf.log_softmax(outs, -1)
@@ -227,6 +228,7 @@ class TransducerTask(Task):
         # compute loss
         loss = self.rnnt_objf(outs, tgt_pad.to(th.int32), enc_len.to(th.int32),
                               tgt_len.to(th.int32), **rnnt_kwargs)
+        loss = loss / th.sum(tgt_len)
         return {"loss": loss}
 
 
@@ -255,10 +257,7 @@ class LmXentTask(Task):
         else:
             pred, _ = self.nnet(egs["src"], None, egs["len"])
         loss = ce_objf(pred, egs["tgt"])
-        accu = compute_accu(pred, egs["tgt"])
-        stats = {
-            "accu": accu,
-            "loss": loss,
-            "@ppl": (loss.item() * accu[-1], accu[-1])
-        }
+        accu, den = compute_accu(pred, egs["tgt"])
+        assert den == egs["#tok"]
+        stats = {"accu": accu, "loss": loss}
         return stats

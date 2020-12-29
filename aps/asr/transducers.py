@@ -97,7 +97,7 @@ class TransducerASRBase(nn.Module):
                     lm_weight: float = 0,
                     beam: int = 16,
                     nbest: int = 8,
-                    normalized: bool = True,
+                    len_norm: bool = True,
                     max_len: int = -1,
                     **kwargs) -> List[Dict]:
         """
@@ -112,7 +112,7 @@ class TransducerASRBase(nn.Module):
                                nbest=nbest,
                                lm=lm,
                                lm_weight=lm_weight,
-                               normalized=normalized)
+                               len_norm=len_norm)
 
 
 @ApsRegisters.asr.register("transducer")

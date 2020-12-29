@@ -41,7 +41,7 @@ class MultiStepLR(lr.MultiStepLR):
         super(MultiStepLR, self).__init__(*args, **kwargs)
 
 
-@LrScheduler.register("noam_lr")
+@LrScheduler.register("warmup_noam_lr")
 class NoamLR(lr._LRScheduler):
     """
     Lr schuduler for Transformer
@@ -72,7 +72,7 @@ class NoamLR(lr._LRScheduler):
         ]
 
 
-@LrScheduler.register("exp_lr")
+@LrScheduler.register("warmup_exp_decay_lr")
 class ExponentialLR(lr._LRScheduler):
     """
     Exponential scheduler proposed in SpecAugment paper
@@ -106,7 +106,7 @@ class ExponentialLR(lr._LRScheduler):
         return [cur_lr for _ in self.optimizer.param_groups]
 
 
-@LrScheduler.register("linear_lr")
+@LrScheduler.register("warmup_linear_decay_lr")
 class LinearLR(lr._LRScheduler):
     """
     Linear warmup scheduler (using linear decay in ExponentialLR)
