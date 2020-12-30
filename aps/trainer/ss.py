@@ -1,7 +1,7 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
-Schedule sampling & Learning rate
+Schedule sampling
 """
 
 from aps.libs import Register
@@ -25,6 +25,8 @@ class BaseScheduler(object):
 class ConstScheduler(BaseScheduler):
     """
     Use const schedule sampling rate
+    Args:
+        ssr: value of schedule sampling rate
     """
 
     def __init__(self, ssr: float = 0) -> None:
@@ -38,6 +40,10 @@ class ConstScheduler(BaseScheduler):
 class EpochScheduler(BaseScheduler):
     """
     Do schedule sampling during several epochs
+    Args:
+        ssr: value of schedule sampling rate
+        epoch_beg: do schedule sampling from epoch #epoch_beg
+        epoch_end: stop schedule sampling at epoch #epoch_end
     """
 
     def __init__(self,
@@ -58,6 +64,9 @@ class EpochScheduler(BaseScheduler):
 class TriggerScheduler(BaseScheduler):
     """
     Use schedule sampling rate when metrics triggered
+    Args:
+        ssr: value of schedule sampling rate
+        trigger: do schedule sampling when accu > #trigger
     """
 
     def __init__(self, ssr: float = 0, trigger: float = 0.6) -> None:
@@ -71,7 +80,12 @@ class TriggerScheduler(BaseScheduler):
 @SsScheduler.register("linear")
 class LinearScheduler(BaseScheduler):
     """
-    Use linear schedule sampling rate
+    Use linear increasing schedule sampling rate
+    Args:
+        ssr: value of schedule sampling rate
+        epoch_beg: do schedule sampling from epoch #epoch_beg
+        epoch_end: stop schedule sampling at epoch #epoch_end
+        update_interval: the interval to increase the ssr
     """
 
     def __init__(self,

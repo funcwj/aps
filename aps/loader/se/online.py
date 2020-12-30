@@ -26,8 +26,16 @@ def DataLoader(train: bool = True,
                num_workers: int = 4) -> Iterable[Dict]:
     """
     Return a online simulation dataloader for enhancement/separation tasks
+    Args
+        train: in training mode or not
+        sr: sample rate of the audio
+        simu_cfg: configuration file for online data simulation
+        chunk_size: #chunk_size (s)
+        batch_size: #batch_size
+        distributed: in distributed mode or not
+        num_workers: number of workers used in dataloader
     """
-    dataset = SimuOptsDataset(simu_cfg, noise=noise_label)
+    dataset = SimuOptionsDataset(simu_cfg, noise=noise_label)
     return WaveChunkDataLoader(dataset,
                                train=train,
                                chunk_size=chunk_size,
@@ -36,12 +44,22 @@ def DataLoader(train: bool = True,
                                distributed=distributed)
 
 
-class SimuOptsDataset(dat.Dataset):
+class SimuOptionsDataset(dat.Dataset):
     """
-    Dataset configured by the simulation command options
+    A dataset drived by the simulation configurations. The format of the "simu.cfg" looks like
+        2spk_mix02  --src-spk /path/to/XXXX1.wav,/path/to/XXXX2.wav --src-begin 4000,0 --src-sdr 1
+        2spk_mix03  --src-spk /path/to/XXXX3.wav,/path/to/XXXX4.wav --src-begin 0,900 --src-sdr -1
+        ...
+    where each line follows pattern <key> <command-options>. See
+    1) aps/loader/simu.py for <command-options> details
+    2) https://github.com/funcwj/setk/tree/master/doc/data_simu for command line usage
+
+    Args:
+        simu_cfg: path of the configuraton file
+        noise: if true, then return both noise and reference audio
     """
 
-    def __init__(self, simu_cfg, noise: bool = False) -> None:
+    def __init__(self, simu_cfg: str, noise: bool = False) -> None:
         self.simu_cfg = BaseReader(simu_cfg, num_tokens=-1)
         self.noise = noise
         self.parser = make_argparse()

@@ -23,7 +23,11 @@ except ImportError:
 
 class WeightNoiseAdder(object):
     """
-    Add gaussian noise to updated weights
+    Add gaussian noise to the network weight
+    Args:
+        cfg: [beg, step, end], adding noise during
+             training steps (beg, end), with a step size #step
+        std: std of the gaussian noise
     """
 
     def __init__(self, cfg: List[int], std: float = 0.075) -> None:
@@ -47,7 +51,13 @@ class WeightNoiseAdder(object):
 
 class ProgressReporter(object):
     """
-    A simple training progress reporter
+    A simple training progress reporter used in Trainer class
+    Args:
+        checkpoint: checkpoint directory (for logging file & tensorboard)
+        metrics: matrics to track, e.g., accu, loss, @ppl
+        rank: rank value (for distributed training only)
+        tensorboard: use tensorboard or not
+        reduction_tag: #utt|#tok|none, how we compute the averaged numbers
     """
 
     def __init__(self,
@@ -216,7 +226,9 @@ class ProgressReporter(object):
 
 class ErrorDetector(object):
     """
-    Detect mini-batch training errors
+    Detect the training errors
+    Args:
+        stop_on_errors: maximum number of errors can exist
     """
 
     def __init__(self, stop_on_errors: int) -> None:
@@ -253,6 +265,11 @@ class ErrorDetector(object):
 class StopDetector(object):
     """
     To manage the early stop of the training
+    Args:
+        no_impr: int, maximum number of epochs that no improvement exists
+        mode: min|max
+        init_criterion: initial value for best criterion
+        no_impr_thres: threshold to check whether there is improvement
     """
 
     def __init__(self,
@@ -320,6 +337,30 @@ class StopDetector(object):
 class Trainer(object):
     """
     A PyTorch distributed trainer
+    Args:
+        task: Task class from aps.task
+        rank: rank value (for distributed training)
+        device_ids: GPU device ID
+        checkpoint: directory for checkpoint storage
+        optimizer: optimizer name (see function create_optimizer)
+        optimizer_kwargs: parameters for the optimizer
+        lr_scheduler: name of the learning rate scheduler (see aps.trainer.lr)
+        lr_scheduler_kwargs: parameters for the learning rate scheduler
+        lr_scheduler_period: epoch|step, run lr_scheduler per-epoch or per-step
+        ss_scheduler: schedule sampling strategy (see aps.trainer.ss)
+        ss_scheduler_kwargs: parameters for the ss_scheduler
+        clip_gradient: value of L2 norm for gradient clipping
+        acmu_gradient: (not implement now)
+        prog_interval: interval to log training progress
+        save_interval: interval to save checkpoint
+        resume: checkpoint to resume training
+        init: checkpoint for model initialization
+        tensorboard: use tensorboard or not
+        no_impr: stop training when it reaches the number of epochs that no improvements exist
+        stop_criterion: do early stopping detection on which metrics (must in in report_metrics)
+        report_metrics: metrics to be tracked during training
+        reduction_tag: used in ProgressReporter
+        stop_on_errors: stop training if errors exist
     """
 
     def __init__(self,
@@ -347,7 +388,7 @@ class Trainer(object):
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
                  report_metrics: List[str] = ["loss"],
-                 report_reduction: str = "none",
+                 reduction_tag: str = "none",
                  stop_on_errors: int = 10,
                  **kwargs) -> None:
         if not isinstance(task, Task):
@@ -391,7 +432,7 @@ class Trainer(object):
                                          rank=rank,
                                          period=prog_interval,
                                          tensorboard=tensorboard,
-                                         reduction_tag=report_reduction)
+                                         reduction_tag=reduction_tag)
         if weight_noise_std is None:
             self.weight_noise_adder = None
         else:
@@ -473,7 +514,7 @@ class Trainer(object):
 
         self.reporter.log(
             f"Track the metrics during training: {report_metrics}, " +
-            f"reduction = {report_reduction}")
+            f"reduction = {reduction_tag}")
         self.reporter.log(f"Early stop detected on metric: {self.stop_on}")
         if clip_gradient:
             self.reporter.log(f"Clip gradient if over {clip_gradient} L2 norm")

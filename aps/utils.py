@@ -25,6 +25,10 @@ def get_logger(name: str,
                file: bool = False) -> logging.Logger:
     """
     Get logger instance
+    Args:
+        name: logger name
+        format_str|date_format: to configure logging format
+        file: if true, treat name as the name of the logging file
     """
 
     def get_handler(handler):
@@ -45,6 +49,9 @@ def get_logger(name: str,
 def io_wrapper(io_str: str, mode: str) -> Tuple[bool, Any]:
     """
     Wrapper for IO stream
+    Args:
+        io_str: "-" or file name
+        mode: IO mode
     """
     if io_str != "-":
         std = False
@@ -63,6 +70,9 @@ def io_wrapper(io_str: str, mode: str) -> Tuple[bool, Any]:
 def load_obj(obj: Any, device: Union[th.device, str]) -> Any:
     """
     Offload tensor object in obj to cuda device
+    Args:
+        obj: Arbitrary object
+        device: target device ("cpu", "cuda" or th.device object)
     """
 
     def cuda(obj):
@@ -79,6 +89,8 @@ def load_obj(obj: Any, device: Union[th.device, str]) -> Any:
 def get_device_ids(device_ids: Union[str, int]) -> Tuple[int]:
     """
     Got device ids
+    Args:
+        device_ids: int or string like "0,1"
     """
     if not th.cuda.is_available():
         raise RuntimeError("CUDA device unavailable... exist")
@@ -99,6 +111,8 @@ def get_device_ids(device_ids: Union[str, int]) -> Tuple[int]:
 def set_seed(seed_str: str) -> Optional[int]:
     """
     Set random seed for numpy & torch & cuda
+    Args:
+        seed_str: string
     """
     # set random seed
     if not seed_str or seed_str == "none":

@@ -49,7 +49,7 @@ def run(args):
                       save_interval=args.save_interval,
                       prog_interval=args.prog_interval,
                       tensorboard=args.tensorboard,
-                      report_reduction="#tok",
+                      reduction_tag="#tok",
                       **conf["trainer_conf"])
     # dump configurations
     conf["cmd_args"] = vars(args)

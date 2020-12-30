@@ -82,10 +82,12 @@ def add_room_response(spk: np.ndarray,
     """
     Convolute source signal with selected rirs
     Args
-        spk: S
-        rir: N x R
+        spk: S, close talk signal
+        rir: N x R, single or multi-channel RIRs
+        early_energy: return energy of early parts
+        sr: sample rate of the signal
     Return
-        revb: N x S
+        revb: N x S, reverberated signals
     """
     if spk.ndim != 1:
         raise RuntimeError(f"Can not convolve rir with {spk.ndim}D signals")
@@ -108,8 +110,7 @@ def add_room_response(spk: np.ndarray,
 
 def run_command(command: str, wait: bool = True):
     """
-    Runs shell commands. These are usually a sequence of
-    commands connected by pipes, so we use shell=True
+    Runs shell commands
     """
     p = subprocess.Popen(command,
                          shell=True,
@@ -132,10 +133,22 @@ class AudioReader(BaseReader):
     Sequential/Random Reader for single/multiple channel audio using soundfile as the backend
     The format of wav.scp follows Kaldi's definition:
         key1 /path/to/key1.wav
+        key2 /path/to/key2.wav
         ...
     or
         key1 sox /home/data/key1.wav -t wav - remix 1 |
+        key2 sox /home/data/key2.wav -t wav - remix 1 |
         ...
+    or
+        key1 /path/to/ark1:XXXX
+        key2 /path/to/ark1:XXXY
+    are supported
+
+    Args:
+        wav_scp: path of the audio script
+        sr: sample rate of the audio
+        norm: normalize audio samples between (-1, 1) if true
+        channel: read audio at #channel if > 0 (-1 means all)
     """
 
     def __init__(self,

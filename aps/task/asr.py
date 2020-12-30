@@ -37,6 +37,9 @@ __all__ = ["CtcXentHybridTask", "TransducerTask", "LmXentTask"]
 def compute_accu(outs: th.Tensor, tgts: th.Tensor) -> Tuple[float]:
     """
     Compute frame-level accuracy
+    Args:
+        outs: N x T, decoder output
+        tgts: N x T, padding target labels
     """
     # N x (To+1)
     pred = th.argmax(outs.detach(), dim=-1)
@@ -57,7 +60,12 @@ def prep_asr_target(
         pad_value: int,
         eos_value: int = -1) -> Tuple[th.Tensor, Optional[th.Tensor]]:
     """
-    Process asr targets for inference and loss computation
+    Process asr targets for forward and loss computation
+    Args:
+        tgt_pad: padding target labels
+        tgt_len: target length
+        pad_value: padding value, e.g., ignore_id
+        eos_value: EOS value
     """
     # N x To, -1 => EOS
     tgt_v1 = tgt_pad.masked_fill(tgt_pad == IGNORE_ID, pad_value)
@@ -75,6 +83,8 @@ def prep_asr_target(
 def load_label_count(label_count: str) -> Optional[th.Tensor]:
     """
     Load tensor from a label count file
+    Args:
+        label_count: path of the label count file
     """
     if not label_count:
         return None
@@ -97,7 +107,14 @@ def load_label_count(label_count: str) -> Optional[th.Tensor]:
 @ApsRegisters.task.register("ctc_xent")
 class CtcXentHybridTask(Task):
     """
-    CTC & Attention AM
+    For encoder/decoder attention based AM training. (CTC for encoder, Xent for decoder)
+    Args:
+        nnet: AM network
+        blank: blank id for CTC
+        lsm_factor: label smoothing factor
+        lsm_method: label smoothing method (uniform|unigram)
+        ctc_weight: CTC weight
+        label_count: label count file
     """
 
     def __init__(self,
@@ -178,7 +195,11 @@ class CtcXentHybridTask(Task):
 @ApsRegisters.task.register("transducer")
 class TransducerTask(Task):
     """
-    For Transducer based AM
+    For RNNT objective function training.
+    Args:
+        nnet: AM network
+        interface: which RNNT loss api to use (warp_rnnt|warprnnt_pytorch)
+        blank: blank ID for RNNT loss computation
     """
 
     def __init__(self,
@@ -237,7 +258,10 @@ class TransducerTask(Task):
 @ApsRegisters.task.register("lm")
 class LmXentTask(Task):
     """
-    For LM training
+    For LM training (Xent loss)
+    Args:
+        nnet: language model
+        repackage_hidden: reuse hidden state in previous batch
     """
 
     def __init__(self, nnet: nn.Module, repackage_hidden: bool = False) -> None:

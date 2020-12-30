@@ -32,6 +32,22 @@ def DataLoader(text: str = "",
                min_batch_size: int = 8,
                batch_size: int = 64,
                num_workers: int = 0) -> Iterable[Dict]:
+    """
+    The utterance-level dataloader for LM training
+    Args:
+        text: path of the text/token file
+        vocab_dict: vocabulary dictionary
+        kaldi_format: whether text/token file is in kaldi format
+        sos|eos: sos|eos ID
+        train: in training mode or not
+        batch_size: maximum value of #batch_size
+        num_workers: number workers used in dataloader
+        {min|max}_token_num: boundary of the token length
+        min_batch_size: minimum value of #batch_size
+        adapt_token_num: used in #batch_size reduction
+        chunk_size_for_sort: #chunk_size for mini-batch sorting, we perform sort
+                             in each chunk (because LM corpus may very big)
+    """
     return UttDataLoader(Dataset(text, vocab_dict, kaldi_format=kaldi_format),
                          sos=sos,
                          eos=eos,
@@ -48,12 +64,16 @@ def DataLoader(text: str = "",
 class Dataset(dat.Dataset):
     """
     Dataset for text corpus
+    Args:
+        text: path of the text/token file
+        vocab_dict: vocabulary dictionary
+        kaldi_format: whether text/token file is in kaldi format
     """
 
     def __init__(self,
                  text: str,
                  vocab_dict: Optional[Dict],
-                 kaldi_format=True) -> None:
+                 kaldi_format: bool = True) -> None:
         self.vocab = vocab_dict
         self.kaldi_format = kaldi_format
         self.token = self._load(text)
@@ -90,18 +110,26 @@ class Dataset(dat.Dataset):
 
 class BatchSampler(dat.Sampler):
     """
-    A custom batchsampler
+    A custom batch sampler for LM dataset
+    Args:
+        dataset: instance of dat.Dataset
+        batch_size: maximum value of #batch_size
+        shuffle: shuffle batches or not
+        {min|max}_token_num: boundary of the token length
+        min_batch_size: minimum value of #batch_size
+        adapt_token_num: used in #batch_size reduction
+        chunk_size_for_sort: we perform sort in each chunk (for large LM corpus)
     """
 
     def __init__(self,
                  dataset: dat.Dataset,
                  batch_size: int,
-                 chunk_size_for_sort: int = 10000,
+                 shuffle: bool = False,
                  min_token_num: int = 2,
                  max_token_num: int = 2000,
                  min_batch_size: int = 8,
                  adapt_token_num: int = 400,
-                 shuffle: bool = False) -> None:
+                 chunk_size_for_sort: int = 10000) -> None:
         self.const = {
             "min": min_token_num,
             "max": max_token_num,
@@ -125,6 +153,9 @@ class BatchSampler(dat.Sampler):
 
     def _sort_indices(self, subset: List[List], batch_size: int,
                       base: int) -> List[List[int]]:
+        """
+        Sort mini-batches in each subset
+        """
         # short -> long
         toks_len = [len(toks) for toks in subset]
         desc_idx = np.argsort(toks_len)
@@ -165,7 +196,18 @@ class BatchSampler(dat.Sampler):
 
 class UttDataLoader(dat.DataLoader):
     """
-    DataLoader for LM training
+    The utterance level dataLoader for LM training
+    Args:
+        dataset: instance of dat.Dataset
+        sos|eos: sos|eos ID
+        shuffle: shuffle batches or not
+        batch_size: maximum value of #batch_size
+        num_workers: number workers used in dataloader
+        min|max_token_num: boundary of the token length
+        min_batch_size: minimum value of #batch_size
+        adapt_token_num: used in #batch_size reduction
+        chunk_size_for_sort: #chunk_size for mini-batch sorting, we perform sort
+                             in each chunk (for large LM corpus)
     """
 
     def __init__(self,

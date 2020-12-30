@@ -30,11 +30,17 @@ def DataLoader(train: bool = True,
                num_workers: int = 4) -> Iterable[Dict]:
     """
     Return a online-chunk dataloader for enhancement/separation tasks
-    args
-        mix_scp: "mix.scp"
-        emb_scp: "emb.scp" or ""
-        doa_scp: "spk1.scp" or "spk1.scp,spk2.scp" or ""
-        ref_scp: "spk1.scp" or "spk1.scp,spk2.scp"
+    Args:
+        train: in training mode or not
+        sr: sample rate of the audio
+        mix_scp: mixture audio script, e.g., "mix.scp"
+        emb_scp: speaker embedding script, e.g, "emb.scp" or ""
+        doa_scp: DoA scripts, e.g., "spk1.scp" or "spk1.scp,spk2.scp" or ""
+        ref_scp: reference audio scripts, e.g., "spk1.scp" or "spk1.scp,spk2.scp"
+        chunk_size: #chunk_size (s)
+        batch_size: #batch_size
+        distributed: in distributed mode or not
+        num_workers: number of workers used in dataloader
     """
     if not mix_scp:
         raise RuntimeError("mix_scp can not be None")
@@ -64,7 +70,9 @@ def DataLoader(train: bool = True,
 
 class NumpyReader(BaseReader):
     """
-    Sequential/Random Reader for numpy's ndarray(*.npy) file
+    Sequential/Random Reader for numpy's ndarray (*.npy) file
+    Args:
+        npy_scp: script of numpy objects
     """
 
     def __init__(self, npy_scp: str) -> None:
@@ -77,6 +85,13 @@ class NumpyReader(BaseReader):
 class ScriptDataset(dat.Dataset):
     """
     Dataset configured by scripts
+    Args:
+        train: in training mode or not
+        sr: sample rate of the audio
+        mix_scp: mixture audio script, e.g., "mix.scp"
+        emb_scp: speaker embedding script, e.g, "emb.scp" or ""
+        doa_scp: DoA scripts, e.g., "spk1.scp" or "spk1.scp,spk2.scp" or ""
+        ref_scp: reference audio scripts, e.g., "spk1.scp" or "spk1.scp,spk2.scp"
     """
 
     def __init__(self,
@@ -149,7 +164,12 @@ class ScriptDataset(dat.Dataset):
 
 class ChunkSplitter(object):
     """
-    Split utterance into small chunks
+    The class to split utterance into small chunks
+    Args:
+        chunk_size: size of audio chunk, we will split the long utterances
+                    to several fix-length chunks
+        train: in training mode or not
+        hop: hop size between the chunks in one utterance
     """
 
     def __init__(self,
@@ -229,7 +249,14 @@ class ChunkSplitter(object):
 
 class WaveChunkDataLoader(object):
     """
-    Online dataloader for chunk-level PIT
+    The audio chunk dataloader for SE/SS tasks (do chunk splitting on-the-fly)
+    Args:
+        dataset: instance of the audio dataset
+        num_workers: number of the workers used in dataloader
+        chunk_size: #chunk_size (s)
+        batch_size: #batch_size
+        distributed: in distributed mode or not
+        train: in training mode or not
     """
 
     def __init__(self,

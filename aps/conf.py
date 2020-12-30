@@ -23,6 +23,10 @@ def load_dict(dict_path: str,
               reverse: bool = False) -> Dict:
     """
     Load the dictionary object
+    Args:
+        dict_path: path of the vocabulary dictionary
+        required: required units in the dict
+        reverse: return int:str if true, else str:int
     """
     with codecs.open(dict_path, encoding="utf-8") as f:
         vocab = {}

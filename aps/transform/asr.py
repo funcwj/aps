@@ -44,6 +44,9 @@ def detect_nan(feature: th.Tensor) -> th.Tensor:
 class SpeedPerturbTransform(nn.Module):
     """
     Transform layer for speed perturb
+    Args:
+        sr: sample rate of source signal
+        perturb: speed perturb factors
     """
 
     def __init__(self, sr: int = 16000, perturb: str = "0.9,1.0,1.1") -> None:
@@ -100,6 +103,8 @@ class SpeedPerturbTransform(nn.Module):
 class TFTransposeTransform(nn.Module):
     """
     Swap time/frequency axis
+    Args:
+        axis1, axis2: axis pairs to be transposed
     """
 
     def __init__(self, axis1: int = -1, axis2: int = -2) -> None:
@@ -123,6 +128,8 @@ class TFTransposeTransform(nn.Module):
 class PreEmphasisTransform(nn.Module):
     """
     Do utterance level preemphasis
+    Args:
+        pre_emphasis: preemphasis factor
     """
 
     def __init__(self, pre_emphasis: float = 0) -> None:
@@ -147,6 +154,17 @@ class PreEmphasisTransform(nn.Module):
 class SpectrogramTransform(STFT):
     """
     Compute spectrogram as a layer
+    Args:
+        frame_len: length of the frame
+        frame_hop: hop size between frames
+        window: window name
+        center: center flag (similar with that in librosa.stft)
+        round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
+        pre_emphasis: factor of preemphasis
+        normalized: use normalized DFT kernel
+        onesided: output onesided STFT
+        mode: "kaldi"|"librosa", slight difference on applying window function
+        power: return power spectrogram or not
     """
 
     def __init__(self,
@@ -198,6 +216,8 @@ class SpectrogramTransform(STFT):
 class AbsTransform(nn.Module):
     """
     Absolute transform
+    Args:
+        eps: small floor value to avoid NAN when backward
     """
 
     def __init__(self, eps: float = 1e-5) -> None:
@@ -240,6 +260,14 @@ class PowerTransform(nn.Module):
 class MelTransform(nn.Module):
     """
     Mel tranform as a layer
+    Args:
+        frame_len: length of the frame
+        round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
+        sr: sample rate of souce signal
+        num_mels: number of the mel bands
+        fmin: lowest frequency (in Hz)
+        fmax: highest frequency (in Hz)
+        requires_grad: make it trainable or not
     """
 
     def __init__(self,
@@ -288,6 +316,9 @@ class MelTransform(nn.Module):
 class LogTransform(nn.Module):
     """
     Transform linear domain to log domain
+    Args:
+        eps: floor value to avoid nagative values
+        lower_bound: lower bound value
     """
 
     def __init__(self, eps: float = 1e-5, lower_bound: float = 0) -> None:
@@ -318,6 +349,10 @@ class LogTransform(nn.Module):
 class DiscreteCosineTransform(nn.Module):
     """
     DCT as a layer (for mfcc features)
+    Args:
+        num_ceps: number of the cepstrum coefficients
+        num_mels: number of mel bands
+        lifter: lifter factor
     """
 
     def __init__(self,
@@ -364,6 +399,12 @@ class DiscreteCosineTransform(nn.Module):
 class CmvnTransform(nn.Module):
     """
     Utterance & Global level mean & variance normalization
+    Args:
+        norm_mean: normalize mean or not
+        norm_var: normalize var or not
+        per_band: do cmvn perband or not
+        gcmvn: path of the glabal cmvn statistics
+        eps: small value to avoid NAN
     """
 
     def __init__(self,
@@ -431,6 +472,12 @@ class CmvnTransform(nn.Module):
 class SpecAugTransform(nn.Module):
     """
     Spectra data augmentation
+    Args:
+        p: probability to do spec-augment
+        p_time: p in SpecAugment paper
+        mask_zero: use zero value or mean in the masked region
+        num_freq_masks|num_time_masks: m_F, m_T in the SpecAugment paper
+        max_bands|max_frame: F, T in the SpecAugment paper
     """
 
     def __init__(self,
@@ -488,7 +535,11 @@ class SpecAugTransform(nn.Module):
 
 class SpliceTransform(nn.Module):
     """
-    Do splicing as well as downsampling if needed
+    Do feature splicing as well as downsampling if needed
+    Args:
+        lctx: left context
+        rctx: right contex
+        subsampling_factor: subsampling factor
     """
 
     def __init__(self,
@@ -533,6 +584,9 @@ class SpliceTransform(nn.Module):
 class DeltaTransform(nn.Module):
     """
     Add delta features
+    Args:
+        ctx: context size
+        order: delta order
     """
 
     def __init__(self, ctx: int = 2, order: int = 2) -> None:
@@ -587,6 +641,38 @@ class FeatureTransform(nn.Module):
         - SpecAugTransform
         - SpliceTransform
         - DeltaTransform
+
+    Args:
+        feats: string that shows the way to extract features
+        frame_len: length of the frame
+        frame_hop: hop size between frames
+        window: window name
+        center: center flag (similar with that in librosa.stft)
+        round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
+        stft_normalized: use normalized DFT kernel
+        stft_mode: "kaldi"|"librosa", slight difference on windowing
+        pre_emphasis: factor of preemphasis
+        use_power: use power spectrogram or not
+        sr: sample rate of the audio
+        speed_perturb: speed perturb factors (perturb)
+        log_lower_bound: lower_bound when we apply log (log)
+        num_mels: number of the mel bands (for fbank|mfcc)
+        num_ceps: number of the cepstrum coefficients (mfcc)
+        min_freq|max_freq: frequency boundry
+        lifter: lifter factor (mfcc)
+        aug_prob: probability to do spec-augment
+        aug_maxp_time: p in SpecAugment paper
+        aug_mask_zero: use zero value or mean in the masked region
+        num_aug_bands|num_aug_frame: m_F, m_T in the SpecAugment paper
+        aug_max_bands|aug_max_frame: F, T in the SpecAugment paper
+        norm_mean|norm_var: normalize mean/var or not (cmvn)
+        norm_per_band: do cmvn per-band or not (cmvn)
+        gcmvn: global cmvn statistics (cmvn)
+        subsampling_factor: subsampling factor
+        lctx|rctx: left/right context for splicing (splice)
+        delta_ctx|delta_order: context|order used in delta feature (delta)
+        requires_grad: make mel matrice trainable
+        eps: floor number
     """
 
     def __init__(self,
