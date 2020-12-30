@@ -2,7 +2,10 @@
 
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
-
+"""
+Adopt from my another project: https://github.com/funcwj/setk
+See https://github.com/funcwj/setk/tree/master/doc/data_simu for command line usage
+"""
 import argparse
 import numpy as np
 

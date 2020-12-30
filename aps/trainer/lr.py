@@ -44,7 +44,18 @@ class MultiStepLR(lr.MultiStepLR):
 @LrScheduler.register("warmup_noam_lr")
 class NoamLR(lr._LRScheduler):
     """
-    Lr schuduler for Transformer
+    Lr schuduler for Transformer:
+
+    const = factor * transformer_dim^{-0.5}
+    1) cur_step > warmup:   const * cur_step**(-0.5)
+    2) cur_step < warmup:   const * cur_step * warmup**(-1.5)
+    3) cur_step = warmup:   const * warmup**(-0.5)
+
+    Args:
+        optimizer: optimizer object in torch.optim.Optimizer
+        transformer_dim: transformer's embedding dim
+        warmup: warmup steps
+        factor: scale factor on learning rate
     """
 
     def __init__(self,
@@ -58,12 +69,6 @@ class NoamLR(lr._LRScheduler):
         super(NoamLR, self).__init__(optimizer, last_epoch=last_epoch)
 
     def get_lr(self, step: Optional[int] = None) -> List[float]:
-        """
-        const = factor * transformer_dim^{-0.5}
-        1) cur_step > warmup:   const * cur_step**(-0.5)
-        2) cur_step < warmup:   const * cur_step * warmup**(-1.5)
-        3) cur_step = warmup:   const * warmup**(-0.5)
-        """
         if step is None:
             step = self._step_count
         return [
@@ -75,7 +80,18 @@ class NoamLR(lr._LRScheduler):
 @LrScheduler.register("warmup_exp_decay_lr")
 class ExponentialLR(lr._LRScheduler):
     """
-    Exponential scheduler proposed in SpecAugment paper
+    Exponential scheduler proposed in SpecAugment paper：
+
+    1) 0 < cur_step <= sr: ramp up (use sr == 0 can skip this stage)
+    2) sr < cur_step <= si: hold on (use si == sr can skip this stage)
+    3) si < cur_step <= sf: exponential decay
+    4) cur_step > sf: hold on
+
+    Args:
+        optimizer: optimizer object in torch.optim.Optimizer
+        time_stamps: [sr, si, sf] in the paper
+        peak_lr: the peak value of the learning rate
+        stop_lr: the minimum value of the learning rate
     """
 
     def __init__(self,
@@ -90,12 +106,6 @@ class ExponentialLR(lr._LRScheduler):
         super(ExponentialLR, self).__init__(optimizer, last_epoch=last_epoch)
 
     def get_lr(self, step: Optional[int] = None) -> List[float]:
-        """
-        1) 0 < cur_step <= sr: ramp up (use sr == 0 can skip this stage)
-        2) sr < cur_step <= si: hold on (use si == sr can skip this stage)
-        2) si < cur_step <= sf: exponential decay
-        3) cur_step > sf: hold on
-        """
         if step is None:
             step = self._step_count
         if step <= self.si:
@@ -109,7 +119,18 @@ class ExponentialLR(lr._LRScheduler):
 @LrScheduler.register("warmup_linear_decay_lr")
 class LinearLR(lr._LRScheduler):
     """
-    Linear warmup scheduler (using linear decay in ExponentialLR)
+    Linear warmup scheduler (using linear decay in ExponentialLR):
+
+    1) 0 < cur_step <= sr: ramp up (use sr == 0 can skip this stage)
+    2) sr < cur_step <= si: hold on (use si == sr can skip this stage)
+    3) si < cur_step <= sf: linear decay
+    4) cur_step > sf: hold on
+
+    Args:
+        optimizer: optimizer object in torch.optim.Optimizer
+        time_stamps: similar with ExponentialLR
+        peak_lr: the peak value of the learning rate
+        stop_lr: the minimum value of the learning rate
     """
 
     def __init__(self,
@@ -124,12 +145,6 @@ class LinearLR(lr._LRScheduler):
         super(LinearLR, self).__init__(optimizer, last_epoch=last_epoch)
 
     def get_lr(self, step: Optional[int] = None) -> List[float]:
-        """
-        1) 0 < cur_step <= sr: ramp up (use sr == 0 can skip this stage)
-        2) sr < cur_step <= si: hold on (use si == sr can skip this stage)
-        2) si < cur_step <= sf: linear decay
-        3) cur_step > sf: hold on
-        """
         if step is None:
             step = self._step_count
         if step <= self.si:

@@ -16,6 +16,9 @@ from typing import Optional, Union, Tuple
 def init_window(wnd: str, frame_len: int) -> th.Tensor:
     """
     Return window coefficient
+    Args:
+        wnd: window name
+        frame_len: length of the frame
     """
 
     def sqrthann(frame_len, periodic=True):
@@ -49,6 +52,14 @@ def init_kernel(frame_len: int,
                 mode: str = "librosa") -> th.Tensor:
     """
     Return STFT kernels
+    Args:
+        frame_len: length of the frame
+        frame_hop: hop size between frames
+        window: window name
+        round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
+        normalized: return normalized DFT matrix
+        inverse: return iDFT matrix
+        mode: framing mode (librosa or kaldi)
     """
     if mode not in ["librosa", "kaldi"]:
         raise ValueError(f"Unsupported mode: {mode}")
@@ -88,6 +99,14 @@ def init_melfilter(frame_len: int,
                    norm: bool = False) -> th.Tensor:
     """
     Return mel-filters
+    Args:
+        frame_len: length of the frame
+        round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
+        num_bins: number of the frequency bins produced by STFT
+        num_mels: number of the mel bands
+        fmin: lowest frequency (in Hz)
+        fmax: highest frequency (in Hz)
+        norm: normalize the mel feature
     """
     # FFT points
     if num_bins is None:
@@ -117,6 +136,9 @@ def speed_perturb_filter(src_sr: int,
     """
     Return speed perturb filters, reference:
         https://github.com/danpovey/filtering/blob/master/lilfilter/resampler.py
+    Args:
+        src_sr: sample rate of the source signal
+        dst_sr: sample rate of the target signal
     """
     if src_sr == dst_sr:
         raise ValueError(
@@ -157,6 +179,7 @@ def _forward_stft(
             complex: return (real, imag) pair
             real: return [real; imag] Tensor
         frame_hop: frame hop size in number samples
+        pre_emphasis: factor of preemphasis
         onesided: return half FFT bins
         center: if true, we assumed to have centered frames
     Return:
@@ -294,6 +317,19 @@ def forward_stft(
         mode: str = "librosa") -> Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]:
     """
     STFT function implementation, equals to STFT layer
+    Args:
+        wav: source audio signal
+        frame_len: length of the frame
+        frame_hop: hop size between frames
+        output: output type (complex, real, polar)
+        window: window name
+        center: center flag (similar with that in librosa.stft)
+        round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
+        pre_emphasis: factor of preemphasis
+        normalized: use normalized DFT kernel
+        onesided: output onesided STFT
+        inverse: using iDFT kernel (for iSTFT)
+        mode: "kaldi"|"librosa", slight difference on applying window function
     """
     K, _ = init_kernel(frame_len,
                        frame_hop,
@@ -323,6 +359,17 @@ def inverse_stft(transform: Union[th.Tensor, Tuple[th.Tensor, th.Tensor]],
                  mode: str = "librosa") -> th.Tensor:
     """
     iSTFT function implementation, equals to iSTFT layer
+    Args:
+        transform: results of STFT
+        frame_len: length of the frame
+        frame_hop: hop size between frames
+        input: input format (complex, real, polar)
+        window: window name
+        center: center flag (similar with that in librosa.stft)
+        round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
+        normalized: use normalized DFT kernel
+        onesided: output onesided STFT
+        mode: "kaldi"|"librosa", slight difference on applying window function
     """
     if isinstance(transform, th.Tensor):
         device = transform.device
@@ -347,6 +394,18 @@ def inverse_stft(transform: Union[th.Tensor, Tuple[th.Tensor, th.Tensor]],
 class STFTBase(nn.Module):
     """
     Base layer for (i)STFT
+
+    Args:
+        frame_len: length of the frame
+        frame_hop: hop size between frames
+        window: window name
+        center: center flag (similar with that in librosa.stft)
+        round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
+        normalized: use normalized DFT kernel
+        pre_emphasis: factor of preemphasis
+        mode: "kaldi"|"librosa", slight difference on applying window function
+        onesided: output onesided STFT
+        inverse: using iDFT kernel (for iSTFT)
     """
 
     def __init__(self,

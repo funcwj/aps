@@ -51,7 +51,11 @@ class RefChannelTransform(nn.Module):
 
 class IpdTransform(nn.Module):
     """
-    Compute inter-channel phase difference
+    Compute inter-channel phase difference (IPD) features
+    Args:
+        ipd_index: index pairs to compute IPD feature
+        cos: using cosIPD or not
+        sin: adding sinIPD or not
     """
 
     def __init__(self,
@@ -114,6 +118,13 @@ class DfTransform(nn.Module):
         1) num_doas == 1: we known the DoA of the target speaker
         2) num_doas != 1: we do not have that prior, so we sampled #num_doas DoAs
                           and compute on each directions
+    Args:
+        geometric: name of the array geometry
+        sr: sample rate of the audio
+        velocity: sound speed
+        num_bins: number of FFT bins
+        num_doas: how many directions to point out
+        af_index: index pairs to compute the directional feature
     """
 
     def __init__(self,
@@ -254,6 +265,12 @@ class DfTransform(nn.Module):
 class FixedBeamformer(nn.Module):
     """
     Fixed beamformer as a layer
+    Args:
+        num_beams: number of beams
+        num_channels: number of the channels
+        num_bins: FFT size / 2 + 1
+        weight: beamformer's coefficient
+        requires_grad: make it trainable or not
     """
 
     def __init__(self,
@@ -336,6 +353,29 @@ class FeatureTransform(nn.Module):
     """
     Feature transform for Enhancement/Separation tasks
     Spectrogram - LogTransform - CmvnTransform + IpdTransform + DfTransform
+
+    Args:
+        feats: string that shows the way to extract features
+        frame_len: length of the frame
+        frame_hop: hop size between frames
+        window: window name
+        center: center flag (similar with that in librosa.stft)
+        round_pow_of_two: if true, choose round(#pow_of_two) as the FFT size
+        stft_normalized: use normalized DFT kernel
+        stft_mode: "kaldi"|"librosa", slight difference on windowing
+        ref_channel: choose one channel
+        sr: sample rate of the audio
+        norm_mean|norm_var: normalize mean/var or not (cmvn)
+        norm_per_band: do cmvn per-band or not (cmvn)
+        gcmvn: global cmvn statistics (cmvn)
+        aug_prob: probability to do spec-augment
+        aug_maxp_time: p in SpecAugment paper
+        aug_mask_zero: use zero value or mean in the masked region
+        num_aug_bands|num_aug_frame: m_F, m_T in the SpecAugment paper
+        aug_max_bands|aug_max_frame: F, T in the SpecAugment paper
+        ipd_index: index pairs to compute IPD feature (ipd)
+        cos_ipd|sin_ipd: using cos or sin IPDs
+        eps: floor number
     """
 
     def __init__(self,

@@ -30,6 +30,10 @@ class MetricReporter(object):
 class AverageReporter(MetricReporter):
     """
     Reportor for SDR, PESQ, SiSNR
+    Args:
+        spk2class (str, optional): spk2class file
+        name (str): SDR, PESQ or SiSNR
+        unit (str): dB
     """
 
     def __init__(self,
@@ -64,6 +68,10 @@ class AverageReporter(MetricReporter):
 class WerReporter(MetricReporter):
     """
     Reportor for WER, CER
+    Args:
+        spk2class (str, optional): spk2class file
+        name (str): WER or CER
+        unit (str): %
     """
 
     def __init__(self,

@@ -24,9 +24,9 @@ def DataLoader(train: bool = True,
                text: str = "",
                utt2dur: str = "",
                vocab_dict: Optional[Dict] = None,
-               max_token_num: int = 400,
                max_dur: float = 3000,
                min_dur: float = 40,
+               max_token_num: int = 400,
                adapt_dur: float = 800,
                adapt_token_num: int = 150,
                skip_utts: str = "",
@@ -34,6 +34,23 @@ def DataLoader(train: bool = True,
                batch_mode: str = "adaptive",
                num_workers: int = 0,
                min_batch_size: int = 4) -> Iterable[Dict]:
+    """
+    Args:
+        train: in training mode or not
+        distributed: in distributed mode or not
+        feats_scp: path of the feature script
+        text: path of the text/token file
+        utt2dur: path of the duration file (should be utt2num_frames here)
+        vocab_dict: vocabulary dictionary object
+        min_dur|max_dur: discard utterance when #num_frames not in [min_dur, max_dur]
+        max_token_num: discard utterance when token length > max_token_num
+        skip_utts: skips utterances if the key is in this file
+        adapt_dur|adapt_token_num: used in adaptive mode dataloader
+        batch_size: maximum #batch_size
+        batch_mode: adaptive or constraint
+        num_workers: number of the workers
+        min_batch_size: minimum #batch_size
+    """
     dataset = Dataset(feats_scp,
                       text,
                       utt2dur,
@@ -67,6 +84,17 @@ class Dataset(AsrDataset):
                  max_token_num: int = 400,
                  max_frame_num: float = 3000,
                  min_frame_num: float = 40) -> None:
+        """
+        Args:
+            feats_scp: path of the feature script
+            text: path of the text/token file
+            utt2dur: path of the duration file (should be utt2num_frames here)
+            vocab_dict: vocabulary dictionary object
+            skip_utts: skips utterances if the key is in this file
+            max_token_num: discard utterance when token length > max_token_num
+            {min|max}_frame_num: discard utterance when #num_frames
+                                 not in [min_frame_num, max_frame_num]
+        """
         feats_reader = ScriptReader(feats_scp)
         token_reader = TokenReader(text,
                                    utt2num_frames,
@@ -82,7 +110,7 @@ class Dataset(AsrDataset):
 
 def egs_collate(egs: Dict) -> Dict:
     """
-    Batch collate, return with keys:
+    Batch collate function, return with dict object with keys:
         #utt: batch size, int
         #tok: token size, int
         src_pad: kaldi features N x T x F
@@ -112,7 +140,17 @@ def egs_collate(egs: Dict) -> Dict:
 
 class KaldiDataLoader(dat.DataLoader):
     """
-    Acoustic dataloader for seq2seq model training
+    Kaldi feature dataloader for E2E AM training
+
+    Args:
+        dataset: instance of dat.Dataset
+        shuffle: shuffle batches or not
+        distributed: in distributed mode or not
+        adapt_dur|adapt_token_num: used in adaptive mode dataloader
+        batch_size: maximum #batch_size
+        batch_mode: adaptive or constraint
+        num_workers: number of the workers
+        min_batch_size: minimum #batch_size
     """
 
     def __init__(self,

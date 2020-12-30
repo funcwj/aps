@@ -116,11 +116,14 @@ def multiple_objf(inp: List[Any],
                   transform: Optional[Callable] = None,
                   batchmean: bool = False) -> th.Tensor:
     """
-    Compute summary of multiple loss functions
+    Compute the summary of multiple loss functions
     Args:
         inp (list(Object)): estimated list
         ref (list(Object)): reference list
-        objf (function): function to compute single pair loss (per mini-batch)
+        objf (callable): the function to compute single pair loss (per mini-batch)
+        weight (list(float)): weight on each loss value
+        transform (callable): transform function on inp & ref
+        batchmean (bool): return mean value of the loss
     Return:
         loss (Tensor): N (per mini-batch) if batchmean == False
     """
@@ -158,6 +161,8 @@ def permu_invarint_objf(inp: List[Any],
         inp (list(Object)): estimated list
         ref (list(Object)): reference list
         objf (function): function to compute single pair loss (per mini-batch)
+        transform (callable): transform function on inp & ref
+        batchmean (bool): return mean value of the loss
     Return:
         loss (Tensor): N (per mini-batch) if batchmean == False
     """

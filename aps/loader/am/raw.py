@@ -38,6 +38,26 @@ def DataLoader(train: bool = True,
                batch_mode: str = "adaptive",
                num_workers: int = 0,
                min_batch_size: int = 4) -> Iterable[Dict]:
+    """
+    Return the raw waveform dataloader (for AM training)
+    Args:
+        train: in training mode or not
+        distributed: in distributed mode or not
+        sr: sample rate of the audio
+        channel: which channel to load, -1 means all
+        audio_norm: loading normalized samples (-1, 1) when reading audio
+        wav_scp: path of the audio script
+        text: path of the token file
+        utt2dur: path of the duration file
+        vocab_dict: dictionary object
+        min_dur|max_dur: discard utterance when #num_frames is not in [min_dur, max_dur]
+        skip_utts: skips utterances that the file shows
+        adapt_dur|adapt_token_num: used in adaptive mode
+        batch_size: maximum #batch_size
+        batch_mode: adaptive or constraint
+        num_workers: number of the workers
+        min_batch_size: minimum #batch_size
+    """
     dataset = Dataset(wav_scp,
                       text,
                       utt2dur,
@@ -62,7 +82,18 @@ def DataLoader(train: bool = True,
 
 class Dataset(AsrDataset):
     """
-    Dataset for raw waveform
+    Dataset for raw waveform input
+    Args:
+        wav_scp: path of the audio script
+        text: path of the token file
+        utt2dur: path of the duration file
+        vocab_dict: vocabulary dictionary object
+        sr: sample rate of the audio
+        channel: which channel to load, -1 means all
+        audio_norm: loading normalized samples (-1, 1) when reading audio
+        {min|max}_wav_dur: discard utterance when duration is not in [min_wav_dur, max_wav_dur]
+        skip_utts: skips utterances that the file shows
+        adapt_wav_dur|adapt_token_num: used in adaptive mode
     """
 
     def __init__(self,
@@ -97,10 +128,10 @@ class Dataset(AsrDataset):
 
 def egs_collate(egs: Dict) -> Dict:
     """
-    Batch collate, return with:
+    Batch collate function, return dict object with keys:
         #utt: batch size, int
         #tok: token size, int
-        src_pad: raw waveforms, N x (C) S
+        src_pad: raw waveforms, N x (C) x S
         tgt_pad: N x T
         src_len: number of the frames, N
         tgt_len: length of the tokens, N
@@ -109,13 +140,13 @@ def egs_collate(egs: Dict) -> Dict:
     def pad_seq(seq, value=0):
         peek_dim = seq[0].dim()
         if peek_dim not in [1, 2]:
-            raise RuntimeError(
-                "Now only supporting pad_sequence for 1/2D tensor")
+            raise RuntimeError("Now only supports 1/2D tensor")
+        # C x S => S x C
         if peek_dim == 2:
-            # C x S => S x C
             seq = [s.transpose(0, 1) for s in seq]
         # N x S x C
         pad_mat = pad_sequence(seq, batch_first=True, padding_value=value)
+        # N x (C) x S
         if peek_dim == 2:
             pad_mat = pad_mat.transpose(1, 2)
         return pad_mat
@@ -139,7 +170,16 @@ def egs_collate(egs: Dict) -> Dict:
 
 class AudioDataLoader(dat.DataLoader):
     """
-    Acoustic dataloader for seq2seq model training
+    Raw waveform dataloader for E2E AM training
+    Args:
+        dataset: instance of dat.Dataset
+        shuffle: shuffle mini-batches or not
+        distributed: in distributed mode or not
+        num_workers: number of the workers
+        adapt_wav_dur|adapt_token_num: used in adaptive mode
+        batch_size: maximum #batch_size
+        batch_mode: adaptive or constraint
+        min_batch_size: minimum #batch_size
     """
 
     def __init__(self,

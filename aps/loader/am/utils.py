@@ -41,7 +41,11 @@ class AsrDataset(dat.Dataset):
 
 class TokenReader(object):
     """
-    The token/text reader for ASR task
+    The token/text reader for ASR task. It will filter utterances that:
+        1) length of the token not in [min_token_num, max_token_num]
+        2) length of the audio not in [min_dur, max_dur]
+        3) utterance's key is in skip_utts
+    and tokenize reference files (from string tokens to int sequences)
     """
 
     def __init__(self,
@@ -75,7 +79,7 @@ class TokenReader(object):
                      max_dur: float = 3000,
                      min_dur: float = 40) -> List[Dict]:
         """
-        Preprocess the transcriptions
+        Preprocess function to filter the utterances
         """
         if skip_utts:
             with open(skip_utts, "r") as skip_fd:
@@ -134,7 +138,15 @@ class TokenReader(object):
 
 class BatchSampler(dat.Sampler):
     """
-    A custom batch sampler
+    A custom batch sampler that can used in distributed/non-distributed mode
+    Args:
+        dataset: dataset object
+        batch_size: maxnimum #batch_size
+        shuffle: shuffle batches or not
+        min_batch_size: minimum #batch_size
+        distributed: distributed or not
+        batch_mode: "adaptive" or "constraint"
+        adapt_dur|adapt_token_num: used in adaptive mode, see _work_adapt_batch_index
     """
 
     def __init__(self,
@@ -171,6 +183,10 @@ class BatchSampler(dat.Sampler):
 
     def _work_const_batch_index(self, dataset: dat.Dataset,
                                 batch_size: int) -> List[Tuple[int, int]]:
+        """
+        In constraint mode, the batch [utt_1, utt_2, ..., utt_N] satisfies
+            sum([len(utt_1), ..., len(utt_N)]) <= #batch_size
+        """
         beg = 0
         tot = len(dataset)
         cur_dur = 0
@@ -200,6 +216,12 @@ class BatchSampler(dat.Sampler):
             adapt_num: int,
             batch_size: int,
             min_batch_size: int = 4) -> List[Tuple[int, int]]:
+        """
+        In adaptive mode, we compute #batch_size using
+            cur_bz = int(max(#min_batch_size, #batch_size // (1 + factor)))
+        where:
+            factor = max(cur_ilen // #adapt_dur, (cur_olen - 1) // #adapt_num)
+        """
         beg = 0
         tot = len(dataset)
         cur_bz = batch_size

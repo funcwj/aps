@@ -65,6 +65,8 @@ def _permute_eval(eval_func: Callable,
         eval_func: function to compute metrics
         ref: array, reference signal (N x S or S, ground truth)
         est: array, enhanced/separated signal (N x S or S)
+        compute_permutation: return permutation order or not
+        fs: sample rate of the audio
     """
 
     def eval_sum(ref, est):
@@ -99,8 +101,11 @@ def permute_metric(
     """
     Computation of SiSNR/PESQ/STOI in permutation/non-permutation mode
     Args:
+        name: metric name
         ref: array, reference signal (N x S or S, ground truth)
         est: array, enhanced/separated signal (N x S or S)
+        compute_permutation: return permutation order or not
+        fs: sample rate of the audio
     """
     if name == "sisnr":
         return _permute_eval(aps_sisnr,

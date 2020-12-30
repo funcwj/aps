@@ -89,6 +89,13 @@ def hybrid_objf(out: List[Any],
                 permu_num_spks: int = 2) -> th.Tensor:
     """
     Return hybrid loss (pair-wise, permutated or pair-wise + permutated)
+    Args:
+        inp (list(Object)): estimated list
+        ref (list(Object)): reference list
+        objf (function): function to compute single pair loss (per mini-batch)
+        weight (list(float)): weight on each loss value
+        permute (bool): use permutation invariant or not
+        permu_num_spks (int): number of speakers when computing PIT
     """
     num_branch = len(out)
     if num_branch != len(ref):
@@ -117,6 +124,11 @@ def hybrid_objf(out: List[Any],
 class SepTask(Task):
     """
     Base class for separation & enhancement task
+    Args:
+        nnet: network instance
+        ctx: context network used for training if needed
+        description: description string
+        weight: weight on each output branch if needed
     """
 
     def __init__(self,
@@ -145,7 +157,13 @@ class SepTask(Task):
 
 class TimeDomainTask(SepTask):
     """
-    Time domain task (to be implemented)
+    Time domain task (to be inherited)
+    Args:
+        nnet: network instance
+        num_spks: number of speakers (output branch in nnet)
+        permute: use permutation invariant loss or not
+        description: description string
+        weight: weight on each output branch if needed
     """
 
     def __init__(self,
@@ -187,6 +205,13 @@ class TimeDomainTask(SepTask):
 class SisnrTask(TimeDomainTask):
     """
     Time domain sisnr loss function
+    Args:
+        nnet: network instance
+        num_spks: number of speakers (output branch in nnet)
+        permute: use permutation invariant loss or not
+        weight: weight on each output branch if needed
+        zero_mean: force zero mean before computing sisnr loss
+        non_nagetive: force non-nagetive value of sisnr
     """
 
     def __init__(self,
@@ -244,6 +269,12 @@ class SnrTask(TimeDomainTask):
 class WaTask(TimeDomainTask):
     """
     Time domain waveform approximation loss function
+    Args:
+        nnet: network instance
+        num_spks: number of speakers (output branch in nnet)
+        objf: L1 or L2 loss
+        permute: use permutation invariant loss or not
+        weight: weight on each output branch if needed
     """
 
     def __init__(self,
@@ -271,7 +302,17 @@ class WaTask(TimeDomainTask):
 
 class FreqSaTask(SepTask):
     """
-    Frequenct SA Task (to be implemented)
+    Frequenct SA Task (to be inherited)
+    Args:
+        nnet: network instance
+        phase_sensitive: using phase sensitive loss function
+        truncated: truncated value (relative) of the reference
+        num_spks: number of speakers (output branch in nnet)
+        masking: if the network predicts TF-mask, set it true.
+                 if the network predicts spectrogram, set it false
+        permute: use permutation invariant loss or not
+        description: description string for current task
+        weight: weight on each output branch if needed
     """
 
     def __init__(self,
@@ -360,6 +401,16 @@ class FreqSaTask(SepTask):
 class LinearFreqSaTask(FreqSaTask):
     """
     Frequency domain linear spectral approximation (MSA or tPSA) loss function
+    Args:
+        nnet: network instance
+        phase_sensitive: using phase sensitive loss function
+        truncated: truncated value (relative) of the reference
+        num_spks: number of speakers (output branch in nnet)
+        masking: if the network predicts TF-mask, set it true.
+                 if the network predicts spectrogram, set it false
+        permute: use permutation invariant loss or not
+        objf: L1 or L2 distance
+        weight: weight on each output branch if needed
     """
 
     def __init__(self,
@@ -403,7 +454,17 @@ class LinearFreqSaTask(FreqSaTask):
 @ApsRegisters.task.register("freq_mel_sa")
 class MelFreqSaTask(FreqSaTask):
     """
-    Spectral approximation on mel-filter domain
+    Frequency domain mel-spectrogram approximation
+    Args:
+        nnet: network instance
+        phase_sensitive: using phase sensitive loss function
+        truncated: truncated value (relative) of the reference
+        num_spks: number of speakers (output branch in nnet)
+        masking: if the network predicts TF-mask, set it true.
+                 if the network predicts spectrogram, set it false
+        permute: use permutation invariant loss or not
+        weight: weight on each output branch if needed
+        ...: others are parameters for mel-spectrogram computation
     """
 
     def __init__(self,
@@ -413,9 +474,9 @@ class MelFreqSaTask(FreqSaTask):
                  weight: Optional[str] = None,
                  permute: bool = True,
                  num_spks: int = 2,
-                 num_bins: int = 257,
                  masking: bool = True,
                  power_mag: bool = False,
+                 num_bins: int = 257,
                  num_mels: int = 80,
                  mel_log: int = False,
                  mel_scale: int = 1,
@@ -464,7 +525,21 @@ class MelFreqSaTask(FreqSaTask):
 
 class TimeSaTask(SepTask):
     """
-    Time domain spectral approximation Task
+    Time domain spectral approximation Task. The network output time-domain signals,
+    we transform them to frequency domain and then compute loss function
+    Args:
+        nnet: network instance
+        frame_len: length of the frame (used in STFT)
+        frame_hop: hop size between frames (used in STFT)
+        window: window name (used in STFT)
+        center: center flag (similar with that in librosa.stft)
+        round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
+        stft_normalized: use normalized DFT kernel in STFT
+        pre_emphasis: coefficient of preemphasis
+        num_spks: number of speakers (output branch in nnet)
+        weight: weight on each output branch if needed
+        permute: use permutation invariant loss or not
+        description: description string on current task
     """
 
     def __init__(self,
@@ -543,6 +618,18 @@ class TimeSaTask(SepTask):
 class LinearTimeSaTask(TimeSaTask):
     """
     Time domain linear spectral approximation loss function
+    Args:
+        nnet: network instance
+        frame_len: length of the frame (used in STFT)
+        frame_hop: hop size between frames (used in STFT)
+        window: window name (used in STFT)
+        center: center flag (similar with that in librosa.stft)
+        round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
+        stft_normalized: use normalized DFT kernel in STFT
+        num_spks: number of speakers (output branch in nnet)
+        weight: weight on each output branch if needed
+        permute: use permutation invariant loss or not
+        objf: ise L1 or L2 distance
     """
 
     def __init__(self,
@@ -592,6 +679,18 @@ class LinearTimeSaTask(TimeSaTask):
 class MelTimeSaTask(TimeSaTask):
     """
     Time domain mel spectral approximation loss function
+    Args:
+        nnet: network instance
+        frame_len: length of the frame (used in STFT)
+        frame_hop: hop size between frames (used in STFT)
+        window: window name (used in STFT)
+        center: center flag (similar with that in librosa.stft)
+        round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
+        stft_normalized: use normalized DFT kernel in STFT
+        num_spks: number of speakers (output branch in nnet)
+        weight: weight on each output branch if needed
+        permute: use permutation invariant loss or not
+        ...: others are parameters for mel-spectrogam extraction
     """
 
     def __init__(self,
@@ -660,7 +759,13 @@ class MelTimeSaTask(TimeSaTask):
 @ApsRegisters.task.register("complex_mapping")
 class ComplexMappingTask(SepTask):
     """
-    Complex Spectral Mapping
+    Frequency domain complex spectral mapping loss function
+    Args:
+        nnet: network instance
+        num_spks: number of speakers (output branch in nnet)
+        weight: weight on each output branch if needed
+        permute: use permutation invariant loss or not
+        objf: use L1 or L2 distance
     """
 
     def __init__(self,

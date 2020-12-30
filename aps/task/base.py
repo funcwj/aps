@@ -7,7 +7,11 @@ from typing import Optional
 
 class Task(nn.Module):
     """
-    Warpper for nnet & loss
+    The class that glues the network forward and loss computation
+    Args:
+        nnet: network instance
+        ctx: context for loss computation
+        description (str): description for current task instance
     """
 
     def __init__(self,
