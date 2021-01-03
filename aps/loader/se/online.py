@@ -55,7 +55,7 @@ class SimuOptionsDataset(dat.Dataset):
     2) https://github.com/funcwj/setk/tree/master/doc/data_simu for command line usage
 
     Args:
-        simu_cfg: path of the configuraton file
+        simu_cfg: path of the audio simulation configuraton file
         noise: if true, then return both noise and reference audio
     """
 
@@ -65,6 +65,12 @@ class SimuOptionsDataset(dat.Dataset):
         self.parser = make_argparse()
 
     def _simu(self, opts_str: str) -> Dict:
+        """
+        Args:
+            opts_str: command options for aps/loader/simu.py
+        Return:
+            egs: training egs
+        """
         args = self.parser.parse_args(opts_str)
         mix, spk_ref, noise = run_simu(args)
         if self.noise and noise is not None:
@@ -75,11 +81,18 @@ class SimuOptionsDataset(dat.Dataset):
         return egs
 
     def __getitem__(self, index: int) -> Dict:
+        """
+        Args:
+            index: index ID
+        """
         return self._simu(self.simu_cfg[index])
 
     def __len__(self) -> int:
         return len(self.simu_cfg)
 
     def __iter__(self) -> Iterator[Dict]:
+        """
+        Return audio chunk iterator
+        """
         for _, opts_str in self.simu_cfg:
             yield self._simu(opts_str)

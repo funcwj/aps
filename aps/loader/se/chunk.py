@@ -29,7 +29,7 @@ def DataLoader(train: bool = True,
                distributed: bool = False,
                num_workers: int = 4) -> Iterable[Dict]:
     """
-    Return a online-chunk dataloader for enhancement/separation tasks
+    Return a audio chunk dataloader for enhancement/separation tasks. We do audio chunking on the fly.
     Args:
         train: in training mode or not
         sr: sample rate of the audio
@@ -84,7 +84,7 @@ class NumpyReader(BaseReader):
 
 class ScriptDataset(dat.Dataset):
     """
-    Dataset configured by scripts
+    Dataset configured by scripts (.scp file)
     Args:
         train: in training mode or not
         sr: sample rate of the audio

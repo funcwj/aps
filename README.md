@@ -5,7 +5,7 @@
 [![Testing](https://github.com/funcwj/aps/workflows/Unit%20Testing/badge.svg)](https://github.com/funcwj/aps/workflows/Unit%20Testing/badge.svg)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 
-My own workspace for speech related tasks, e.g., single/multi-channel speech enhancement & separation & recognition. The goal is to simplify the training and evaluation procedure and make it easy and flexible for me to do experiments and verify neural network based methods.
+My workspace for speech related tasks, e.g., single/multi-channel speech enhancement & separation & recognition. The goal is to simplify the training and evaluation procedure and make it easy and flexible for me to do experiments and verify neural network based methods.
 
 ## Setup
 
@@ -26,10 +26,12 @@ to setup the development environments.
 
 ## Introduction
 
+* [Feature](docs/feature.md)
 * [Overivew](docs/overview.md)
 * [Structure](docs/code.md)
 * [Instruction](docs/instruction.md)
 * [Q & A](docs/qa.md)
+* [Known Issues](docs/issue.md)
 * [Examples](examples)
 
 ## Acknowledge
