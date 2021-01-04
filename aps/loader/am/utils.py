@@ -16,7 +16,17 @@ from aps.const import UNK_TOKEN
 
 class AsrDataset(dat.Dataset):
     """
-    A base dataset class for ASR task
+    A base dataset class for AM training
+
+    Args:
+        input_reader: source feature reader instance
+        text: path of the token file
+        utt2dur: path of the duration file
+        vocab_dict: vocabulary dictionary object
+        {min,max}_token_num: filter the utterances if the token number not in [#min_token_num, #max_token_num]
+        {min|max}_dur: filter the utterances when length is not in [#min_wav_dur, #max_wav_dur]
+        skip_utts: skips utterances that the file shows
+        duration_axis: duration axis index for input_reader
     """
 
     def __init__(self,
@@ -160,10 +170,10 @@ class BatchSampler(dat.Sampler):
         dataset: dataset object
         batch_size: maxnimum #batch_size
         shuffle: shuffle batches or not
-        min_batch_size: minimum #batch_size
-        distributed: distributed or not
         batch_mode: "adaptive" or "constraint"
         adapt_dur|adapt_token_num: used in adaptive mode, see _work_adapt_batch_index
+        min_batch_size: minimum #batch_size
+        distributed: distributed or not
     """
 
     def __init__(self,
@@ -279,12 +289,13 @@ class AsrDataLoader(dat.DataLoader):
 
     Args:
         dataset: instance of dat.Dataset
+        collate_fn: collate function used in dat.DataLoader
         shuffle: shuffle batches or not
         distributed: in distributed mode or not
+        num_workers: number of the workers used in dat.DataLoader
         adapt_dur|adapt_token_num: used in adaptive mode dataloader
         batch_size: maximum #batch_size
         batch_mode: adaptive or constraint
-        num_workers: number of the workers
         min_batch_size: minimum #batch_size
     """
 

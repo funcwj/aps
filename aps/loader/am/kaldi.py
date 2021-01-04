@@ -43,7 +43,7 @@ def DataLoader(train: bool = True,
         utt2dur: path of the duration file (should be utt2num_frames here)
         vocab_dict: vocabulary dictionary object
         min_dur|max_dur: discard utterance when #num_frames not in [min_dur, max_dur]
-        max_token_num: discard utterance when token length > max_token_num
+        max_token_num: discard the utterances when token length > max_token_num
         skip_utts: skips utterances if the key is in this file
         adapt_dur|adapt_token_num: used in adaptive mode dataloader
         batch_size: maximum #batch_size

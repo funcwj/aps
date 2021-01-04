@@ -70,10 +70,11 @@ Supported task in APS. The `Task` class is responsible for the computation of an
 
 ## `aps.loader`
 
-The supported data loader in APS. For acoustic model training, we have two options
+The supported data loader in APS. For acoustic model training, we have three options
 
 * `am_raw`: Raw waveform data loader which do not need us to prepare acoustic features beforehead (recommended way).
 * `am_kaldi`: The data loader that supports the Kaldi format feature.
+* `am_online`: The dataloader which generates the training audio (noisy, far-field, etc) on-the-fly.
 
 For separation/enhancement model training, we also have two options
 
