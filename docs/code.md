@@ -56,9 +56,9 @@ The default trainer is `DdpTrainer` which could be used for both single/multi-GP
 Supported task in APS. The `Task` class is responsible for the computation of an user-specific objective function, which is defined in the `forward()` function. Actually it's still a PyTorch's `Module` class and each one should inherit from `th.nn.Module`. Currently the supported task are shown below:
 
 * `LmXentTask`: for LM training
-* `CtcXentHybridTask`: for CTC & Attention based AM training
+* `CtcXentHybridTask`: CTC & Xent multi-task training for E2E ASR
 * `TransducerTask`: for RNNT training
-* `UnsuperEnhTask`: for unsupervised enhancement training
+* `UnsuperEnhTask`: for unsupervised multi-channel speech enhancement
 * `SisnrTask`: SiSNR loss for time domain enhancement/separation model
 * `SnrTask`: SNR loss for time domain enhancement/separation model
 * `WaTask`: waveform L1/L2 loss for time domain enhancement/separation model

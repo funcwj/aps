@@ -8,6 +8,7 @@ set -eu
 wsj0="/home/jwu/doc/data/wsj0"
 wsj1="/home/jwu/doc/data/wsj1"
 
+gpu=0
 stage=1
 
 # word piece
@@ -48,11 +49,9 @@ fi
 
 if [ $stage -le 3 ]; then
   # training am
-  ./scripts/distributed_train.sh \
+  ./scripts/train.sh \
     --seed $am_seed \
-    --gpu "0,1,2,3" \
-    --num-process 4 \
-    --distributed "torch" \
+    --gpu $gpu \
     --epochs $am_epochs \
     --num-workers $am_num_workers \
     --batch-size $am_batch_size \

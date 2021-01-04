@@ -9,7 +9,7 @@ import torch as th
 import torch.utils.data as dat
 import aps.distributed as dist
 
-from typing import Dict, List, Tuple, NoReturn, Optional
+from typing import Dict, List, Tuple, NoReturn, Optional, Callable
 from kaldi_python_io import Reader as BaseReader
 from aps.const import UNK_TOKEN
 
@@ -19,9 +19,26 @@ class AsrDataset(dat.Dataset):
     A base dataset class for ASR task
     """
 
-    def __init__(self, input_reader, token_reader, duration_axis=-1):
+    def __init__(self,
+                 input_reader,
+                 text: str,
+                 utt2dur: str,
+                 vocab_dict: Optional[Dict],
+                 max_token_num: int = 400,
+                 min_token_num: int = 2,
+                 max_dur: float = 3000,
+                 min_dur: float = 40,
+                 skip_utts: str = "",
+                 duration_axis=-1):
         self.input_reader = input_reader
-        self.token_reader = token_reader
+        self.token_reader = TokenReader(text,
+                                        utt2dur,
+                                        vocab_dict,
+                                        skip_utts=skip_utts,
+                                        max_dur=max_dur,
+                                        min_dur=min_dur,
+                                        max_token_num=max_token_num,
+                                        min_token_num=min_token_num)
         self.duration_axis = duration_axis
 
     def __getitem__(self, idx: int) -> Dict:
@@ -254,3 +271,46 @@ class BatchSampler(dat.Sampler):
 
     def __len__(self) -> int:
         return self.num_batches
+
+
+class AsrDataLoader(dat.DataLoader):
+    """
+    ASR dataloader for E2E AM training
+
+    Args:
+        dataset: instance of dat.Dataset
+        shuffle: shuffle batches or not
+        distributed: in distributed mode or not
+        adapt_dur|adapt_token_num: used in adaptive mode dataloader
+        batch_size: maximum #batch_size
+        batch_mode: adaptive or constraint
+        num_workers: number of the workers
+        min_batch_size: minimum #batch_size
+    """
+
+    def __init__(self,
+                 dataset: dat.Dataset,
+                 collate_fn: Callable,
+                 shuffle: bool = True,
+                 distributed: bool = False,
+                 num_workers: int = 0,
+                 adapt_dur: float = 800,
+                 adapt_token_num: int = 150,
+                 batch_size: int = 32,
+                 batch_mode: str = "adaptive",
+                 min_batch_size: int = 4) -> None:
+        sampler = BatchSampler(dataset,
+                               batch_size,
+                               shuffle=shuffle,
+                               batch_mode=batch_mode,
+                               distributed=distributed,
+                               adapt_dur=adapt_dur,
+                               adapt_token_num=adapt_token_num,
+                               min_batch_size=min_batch_size)
+        super(AsrDataLoader, self).__init__(dataset,
+                                            batch_sampler=sampler,
+                                            collate_fn=collate_fn,
+                                            num_workers=num_workers)
+
+    def set_epoch(self, epoch: int) -> NoReturn:
+        self.batch_sampler.set_epoch(epoch)

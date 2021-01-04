@@ -31,7 +31,7 @@ to setup the development environments.
 * [Structure](docs/code.md)
 * [Instruction](docs/instruction.md)
 * [Q & A](docs/qa.md)
-* [Known Issues](docs/issue.md)
+* [Issues](docs/issue.md)
 * [Examples](examples)
 
 ## Acknowledge

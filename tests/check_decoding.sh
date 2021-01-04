@@ -19,7 +19,7 @@ cpt_dir=data/checkpoint/aishell_att_1a
     --channel -1 \
     --dict $cpt_dir/dict \
     --max-len 50 \
-    --normalized true
+    --len-norm true
 ../cmd/decode.py $cpt_dir/egs.scp - \
     --dump-nbest greedy.nbest \
     --checkpoint $cpt_dir \
@@ -28,7 +28,7 @@ cpt_dir=data/checkpoint/aishell_att_1a
     --dict $cpt_dir/dict \
     --function "greedy_search" \
     --max-len 50 \
-    --normalized true
+    --len-norm true
 ../cmd/decode_batch.py $cpt_dir/egs.scp - \
     --dump-nbest batch.nbest \
     --beam-size 16 \
@@ -39,7 +39,7 @@ cpt_dir=data/checkpoint/aishell_att_1a
     --channel -1 \
     --dict $cpt_dir/dict \
     --max-len 50 \
-#     --normalized true
+    --len-norm true
 
 # test decoding for rnnt
 cpt_dir=data/checkpoint/timit_rnnt_1a
@@ -50,7 +50,7 @@ cpt_dir=data/checkpoint/timit_rnnt_1a
     --channel -1 \
     --dict $cpt_dir/dict \
     --max-len 50 \
-    --normalized true
+    --len-norm true
 ../cmd/decode.py $cpt_dir/egs.scp - \
     --function "greedy_search" \
     --checkpoint $cpt_dir \
@@ -58,4 +58,4 @@ cpt_dir=data/checkpoint/timit_rnnt_1a
     --channel -1 \
     --dict $cpt_dir/dict \
     --max-len 50 \
-    --normalized true
+    --len-norm true

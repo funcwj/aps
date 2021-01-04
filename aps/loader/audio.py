@@ -12,7 +12,6 @@ import soundfile as sf
 import scipy.signal as ss
 
 from kaldi_python_io import Reader as BaseReader
-
 from typing import Optional, IO, Union, Any, NoReturn, Tuple
 
 

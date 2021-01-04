@@ -5,14 +5,15 @@
 """
 Dataloader for raw waveforms in asr tasks
 """
-
+import numpy as np
 import torch as th
 import torch.utils.data as dat
 
 from torch.nn.utils.rnn import pad_sequence
 
-from typing import Dict, Iterable, Optional, NoReturn
-from aps.loader.am.utils import AsrDataset, TokenReader, BatchSampler
+from typing import Dict, Iterable, Optional
+from aps.loader.am.utils import AsrDataset, AsrDataLoader
+from aps.loader.se.online import SimuOptionsDataset
 from aps.loader.audio import AudioReader
 from aps.const import IGNORE_ID
 from aps.libs import ApsRegisters
@@ -69,15 +70,37 @@ def DataLoader(train: bool = True,
                       max_token_num=max_token_num,
                       max_wav_dur=max_dur,
                       min_wav_dur=min_dur)
-    return AudioDataLoader(dataset,
-                           shuffle=train,
-                           distributed=distributed,
-                           num_workers=num_workers,
-                           adapt_wav_dur=adapt_dur,
-                           adapt_token_num=adapt_token_num,
-                           batch_size=batch_size,
-                           batch_mode=batch_mode,
-                           min_batch_size=min_batch_size)
+    return AsrDataLoader(dataset,
+                         egs_collate,
+                         shuffle=train,
+                         distributed=distributed,
+                         num_workers=num_workers,
+                         adapt_dur=adapt_dur,
+                         adapt_token_num=adapt_token_num,
+                         batch_size=batch_size,
+                         batch_mode=batch_mode,
+                         min_batch_size=min_batch_size)
+
+
+class AsrSimuReader(SimuOptionsDataset):
+    """
+    Simulation audio reader for ASR task
+    Args:
+        simu_cfg: path of the audio simulation configuraton file
+    """
+
+    def __init__(self, simu_cfg: str) -> None:
+        super(AsrSimuReader, self).__init__(simu_cfg, return_in_egs=["mix"])
+
+    def __getitem__(self, index: int) -> np.ndarray:
+        """
+        Args:
+            index: index ID
+        Return:
+            egs: simulated audio
+        """
+        opts_str = self.simu_cfg[index]
+        return self._simu(opts_str)["mix"]
 
 
 class Dataset(AsrDataset):
@@ -114,15 +137,14 @@ class Dataset(AsrDataset):
                                    sr=sr,
                                    channel=channel,
                                    norm=audio_norm)
-        token_reader = TokenReader(text,
-                                   utt2dur,
-                                   vocab_dict,
-                                   skip_utts=skip_utts,
-                                   max_dur=max_wav_dur,
-                                   min_dur=min_wav_dur,
-                                   max_token_num=max_token_num)
         super(Dataset, self).__init__(audio_reader,
-                                      token_reader,
+                                      text,
+                                      utt2dur,
+                                      vocab_dict,
+                                      skip_utts=skip_utts,
+                                      max_dur=max_wav_dur,
+                                      min_dur=min_wav_dur,
+                                      max_token_num=max_token_num,
                                       duration_axis=-1)
 
 
@@ -166,45 +188,3 @@ def egs_collate(egs: Dict) -> Dict:
             th.tensor([eg["len"] for eg in egs], dtype=th.int64)
     }
     return egs
-
-
-class AudioDataLoader(dat.DataLoader):
-    """
-    Raw waveform dataloader for E2E AM training
-    Args:
-        dataset: instance of dat.Dataset
-        shuffle: shuffle mini-batches or not
-        distributed: in distributed mode or not
-        num_workers: number of the workers
-        adapt_wav_dur|adapt_token_num: used in adaptive mode
-        batch_size: maximum #batch_size
-        batch_mode: adaptive or constraint
-        min_batch_size: minimum #batch_size
-    """
-
-    def __init__(self,
-                 dataset: dat.Dataset,
-                 shuffle: bool = True,
-                 distributed: bool = False,
-                 num_workers: int = 0,
-                 adapt_wav_dur: float = 8,
-                 adapt_token_num: int = 150,
-                 batch_size: int = 32,
-                 batch_mode: str = "adaptive",
-                 min_batch_size: int = 4) -> None:
-        sampler = BatchSampler(dataset,
-                               batch_size,
-                               shuffle=shuffle,
-                               distributed=distributed,
-                               batch_mode=batch_mode,
-                               adapt_dur=adapt_wav_dur,
-                               adapt_token_num=adapt_token_num,
-                               min_batch_size=min_batch_size)
-
-        super(AudioDataLoader, self).__init__(dataset,
-                                              batch_sampler=sampler,
-                                              collate_fn=egs_collate,
-                                              num_workers=num_workers)
-
-    def set_epoch(self, epoch: int) -> NoReturn:
-        self.batch_sampler.set_epoch(epoch)
