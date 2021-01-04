@@ -98,7 +98,7 @@ if __name__ == "__main__":
         description="Command for speech separation/enhancement model training "
         "(support distributed mode on single node). "
         "Using python -m torch.distributed.launch or horovodrun to launch the command. "
-        "See scripts/distributed_train_ss.sh ",
+        "See scripts/distributed_train.sh ",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[DistributedTrainParser.parser])
     args = parser.parse_args()

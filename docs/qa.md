@@ -2,7 +2,7 @@
 
 1. How to train my customized network using the framework of APS?
 
-    There are two options. The first one is straightforward and just to modify the source code of the APS following the steps:
+    There are two options. The first one is straightforward: modify the source code of the APS following the steps:
 
     * Give your implementation of network structure if needed in `aps.asr`, `aps.sse` or `aps.xxx` (may coming in the future) and decorate it using `@ApsRegisters.xxx.register(...)`.
     * Give your implementation of `Task` if needed in `aps.task` and also decorate it using `@ApsRegisters.task.register(...)`.

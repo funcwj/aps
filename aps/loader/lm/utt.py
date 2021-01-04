@@ -44,7 +44,7 @@ def DataLoader(text: str = "",
         num_workers: number workers used in dataloader
         {min|max}_token_num: boundary of the token length
         min_batch_size: minimum value of #batch_size
-        adapt_token_num: used in #batch_size reduction
+        adapt_token_num: used for #batch_size reduction
         chunk_size_for_sort: #chunk_size for mini-batch sorting, we perform sort
                              in each chunk (because LM corpus may very big)
     """
@@ -117,7 +117,7 @@ class BatchSampler(dat.Sampler):
         shuffle: shuffle batches or not
         {min|max}_token_num: boundary of the token length
         min_batch_size: minimum value of #batch_size
-        adapt_token_num: used in #batch_size reduction
+        adapt_token_num: used for #batch_size reduction
         chunk_size_for_sort: we perform sort in each chunk (for large LM corpus)
     """
 
@@ -205,7 +205,7 @@ class UttDataLoader(dat.DataLoader):
         num_workers: number workers used in dataloader
         min|max_token_num: boundary of the token length
         min_batch_size: minimum value of #batch_size
-        adapt_token_num: used in #batch_size reduction
+        adapt_token_num: used for #batch_size reduction
         chunk_size_for_sort: #chunk_size for mini-batch sorting, we perform sort
                              in each chunk (for large LM corpus)
     """

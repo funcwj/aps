@@ -336,7 +336,7 @@ class StopDetector(object):
 
 class Trainer(object):
     """
-    A PyTorch distributed trainer
+    The base trainer (to be inherited)
     Args:
         task: Task class from aps.task
         rank: rank value (for distributed training)

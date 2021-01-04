@@ -6,13 +6,11 @@
 Dataloader for kaldi features
 """
 import torch as th
-import torch.utils.data as dat
 
 from torch.nn.utils.rnn import pad_sequence
-from typing import Dict, Iterable, Optional, NoReturn
+from typing import Dict, Iterable, Optional
 from kaldi_python_io import ScriptReader
-
-from aps.loader.am.utils import AsrDataset, TokenReader, BatchSampler
+from aps.loader.am.utils import AsrDataset, AsrDataLoader
 from aps.libs import ApsRegisters
 from aps.const import IGNORE_ID
 
@@ -43,7 +41,7 @@ def DataLoader(train: bool = True,
         utt2dur: path of the duration file (should be utt2num_frames here)
         vocab_dict: vocabulary dictionary object
         min_dur|max_dur: discard utterance when #num_frames not in [min_dur, max_dur]
-        max_token_num: discard utterance when token length > max_token_num
+        max_token_num: discard the utterances when token length > max_token_num
         skip_utts: skips utterances if the key is in this file
         adapt_dur|adapt_token_num: used in adaptive mode dataloader
         batch_size: maximum #batch_size
@@ -59,15 +57,16 @@ def DataLoader(train: bool = True,
                       max_token_num=max_token_num,
                       max_frame_num=max_dur,
                       min_frame_num=min_dur)
-    return KaldiDataLoader(dataset,
-                           shuffle=train,
-                           distributed=distributed,
-                           num_workers=num_workers,
-                           adapt_frame_num=adapt_dur,
-                           adapt_token_num=adapt_token_num,
-                           batch_size=batch_size,
-                           batch_mode=batch_mode,
-                           min_batch_size=min_batch_size)
+    return AsrDataLoader(dataset,
+                         egs_collate,
+                         shuffle=train,
+                         distributed=distributed,
+                         num_workers=num_workers,
+                         adapt_dur=adapt_dur,
+                         adapt_token_num=adapt_token_num,
+                         batch_size=batch_size,
+                         batch_mode=batch_mode,
+                         min_batch_size=min_batch_size)
 
 
 class Dataset(AsrDataset):
@@ -96,15 +95,14 @@ class Dataset(AsrDataset):
                                  not in [min_frame_num, max_frame_num]
         """
         feats_reader = ScriptReader(feats_scp)
-        token_reader = TokenReader(text,
-                                   utt2num_frames,
-                                   vocab_dict,
-                                   skip_utts=skip_utts,
-                                   max_dur=max_frame_num,
-                                   min_dur=min_frame_num,
-                                   max_token_num=max_token_num)
         super(Dataset, self).__init__(feats_reader,
-                                      token_reader,
+                                      text,
+                                      utt2num_frames,
+                                      vocab_dict,
+                                      skip_utts=skip_utts,
+                                      max_dur=max_frame_num,
+                                      min_dur=min_frame_num,
+                                      max_token_num=max_token_num,
                                       duration_axis=0)
 
 
@@ -136,45 +134,3 @@ def egs_collate(egs: Dict) -> Dict:
         "tgt_len":
             th.tensor([eg["len"] for eg in egs], dtype=th.int64)
     }
-
-
-class KaldiDataLoader(dat.DataLoader):
-    """
-    Kaldi feature dataloader for E2E AM training
-
-    Args:
-        dataset: instance of dat.Dataset
-        shuffle: shuffle batches or not
-        distributed: in distributed mode or not
-        adapt_dur|adapt_token_num: used in adaptive mode dataloader
-        batch_size: maximum #batch_size
-        batch_mode: adaptive or constraint
-        num_workers: number of the workers
-        min_batch_size: minimum #batch_size
-    """
-
-    def __init__(self,
-                 dataset: dat.Dataset,
-                 shuffle: bool = True,
-                 distributed: bool = False,
-                 num_workers: int = 0,
-                 adapt_frame_num: float = 800,
-                 adapt_token_num: int = 150,
-                 batch_size: int = 32,
-                 batch_mode: str = "adaptive",
-                 min_batch_size: int = 4) -> None:
-        sampler = BatchSampler(dataset,
-                               batch_size,
-                               shuffle=shuffle,
-                               batch_mode=batch_mode,
-                               distributed=distributed,
-                               adapt_dur=adapt_frame_num,
-                               adapt_token_num=adapt_token_num,
-                               min_batch_size=min_batch_size)
-        super(KaldiDataLoader, self).__init__(dataset,
-                                              batch_sampler=sampler,
-                                              collate_fn=egs_collate,
-                                              num_workers=num_workers)
-
-    def set_epoch(self, epoch: int) -> NoReturn:
-        self.batch_sampler.set_epoch(epoch)
