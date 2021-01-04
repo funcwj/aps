@@ -6,12 +6,10 @@
 Dataloader for kaldi features
 """
 import torch as th
-import torch.utils.data as dat
 
 from torch.nn.utils.rnn import pad_sequence
 from typing import Dict, Iterable, Optional
 from kaldi_python_io import ScriptReader
-
 from aps.loader.am.utils import AsrDataset, AsrDataLoader
 from aps.libs import ApsRegisters
 from aps.const import IGNORE_ID
