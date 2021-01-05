@@ -52,7 +52,7 @@ task_conf:
 
 trainer_conf:
   clip_gradient: 5
-  lr_scheduler: noam_lr
+  lr_scheduler: warmup_noam_lr
   lr_scheduler_kwargs:
     factor: 1
     transformer_dim: 512

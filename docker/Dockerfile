@@ -14,14 +14,14 @@ LABEL tag="pt${PYTORCH_VERSION}-py${PYTHON_VERSION}-cuda${CUDA}-ubuntu18.04"
 LABEL creator="funcwj"
 LABEL time="2020/09/04"
 
-# https://download.open-mpi.org/release/open-mpi/v4.0/openmpi-4.0.5.tar.gz
 # install tools
 RUN apt-get update && apt-get install -y --no-install-recommends --allow-downgrades \
     --allow-change-held-packages vim git curl locales htop wget zip unzip sox libsndfile1 \
     cmake g++ gcc make openssh-server ca-certificates libnccl2 libnccl-dev && \
     locale-gen en_US.UTF-8 && rm -rf /var/lib/apt/lists/*
 
-# install openmpi (for horovod)
+# https://download.open-mpi.org/release/open-mpi/v4.0/openmpi-4.0.5.tar.gz
+# install openmpi (for horovod, optional)
 RUN wget https://download.open-mpi.org/release/open-mpi/${OPENMPI}/openmpi-${OPENMPI_VERSION}.tar.gz && \
     tar -zxf openmpi-${OPENMPI_VERSION}.tar.gz && rm openmpi-${OPENMPI_VERSION}.tar.gz && \
     cd openmpi-${OPENMPI_VERSION} && ./configure --enable-orterun-prefix-by-default && make -j $(nproc) all && \

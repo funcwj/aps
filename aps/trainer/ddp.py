@@ -104,25 +104,34 @@ class DdpTrainer(Trainer):
         3) Clip Gradient
         4) Step optimizer
         """
-        self.optimizer.zero_grad()
-
         # add noise if needed
         if self.weight_noise_adder:
             self.weight_noise_adder(self.task, self.cur_step)
 
+        is_backward_step = (self.cur_step + 1) % self.acmu_gradient == 0
+        if self.distributed and not is_backward_step:
+            with self.task.no_sync():
+                stats = self.task(egs)
+        else:
+            stats = self.task(egs)
+
         stats = self.task(egs)
         # use all reduce to check loss
-        if self.distributed:
+        if self.distributed and is_backward_step:
             loss = dist.all_reduce(stats["loss"].clone()).item()
         else:
             loss = stats["loss"].item()
 
         # backward if not nan/inf
         if math.isfinite(loss):
-            stats["loss"].backward()
+            (stats["loss"] / self.acmu_gradient).backward()
         else:
             self.reporter.log(f"Invalid loss {loss:.3f}, skip...")
             return False
+
+        # if not backward step, return
+        if not is_backward_step:
+            return True
 
         # clip gradient after backward
         norm = -1
@@ -132,6 +141,7 @@ class DdpTrainer(Trainer):
         # step optimizer and update statistics
         if math.isfinite(norm):
             self.optimizer.step()
+            self.optimizer.zero_grad()
             if norm != -1:
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]

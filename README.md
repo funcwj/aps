@@ -36,4 +36,4 @@ to setup the development environments.
 
 ## Acknowledge
 
-The project was started at early 2019 when the author was a master student of the Audio, Speech and Language Processing Group (ASLP) in Northwestern Polytechnical University (NWPU), Xi'an, China. Originally it was used to collect the source code of the experiments that I did in the past.
+The project was started at early 2019 when the author was a master student of the Audio, Speech and Language Processing Group (ASLP) in Northwestern Polytechnical University (NWPU), Xi'an, China. Originally it was used to collect the source code of the experiments that the author did in the past.

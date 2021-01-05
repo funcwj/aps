@@ -9,7 +9,7 @@ set -eu
 data=/scratch/jwu/aishell_v1
 data_url=www.openslr.org/resources/33
 
-stage=1
+stage="1-5"
 dataset="aishell_v1" # prepare data in data/aishell_v1/{train,dev,test}
 # training
 gpu=0
@@ -37,7 +37,12 @@ lm_weight=0.2
 
 . ./utils/parse_options.sh || exit 1
 
-if [ $stage -le 1 ]; then
+beg=$(echo $stage | awk -F '-' '{print $1}')
+end=$(echo $stage | awk -F '-' '{print $2}')
+[ -z $end ] && end=$beg
+
+if [ $end -ge 1 ] && [ $beg -le 1 ]; then
+  echo "Stage 1: preparing data ..."
   for name in data_aishell resource_aishell; do
     local/download_and_untar.sh $data $data_url $name
   done
@@ -45,7 +50,8 @@ if [ $stage -le 1 ]; then
     $data/data_aishell/transcript data/$dataset
 fi
 
-if [ $stage -le 2 ]; then
+if [ $end -ge 2 ] && [ $beg -le 2 ]; then
+  echo "Stage 2: training AM ..."
   ./scripts/train.sh \
     --seed $seed \
     --gpu $gpu \
@@ -57,7 +63,8 @@ if [ $stage -le 2 ]; then
     am $dataset $am_exp
 fi
 
-if [ $stage -le 3 ]; then
+if [ $end -ge 3 ] && [ $beg -le 3 ]; then
+  echo "Stage 3: decoding ..."
   # decoding
   ./scripts/decode.sh \
     --gpu $gpu \
@@ -74,7 +81,8 @@ if [ $stage -le 3 ]; then
     data/$dataset/test/text
 fi
 
-if [ $stage -le 4 ]; then
+if [ $end -ge 4 ] && [ $beg -le 4 ]; then
+  echo "Stage 4: training LM ..."
   ./scripts/train.sh \
     --seed $seed \
     --gpu $gpu \
@@ -86,7 +94,8 @@ if [ $stage -le 4 ]; then
     lm $dataset $lm_exp
 fi
 
-if [ $stage -le 5 ]; then
+if [ $end -ge 5 ] && [ $beg -le 5 ]; then
+  echo "Stage 5: decoding ..."
   name=dec_lm${lm_exp}_$lm_weight
   # decoding
   ./scripts/decode.sh \

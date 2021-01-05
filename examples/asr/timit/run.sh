@@ -7,7 +7,7 @@ set -eu
 
 timit_data=/scratch/jwu/TIMIT-LDC93S1/TIMIT
 dataset="timit"
-stage=1
+stage="1-3"
 # training
 gpu=0
 exp=1a # load training configuration in conf/timit/1a.yaml
@@ -24,11 +24,17 @@ nbest=8
 
 . ./utils/parse_options.sh || exit 1
 
-if [ $stage -le 1 ]; then
+beg=$(echo $stage | awk -F '-' '{print $1}')
+end=$(echo $stage | awk -F '-' '{print $2}')
+[ -z $end ] && end=$beg
+
+if [ $end -ge 1 ] && [ $beg -le 1 ]; then
+  echo "Stage 1: preparing data ..."
   ./local/timit_data_prep.sh --dataset $dataset $timit_data
 fi
 
-if [ $stage -le 2 ]; then
+if [ $end -ge 2 ] && [ $beg -le 2 ]; then
+  echo "Stage 1: training AM ..."
   ./scripts/train.sh \
     --seed $seed \
     --gpu $gpu \
@@ -40,7 +46,8 @@ if [ $stage -le 2 ]; then
     am $dataset $exp
 fi
 
-if [ $stage -le 3 ]; then
+if [ $end -ge 3 ] && [ $beg -le 3 ]; then
+  echo "Stage 3: decoding ..."
   # decoding
   ./scripts/decode.sh \
     --gpu $gpu \

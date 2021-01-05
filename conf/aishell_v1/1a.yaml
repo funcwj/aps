@@ -60,7 +60,7 @@ trainer_conf:
   optimizer_kwargs:
     lr: 1.0e-3
     weight_decay: 1.0e-5
-  lr_scheduler: "exp_lr"
+  lr_scheduler: "warmup_exp_decay_lr"
   lr_scheduler_period: "step"
   lr_scheduler_kwargs:
     time_stamps: [800, 40000, 100000]

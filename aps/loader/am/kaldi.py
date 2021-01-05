@@ -72,6 +72,14 @@ def DataLoader(train: bool = True,
 class Dataset(AsrDataset):
     """
     Dataset for kaldi features
+    Args:
+        feats_scp: path of the feature script
+        text: path of the text/token file
+        utt2dur: path of the duration file (should be utt2num_frames here)
+        vocab_dict: vocabulary dictionary object
+        skip_utts: skips utterances if the key is in this file
+        max_token_num: discard utterance when token length > max_token_num
+        {min|max}_frame_num: discard utterance when #num_frames not in [min_frame_num, max_frame_num]
     """
 
     def __init__(self,
@@ -83,17 +91,6 @@ class Dataset(AsrDataset):
                  max_token_num: int = 400,
                  max_frame_num: float = 3000,
                  min_frame_num: float = 40) -> None:
-        """
-        Args:
-            feats_scp: path of the feature script
-            text: path of the text/token file
-            utt2dur: path of the duration file (should be utt2num_frames here)
-            vocab_dict: vocabulary dictionary object
-            skip_utts: skips utterances if the key is in this file
-            max_token_num: discard utterance when token length > max_token_num
-            {min|max}_frame_num: discard utterance when #num_frames
-                                 not in [min_frame_num, max_frame_num]
-        """
         feats_reader = ScriptReader(feats_scp)
         super(Dataset, self).__init__(feats_reader,
                                       text,

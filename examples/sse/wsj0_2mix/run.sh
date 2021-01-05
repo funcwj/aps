@@ -5,7 +5,7 @@
 
 set -eu
 
-stage=1
+stage="1-3"
 dataset="wsj0_2mix"
 exp="1a"
 gpu=0
@@ -22,13 +22,18 @@ prog_interval=100
 
 [ $# -ne 1 ] && echo "Script format error: $0 <wsj0-2mix-dir>" && exit 1
 
+beg=$(echo $stage | awk -F '-' '{print $1}')
+end=$(echo $stage | awk -F '-' '{print $2}')
+[ -z $end ] && end=$beg
+
 data_dir=$1
 
 prepare_scp () {
   find $2 -name "*.$1" | awk -F '/' '{printf("%s\t%s\n", $NF, $0)}' | sed "s:.$1::"
 }
 
-if [ $stage -le 1 ]; then
+if [ $end -ge 1 ] && [ $beg -le 1 ]; then
+  echo "Stage 1: preparing data ..."
   for x in "tr" "tt" "cv"; do [ ! -d $data_dir/$x ] && echo "$data_dir/$x not exists, exit ..." && exit 1; done
   data_dir=$(cd $data_dir && pwd)
   mkdir -p data/$dataset/{tr,cv,tt}
@@ -42,7 +47,8 @@ if [ $stage -le 1 ]; then
   echo "$0: Prepare data done under data/$dataset"
 fi
 
-if [ $stage -le 2 ]; then
+if [ $end -ge 2 ] && [ $beg -le 2 ]; then
+  echo "Stage 2: training SS model ..."
   ./scripts/train.sh \
     --gpu $gpu --seed $seed \
     --epochs $epochs --batch-size $batch_size \
@@ -55,7 +61,8 @@ if [ $stage -le 2 ]; then
   echo "$0: Train model done under exp/$dataset/$exp"
 fi
 
-if [ $stage -le 3 ]; then
+if [ $end -ge 3 ] && [ $beg -le 3 ]; then
+  echo "Stage 3: evaluating ..."
   # generate separation audio under exp/$dataset/$exp/bss
   ./cmd/separate_blind.py \
     --checkpoint exp/$dataset/$exp \

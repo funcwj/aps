@@ -2,7 +2,7 @@
 """
 Provide some simple operations on the complex-valued tensor (that was used by APS)
 Will be removed when PyTorch supports complex matrices well
-Reference code:
+Reference the code in:
 https://github.com/kamo-naoyuki/pytorch_complex
 """
 

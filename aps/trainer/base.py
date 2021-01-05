@@ -376,7 +376,7 @@ class Trainer(object):
                  ss_scheduler: str = "const",
                  ss_scheduler_kwargs: Optional[Dict] = None,
                  clip_gradient: Optional[float] = None,
-                 acmu_gradient: int = -1,
+                 acmu_gradient: int = 1,
                  weight_noise_cfg: List[int] = [0, 1, -1],
                  weight_noise_std: Optional[float] = None,
                  prog_interval: int = 100,
@@ -440,7 +440,6 @@ class Trainer(object):
                                                        std=weight_noise_std)
 
         self.clip_gradient = clip_gradient
-        # TODO: acmu_gradient
         self.acmu_gradient = acmu_gradient
         self.cur_epoch = 0  # zero based
         self.cur_step = 0
@@ -472,6 +471,7 @@ class Trainer(object):
         self.optimizer = self.create_optimizer(optimizer,
                                                optimizer_kwargs,
                                                state=optimizer_dict)
+        self.optimizer.zero_grad()
 
         # make lr scheduler
         if lr_scheduler == "reduce_lr":
@@ -518,7 +518,7 @@ class Trainer(object):
         self.reporter.log(f"Early stop detected on metric: {self.stop_on}")
         if clip_gradient:
             self.reporter.log(f"Clip gradient if over {clip_gradient} L2 norm")
-        if acmu_gradient:
+        if acmu_gradient > 1:
             self.reporter.log(
                 f"Accumulate gradient per {acmu_gradient} batches")
         if weight_noise_std:
@@ -839,7 +839,8 @@ class Trainer(object):
             done_epoch = self.run_in_batch(trn_loader,
                                            dev_loader,
                                            num_epochs=num_epochs,
-                                           eval_interval=eval_interval)
+                                           eval_interval=eval_interval *
+                                           self.acmu_gradient)
         else:
             done_epoch = self.run_in_epoch(trn_loader,
                                            dev_loader,
