@@ -18,7 +18,7 @@ import aps.distributed as dist
 @ApsRegisters.trainer.register("ddp")
 class DdpTrainer(Trainer):
     """
-    A PyTorch distributed data parallel (DDP) Trainer
+    The PyTorch distributed data parallel (DDP) Trainer
     """
 
     def __init__(self,
@@ -99,10 +99,10 @@ class DdpTrainer(Trainer):
         """
         Make one training step (return true if no error exists)
 
-        1) Zero optimizer
-        2) Forward & Backword
-        3) Clip Gradient
-        4) Step optimizer
+        1) Forward & Backword
+        2) Clip Gradient
+        3) Step optimizer
+        4) Zero optimizer
         """
         # add noise if needed
         if self.weight_noise_adder:

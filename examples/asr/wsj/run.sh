@@ -19,6 +19,14 @@ am_epochs=70
 am_batch_size=32
 am_num_workers=8
 
+# lm
+lm_exp=1a
+lm_seed=888
+lm_epochs=70
+lm_batch_size=32
+lm_num_workers=8
+
+lm_weight=0.2
 beam_size=16
 test_sets="test_dev93 test_eval92"
 
@@ -36,7 +44,7 @@ fi
 
 if [ $end -ge 2 ] && [ $beg -le 2 ]; then
   echo "Stage 2: tokenizing ..."
-  for name in "test_dev93 train_si284"; do
+  for name in test_dev93 train_si284; do
     ./utils/tokenizer.py \
       --dump-vocab data/wsj/dict \
       --filter-units "<*IN*>,<*MR.*>,<NOISE>" \
@@ -67,7 +75,7 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
     ./scripts/decode.sh \
       --log-suffix $name \
       --beam-size $beam_size \
-      --max-len 100 \
+      --max-len 220 \
       --dict data/wsj/dict \
       --nbest 8 \
       --space "<space>" \
@@ -80,6 +88,59 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
     # WER
     ./cmd/compute_wer.py \
       exp/wsj/$am_exp/$name/beam$beam_size.decode \
+      data/wsj/$name/text
+  done
+fi
+
+if [ $end -ge 5 ] && [ $beg -le 5 ]; then
+  echo "Stage 5: preparing data (LM) ..."
+  mkdir -p data/wsj/lm
+  zcat $wsj1/13-32.1/wsj1/doc/lng_modl/lm_train/np_data/{87,88,89}/*.z \
+    | grep -v "<" | tr "[:lower:]" "[:upper:]" \
+    | awk '{printf("utt-%08d %s\n", NR, $0)}' > data/wsj/lm/external.train.text
+  ./utils/tokenizer.py \
+    --filter-units "<*IN*>,<*MR.*>,<NOISE>" \
+    --space $space \
+    --unit char \
+    data/wsj/lm/external.train.text \
+    data/wsj/lm/external.train.token
+  cat data/wsj/lm/external.train.token data/wsj/train_si284/token \
+    > data/wsj/lm/train.token
+fi
+
+if [ $end -ge 6 ] && [ $beg -le 6 ]; then
+  echo "Stage 6: training LM ..."
+  ./scripts/train.sh \
+    --gpu $gpu \
+    --seed $lm_seed \
+    --epochs $lm_epochs \
+    --batch-size $lm_batch_size \
+    --num-workers $lm_num_workers \
+    --prog-interval 100 \
+    --eval-interval -1 \
+    lm wsj $lm_exp
+fi
+
+if [ $end -ge 7 ] && [ $beg -le 7 ]; then
+  echo "Stage 7: decoding ..."
+  for name in $test_sets; do
+    ./scripts/decode.sh \
+      --log-suffix $name \
+      --beam-size $beam_size \
+      --max-len 220 \
+      --dict data/wsj/dict \
+      --nbest 8 \
+      --space "<space>" \
+      wsj $am_exp \
+      data/wsj/$name/wav.scp \
+      exp/wsj/$am_exp/${name}_lm${lm_exp}_$lm_weight &
+  done
+  wait
+  for name in $test_sets; do
+    # WER
+    dir=${name}_lm${lm_exp}_$lm_weight
+    ./cmd/compute_wer.py \
+      exp/wsj/$am_exp/$dir/beam$beam_size.decode \
       data/wsj/$name/text
   done
 fi

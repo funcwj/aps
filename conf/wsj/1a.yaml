@@ -1,0 +1,91 @@
+nnet: "att"
+
+nnet_conf:
+  input_size: 80
+  enc_type: "concat"
+  enc_proj: 512
+  enc_kwargs:
+    conv2d:
+      out_features: -1
+      channel: 32
+      num_layers: 2
+      stride: 2
+      padding: 1
+      kernel_size: 3
+    pytorch_rnn:
+      bidirectional: true
+      dropout: 0.3
+      hidden: 512
+      num_layers: 3
+  dec_dim: 512
+  dec_kwargs:
+    dec_rnn: "lstm"
+    rnn_layers: 2
+    rnn_hidden: 512
+    rnn_dropout: 0.2
+    emb_dropout: 0.2
+    dropout: 0.2
+  att_type: "dot"
+  att_kwargs:
+    att_dim: 512
+
+task: "ctc_xent"
+
+task_conf:
+  ctc_weight: 0.2
+  lsm_factor: 0.1
+
+asr_transform:
+  feats: "perturb-fbank-log-aug"
+  frame_len: 400
+  frame_hop: 160
+  window: "hamm"
+  round_pow_of_two: true
+  use_power: true
+  pre_emphasis: 0.97
+  sr: 16000
+  num_mels: 80
+  min_freq: 20
+  norm_mean: true
+  norm_var: true
+  norm_per_band: false
+  aug_prob: 1
+  aug_max_bands: 25
+  aug_max_frame: 60
+  aug_mask_zero: true
+  num_aug_bands: 1
+  num_aug_frame: 1
+
+trainer_conf:
+  optimizer: "adam"
+  optimizer_kwargs:
+    lr: 1.0e-3
+    weight_decay: 1.0e-3
+  lr_scheduler: "reduce_lr"
+  lr_scheduler_kwargs:
+    min_lr: 1.0e-8
+    patience: 1
+    factor: 0.5
+  no_impr: 6
+  no_impr_thres: 0.1
+  clip_gradient: 1
+  report_metrics: ["loss", "accu", "@ctc"]
+  stop_criterion: "accu"
+
+data_conf:
+  fmt: "am_raw"
+  loader:
+    max_dur: 30 # (s)
+    min_dur: 0.4 # (s)
+    adapt_dur: 10 # (s)
+    audio_norm: false
+    max_token_num: 400
+    adapt_token_num: 150
+  train:
+    wav_scp: "data/wsj/train_si284/wav.scp"
+    utt2dur: "data/wsj/train_si284/utt2dur"
+    text: "data/wsj/train_si284/token"
+  valid:
+    wav_scp: "data/wsj/test_dev93/wav.scp"
+    utt2dur: "data/wsj/test_dev93/utt2dur"
+    text: "data/wsj/test_dev93/token"

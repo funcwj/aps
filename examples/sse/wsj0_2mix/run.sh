@@ -64,7 +64,7 @@ fi
 if [ $end -ge 3 ] && [ $beg -le 3 ]; then
   echo "Stage 3: evaluating ..."
   # generate separation audio under exp/$dataset/$exp/bss
-  ./cmd/separate_blind.py \
+  ./cmd/separate.py \
     --checkpoint exp/$dataset/$exp \
     --sr 8000 \
     --device-id $gpu \

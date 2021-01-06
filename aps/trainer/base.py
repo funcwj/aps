@@ -350,7 +350,7 @@ class Trainer(object):
         ss_scheduler: schedule sampling strategy (see aps.trainer.ss)
         ss_scheduler_kwargs: parameters for the ss_scheduler
         clip_gradient: value of L2 norm for gradient clipping
-        acmu_gradient: (not implement now)
+        acmu_gradient: do gradient accumulation over #acmu_gradient mini-batches
         prog_interval: interval to log training progress
         save_interval: interval to save checkpoint
         resume: checkpoint to resume training
@@ -547,12 +547,12 @@ class Trainer(object):
         }
         if optimizer not in supported_optimizer:
             raise ValueError(f"Unknown optimizer: {optimizer}")
-        opt = supported_optimizer[optimizer](self.task.parameters(), **kwargs)
+        optim = supported_optimizer[optimizer](self.task.parameters(), **kwargs)
         self.reporter.log(f"Create optimizer {optimizer}: {kwargs}")
         if state is not None:
-            opt.load_state_dict(state)
+            optim.load_state_dict(state)
             self.reporter.log("Load optimizer state from the checkpoint")
-        return opt
+        return optim
 
     def create_scheduler(self,
                          scheduler: str,
@@ -623,10 +623,10 @@ class Trainer(object):
         """
         Make one training step (return true if no error exists)
 
-        1) Zero optimizer
-        2) Forward & Backword
-        3) Clip Gradient
-        4) Step optimizer
+        1) Forward & Backword
+        2) Clip Gradient
+        3) Step optimizer
+        4) Zero optimizer
         """
         raise NotImplementedError
 

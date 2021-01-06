@@ -8,7 +8,7 @@ set -eu
 for x in am lm ss; do python ../cmd/train_$x.py -h; done
 for x in am ss; do python ../cmd/distributed_train_$x.py -h; done
 for x in wer ss_metric gmvn; do python ../cmd/compute_$x.py -h; done
-for x in separate_blind decode decode_batch; do python ../cmd/$x.py -h; done
+for x in separate decode decode_batch; do python ../cmd/$x.py -h; done
 
 # 5.12% & 2.70%
 for cer in false true; do

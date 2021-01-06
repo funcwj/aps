@@ -34,6 +34,8 @@ def run(args):
     dst_std, dst = io_wrapper(args.dst_tok, "w")
 
     def add_to_vocab(vocab, units):
+        if vocab is None:
+            return
         for unit in units:
             if unit not in vocab:
                 vocab[unit] = len(vocab)
@@ -78,8 +80,7 @@ def run(args):
             else:
                 toks = [tok]
             kept_tokens += toks
-            if vocab is not None:
-                add_to_vocab(vocab, toks)
+            add_to_vocab(vocab, toks)
             if args.space and n != len(sets) - 1:
                 kept_tokens += [args.space]
         if args.unit == "subword":

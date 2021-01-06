@@ -114,13 +114,11 @@ class ApexTrainer(Trainer):
         """
         Make one training step for hovorod
 
-        1) Zero optimizer
-        2) Forward & Backword
-        3) Clip Gradient
-        4) Step optimizer
+        1) Forward & Backword
+        2) Clip Gradient
+        3) Step optimizer
+        4) Zero optimizer
         """
-        self.optimizer.zero_grad()
-
         # add noise if needed
         if self.weight_noise_adder:
             self.weight_noise_adder(self.task, self.cur_step)
@@ -150,6 +148,7 @@ class ApexTrainer(Trainer):
         # step optimizer and update statistics
         if math.isfinite(norm):
             self.optimizer.step()
+            self.optimizer.zero_grad()
             if norm != -1:
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
