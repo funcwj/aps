@@ -34,7 +34,7 @@ class DdpTrainer(Trainer):
                  ss_scheduler: str = "const",
                  ss_scheduler_kwargs: Optional[Dict] = None,
                  clip_gradient: Optional[float] = None,
-                 acmu_gradient: int = -1,
+                 acmu_gradient: int = 1,
                  weight_noise_cfg: List[int] = [0, 1, -1],
                  weight_noise_std: Optional[float] = None,
                  prog_interval: int = 100,
@@ -45,6 +45,7 @@ class DdpTrainer(Trainer):
                  stop_criterion: str = "loss",
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
+                 average_checkpoint: bool = False,
                  report_metrics: List[str] = ["loss"],
                  reduction_tag: str = "none",
                  stop_on_errors: int = 10,
@@ -73,6 +74,7 @@ class DdpTrainer(Trainer):
                              stop_criterion=stop_criterion,
                              no_impr=no_impr,
                              no_impr_thres=no_impr_thres,
+                             average_checkpoint=average_checkpoint,
                              report_metrics=report_metrics,
                              reduction_tag=reduction_tag,
                              stop_on_errors=stop_on_errors)
@@ -115,7 +117,6 @@ class DdpTrainer(Trainer):
         else:
             stats = self.task(egs)
 
-        stats = self.task(egs)
         # use all reduce to check loss
         if self.distributed and is_backward_step:
             loss = dist.all_reduce(stats["loss"].clone()).item()

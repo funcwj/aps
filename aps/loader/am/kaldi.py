@@ -96,11 +96,11 @@ class Dataset(AsrDataset):
                                       text,
                                       utt2num_frames,
                                       vocab_dict,
-                                      skip_utts=skip_utts,
                                       max_dur=max_frame_num,
                                       min_dur=min_frame_num,
-                                      max_token_num=max_token_num,
-                                      duration_axis=0)
+                                      dur_axis=0,
+                                      skip_utts=skip_utts,
+                                      max_token_num=max_token_num)
 
 
 def egs_collate(egs: Dict) -> Dict:

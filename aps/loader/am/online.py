@@ -130,8 +130,8 @@ class Dataset(AsrDataset):
                                       text,
                                       utt2dur,
                                       vocab_dict,
-                                      skip_utts=skip_utts,
                                       max_dur=max_wav_dur,
                                       min_dur=min_wav_dur,
-                                      max_token_num=max_token_num,
-                                      duration_axis=-1)
+                                      dur_axis=-1,
+                                      skip_utts=skip_utts,
+                                      max_token_num=max_token_num)

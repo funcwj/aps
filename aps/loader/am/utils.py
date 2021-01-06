@@ -26,7 +26,7 @@ class AsrDataset(dat.Dataset):
         {min,max}_token_num: filter the utterances if the token number not in [#min_token_num, #max_token_num]
         {min|max}_dur: filter the utterances when length is not in [#min_wav_dur, #max_wav_dur]
         skip_utts: skips utterances that the file shows
-        duration_axis: duration axis index for input_reader
+        dur_axis: duration axis index for input_reader
     """
 
     def __init__(self,
@@ -39,7 +39,7 @@ class AsrDataset(dat.Dataset):
                  max_dur: float = 3000,
                  min_dur: float = 40,
                  skip_utts: str = "",
-                 duration_axis=-1):
+                 dur_axis: int = -1) -> None:
         self.input_reader = input_reader
         self.token_reader = TokenReader(text,
                                         utt2dur,
@@ -49,14 +49,14 @@ class AsrDataset(dat.Dataset):
                                         min_dur=min_dur,
                                         max_token_num=max_token_num,
                                         min_token_num=min_token_num)
-        self.duration_axis = duration_axis
+        self.dur_axis = dur_axis
 
     def __getitem__(self, idx: int) -> Dict:
         tok = self.token_reader[idx]
         key = tok["key"]
         inp = self.input_reader[key]
         return {
-            "dur": inp.shape[self.duration_axis],
+            "dur": inp.shape[self.dur_axis],
             "inp": inp,
             "len": tok["len"],
             "ref": tok["tok"]
@@ -313,15 +313,15 @@ class AsrDataLoader(dat.DataLoader):
         sampler = BatchSampler(dataset,
                                batch_size,
                                shuffle=shuffle,
+                               adapt_dur=adapt_dur,
                                batch_mode=batch_mode,
                                distributed=distributed,
-                               adapt_dur=adapt_dur,
                                adapt_token_num=adapt_token_num,
                                min_batch_size=min_batch_size)
         super(AsrDataLoader, self).__init__(dataset,
-                                            batch_sampler=sampler,
                                             collate_fn=collate_fn,
-                                            num_workers=num_workers)
+                                            num_workers=num_workers,
+                                            batch_sampler=sampler)
 
     def set_epoch(self, epoch: int) -> NoReturn:
         self.batch_sampler.set_epoch(epoch)

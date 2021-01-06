@@ -43,6 +43,7 @@ class HvdTrainer(Trainer):
                  stop_criterion: str = "loss",
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
+                 average_checkpoint: bool = False,
                  report_metrics: List[str] = ["loss"],
                  reduction_tag: str = "none",
                  stop_on_errors: int = 10,
@@ -71,6 +72,7 @@ class HvdTrainer(Trainer):
                              stop_criterion=stop_criterion,
                              no_impr=no_impr,
                              no_impr_thres=no_impr_thres,
+                             average_checkpoint=average_checkpoint,
                              report_metrics=report_metrics,
                              stop_on_errors=stop_on_errors,
                              reduction_tag=reduction_tag)
@@ -110,9 +112,8 @@ class HvdTrainer(Trainer):
         if self.weight_noise_adder:
             self.weight_noise_adder(self.task, self.cur_step)
 
-        stats = self.task(egs)
-
         is_backward_step = (self.cur_step + 1) % self.acmu_gradient == 0
+        stats = self.task(egs)
 
         if is_backward_step:
             loss = dist.all_reduce(stats["loss"])

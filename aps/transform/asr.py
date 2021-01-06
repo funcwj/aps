@@ -593,6 +593,7 @@ class DeltaTransform(nn.Module):
         super(DeltaTransform, self).__init__()
         self.ctx = ctx
         self.order = order
+        self.normalizer = 2 * sum(i**2 for i in range(1, self.ctx + 1))
 
     def extra_repr(self) -> str:
         return f"context={self.ctx}, order={self.order}"
@@ -601,14 +602,15 @@ class DeltaTransform(nn.Module):
         return self.order
 
     def _add_delta(self, x: th.Tensor) -> th.Tensor:
-        dx = th.zeros_like(x)
+        delta = th.zeros_like(x)
+        beg, end = x[..., :1, :], x[..., -1:, :]
         for i in range(1, self.ctx + 1):
-            dx[..., :-i, :] += i * x[..., i:, :]
-            dx[..., i:, :] += -i * x[..., :-i, :]
-            dx[..., -i:, :] += i * x[..., -1:, :]
-            dx[..., :i, :] += -i * x[..., :1, :]
-        dx = dx / (2 * sum(i**2 for i in range(1, self.ctx + 1)))
-        return dx
+            delta[..., :-i, :] += x[..., i:, :]
+            delta[..., i:, :] -= x[..., :-i, :]
+            delta[..., :i, :] -= beg
+            delta[..., -i:, :] += end
+            delta = delta * i
+        return delta / self.normalizer
 
     def forward(self, feats: th.Tensor) -> th.Tensor:
         """

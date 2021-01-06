@@ -444,8 +444,7 @@ class FSMNEncoder(EncoderBase):
                  project: int = 512,
                  num_layers: int = 4,
                  residual: bool = True,
-                 lctx: int = 3,
-                 rctx: int = 3,
+                 context: int = 3,
                  norm: str = "BN",
                  dilation: Union[List[int], int] = 1,
                  dropout: float = 0):
@@ -456,9 +455,8 @@ class FSMNEncoder(EncoderBase):
             FSMN(inp_features if i == 0 else out_features,
                  out_features,
                  project,
-                 lctx=lctx,
-                 rctx=rctx,
-                 norm="" if i == num_layers - 1 else norm,
+                 context=context,
+                 norm=norm,
                  dilation=dilation[i],
                  dropout=dropout) for i in range(num_layers)
         ])

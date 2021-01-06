@@ -5,7 +5,7 @@ import math
 import warnings
 
 from pathlib import Path
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 import torch as th
 from typing import Optional, Dict, List, Union, Tuple, NoReturn, Iterable
@@ -214,7 +214,7 @@ class ProgressReporter(object):
         # Write tensorboard if needed
         if self.board_writer:
             for name, value in reports.items():
-                self.board_writer.add_scalar(f"loss/{self.mode}", name, value)
+                self.board_writer.add_scalar(f"stats/{self.mode}", name, value)
         cost = self.timer.elapsed()
 
         header = "/".join(self.metrics)
@@ -357,10 +357,11 @@ class Trainer(object):
         init: checkpoint for model initialization
         tensorboard: use tensorboard or not
         no_impr: stop training when it reaches the number of epochs that no improvements exist
+        average_checkpoint: average the checkpoints over no improvement epochs or not
         stop_criterion: do early stopping detection on which metrics (must in in report_metrics)
         report_metrics: metrics to be tracked during training
         reduction_tag: used in ProgressReporter
-        stop_on_errors: stop training if errors exist
+        stop_on_errors: stop training if #stop_on_errors consecutive errors exist
     """
 
     def __init__(self,
@@ -387,6 +388,7 @@ class Trainer(object):
                  stop_criterion: str = "loss",
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
+                 average_checkpoint: bool = False,
                  report_metrics: List[str] = ["loss"],
                  reduction_tag: str = "none",
                  stop_on_errors: int = 10,
@@ -446,6 +448,7 @@ class Trainer(object):
         self.save_interval = save_interval
         self.ssr = 0
         self.no_impr = no_impr
+        self.average_checkpoint = average_checkpoint
 
         mode = "max" if stop_criterion == "accu" else "min"
         self.stop_on = stop_criterion
@@ -453,7 +456,7 @@ class Trainer(object):
                                           mode=mode,
                                           no_impr_thres=no_impr_thres)
         self.stop_on_errors = stop_on_errors
-        self.error_detector = ErrorDetector(stop_on_errors)
+        self.detector = ErrorDetector(stop_on_errors)
         self.task = task
         if self.rank in [0, None]:
             self.reporter.log(f"Model summary:\n{task.nnet}")
@@ -604,20 +607,59 @@ class Trainer(object):
         """
         raise NotImplementedError
 
-    def save_checkpoint(self, states: Dict, best: bool = True) -> NoReturn:
+    def save_checkpoint(self,
+                        states: Dict,
+                        tag: str = "best",
+                        enable_subroutine: bool = True,
+                        keep_optimizer: bool = True) -> NoReturn:
         """
         Save checkpoint (epoch, model, optimizer, ...)
         """
         if self.rank in [0, None]:
-            cpt = self.model_states()
-            cpt.update(states)
-            cpt_name = "{}.pt.tar".format("best" if best else "last")
+            if enable_subroutine:
+                cpt = self.model_states()
+                cpt.update(states)
+            else:
+                cpt = states
+            cpt_name = f"{tag}.pt.tar"
+            if not keep_optimizer and "optimizer_state" in cpt:
+                _ = cpt.pop("optimizer_state")
             th.save(cpt, self.checkpoint / cpt_name)
             self.reporter.log(
                 f"Save checkpoint ==> {self.checkpoint / cpt_name}")
-            if self.save_interval > 0 and self.cur_epoch % self.save_interval == 0:
-                th.save(cpt.pop("optimizer_state"),
-                        self.checkpoint / f"{self.cur_epoch}.pt.tar")
+
+    def average_checkpoints(self) -> NoReturn:
+        """
+        Average checkpoint over no improvement epochs
+        """
+        if not self.average_checkpoint:
+            return
+        if self.rank not in [0, None]:
+            return
+        averaged = OrderedDict()
+        for i in range(self.no_impr):
+            cpt = th.load(self.checkpoint / f"no_impr.{i + 1}.pt.tar",
+                          map_location="cpu")
+            param = cpt["model_state"]
+            for key in param.keys():
+                p = param[key]
+                if key not in averaged:
+                    averaged[key] = p.clone()
+                else:
+                    averaged[key] += p
+        for key in averaged:
+            if averaged[key].is_floating_point():
+                averaged[key].div_(self.no_impr)
+            else:
+                averaged[key] //= self.no_impr
+
+        final = {
+            "step": self.cur_step,
+            "epoch": self.cur_epoch,
+            "model_state": averaged,
+            "num_parameters": self.num_params
+        }
+        self.save_checkpoint(final, tag="avg", enable_subroutine=False)
 
     def train_one_step(self, egs: Dict) -> bool:
         """
@@ -650,7 +692,7 @@ class Trainer(object):
         """
         self.task.train()
         self.reporter.train()
-        self.error_detector.reset()
+        self.detector.reset()
         for egs in data_loader:
             # load to gpu
             egs = self.prep_egs(egs)
@@ -658,9 +700,9 @@ class Trainer(object):
             succ = self.train_one_step(egs)
             if succ:
                 self.cur_step += 1
-            if self.error_detector.step(succ):
+            if self.detector.step(succ):
                 break
-        stop = self.error_detector.stop()
+        stop = self.detector.stop()
         if stop:
             self.reporter.log("Stop training as detecting " +
                               f"{self.stop_on_errors} consecutive errors")
@@ -709,10 +751,17 @@ class Trainer(object):
         }
         status.update(reports)
         if better:
-            self.save_checkpoint(status, best=True)
+            # save best checkpoint
+            self.save_checkpoint(status, tag="best")
         else:
-            logstr += f" | no impr: {self.stop_detector.no_impr:d}, "
+            no_impr = self.stop_detector.no_impr
+            logstr += f" | no impr: {no_impr:d}, "
             logstr += f"best = {self.stop_detector.best:.4f}"
+            # save for average
+            if self.average_checkpoint:
+                self.save_checkpoint(status,
+                                     tag=f"no_impr.{no_impr:d}",
+                                     keep_optimizer=False)
 
         self.reporter.log(logstr)
         # << valid
@@ -721,7 +770,11 @@ class Trainer(object):
         if self.ss_scheduler:
             self.ssr = self.ss_scheduler.step(self.cur_epoch, reports["accu"])
         # save last checkpoint
-        self.save_checkpoint(status, best=False)
+        self.save_checkpoint(status, tag="last")
+        if self.save_interval > 0 and self.cur_epoch % self.save_interval == 0:
+            self.save_checkpoint(status,
+                                 tag=f"{self.cur_epoch}",
+                                 keep_optimizer=False)
         # early stop
         if self.stop_detector.stop():
             self.reporter.log("Stop training cause no impr for " +
@@ -794,14 +847,14 @@ class Trainer(object):
                 if self.cur_step % eval_interval == 0:
                     self.task.train()
                     self.reporter.train()
-                    self.error_detector.reset()
+                    self.detector.reset()
                     trn_loader.set_epoch(self.cur_epoch)
                 # update per-batch
                 egs = self.prep_egs(egs)
                 succ = self.train_one_step(egs)
                 if succ:
                     self.cur_step += 1
-                if self.error_detector.step(succ):
+                if self.detector.step(succ):
                     self.reporter.log(
                         f"Stop training as detecting {self.stop_on_errors} " +
                         "consecutive errors")
@@ -845,5 +898,6 @@ class Trainer(object):
             done_epoch = self.run_in_epoch(trn_loader,
                                            dev_loader,
                                            num_epochs=num_epochs)
+        self.average_checkpoints()
         self.reporter.log(
             f"Training for {done_epoch:d}/{num_epochs:d} epochs done!")
