@@ -49,8 +49,8 @@ asr_transform:
   rctx: 1
   subsampling_factor: 3
   aug_prob: 0.3
-  num_aug_bands: 1
-  num_aug_frame: 1
+  aug_freq_args: [30, 1]
+  aug_time_args: [40, 1]
   aug_mask_zero: false
 
 trainer_conf:

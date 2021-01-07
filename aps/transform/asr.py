@@ -17,8 +17,8 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from typing import Optional, Union
-from aps.transform.utils import STFT, init_melfilter, speed_perturb_filter
+from typing import Optional, Union, Tuple
+from aps.transform.utils import STFT, init_melfilter, splice_feature, speed_perturb_filter
 from aps.transform.augment import tf_mask, perturb_speed
 from aps.const import EPSILON
 from aps.libs import ApsRegisters
@@ -475,23 +475,22 @@ class SpecAugTransform(nn.Module):
     Args:
         p: probability to do spec-augment
         p_time: p in SpecAugment paper
+        time_args: (T, m_T) in the SpecAugment paper
+        freq_args: (F, m_F) in the SpecAugment paper
         mask_zero: use zero value or mean in the masked region
-        num_freq_masks|num_time_masks: m_F, m_T in the SpecAugment paper
-        max_bands|max_frame: F, T in the SpecAugment paper
     """
 
     def __init__(self,
                  p: float = 0.5,
                  p_time: float = 1.0,
-                 max_bands: int = 30,
-                 max_frame: int = 40,
-                 num_freq_masks: int = 2,
-                 num_time_masks: int = 2,
+                 time_args: Tuple[int] = [40, 1],
+                 freq_args: Tuple[int] = [30, 1],
                  mask_zero: bool = True) -> None:
         super(SpecAugTransform, self).__init__()
-        self.fnum, self.tnum = num_freq_masks, num_time_masks
+        assert len(freq_args) == 2 and len(time_args) == 2
+        self.fnum, self.tnum = freq_args[1], time_args[1]
         self.mask_zero = mask_zero
-        self.F, self.T = max_bands, max_frame
+        self.F, self.T = freq_args[0], time_args[0]
         # prob to do spec-augment
         self.p = p
         # max portion constraint on time axis
@@ -538,7 +537,7 @@ class SpliceTransform(nn.Module):
     Do feature splicing as well as downsampling if needed
     Args:
         lctx: left context
-        rctx: right contex
+        rctx: right context
         subsampling_factor: subsampling factor
     """
 
@@ -565,17 +564,11 @@ class SpliceTransform(nn.Module):
         return:
             slice (Tensor): spliced feature, N x ... x To x FD
         """
-        T = feats.shape[-2]
-        T = T - T % self.subsampling_factor
-        if self.lctx + self.rctx != 0:
-            ctx = []
-            for c in range(-self.lctx, self.rctx + 1):
-                idx = th.arange(c, c + T, device=feats.device, dtype=th.int64)
-                idx = th.clamp(idx, min=0, max=T - 1)
-                # N x ... x T x F
-                ctx.append(th.index_select(feats, -2, idx))
-            # N x ... x T x FD
-            feats = th.cat(ctx, -1)
+        # N x ... x T x FD
+        feats = splice_feature(feats,
+                               lctx=self.lctx,
+                               rctx=self.rctx,
+                               subsampling_factor=self.subsampling_factor)
         if self.subsampling_factor != 1:
             feats = feats[..., ::self.subsampling_factor, :]
         return feats
@@ -589,28 +582,23 @@ class DeltaTransform(nn.Module):
         order: delta order
     """
 
-    def __init__(self, ctx: int = 2, order: int = 2) -> None:
+    def __init__(self,
+                 ctx: int = 2,
+                 order: int = 2,
+                 delta_as_channel: bool = False) -> None:
         super(DeltaTransform, self).__init__()
         self.ctx = ctx
         self.order = order
-        self.normalizer = 2 * sum(i**2 for i in range(1, self.ctx + 1))
+        scale = th.arange(-ctx, ctx + 1, dtype=th.float32)
+        normalizer = sum(i * i for i in range(-ctx, ctx + 1))
+        self.scale = nn.Parameter(scale / normalizer, requires_grad=False)
+        self.delta_as_channel = delta_as_channel
 
     def extra_repr(self) -> str:
-        return f"context={self.ctx}, order={self.order}"
+        return f"context={self.ctx}, order={self.order}, delta_as_channel={self.delta_as_channel}"
 
     def dim_scale(self) -> int:
         return self.order
-
-    def _add_delta(self, x: th.Tensor) -> th.Tensor:
-        delta = th.zeros_like(x)
-        beg, end = x[..., :1, :], x[..., -1:, :]
-        for i in range(1, self.ctx + 1):
-            delta[..., :-i, :] += x[..., i:, :]
-            delta[..., i:, :] -= x[..., :-i, :]
-            delta[..., :i, :] -= beg
-            delta[..., -i:, :] += end
-            delta = delta * i
-        return delta / self.normalizer
 
     def forward(self, feats: th.Tensor) -> th.Tensor:
         """
@@ -621,9 +609,19 @@ class DeltaTransform(nn.Module):
         """
         delta = [feats]
         for _ in range(self.order):
-            delta.append(self._add_delta(delta[-1]))
-        # N x ... x T x FD
-        return th.cat(delta, -1)
+            # N x T x F x (2C+1)
+            splice = splice_feature(delta[-1],
+                                    lctx=self.ctx,
+                                    rctx=self.ctx,
+                                    op="stack")
+            # N x T x F
+            delta.append(th.sum(splice * self.scale, -1))
+        if self.delta_as_channel:
+            # N x C x T x F
+            return th.stack(delta, 1)
+        else:
+            # N x ... x T x FD
+            return th.cat(delta, -1)
 
 
 @ApsRegisters.transform.register("asr")
@@ -665,8 +663,8 @@ class FeatureTransform(nn.Module):
         aug_prob: probability to do spec-augment
         aug_maxp_time: p in SpecAugment paper
         aug_mask_zero: use zero value or mean in the masked region
-        num_aug_bands|num_aug_frame: m_F, m_T in the SpecAugment paper
-        aug_max_bands|aug_max_frame: F, T in the SpecAugment paper
+        aug_time_args: (T, m_T) in the SpecAugment paper
+        aug_freq_args: (F, m_F) in the SpecAugment paper
         norm_mean|norm_var: normalize mean/var or not (cmvn)
         norm_per_band: do cmvn per-band or not (cmvn)
         gcmvn: global cmvn statistics (cmvn)
@@ -697,12 +695,10 @@ class FeatureTransform(nn.Module):
                  max_freq: Optional[int] = None,
                  lifter: float = 0,
                  aug_prob: float = 0,
-                 aug_maxp_time: float = 1.0,
-                 aug_max_bands: int = 30,
-                 aug_max_frame: int = 40,
+                 aug_maxp_time: float = 0.5,
                  aug_mask_zero: bool = True,
-                 num_aug_bands: int = 1,
-                 num_aug_frame: int = 1,
+                 aug_time_args: Tuple[int] = (40, 1),
+                 aug_freq_args: Tuple[int] = (30, 1),
                  norm_mean: bool = True,
                  norm_var: bool = True,
                  norm_per_band: bool = True,
@@ -712,6 +708,7 @@ class FeatureTransform(nn.Module):
                  rctx: int = 1,
                  delta_ctx: int = 2,
                  delta_order: int = 2,
+                 delta_as_channel: bool = False,
                  requires_grad: bool = False,
                  eps: float = EPSILON) -> None:
         super(FeatureTransform, self).__init__()
@@ -725,8 +722,8 @@ class FeatureTransform(nn.Module):
             "window": window,
             "center": center,
             "use_power": use_power,
-            "pre_emphasis": pre_emphasis,
             "normalized": stft_normalized,
+            "pre_emphasis": pre_emphasis,
             "round_pow_of_two": round_pow_of_two
         }
         mel_kwargs = {
@@ -806,11 +803,9 @@ class FeatureTransform(nn.Module):
                 transform.append(
                     SpecAugTransform(p=aug_prob,
                                      p_time=aug_maxp_time,
-                                     max_bands=aug_max_bands,
-                                     max_frame=aug_max_frame,
-                                     mask_zero=aug_mask_zero,
-                                     num_freq_masks=num_aug_bands,
-                                     num_time_masks=num_aug_frame))
+                                     freq_args=aug_freq_args,
+                                     time_args=aug_time_args,
+                                     mask_zero=aug_mask_zero))
             elif tok == "splice":
                 transform.append(
                     SpliceTransform(lctx=lctx,
@@ -819,7 +814,9 @@ class FeatureTransform(nn.Module):
                 feats_dim *= (1 + lctx + rctx)
             elif tok == "delta":
                 transform.append(
-                    DeltaTransform(ctx=delta_ctx, order=delta_order))
+                    DeltaTransform(ctx=delta_ctx,
+                                   order=delta_order,
+                                   delta_as_channel=delta_as_channel))
                 feats_dim *= (1 + delta_order)
             else:
                 raise RuntimeError(f"Unknown token {tok} in {feats}")

@@ -370,6 +370,7 @@ class Conv2dEncoder(EncoderBase):
                  inp_features: int,
                  out_features: int,
                  channel: Union[int, List[int]] = 32,
+                 in_channels: int = 1,
                  num_layers: int = 3,
                  kernel_size: Conv2dParam = 3,
                  padding: Conv2dParam = 0,
@@ -392,7 +393,7 @@ class Conv2dEncoder(EncoderBase):
         stride = param2need(stride, num_layers)
 
         self.enc_layers = nn.ModuleList([
-            Conv2d(1 if i == 0 else channel[i - 1],
+            Conv2d(in_channels if i == 0 else channel[i - 1],
                    channel[i],
                    kernel_size=kernel_size[i],
                    stride=stride[i],

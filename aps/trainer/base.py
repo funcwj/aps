@@ -636,10 +636,12 @@ class Trainer(object):
             return
         if self.rank not in [0, None]:
             return
+        self.reporter.log("Average checkpoints best.pt.tar + no_impr" +
+                          f".(1..{self.no_impr}).pt.tar ...")
         averaged = OrderedDict()
-        for i in range(self.no_impr):
-            cpt = th.load(self.checkpoint / f"no_impr.{i + 1}.pt.tar",
-                          map_location="cpu")
+        for i in range(self.no_impr + 1):
+            name = f"no_impr.{i}.pt.tar" if i else "best.pt.tar"
+            cpt = th.load(self.checkpoint / name, map_location="cpu")
             param = cpt["model_state"]
             for key in param.keys():
                 p = param[key]
@@ -649,9 +651,9 @@ class Trainer(object):
                     averaged[key] += p
         for key in averaged:
             if averaged[key].is_floating_point():
-                averaged[key].div_(self.no_impr)
+                averaged[key].div_(self.no_impr + 1)
             else:
-                averaged[key] //= self.no_impr
+                averaged[key] //= (self.no_impr + 1)
 
         final = {
             "step": self.cur_step,

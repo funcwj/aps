@@ -60,11 +60,9 @@ asr_transform:
   norm_var: true
   norm_per_band: false
   aug_prob: 1
-  aug_max_bands: 27
-  aug_max_frame: 100
+  aug_freq_args: [27, 2]
+  aug_time_args: [100, 2]
   aug_mask_zero: true
-  num_aug_bands: 2
-  num_aug_frame: 2
 
 trainer_conf:
   optimizer: "adam"

@@ -143,14 +143,14 @@ def test_df_transform(num_bins, num_doas):
 
 
 def debug_visualize_feature():
-    transform = AsrTransform(feats="spectrogram-log-aug",
+    transform = AsrTransform(feats="fbank-log-delta",
                              frame_len=400,
                              frame_hop=160,
                              use_power=True,
                              pre_emphasis=0.97,
                              aug_prob=1,
-                             aug_max_frame=100,
-                             aug_max_bands=40,
+                             aug_freq_args=(40, 1),
+                             aug_time_args=(100, 1),
                              aug_mask_zero=False)
     feats, _ = transform(th.from_numpy(egs1_wav[None, ...]), None)
     import matplotlib.pyplot as plt

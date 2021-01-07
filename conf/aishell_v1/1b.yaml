@@ -35,9 +35,8 @@ asr_transform:
   norm_var: true
   aug_prob: 0.5
   aug_mask_zero: false
-  aug_max_frame: 80
-  num_aug_bands: 1
-  num_aug_frame: 1
+  aug_freq_args: [30, 1]
+  aug_time_args: [80, 1]
 
 task: "ctc_xent"
 

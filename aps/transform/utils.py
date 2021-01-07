@@ -139,6 +139,8 @@ def speed_perturb_filter(src_sr: int,
     Args:
         src_sr: sample rate of the source signal
         dst_sr: sample rate of the target signal
+    Return:
+        weight (Tensor): coefficients of the filter
     """
     if src_sr == dst_sr:
         raise ValueError(
@@ -159,6 +161,43 @@ def speed_perturb_filter(src_sr: int,
     weight = np.sinc(
         times * zeros_per_block) * window * zeros_per_block / float(src_sr)
     return th.tensor(weight, dtype=th.float32)
+
+
+def splice_feature(feats: th.Tensor,
+                   lctx: int = 1,
+                   rctx: int = 1,
+                   subsampling_factor: int = 1,
+                   op: str = "cat") -> th.Tensor:
+    """
+    Splice feature
+    Args:
+        feats (Tensor): N x ... x T x F, original feature
+        lctx: left context
+        rctx: right context
+        subsampling_factor: subsampling factor
+        op: operator on feature context
+    Return:
+        splice (Tensor): feature with context padded
+    """
+    if lctx + rctx == 0:
+        return feats
+    if op not in ["cat", "stack"]:
+        raise ValueError(f"Unknown op for feature splicing: {op}")
+    # [N x ... x T x F, ...]
+    ctx = []
+    T = feats.shape[-2]
+    T = T - T % subsampling_factor
+    for c in range(-lctx, rctx + 1):
+        idx = th.arange(c, c + T, device=feats.device, dtype=th.int64)
+        idx = th.clamp(idx, min=0, max=T - 1)
+        ctx.append(th.index_select(feats, -2, idx))
+    if op == "cat":
+        # N x ... x T x FD
+        splice = th.cat(ctx, -1)
+    else:
+        # N x ... x T x F x D
+        splice = th.stack(ctx, -1)
+    return splice
 
 
 def _forward_stft(
