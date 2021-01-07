@@ -39,7 +39,7 @@ def read_nbest(nbest_fd: str) -> Tuple[int, Dict]:
 
 def run(args):
     nbest, nbest_hypos = read_nbest(args.nbest)
-    ngram = kenlm.Model(args.lm)
+    ngram = kenlm.LanguageModel(args.lm)
 
     stdout, top1 = io_wrapper(args.top1, "w")
     for key, nbest_dict in nbest_hypos.items():

@@ -8,6 +8,7 @@ import argparse
 
 import torch as th
 
+from pathlib import Path
 from aps.eval import NnetEvaluator, TextPostProcessor
 from aps.opts import DecodingParser
 from aps.utils import get_logger, io_wrapper, SimpleTimer
@@ -76,10 +77,15 @@ def run(args):
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
     if args.lm:
-        lm = NnetEvaluator(args.lm, device_id=args.device_id)
-        logger.info(f"Load lm from {args.lm}: epoch {lm.epoch}, " +
-                    f"weight = {args.lm_weight}")
-        lm = lm.nnet
+        if Path(args.lm).is_file():
+            from aps.asr.lm.ngram import NgramLM
+            lm = NgramLM(args.lm, args.dict)
+            logger.info(f"Load ngram from {args.lm}, weight = {args.lm_weight}")
+        else:
+            lm = NnetEvaluator(args.lm, device_id=args.device_id)
+            logger.info(f"Load rnnlm from {args.lm}: epoch {lm.epoch}, " +
+                        f"weight = {args.lm_weight}")
+            lm = lm.nnet
     else:
         lm = None
 

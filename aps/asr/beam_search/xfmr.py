@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from aps.asr.beam_search.utils import BeamTracker, BatchBeamTracker
-from aps.asr.beam_search.lm import lm_score
+from aps.asr.beam_search.lm import rnnlm_score
 
 from typing import List, Dict, Optional
 
@@ -77,7 +77,7 @@ def beam_search(decoder: nn.Module,
 
         if lm:
             # beam x V
-            lm_prob, lm_state = lm_score(lm, point, pre_out, lm_state)
+            lm_prob, lm_state = rnnlm_score(lm, point, pre_out, lm_state)
         else:
             lm_prob = 0
 
@@ -169,7 +169,7 @@ def beam_search_batch(decoder: nn.Module,
 
         if lm:
             # beam x V
-            lm_prob, lm_state = lm_score(lm, point, pre_out, lm_state)
+            lm_prob, lm_state = rnnlm_score(lm, point, pre_out, lm_state)
         else:
             lm_prob = 0
 

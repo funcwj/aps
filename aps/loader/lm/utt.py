@@ -139,49 +139,56 @@ class BatchSampler(dat.Sampler):
         self.genfunc = th.randperm if shuffle else th.arange
         self.batches = []
         chunk_size = chunk_size_for_sort
-        total_utts = len(dataset)
+        kept_index = self._filter_indices(dataset)
+        total_utts = len(kept_index)
         num_parts = total_utts // chunk_size + 1
         print(f"BatchSampler: sort indices ({num_parts} parts) ...", flush=True)
         for base in range(0, total_utts, chunk_size):
-            indices = self._sort_indices([
-                dataset[i]
+            indices = self._sort_indices(dataset, [
+                kept_index[i]
                 for i in range(base, min(base + chunk_size, total_utts))
-            ], batch_size, base)
+            ], batch_size)
             self.batches += indices
             done = min(base + chunk_size, total_utts) * 100 / float(total_utts)
             print(f"BatchSampler: done {done:.2f}% ...", flush=True)
 
-    def _sort_indices(self, subset: List[List], batch_size: int,
-                      base: int) -> List[List[int]]:
+    def _filter_indices(self, dataset: dat.Dataset) -> List[int]:
         """
-        Sort mini-batches in each subset
+        Return utterance index used for training (pass short/long utterances)
         """
-        # short -> long
-        toks_len = [len(toks) for toks in subset]
-        desc_idx = np.argsort(toks_len)
-        kept_desc_idx = []
+        print(f"BatchSampler: filtering indices ...", flush=True)
+        kept_index = []
         filter_sutt, filter_lutt = 0, 0
-        for i in range(len(desc_idx)):
-            tok_len = toks_len[desc_idx[i]]
+        for i in range(len(dataset)):
+            tok_len = len(dataset[i])
             if tok_len < self.const["min"]:
                 filter_sutt += 1
             elif tok_len > self.const["max"]:
                 filter_lutt += 1
             else:
-                kept_desc_idx.append(i)
+                kept_index.append(i)
         if filter_lutt or filter_sutt:
-            ratio_lutt = filter_lutt * 100.0 / len(desc_idx)
-            ratio_sutt = filter_sutt * 100.0 / len(desc_idx)
-            warnings.warn(
-                f"Filter {ratio_lutt:.2f}/{ratio_sutt:.2f}% long/short utterances..."
-            )
+            ratio_lutt = filter_lutt * 100.0 / len(dataset)
+            ratio_sutt = filter_sutt * 100.0 / len(dataset)
+            warnings.warn(f"Filter {ratio_lutt:.2f}/{ratio_sutt:.2f}% " +
+                          "long/short utterances...")
+        return kept_index
+
+    def _sort_indices(self, dataset: dat.Dataset, subset: List[int],
+                      batch_size: int) -> List[List[int]]:
+        """
+        Sort mini-batches in each subset
+        """
+        toks_len = [len(dataset[i]) for i in subset]
+        # long -> short
+        sort_idx = np.argsort(toks_len)[::-1]
         batches = []
         beg, cur_bz = 0, batch_size
-        while beg + cur_bz <= len(kept_desc_idx):
-            cur_len = toks_len[kept_desc_idx[beg]]
+        while beg + cur_bz <= len(sort_idx):
+            cur_len = toks_len[sort_idx[beg]]
             factor = (cur_len - 1) // self.const["adapt"]
             cur_bz = int(max(self.const["floor"], batch_size // (1 + factor)))
-            batches.append([base + i for i in kept_desc_idx[beg:beg + cur_bz]])
+            batches.append([subset[i] for i in sort_idx[beg:beg + cur_bz]])
             beg += cur_bz
         return batches
 

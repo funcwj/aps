@@ -8,8 +8,10 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Union, Tuple
+from aps.asr.lm.ngram import NgramLM
 
 HiddenType = Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]
+LmType = Union[nn.Module, NgramLM]
 
 
 def adjust_hidden(back_point: th.Tensor, state: HiddenType) -> HiddenType:
@@ -31,10 +33,30 @@ def adjust_hidden(back_point: th.Tensor, state: HiddenType) -> HiddenType:
     return state
 
 
-def lm_score(lm: nn.Module, back_point: th.Tensor, prev_token: th.Tensor,
-             state: HiddenType) -> Tuple[th.Tensor, HiddenType]:
+def ngram_score(lm: NgramLM, back_point: th.Tensor, prev_token: th.Tensor,
+                state):
     """
-    Get LM prob/score
+    Get ngram LM score
+    Args:
+        back_point (Tensor): N
+        state (list[list(State)]): ngram LM states
+    Return:
+        score (Tensor): beam x V
+        state (list[list(State)]): new LM state
+    """
+    if state is None:
+        prev_state = None
+    else:
+        # adjust states
+        ptr = back_point.tolist()
+        prev_state = [state[p] for p in ptr]
+    return lm(prev_token, prev_state)
+
+
+def rnnlm_score(lm: nn.Module, back_point: th.Tensor, prev_token: th.Tensor,
+                state: HiddenType) -> Tuple[th.Tensor, HiddenType]:
+    """
+    Get RNN LM prob/score
     Args:
         back_point (Tensor): N
         prev_token (Tensor): N

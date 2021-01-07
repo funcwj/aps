@@ -117,8 +117,8 @@ def get_aps_decode_parser():
     parser.add_argument("--lm",
                         type=str,
                         default="",
-                        help="Checkpoint of the nerual network LM "
-                        "used in shallow fusion")
+                        help="Experimental directory of the RNNLM "
+                        "or path of the ngram LM")
     parser.add_argument("--lm-weight",
                         type=float,
                         default=0.1,
