@@ -59,6 +59,7 @@ class NgramLM(object):
             score (Tensor): N x V, LM scores
             state (list[list[State]]), new states
         """
+        device = token.device
         token = token.tolist()
         if state is None:
             init_state = kenlm.State()
@@ -72,5 +73,5 @@ class NgramLM(object):
             score, state = self._step(state)
             scores.append(score)
             states.append(state)
-        scores = th.stack(scores).to(token.device)
+        scores = th.stack(scores).to(device)
         return scores, states

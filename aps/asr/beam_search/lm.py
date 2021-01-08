@@ -53,7 +53,7 @@ def ngram_score(lm: NgramLM, back_point: th.Tensor, prev_token: th.Tensor,
     return lm(prev_token, prev_state)
 
 
-def rnnlm_score(lm: nn.Module, back_point: th.Tensor, prev_token: th.Tensor,
+def rnnlm_score(rnnlm: nn.Module, back_point: th.Tensor, prev_token: th.Tensor,
                 state: HiddenType) -> Tuple[th.Tensor, HiddenType]:
     """
     Get RNN LM prob/score
@@ -68,7 +68,7 @@ def rnnlm_score(lm: nn.Module, back_point: th.Tensor, prev_token: th.Tensor,
     # adjust order
     state = adjust_hidden(back_point, state)
     # LM
-    lmout, state = lm(prev_token[..., None], state)
+    lmout, state = rnnlm(prev_token[..., None], state)
     # beam x V
     score = tf.log_softmax(lmout[:, 0], dim=-1)
     # return state & score

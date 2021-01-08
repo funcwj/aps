@@ -102,10 +102,10 @@ def get_aps_decode_parser():
                         type=int,
                         default=16000,
                         help="Sample rate of the original audio")
-    parser.add_argument("--checkpoint",
+    parser.add_argument("--am",
                         type=str,
                         required=True,
-                        help="Checkpoint directory of the model")
+                        help="Checkpoint directory of the AM")
     parser.add_argument("--tag",
                         type=str,
                         default="best",
@@ -123,6 +123,10 @@ def get_aps_decode_parser():
                         type=float,
                         default=0.1,
                         help="LM score weight used in shallow fusion")
+    parser.add_argument("--lm-tag",
+                        type=str,
+                        default="best",
+                        help="Tag name for RNNLM")
     parser.add_argument("--temperature",
                         type=float,
                         default=1,

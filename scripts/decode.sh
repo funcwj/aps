@@ -18,6 +18,8 @@ penalty=0
 wav_norm=true
 len_norm=true
 temperature=1
+am_tag="best"
+lm_tag="best"
 lm=""
 lm_weight=0
 spm=""
@@ -48,11 +50,13 @@ if [ -z $batch_size ]; then
     $tst_scp \
     $dec_dir/beam${beam_size}.decode \
     --beam-size $beam_size \
-    --checkpoint $exp_dir \
     --device-id $gpu \
     --channel $channel \
     --dict "$dict" \
+    --am $exp_dir \
     --lm "$lm" \
+    --am-tag $am_tag \
+    --lm-tag $lm_tag \
     --spm "$spm" \
     --penalty $penalty \
     --temperature $temperature \
@@ -76,6 +80,8 @@ else
     --channel $channel \
     --dict "$dict" \
     --lm "$lm" \
+    --am-tag $am_tag \
+    --lm-tag $lm_tag \
     --spm "$spm" \
     --space "$space" \
     --penalty $penalty \

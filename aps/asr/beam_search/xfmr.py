@@ -10,14 +10,14 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from aps.asr.beam_search.utils import BeamTracker, BatchBeamTracker
-from aps.asr.beam_search.lm import rnnlm_score
+from aps.asr.beam_search.lm import rnnlm_score, ngram_score, LmType
 
 from typing import List, Dict, Optional
 
 
 def beam_search(decoder: nn.Module,
                 enc_out: th.Tensor,
-                lm: Optional[nn.Module] = None,
+                lm: Optional[LmType] = None,
                 lm_weight: float = 0,
                 beam: int = 8,
                 nbest: int = 1,
@@ -45,6 +45,12 @@ def beam_search(decoder: nn.Module,
         raise RuntimeError("Function step should defined in decoder network")
     if beam > decoder.vocab_size:
         raise RuntimeError(f"Beam size({beam}) > vocabulary size")
+
+    if lm:
+        if isinstance(lm, nn.Module):
+            lm_score_impl = rnnlm_score
+        else:
+            lm_score_impl = ngram_score
 
     nbest = min(beam, nbest)
     device = enc_out.device
@@ -77,7 +83,7 @@ def beam_search(decoder: nn.Module,
 
         if lm:
             # beam x V
-            lm_prob, lm_state = rnnlm_score(lm, point, pre_out, lm_state)
+            lm_prob, lm_state = lm_score_impl(lm, point, pre_out, lm_state)
         else:
             lm_prob = 0
 
@@ -106,7 +112,7 @@ def beam_search(decoder: nn.Module,
 def beam_search_batch(decoder: nn.Module,
                       enc_out: th.Tensor,
                       enc_len: th.Tensor,
-                      lm: Optional[nn.Module] = None,
+                      lm: Optional[LmType] = None,
                       lm_weight: float = 0,
                       beam: int = 8,
                       nbest: int = 1,
@@ -131,6 +137,11 @@ def beam_search_batch(decoder: nn.Module,
         raise RuntimeError("Function step should defined in decoder network")
     if beam > decoder.vocab_size:
         raise RuntimeError(f"Beam size({beam}) > vocabulary size")
+    if lm:
+        if isinstance(lm, nn.Module):
+            lm_score_impl = rnnlm_score
+        else:
+            lm_score_impl = ngram_score
 
     N, _, _ = enc_out.shape
     nbest = min(beam, nbest)
@@ -169,7 +180,7 @@ def beam_search_batch(decoder: nn.Module,
 
         if lm:
             # beam x V
-            lm_prob, lm_state = rnnlm_score(lm, point, pre_out, lm_state)
+            lm_prob, lm_state = lm_score_impl(lm, point, pre_out, lm_state)
         else:
             lm_prob = 0
 

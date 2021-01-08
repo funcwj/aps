@@ -25,9 +25,15 @@ class BatchDecoder(NnetEvaluator):
     Decoder wrapper
     """
 
-    def __init__(self, cpt_dir, device_id=-1):
-        super(BatchDecoder, self).__init__(cpt_dir, device_id=device_id)
-        logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
+    def __init__(self,
+                 cpt_dir: str,
+                 device_id: int = -1,
+                 cpt_tag: str = "best") -> None:
+        super(BatchDecoder, self).__init__(cpt_dir,
+                                           device_id=device_id,
+                                           cpt_tag=cpt_tag)
+        logger.info(f"Load checkpoint from {cpt_dir}: epoch " +
+                    f"{self.epoch}, tag {cpt_tag}")
 
     def run(self, inps, **kwargs):
         return self.nnet.beam_search_batch(
@@ -38,7 +44,9 @@ def run(args):
     print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     if args.batch_size == 1:
         warnings.warn("can use decode.py instead as batch_size == 1")
-    decoder = BatchDecoder(args.checkpoint, device_id=args.device_id)
+    decoder = BatchDecoder(args.am,
+                           device_id=args.device_id,
+                           cpt_tag=args.am_tag)
     if decoder.accept_raw:
         src_reader = AudioReader(args.feats_or_wav_scp,
                                  sr=args.sr,
@@ -51,10 +59,13 @@ def run(args):
         if Path(args.lm).is_file():
             from aps.asr.lm.ngram import NgramLM
             lm = NgramLM(args.lm, args.dict)
-            logger.info(f"Load ngram from {args.lm}, weight = {args.lm_weight}")
+            logger.info(
+                f"Load ngram LM from {args.lm}, weight = {args.lm_weight}")
         else:
-            lm = NnetEvaluator(args.lm, device_id=args.device_id)
-            logger.info(f"Load rnnlm from {args.lm}: epoch {lm.epoch}, " +
+            lm = NnetEvaluator(args.lm,
+                               device_id=args.device_id,
+                               cpt_tag=args.lm_tag)
+            logger.info(f"Load RNN LM from {args.lm}: epoch {lm.epoch}, " +
                         f"weight = {args.lm_weight}")
             lm = lm.nnet
     else:

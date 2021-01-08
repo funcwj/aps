@@ -31,7 +31,7 @@ exp_id=$3
 
 opts=""
 case $task in
-  "am" )
+  "am" | "lm" )
     dict=data/$data/dict
     [ ! -f $dict ] && echo "$0: missing dictionary $dict" && exit 1
     opts="--dict $dict"

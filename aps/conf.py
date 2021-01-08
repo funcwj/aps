@@ -82,6 +82,7 @@ def load_lm_conf(yaml_conf: str, dict_path: str) -> Dict:
         conf = yaml.full_load(f)
     conf = check_conf(conf, required_keys, all_lm_conf_keys)
     vocab = load_dict(dict_path)
+    conf["nnet_conf"]["vocab_size"] = len(vocab)
     return conf, vocab
 
 

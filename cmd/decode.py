@@ -50,7 +50,8 @@ class FasterDecoder(NnetEvaluator):
                 f"AM doesn't have the decoding function: {function}")
         self.decode = getattr(self.nnet, function)
         self.function = function
-        logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
+        logger.info(f"Load checkpoint from {cpt_dir}: epoch " +
+                    f"{self.epoch}, tag {cpt_tag}")
         logger.info(f"Using decoding function: {function}")
 
     def run(self, src, **kwargs):
@@ -64,8 +65,8 @@ class FasterDecoder(NnetEvaluator):
 def run(args):
     print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
 
-    decoder = FasterDecoder(args.checkpoint,
-                            cpt_tag=args.tag,
+    decoder = FasterDecoder(args.am,
+                            cpt_tag=args.am_tag,
                             function=args.function,
                             device_id=args.device_id)
     if decoder.accept_raw:
@@ -80,10 +81,13 @@ def run(args):
         if Path(args.lm).is_file():
             from aps.asr.lm.ngram import NgramLM
             lm = NgramLM(args.lm, args.dict)
-            logger.info(f"Load ngram from {args.lm}, weight = {args.lm_weight}")
+            logger.info(
+                f"Load ngram LM from {args.lm}, weight = {args.lm_weight}")
         else:
-            lm = NnetEvaluator(args.lm, device_id=args.device_id)
-            logger.info(f"Load rnnlm from {args.lm}: epoch {lm.epoch}, " +
+            lm = NnetEvaluator(args.lm,
+                               device_id=args.device_id,
+                               cpt_tag=args.lm_tag)
+            logger.info(f"Load RNN LM from {args.lm}: epoch {lm.epoch}, " +
                         f"weight = {args.lm_weight}")
             lm = lm.nnet
     else:

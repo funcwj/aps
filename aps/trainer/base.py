@@ -546,6 +546,7 @@ class Trainer(object):
             "adagrad": th.optim.Adagrad,  # lr, lr_decay, weight_decay
             "adamax": th.optim.Adamax,  # lr, weight_decay
             "adamw": th.optim.AdamW,  # lr, weight_decay
+            "rprop": th.optim.Rprop,  # lr, etas, step_sizes
             # ...
         }
         if optimizer not in supported_optimizer:

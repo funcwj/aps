@@ -11,6 +11,7 @@ import numpy as np
 import torch as th
 
 import torch.utils.data as dat
+import aps.distributed as dist
 
 from torch.nn.utils.rnn import pad_sequence
 from typing import NoReturn, List, Dict, Optional, Iterator, Iterable
@@ -24,6 +25,7 @@ def DataLoader(text: str = "",
                train: bool = True,
                sos: int = -1,
                eos: int = -1,
+               distributed: bool = False,
                kaldi_format: bool = True,
                chunk_size_for_sort: int = 10000,
                min_token_num: int = 2,
@@ -37,8 +39,9 @@ def DataLoader(text: str = "",
     Args:
         text: path of the text/token file
         vocab_dict: vocabulary dictionary
-        kaldi_format: whether text/token file is in kaldi format
         sos|eos: sos|eos ID
+        distributed: for distributed training or not
+        kaldi_format: whether text/token file is in kaldi format
         train: in training mode or not
         batch_size: maximum value of #batch_size
         num_workers: number workers used in dataloader
@@ -53,6 +56,7 @@ def DataLoader(text: str = "",
                          eos=eos,
                          shuffle=train,
                          batch_size=batch_size,
+                         distributed=distributed,
                          num_workers=num_workers,
                          min_token_num=min_token_num,
                          max_token_num=max_token_num,
@@ -115,6 +119,7 @@ class BatchSampler(dat.Sampler):
         dataset: instance of dat.Dataset
         batch_size: maximum value of #batch_size
         shuffle: shuffle batches or not
+        distributed: in distributed mode or not
         {min|max}_token_num: boundary of the token length
         min_batch_size: minimum value of #batch_size
         adapt_token_num: used for #batch_size reduction
@@ -125,11 +130,19 @@ class BatchSampler(dat.Sampler):
                  dataset: dat.Dataset,
                  batch_size: int,
                  shuffle: bool = False,
+                 distributed: bool = False,
                  min_token_num: int = 2,
                  max_token_num: int = 2000,
                  min_batch_size: int = 8,
                  adapt_token_num: int = 400,
                  chunk_size_for_sort: int = 10000) -> None:
+        self.distributed = distributed
+        if distributed:
+            self.world_size = dist.world_size()
+            self.rank = dist.rank()
+            self.header = f"BatchSampler (rank {self.rank})"
+        else:
+            self.header = "BatchSampler"
         self.const = {
             "min": min_token_num,
             "max": max_token_num,
@@ -142,7 +155,8 @@ class BatchSampler(dat.Sampler):
         kept_index = self._filter_indices(dataset)
         total_utts = len(kept_index)
         num_parts = total_utts // chunk_size + 1
-        print(f"BatchSampler: sort indices ({num_parts} parts) ...", flush=True)
+        print(f"{self.header}: sort indices ({num_parts} parts) ...",
+              flush=True)
         for base in range(0, total_utts, chunk_size):
             indices = self._sort_indices(dataset, [
                 kept_index[i]
@@ -150,13 +164,18 @@ class BatchSampler(dat.Sampler):
             ], batch_size)
             self.batches += indices
             done = min(base + chunk_size, total_utts) * 100 / float(total_utts)
-            print(f"BatchSampler: done {done:.2f}% ...", flush=True)
+            print(f"{self.header}: done {done:.2f}% ...", flush=True)
+        if distributed:
+            self.num_batches = len(self.batches) // self.world_size
+        else:
+            self.num_batches = len(self.batches)
+        self.epoch = 0
 
     def _filter_indices(self, dataset: dat.Dataset) -> List[int]:
         """
         Return utterance index used for training (pass short/long utterances)
         """
-        print(f"BatchSampler: filtering indices ...", flush=True)
+        print(f"{self.header}: filtering indices ...", flush=True)
         kept_index = []
         filter_sutt, filter_lutt = 0, 0
         for i in range(len(dataset)):
@@ -170,8 +189,9 @@ class BatchSampler(dat.Sampler):
         if filter_lutt or filter_sutt:
             ratio_lutt = filter_lutt * 100.0 / len(dataset)
             ratio_sutt = filter_sutt * 100.0 / len(dataset)
-            warnings.warn(f"Filter {ratio_lutt:.2f}/{ratio_sutt:.2f}% " +
-                          "long/short utterances...")
+            warnings.warn(
+                f"{self.header}: filter {ratio_lutt:.2f}/{ratio_sutt:.2f}% " +
+                "long/short utterances...")
         return kept_index
 
     def _sort_indices(self, dataset: dat.Dataset, subset: List[int],
@@ -193,12 +213,23 @@ class BatchSampler(dat.Sampler):
         return batches
 
     def __iter__(self) -> Iterator[List[int]]:
-        num_batches = len(self.batches)
-        indices = [self.batches[i] for i in self.genfunc(num_batches).tolist()]
+        if self.distributed:
+            # deterministically shuffle based on epoch
+            g = th.Generator()
+            g.manual_seed(self.epoch)
+            N = self.num_batches * self.world_size
+            indices = th.randperm(N, generator=g).tolist()
+            indices = indices[self.rank:N:self.world_size]
+        else:
+            indices = self.genfunc(self.num_batches).tolist()
+        indices = [self.batches[i] for i in indices]
         return iter(indices)
 
     def __len__(self) -> int:
-        return len(self.batches)
+        return self.num_batches
+
+    def set_epoch(self, epoch: int) -> NoReturn:
+        self.epoch = epoch
 
 
 class UttDataLoader(dat.DataLoader):
@@ -223,6 +254,7 @@ class UttDataLoader(dat.DataLoader):
                  eos: int = -1,
                  shuffle: bool = True,
                  batch_size: int = 64,
+                 distributed: bool = False,
                  num_workers: int = 0,
                  min_token_num: int = 2,
                  max_token_num: int = 2000,
@@ -233,16 +265,17 @@ class UttDataLoader(dat.DataLoader):
             raise ValueError(f"Invalid sos/eos value: {sos}/{eos}")
         self.eos = eos
         self.sos = sos
-        sampler = BatchSampler(dataset,
-                               batch_size,
-                               shuffle=shuffle,
-                               min_token_num=min_token_num,
-                               max_token_num=max_token_num,
-                               min_batch_size=min_batch_size,
-                               adapt_token_num=adapt_token_num,
-                               chunk_size_for_sort=chunk_size_for_sort)
+        self.sampler = BatchSampler(dataset,
+                                    batch_size,
+                                    shuffle=shuffle,
+                                    distributed=distributed,
+                                    min_token_num=min_token_num,
+                                    max_token_num=max_token_num,
+                                    min_batch_size=min_batch_size,
+                                    adapt_token_num=adapt_token_num,
+                                    chunk_size_for_sort=chunk_size_for_sort)
         super(UttDataLoader, self).__init__(dataset,
-                                            batch_sampler=sampler,
+                                            batch_sampler=self.sampler,
                                             num_workers=num_workers,
                                             collate_fn=self.egs_collate)
 
@@ -264,4 +297,4 @@ class UttDataLoader(dat.DataLoader):
         }
 
     def set_epoch(self, epoch: int) -> NoReturn:
-        pass
+        self.sampler.set_epoch(epoch)

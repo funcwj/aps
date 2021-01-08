@@ -22,7 +22,7 @@ def train_worker(task, conf, args):
     distributed.init(args.distributed)
     rank = distributed.rank()
 
-    Trainer = aps_trainer(args.trainer)
+    Trainer = aps_trainer(args.trainer, distributed=True)
     trainer = Trainer(task,
                       rank=distributed.rank(),
                       device_ids=args.device_ids,
@@ -42,25 +42,24 @@ def train_worker(task, conf, args):
 
     num_process = len(args.device_ids.split(","))
     if num_process != distributed.world_size():
-        raise RuntimeError(
-            f"Number of process != world size: {num_process} vs {distributed.world_size()}"
-        )
+        raise RuntimeError(f"Number of process != world size: {num_process} " +
+                           f"vs {distributed.world_size()}")
     data_conf = conf["data_conf"]
-    num_workers = args.num_workers // num_process
+    load_conf = {
+        "fmt": data_conf["fmt"],
+        "num_workers": args.num_workers // num_process
+    }
+    load_conf.update(data_conf["loader"])
     trn_loader = aps_dataloader(train=True,
-                                fmt=data_conf["fmt"],
-                                batch_size=args.batch_size // num_process,
-                                num_workers=num_workers,
                                 distributed=True,
-                                **data_conf["loader"],
+                                batch_size=args.batch_size // num_process,
+                                **load_conf,
                                 **data_conf["train"])
     dev_loader = aps_dataloader(train=False,
-                                fmt=data_conf["fmt"],
+                                distributed=False,
                                 batch_size=args.batch_size //
                                 args.dev_batch_factor,
-                                num_workers=num_workers,
-                                distributed=False,
-                                **data_conf["loader"],
+                                **load_conf,
                                 **data_conf["valid"])
     if args.eval_interval <= 0:
         raise RuntimeError("For distributed training of SE/SS model, "
@@ -95,8 +94,8 @@ def run(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Command for speech separation/enhancement model training "
-        "(support distributed mode on single node). "
+        description=
+        "Command for distributed speech separation/enhancement model training "
         "Using python -m torch.distributed.launch or horovodrun to launch the command. "
         "See scripts/distributed_train.sh ",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
