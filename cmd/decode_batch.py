@@ -51,7 +51,6 @@ def run(args):
     if decoder.accept_raw:
         src_reader = AudioReader(args.feats_or_wav_scp,
                                  sr=args.sr,
-                                 norm=args.wav_norm,
                                  channel=args.channel)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)

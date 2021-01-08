@@ -15,7 +15,6 @@ beam_size=16
 batch_size=""
 function="beam_search"
 penalty=0
-wav_norm=true
 len_norm=true
 temperature=1
 am_tag="best"
@@ -65,7 +64,6 @@ if [ -z $batch_size ]; then
     --nbest $nbest \
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
     --max-len $max_len \
-    --wav-norm $wav_norm \
     --len-norm $len_norm \
     --function $function \
     > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
@@ -90,7 +88,6 @@ else
     --nbest $nbest \
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
     --max-len $max_len \
-    --wav-norm $wav_norm \
     --len-norm $len_norm \
     > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
 fi

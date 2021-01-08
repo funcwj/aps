@@ -16,7 +16,6 @@ penalty=0
 beam_size=16
 function="beam_search"
 temperature=1
-wav_norm=true
 len_norm=true
 am_tag="best"
 lm_tag="best"
@@ -68,7 +67,6 @@ $cmd JOB=1:$nj $log_dir/decode.JOB.log \
   --dump-nbest $log_dir/beam${beam_size}.JOB.${nbest}best \
   --max-len $max_len \
   --function $function \
-  --wav-norm $wav_norm \
   --len-norm $len_norm
 
 cat $log_dir/beam${beam_size}.*.decode | \

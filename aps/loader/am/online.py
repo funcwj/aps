@@ -22,7 +22,6 @@ def DataLoader(train: bool = True,
                text: str = "",
                utt2dur: str = "",
                vocab_dict: Optional[Dict] = None,
-               audio_norm: bool = True,
                max_token_num: int = 400,
                max_dur: float = 30,
                min_dur: float = 0.4,
@@ -42,7 +41,6 @@ def DataLoader(train: bool = True,
         text: path of the token file
         utt2dur: path of the duration file
         vocab_dict: dictionary object
-        audio_norm: loading normalized samples (-1, 1) when reading audio
         max_token_num: filter the utterances if the token number exceeds #max_token_num
         min_dur|max_dur: discard utterance when #num_frames is not in [min_dur, max_dur]
         adapt_dur|adapt_token_num: used in adaptive mode
@@ -56,7 +54,6 @@ def DataLoader(train: bool = True,
                       text,
                       utt2dur,
                       vocab_dict,
-                      audio_norm=audio_norm,
                       skip_utts=skip_utts,
                       max_token_num=max_token_num,
                       max_wav_dur=max_dur,

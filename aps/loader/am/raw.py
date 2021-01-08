@@ -24,7 +24,6 @@ def DataLoader(train: bool = True,
                text: str = "",
                utt2dur: str = "",
                vocab_dict: Optional[Dict] = None,
-               audio_norm: bool = True,
                max_token_num: int = 400,
                max_dur: float = 30,
                min_dur: float = 0.4,
@@ -42,7 +41,6 @@ def DataLoader(train: bool = True,
         distributed: in distributed mode or not
         sr: sample rate of the audio
         channel: which channel to load, -1 means all
-        audio_norm: loading normalized samples (-1, 1) when reading audio
         wav_scp: path of the audio script
         text: path of the token file
         utt2dur: path of the duration file
@@ -62,7 +60,6 @@ def DataLoader(train: bool = True,
                       vocab_dict,
                       sr=sr,
                       channel=channel,
-                      audio_norm=audio_norm,
                       skip_utts=skip_utts,
                       max_token_num=max_token_num,
                       max_wav_dur=max_dur,

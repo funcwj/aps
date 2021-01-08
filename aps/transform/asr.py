@@ -44,6 +44,12 @@ def detect_nan(feature: th.Tensor) -> th.Tensor:
 class RescaleTransform(nn.Module):
     """
     Rescale audio samples (e.g., [-1, 1] to MAX_INT16 scale)
+
+    By define this layer, we can avoid using "audio_norm" parameters in dataloader
+    and make it easy to control during training and evaluation (decoding)
+
+    Args:
+        rescale: rescale number, MAX_INT16 by default
     """
 
     def __init__(self, rescale: float = MAX_INT16 * 1.0) -> None:
@@ -65,7 +71,7 @@ class RescaleTransform(nn.Module):
 
 class PreEmphasisTransform(nn.Module):
     """
-    Do utterance level preemphasis
+    Do utterance level preemphasis (we do frame-level preemphasis in STFT layer)
     Args:
         pre_emphasis: preemphasis factor
     """
@@ -91,7 +97,7 @@ class PreEmphasisTransform(nn.Module):
 
 class SpeedPerturbTransform(nn.Module):
     """
-    Transform layer for speed perturb
+    Transform layer for performing speed perturb
     Args:
         sr: sample rate of source signal
         perturb: speed perturb factors
@@ -175,7 +181,7 @@ class TFTransposeTransform(nn.Module):
 
 class SpectrogramTransform(STFT):
     """
-    Compute spectrogram as a layer
+    (Power|Linear) spectrogram feature extraction
     Args:
         frame_len: length of the frame
         frame_hop: hop size between frames
@@ -281,7 +287,7 @@ class PowerTransform(nn.Module):
 
 class MelTransform(nn.Module):
     """
-    Mel tranform as a layer
+    Perform mel tranform (multiply mel filters)
     Args:
         frame_len: length of the frame
         round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
@@ -337,7 +343,7 @@ class MelTransform(nn.Module):
 
 class LogTransform(nn.Module):
     """
-    Transform linear domain to log domain
+    Transform feature from linear domain to log domain
     Args:
         eps: floor value to avoid nagative values
         lower_bound: lower bound value
@@ -370,7 +376,7 @@ class LogTransform(nn.Module):
 
 class DiscreteCosineTransform(nn.Module):
     """
-    DCT as a layer (for mfcc features)
+    Perform DCT (for mfcc features)
     Args:
         num_ceps: number of the cepstrum coefficients
         num_mels: number of mel bands
@@ -556,7 +562,7 @@ class SpecAugTransform(nn.Module):
 
 class SpliceTransform(nn.Module):
     """
-    Do feature splicing as well as downsampling if needed
+    Do feature splicing & subsampling if needed
     Args:
         lctx: left context
         rctx: right context
