@@ -28,9 +28,9 @@ class Separator(NnetEvaluator):
         super(Separator, self).__init__(cpt_dir,
                                         cpt_tag=cpt_tag,
                                         device_id=device_id,
-                                        task="enh")
-        logger.info(f"Load checkpoint from {cpt_dir}: epoch " +
-                    f"{self.epoch}, tag {cpt_tag}")
+                                        task="sse")
+        logger.info(f"Load checkpoint from {cpt_dir}, epoch: " +
+                    f"{self.epoch}, tag: {cpt_tag}")
 
     def run(self,
             src: np.ndarray,

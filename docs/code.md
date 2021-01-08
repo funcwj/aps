@@ -21,8 +21,9 @@ The relationship of the `aps.transform`, `aps.task`, `aps.trainer`, `aps.loader`
 
 Customized feature transform module in APS. The feature transform layer from `aps.transform` is stacked as the feature extractor for ASR or enhancement/separation tasks, e.g., a stack of `SpectrogramTransform, AbsTransform, MelTransform, LogTransform` can used to extract log mel filter-bank features. Currently the supported feature transform layers are shown in the following:
 
-* `SpeedPerturbTransform`
+* `RescaleTransform`
 * `PreEmphasisTransform`
+* `SpeedPerturbTransform`
 * `SpectrogramTransform`
 * `TFTransposeTransform`
 * `AbsTransform`

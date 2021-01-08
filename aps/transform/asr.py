@@ -20,7 +20,7 @@ import torch.nn.functional as F
 from typing import Optional, Union, Tuple
 from aps.transform.utils import STFT, init_melfilter, splice_feature, speed_perturb_filter
 from aps.transform.augment import tf_mask, perturb_speed
-from aps.const import EPSILON
+from aps.const import EPSILON, MAX_INT16
 from aps.libs import ApsRegisters
 from aps.cplx import ComplexTensor
 
@@ -39,6 +39,54 @@ def detect_nan(feature: th.Tensor) -> th.Tensor:
         raise ValueError(f"Detect {num_nans} NANs in feature matrices, " +
                          f"shape = {feature.shape}...")
     return feature
+
+
+class RescaleTransform(nn.Module):
+    """
+    Rescale audio samples (e.g., [-1, 1] to MAX_INT16 scale)
+    """
+
+    def __init__(self, rescale: float = MAX_INT16 * 1.0) -> None:
+        super(RescaleTransform, self).__init__()
+        self.rescale = rescale
+
+    def extra_repr(self) -> str:
+        return f"rescale={self.rescale}"
+
+    def forward(self, wav: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            wav (Tensor): input signal, N x (C) x S
+        Return:
+            wav (Tensor): output signal, N x (C) x S
+        """
+        return th.round(wav * self.rescale)
+
+
+class PreEmphasisTransform(nn.Module):
+    """
+    Do utterance level preemphasis
+    Args:
+        pre_emphasis: preemphasis factor
+    """
+
+    def __init__(self, pre_emphasis: float = 0) -> None:
+        super(PreEmphasisTransform, self).__init__()
+        self.pre_emphasis = pre_emphasis
+
+    def extra_repr(self) -> str:
+        return f"pre_emphasis={self.pre_emphasis}"
+
+    def forward(self, wav: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            wav (Tensor): input signal, N x (C) x S
+        Return:
+            wav (Tensor): output signal, N x (C) x S
+        """
+        if self.pre_emphasis > 0:
+            wav[..., 1:] = wav[..., 1:] - self.pre_emphasis * wav[..., :-1]
+        return wav
 
 
 class SpeedPerturbTransform(nn.Module):
@@ -123,32 +171,6 @@ class TFTransposeTransform(nn.Module):
             tensor (Tensor): output signal, N x ... x T x F
         """
         return tensor.transpose(-1, -2)
-
-
-class PreEmphasisTransform(nn.Module):
-    """
-    Do utterance level preemphasis
-    Args:
-        pre_emphasis: preemphasis factor
-    """
-
-    def __init__(self, pre_emphasis: float = 0) -> None:
-        super(PreEmphasisTransform, self).__init__()
-        self.pre_emphasis = pre_emphasis
-
-    def extra_repr(self) -> str:
-        return f"pre_emphasis={self.pre_emphasis}"
-
-    def forward(self, wav: th.Tensor) -> th.Tensor:
-        """
-        Args:
-            wav (Tensor): input signal, N x (C) x S
-        Return:
-            wav (Tensor): output signal, N x (C) x S
-        """
-        if self.pre_emphasis > 0:
-            wav[..., 1:] = wav[..., 1:] - self.pre_emphasis * wav[..., :-1]
-        return wav
 
 
 class SpectrogramTransform(STFT):
@@ -628,8 +650,9 @@ class DeltaTransform(nn.Module):
 class FeatureTransform(nn.Module):
     """
     Feature transform for ASR tasks
-        - SpeedPerturbTransform
+        - RescaleTransform
         - PreEmphasisTransform
+        - SpeedPerturbTransform
         - SpectrogramTransform
         - TFTransposeTransform
         - PowerTransform
@@ -650,6 +673,7 @@ class FeatureTransform(nn.Module):
         center: center flag (similar with that in librosa.stft)
         round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
         stft_normalized: use normalized DFT kernel
+        audio_norm: use audio samples normalized between [-1, 1] or [-MAX-INT16, MAX-INT16]
         stft_mode: "kaldi"|"librosa", slight difference on windowing
         pre_emphasis: factor of preemphasis
         use_power: use power spectrogram or not
@@ -684,6 +708,7 @@ class FeatureTransform(nn.Module):
                  round_pow_of_two: bool = True,
                  stft_normalized: bool = False,
                  stft_mode: str = "librosa",
+                 audio_norm: bool = True,
                  pre_emphasis: float = 0.97,
                  use_power: bool = False,
                  sr: int = 16000,
@@ -715,7 +740,7 @@ class FeatureTransform(nn.Module):
         if not feats:
             raise ValueError("FeatureTransform: \'feats\' can not be empty")
         feat_tokens = feats.split("-")
-        transform = []
+        transform = [] if audio_norm else [RescaleTransform()]
         feats_dim = 0
         stft_kwargs = {
             "mode": stft_mode,
@@ -736,36 +761,37 @@ class FeatureTransform(nn.Module):
         }
         self.spectra_index = -1
         self.perturb_index = -1
-        for idx, tok in enumerate(feat_tokens):
+        for tok in feat_tokens:
             if tok == "perturb":
+                self.perturb_index = len(transform)
                 transform.append(
                     SpeedPerturbTransform(sr=sr, perturb=speed_perturb))
-                self.perturb_index = idx
             elif tok == "emph":
                 transform.append(
                     PreEmphasisTransform(pre_emphasis=pre_emphasis))
             elif tok == "spectrogram":
+                self.spectra_index = len(transform)
                 spectrogram = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
                     TFTransposeTransform(),
                 ]
                 transform += spectrogram
                 feats_dim = transform[-2].dim()
-                self.spectra_index = idx
             elif tok == "trans":
                 transform.append(TFTransposeTransform())
             elif tok == "power":
                 transform.append(PowerTransform())
             elif tok == "fbank":
+                self.spectra_index = len(transform)
                 fbank = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
                     TFTransposeTransform(),
                     MelTransform(frame_len, **mel_kwargs)
                 ]
-                self.spectra_index = idx
                 transform += fbank
                 feats_dim = transform[-1].dim()
             elif tok == "mfcc":
+                self.spectra_index = len(transform)
                 mfcc = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
                     TFTransposeTransform(),
@@ -775,7 +801,6 @@ class FeatureTransform(nn.Module):
                                             num_mels=num_mels,
                                             lifter=lifter)
                 ]
-                self.spec_index = idx
                 transform += mfcc
                 feats_dim = transform[-1].dim()
             elif tok == "mel":

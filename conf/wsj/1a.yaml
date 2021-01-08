@@ -1,3 +1,8 @@
+# WER (%) Report:
+# Total (503 utterances): 1398/8334 = 16.77%, SUB/INS/DEL = 1066/149/183
+# WER (%) Report:
+# Total (333 utterances): 771/5700 = 13.53%, SUB/INS/DEL = 580/91/100
+
 nnet: "att"
 
 nnet_conf:
@@ -8,13 +13,14 @@ nnet_conf:
     conv2d:
       out_features: -1
       channel: 32
+      in_channels: 3
       num_layers: 2
       stride: 2
       padding: 1
       kernel_size: 3
     pytorch_rnn:
       bidirectional: true
-      dropout: 0.3
+      dropout: 0.2
       hidden: 512
       num_layers: 3
   dec_dim: 512
@@ -25,7 +31,8 @@ nnet_conf:
     rnn_dropout: 0.2
     emb_dropout: 0.2
     dropout: 0.2
-  att_type: "dot"
+    input_feeding: true
+  att_type: "ctx"
   att_kwargs:
     att_dim: 512
 
@@ -36,13 +43,14 @@ task_conf:
   lsm_factor: 0.1
 
 asr_transform:
-  feats: "perturb-fbank-log-aug"
+  feats: "perturb-fbank-log-aug-delta"
   frame_len: 400
   frame_hop: 160
   window: "hamm"
   round_pow_of_two: true
   use_power: true
   pre_emphasis: 0.97
+  audio_norm: false
   sr: 16000
   num_mels: 80
   min_freq: 20
@@ -50,35 +58,38 @@ asr_transform:
   norm_var: true
   norm_per_band: false
   aug_prob: 1
+  aug_maxp_time: 0.5
   aug_freq_args: [25, 1]
-  aug_time_args: [80, 1]
+  aug_time_args: [100, 1]
   aug_mask_zero: true
+  delta_as_channel: true
 
 trainer_conf:
   optimizer: "adam"
   optimizer_kwargs:
     lr: 1.0e-3
-    weight_decay: 1.0e-3
+    weight_decay: 1.0e-5
   lr_scheduler: "reduce_lr"
   lr_scheduler_kwargs:
     min_lr: 1.0e-8
     patience: 1
     factor: 0.5
   no_impr: 6
-  no_impr_thres: 0.1
-  clip_gradient: 1
+  no_impr_thres: 0
+  clip_gradient: 5
   report_metrics: ["loss", "accu", "@ctc"]
   stop_criterion: "accu"
+  average_checkpoint: true
+
 
 data_conf:
   fmt: "am_raw"
   loader:
-    max_dur: 30 # (s)
-    min_dur: 0.4 # (s)
-    adapt_dur: 10 # (s)
-    audio_norm: false
+    max_dur: 30
+    min_dur: 0.4
+    adapt_dur: 10
     max_token_num: 400
-    adapt_token_num: 150
+    adapt_token_num: 200
   train:
     wav_scp: "data/wsj/train_si284/wav.scp"
     utt2dur: "data/wsj/train_si284/utt2dur"

@@ -43,6 +43,7 @@ class FasterDecoder(NnetEvaluator):
                  function: str = "beam_search",
                  device_id: int = -1) -> None:
         super(FasterDecoder, self).__init__(cpt_dir,
+                                            task="asr",
                                             cpt_tag=cpt_tag,
                                             device_id=device_id)
         if not hasattr(self.nnet, function):
@@ -50,8 +51,8 @@ class FasterDecoder(NnetEvaluator):
                 f"AM doesn't have the decoding function: {function}")
         self.decode = getattr(self.nnet, function)
         self.function = function
-        logger.info(f"Load checkpoint from {cpt_dir}: epoch " +
-                    f"{self.epoch}, tag {cpt_tag}")
+        logger.info(f"Load checkpoint from {cpt_dir}, epoch: " +
+                    f"{self.epoch}, tag: {cpt_tag}")
         logger.info(f"Using decoding function: {function}")
 
     def run(self, src, **kwargs):

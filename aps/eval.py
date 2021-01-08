@@ -40,7 +40,7 @@ class NnetEvaluator(object):
               cpt_dir: str,
               cpt_tag: str = "best",
               task: str = "asr") -> Tuple[int, nn.Module, Dict]:
-        if task not in ["asr", "enh"]:
+        if task not in ["asr", "sse"]:
             raise ValueError(f"Unknown task name: {task}")
         cpt_dir = pathlib.Path(cpt_dir)
         # load checkpoint

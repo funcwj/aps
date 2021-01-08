@@ -23,7 +23,7 @@ def train_worker(task, conf, vocab_dict, args):
 
     Trainer = aps_trainer(args.trainer, distributed=True)
     trainer = Trainer(task,
-                      device_ids=args.device_id,
+                      device_ids=args.device_ids,
                       checkpoint=args.checkpoint,
                       resume=args.resume,
                       save_interval=args.save_interval,

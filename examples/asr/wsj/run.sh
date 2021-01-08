@@ -128,6 +128,8 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
       --log-suffix $name \
       --beam-size $beam_size \
       --max-len 220 \
+      --lm exp/wsj/nnlm/$lm_exp \
+      --lm-weight $lm_weight \
       --dict data/wsj/dict \
       --nbest 8 \
       --space "<space>" \

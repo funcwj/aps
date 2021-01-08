@@ -106,7 +106,7 @@ def get_aps_decode_parser():
                         type=str,
                         required=True,
                         help="Checkpoint directory of the AM")
-    parser.add_argument("--tag",
+    parser.add_argument("--am-tag",
                         type=str,
                         default="best",
                         help="Tag name to load the checkpoint: (tag).pt.tar")
