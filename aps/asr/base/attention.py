@@ -82,19 +82,19 @@ class LocAttention(Attention):
                  enc_dim: int,
                  dec_dim: int,
                  att_dim: int = 512,
-                 att_channels: int = 128,
-                 att_kernel: int = 11):
+                 conv_channels: int = 10,
+                 loc_context: int = 64):
         super(LocAttention, self).__init__()
         self.enc_proj = nn.Linear(enc_dim, att_dim)
         self.dec_proj = nn.Linear(dec_dim, att_dim, bias=False)
         # N x D_conv x T => N x D_att x T
-        self.att = nn.Conv1d(att_channels, att_dim, 1, bias=False)
+        self.att = nn.Conv1d(conv_channels, att_dim, 1, bias=False)
         # N x 1 x T => N x D_att x T
         self.F = nn.Conv1d(1,
-                           att_channels,
-                           att_kernel,
+                           conv_channels,
+                           loc_context * 2 + 1,
                            stride=1,
-                           padding=(att_kernel - 1) // 2)
+                           padding=loc_context)
         self.w = nn.Linear(att_dim, 1, bias=False)
         # clear variables
         self.clear()

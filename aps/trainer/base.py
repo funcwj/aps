@@ -31,6 +31,8 @@ class WeightNoiseAdder(object):
     """
 
     def __init__(self, cfg: List[int], std: float = 0.075) -> None:
+        if std <= 0:
+            raise ValueError(f"WeightNoiseAdder: std must > 0, got {std}")
         self.std = std
         self.beg, self.step, self.end = cfg
 
@@ -463,13 +465,19 @@ class Trainer(object):
         self.task.to(self.default_device)
 
         _lr_scheduler_kwargs = lr_scheduler_kwargs.copy()
+        # init state as None
+        _lr_scheduler_kwargs["state"] = None
         if resume or init:
-            self.cpt_stats, optimizer_dict = self.load_checkpoint(
-                resume if resume else init, "resume" if resume else "init")
-            _lr_scheduler_kwargs["state"] = self.cpt_stats["lr_scheduler_state"]
+            if resume:
+                self.cpt_stats, optimizer_dict = self.load_checkpoint(
+                    resume, "resume")
+                _lr_scheduler_kwargs["state"] = self.cpt_stats[
+                    "lr_scheduler_state"]
+            else:
+                self.cpt_stats, optimizer_dict = self.load_checkpoint(
+                    init, "init")
         else:
             self.cpt_stats, optimizer_dict = None, None
-            _lr_scheduler_kwargs["state"] = None
         # make optimizer
         self.optimizer = self.create_optimizer(optimizer,
                                                optimizer_kwargs,

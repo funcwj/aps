@@ -104,6 +104,13 @@ for x in train dev test; do
   cp $dir/$x.text $data_dir/$x/text
 done
 
+# map reference to 39 phone classes for WER
+for x in dev test; do
+  cat $data_dir/$x/text | local/timit_norm_trans.pl -i - -m $conf/phones.60-48-39.map \
+    -from 48 -to 39 | sort > $data_dir/$x/text.39phn
+done
+
+
 echo "$0: Prepare dict & utt2dur..."
 ./utils/tokenizer.py $data_dir/train/text /dev/null \
   --unit word --add-units "<sos>,<eos>" --dump-vocab $data_dir/dict

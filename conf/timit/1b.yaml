@@ -1,7 +1,3 @@
-# 1b.yaml (beam-size/4)
-#   WER(%) Report:
-#   Total WER: 25.68%, 192 utterances
-
 nnet: "transducer"
 
 nnet_conf:

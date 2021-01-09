@@ -225,11 +225,11 @@ class BatchSampler(dat.Sampler):
         indices = [self.batches[i] for i in indices]
         return iter(indices)
 
-    def __len__(self) -> int:
-        return self.num_batches
-
     def set_epoch(self, epoch: int) -> NoReturn:
         self.epoch = epoch
+
+    def __len__(self) -> int:
+        return self.num_batches
 
 
 class UttDataLoader(dat.DataLoader):
@@ -265,17 +265,17 @@ class UttDataLoader(dat.DataLoader):
             raise ValueError(f"Invalid sos/eos value: {sos}/{eos}")
         self.eos = eos
         self.sos = sos
-        self.sampler = BatchSampler(dataset,
-                                    batch_size,
-                                    shuffle=shuffle,
-                                    distributed=distributed,
-                                    min_token_num=min_token_num,
-                                    max_token_num=max_token_num,
-                                    min_batch_size=min_batch_size,
-                                    adapt_token_num=adapt_token_num,
-                                    chunk_size_for_sort=chunk_size_for_sort)
+        sampler = BatchSampler(dataset,
+                               batch_size,
+                               shuffle=shuffle,
+                               distributed=distributed,
+                               min_token_num=min_token_num,
+                               max_token_num=max_token_num,
+                               min_batch_size=min_batch_size,
+                               adapt_token_num=adapt_token_num,
+                               chunk_size_for_sort=chunk_size_for_sort)
         super(UttDataLoader, self).__init__(dataset,
-                                            batch_sampler=self.sampler,
+                                            batch_sampler=sampler,
                                             num_workers=num_workers,
                                             collate_fn=self.egs_collate)
 
@@ -297,4 +297,4 @@ class UttDataLoader(dat.DataLoader):
         }
 
     def set_epoch(self, epoch: int) -> NoReturn:
-        self.sampler.set_epoch(epoch)
+        self.batch_sampler.set_epoch(epoch)

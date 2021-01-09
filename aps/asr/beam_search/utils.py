@@ -96,7 +96,7 @@ class BeamTracker(BaseBeamTracker):
         if att_ali is None:
             cov = 0
         else:
-            cov = th.sum(att_ali > 0.5, -1, keepdim=True)
+            cov = th.log(th.clamp_max(th.sum(att_ali, -1, keepdim=True), 0.5))
         # local pruning: beam x V => beam x beam
         topk_score, topk_token = th.topk(am_prob + lm_prob * self.lm_weight +
                                          cov * self.coverage,
@@ -216,7 +216,7 @@ class BatchBeamTracker(BaseBeamTracker):
         if att_ali is None:
             cov = 0
         else:
-            cov = th.sum(att_ali > 0.5, -1, keepdim=True)
+            cov = th.log(th.clamp_max(th.sum(att_ali, -1, keepdim=True), 0.5))
         # local pruning: N*beam x beam
         topk_score, topk_token = th.topk(am_prob + self.lm_weight * lm_prob +
                                          self.coverage * cov,

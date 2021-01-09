@@ -205,7 +205,7 @@ class JitLSTMEncoder(EncoderBase):
             inp_len (Tensor): (N) x Ti
         """
         if inp.dim() != 3:
-            inp = th.unsqueeze(inp, 0)
+            inp = inp[..., None]
         if self.proj:
             inp = tf.relu(self.proj(inp))
         rnn_out, _ = self.rnns(inp)
@@ -271,11 +271,11 @@ class VariantRNNEncoder(EncoderBase):
             VariantRNN(derive_inp_size(i),
                        hidden_size=hidden,
                        rnn=rnn,
-                       norm=norm if i != num_layers - 1 else "",
+                       norm=norm,
                        project=project if i != num_layers - 1 else out_features,
                        dropout=derive_dropout(i),
                        bidirectional=bidirectional,
-                       non_linear=non_linear if i != num_layers - 1 else "none",
+                       non_linear=non_linear,
                        add_forward_backward=add_forward_backward)
             for i in range(num_layers)
         ])
