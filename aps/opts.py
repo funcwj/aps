@@ -176,6 +176,11 @@ def get_aps_decode_parser():
                         default="false",
                         help="If ture, using length normalized "
                         "when sort nbest hypos")
+    parser.add_argument("--dump-alignment",
+                        type=str,
+                        default="",
+                        help="If assigned, dump alignment "
+                        "weight to the directory")
     return parser
 
 

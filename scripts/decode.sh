@@ -22,6 +22,7 @@ lm_tag="best"
 lm=""
 lm_weight=0
 spm=""
+dump_align=""
 log_suffix=""
 
 echo "$0 $*"
@@ -63,6 +64,7 @@ if [ -z $batch_size ]; then
     --space "$space" \
     --nbest $nbest \
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
+    --dump-alignment "$dump_align" \
     --max-len $max_len \
     --len-norm $len_norm \
     --function $function \
@@ -73,10 +75,10 @@ else
     $dec_dir/beam${beam_size}.decode \
     --beam-size $beam_size \
     --batch-size $batch_size \
-    --checkpoint $exp_dir \
     --device-id $gpu \
     --channel $channel \
     --dict "$dict" \
+    --am $exp_dir \
     --lm "$lm" \
     --am-tag $am_tag \
     --lm-tag $lm_tag \
@@ -87,6 +89,7 @@ else
     --lm-weight $lm_weight \
     --nbest $nbest \
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
+    --dump-alignment "$dump_align" \
     --max-len $max_len \
     --len-norm $len_norm \
     > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1

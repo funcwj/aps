@@ -27,8 +27,8 @@ nnet_conf:
   att_type: "loc"
   att_kwargs:
     att_dim: 256
-    att_channels: 10
-    att_kernel: 201
+    conv_channels: 10
+    loc_context: 100
 
 task: "ctc_xent"
 

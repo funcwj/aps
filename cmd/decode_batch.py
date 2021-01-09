@@ -7,6 +7,7 @@ import pprint
 import argparse
 import warnings
 
+import numpy as np
 import torch as th
 
 from pathlib import Path
@@ -81,7 +82,10 @@ def run(args):
         stdout_topn, topn = io_wrapper(args.dump_nbest, "w")
         nbest = min(args.beam_size, args.nbest)
         topn.write(f"{nbest}\n")
-
+    ali_dir = args.dump_alignment
+    if ali_dir:
+        Path(ali_dir).mkdir(exist_ok=True, parents=True)
+        logger.info(f"Dump alignments to dir: {ali_dir}")
     done = 0
     timer = SimpleTimer()
     batches = []
@@ -115,9 +119,12 @@ def run(args):
                 token = hyp["trans"][1:-1]
                 trans = processor.run(token)
                 score = hyp["score"]
-                nbest.append(f"{score:.3f}\t{len(token):d}\t{trans}\n")
+                nbest_hypos.append(f"{score:.3f}\t{len(token):d}\t{trans}\n")
                 if idx == 0:
                     top1.write(f"{key}\t{trans}\n")
+                if ali_dir:
+                    np.save(f"{ali_dir}/{key}-nbest{idx+1}",
+                            hyp["align"].numpy())
             if topn:
                 topn.write("".join(nbest_hypos))
         top1.flush()

@@ -271,11 +271,11 @@ class VariantRNNEncoder(EncoderBase):
             VariantRNN(derive_inp_size(i),
                        hidden_size=hidden,
                        rnn=rnn,
-                       norm=norm,
+                       norm=norm if i != num_layers - 1 else "",
                        project=project if i != num_layers - 1 else out_features,
                        dropout=derive_dropout(i),
                        bidirectional=bidirectional,
-                       non_linear=non_linear,
+                       non_linear=non_linear if i != num_layers - 1 else "none",
                        add_forward_backward=add_forward_backward)
             for i in range(num_layers)
         ])

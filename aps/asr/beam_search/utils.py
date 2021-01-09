@@ -24,7 +24,8 @@ class BeamSearchParam(object):
     eos_threshold: float = 0
     device: Union[th.device, str] = "cpu"
     penalty: float = 0
-    coverage: float = 0
+    cov_weight: float = 0
+    cov_threshold: float = 0.5
     len_norm: bool = True
 
 
@@ -35,6 +36,8 @@ class BaseBeamTracker(object):
 
     def __init__(self, param: BeamSearchParam) -> None:
         self.param = param
+        # N x T x U
+        self.align = None
 
     def beam_select(self, am_prob: th.Tensor, lm_prob: Union[th.Tensor, float],
                     att_ali: Optional[th.Tensor]) -> Tuple[th.Tensor]:
@@ -48,33 +51,30 @@ class BaseBeamTracker(object):
             topk_score (Tensor): N x K, topk score
             topk_token (Tensor): N x K, topk token ID
         """
-        if att_ali is None:
-            cov = 0
-        else:
-            cov = th.log(th.clamp_max(th.sum(att_ali, -1, keepdim=True), 0.5))
         # local pruning: N*beam x beam
-        topk_score, topk_token = th.topk(am_prob +
-                                         self.param.lm_weight * lm_prob +
-                                         self.param.coverage * cov,
-                                         self.param.beam_size,
-                                         dim=-1)
+        topk_score, topk_token = th.topk(
+            am_prob + self.param.lm_weight * lm_prob + self.param.beam_size,
+            dim=-1)
         return (topk_score, topk_token)
 
     def trace_hypos(self,
+                    point: th.Tensor,
                     score: List[float],
-                    point: List[th.Tensor],
-                    token: List[th.Tensor],
+                    point_list: List[th.Tensor],
+                    token_list: List[th.Tensor],
                     final: bool = False) -> List[Dict]:
         """
         Traceback decoding hypothesis
         Args:
+            point (Tensor): starting traceback point
             score (list[float]): final decoding score
-            point (list[Tensor]): traceback point
-            token (list[Tensor]): token sequence
+            point_list (list[Tensor]): traceback point
+            token_list (list[Tensor]): token sequence
             final (bool): is final step or not
         """
         trans = []
-        for ptr, tok in zip(point[::-1], token[::-1]):
+        align = self.align[point].cpu()
+        for ptr, tok in zip(point_list[::-1], token_list[::-1]):
             trans.append(tok[point].tolist())
             point = ptr[point]
         hypos = []
@@ -85,7 +85,8 @@ class BaseBeamTracker(object):
             score = s + token_len * self.param.penalty
             hypos.append({
                 "score": score / (token_len if self.param.len_norm else 1),
-                "trans": token + [self.param.eos] if final else token
+                "trans": token + [self.param.eos] if final else token,
+                "align": align[i]
             })
         return hypos
 
@@ -127,7 +128,9 @@ class BeamTracker(BaseBeamTracker):
                             device=self.param.device)
             hyp = self._trace_back_hypos(idx, final=True)
         # filter short utterances
-        return [h for h in hyp if len(h["trans"]) >= self.param.min_len + 2]
+        if hyp:
+            hyp = [h for h in hyp if len(h["trans"]) >= self.param.min_len + 2]
+        return hyp
 
     def prune_beam(self,
                    am_prob: th.Tensor,
@@ -154,9 +157,14 @@ class BeamTracker(BaseBeamTracker):
             self.score, topk_index = th.topk(accu_score,
                                              self.param.beam_size,
                                              dim=-1)
-            # point to father's node
-            self.point.append(topk_index // self.param.beam_size)
             self.token.append(topk_token.view(-1)[topk_index])
+            # point to father's node
+            back_point = topk_index // self.param.beam_size
+            self.point.append(back_point)
+        # gather alignments
+        if att_ali is not None:
+            self.align = att_ali[..., None] if self.align is None else th.stack(
+                [self.align[back_point], att_ali], -1)
 
     def _trace_back_hypos(self,
                           point: th.Tensor,
@@ -168,7 +176,11 @@ class BeamTracker(BaseBeamTracker):
         """
         score = self.score[point].tolist()
         self.score[point] = NEG_INF
-        return self.trace_hypos(score, self.point, self.token, final=final)
+        return self.trace_hypos(point,
+                                score,
+                                self.point,
+                                self.token,
+                                final=final)
 
 
 class BatchBeamTracker(BaseBeamTracker):
@@ -179,6 +191,7 @@ class BatchBeamTracker(BaseBeamTracker):
     def __init__(self, batch_size: int, param: BeamSearchParam) -> None:
         super(BatchBeamTracker, self).__init__(param)
         self.param = param
+        self.batch_size = batch_size
         self.token = [
             th.tensor([[param.sos] * param.beam_size] * batch_size,
                       device=param.device)
@@ -217,7 +230,9 @@ class BatchBeamTracker(BaseBeamTracker):
                             device=self.score.device)
             hyp = self._trace_back_hypos(batch, idx, final=True)
         # filter short utterances
-        return [h for h in hyp if len(h["trans"]) >= self.param.min_len + 2]
+        if hyp:
+            hyp = [h for h in hyp if len(h["trans"]) >= self.param.min_len + 2]
+        return hyp
 
     def prune_beam(self,
                    am_prob: th.Tensor,
@@ -240,7 +255,7 @@ class BatchBeamTracker(BaseBeamTracker):
         else:
             # N*beam x beam = N*beam x 1 + N*beam x beam
             accu_score = self.score.view(-1, 1) + topk_score
-            accu_score = accu_score.view(self.param.batch_size, -1)
+            accu_score = accu_score.view(self.batch_size, -1)
             # N x beam*beam => N x beam
             self.score, topk_index = th.topk(accu_score,
                                              self.param.beam_size,
@@ -249,7 +264,7 @@ class BatchBeamTracker(BaseBeamTracker):
             # N x beam
             self.point.append(topk_index // self.param.beam_size)
             # N x beam*beam
-            topk_token = topk_token.view(self.param.batch_size, -1)
+            topk_token = topk_token.view(self.batch_size, -1)
             token = th.gather(topk_token, -1, topk_index)
         self.token.append(token.clone())
 
@@ -267,4 +282,4 @@ class BatchBeamTracker(BaseBeamTracker):
         self.score[batch, point] = NEG_INF
         points = [p[batch] for p in self.point]
         tokens = [t[batch] for t in self.token]
-        return self.trace_hypos(score, points, tokens, final=final)
+        return self.trace_hypos(point, score, points, tokens, final=final)
