@@ -1,7 +1,7 @@
 # WER (%) Report:
-# Total (400 utterances): 3809/15057 = 25.30%, SUB/INS/DEL = 2461/696/652
+# Total (400 utterances): 3218/15057 = 21.37%, SUB/INS/DEL = 2161/568/489
 # WER (%) Report:
-# Total (192 utterances): 1921/7215 = 26.63%, SUB/INS/DEL = 1323/302/296
+# Total (192 utterances): 1636/7215 = 22.67%, SUB/INS/DEL = 1150/252/234
 
 nnet: "att"
 
@@ -33,11 +33,11 @@ nnet_conf:
 task: "ctc_xent"
 
 task_conf:
-  lsm_factor: 0
+  lsm_factor: 0.1
   ctc_weight: 0.2
 
 asr_transform:
-  feats: "fbank-log-cmvn-delta"
+  feats: "perturb-fbank-log-cmvn-delta"
   frame_len: 400
   frame_hop: 160
   audio_norm: false

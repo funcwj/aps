@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Optional, List, Dict
-from aps.asr.beam_search.utils import BeamTracker, BatchBeamTracker
+from aps.asr.beam_search.utils import BeamSearchParam, BeamTracker, BatchBeamTracker
 from aps.asr.beam_search.lm import rnnlm_score, ngram_score, LmType
 
 
@@ -112,14 +112,15 @@ def beam_search(decoder: nn.Module,
     att_ctx = th.zeros([N * beam, D_enc], device=device)
     proj = th.zeros([N * beam, D_enc], device=device)
 
-    beam_tracker = BeamTracker(beam,
-                               sos=sos,
-                               eos=eos,
-                               device=device,
-                               penalty=penalty,
-                               coverage=coverage,
-                               lm_weight=lm_weight,
-                               len_norm=len_norm)
+    beam_tracker = BeamTracker(
+        BeamSearchParam(beam_size=beam,
+                        sos=sos,
+                        eos=eos,
+                        device=device,
+                        penalty=penalty,
+                        coverage=coverage,
+                        lm_weight=lm_weight,
+                        len_norm=len_norm))
 
     lm_state = None
     hypos = []
@@ -218,15 +219,15 @@ def beam_search_batch(decoder: nn.Module,
     proj = th.zeros([N * beam, D_enc], device=device)
 
     lm_state = None
-    beam_tracker = BatchBeamTracker(beam,
-                                    N,
-                                    sos=sos,
-                                    eos=eos,
-                                    device=device,
-                                    penalty=penalty,
-                                    coverage=coverage,
-                                    lm_weight=lm_weight,
-                                    len_norm=len_norm)
+    beam_param = BeamSearchParam(beam_size=beam,
+                                 sos=sos,
+                                 eos=eos,
+                                 device=device,
+                                 penalty=penalty,
+                                 coverage=coverage,
+                                 lm_weight=lm_weight,
+                                 len_norm=len_norm)
+    beam_tracker = BatchBeamTracker(N, beam_param)
 
     # for each utterance
     hypos = [[] for _ in range(N)]

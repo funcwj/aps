@@ -14,8 +14,8 @@ exp=1a # load training configuration in conf/timit/1a.yaml
 seed=777
 epochs=100
 tensorboard=false
-batch_size=12
-num_workers=2
+batch_size=16
+num_workers=4
 prog_interval=100
 
 # decoding

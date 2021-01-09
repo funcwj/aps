@@ -54,7 +54,7 @@ $cmd JOB=1:$nj $log_dir/decode.JOB.log \
   --am $exp_dir \
   --device-id -1 \
   --channel $channel \
-  --am-tag $tag \
+  --am-tag $am_tag \
   --lm-tag $lm_tag \
   --dict "$dict" \
   --lm "$lm" \
