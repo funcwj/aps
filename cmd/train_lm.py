@@ -25,11 +25,11 @@ def run(args):
     data_conf = conf["data_conf"]
     load_conf = {
         "vocab_dict": vocab,
-        "batch_size": args.batch_size,
         "num_workers": args.num_workers,
         "sos": vocab["<sos>"],
         "eos": vocab["<eos>"],
-        "fmt": data_conf["fmt"]
+        "fmt": data_conf["fmt"],
+        "max_batch_size": args.batch_size
     }
     load_conf.update(data_conf["loader"])
     trn_loader = aps_dataloader(train=True, **data_conf["train"], **load_conf)

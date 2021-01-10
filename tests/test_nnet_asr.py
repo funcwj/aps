@@ -227,8 +227,8 @@ def test_conv2d_encoder(inp_len, num_layers, kernel_size):
     }),
     pytest.param("mhloc", {
         "att_dim": 512,
-        "att_channels": 128,
-        "att_kernel": 11,
+        "conv_channels": 8,
+        "loc_context": 64,
         "att_head": 4
     }),
 ])

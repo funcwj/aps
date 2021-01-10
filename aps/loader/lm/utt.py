@@ -32,7 +32,7 @@ def DataLoader(text: str = "",
                max_token_num: int = 2000,
                adapt_token_num: int = 400,
                min_batch_size: int = 8,
-               batch_size: int = 64,
+               max_batch_size: int = 64,
                num_workers: int = 0) -> Iterable[Dict]:
     """
     The utterance-level dataloader for LM training
@@ -43,10 +43,10 @@ def DataLoader(text: str = "",
         distributed: for distributed training or not
         kaldi_format: whether text/token file is in kaldi format
         train: in training mode or not
-        batch_size: maximum value of #batch_size
+        max_batch_size: maximum value of #batch_size
+        min_batch_size: minimum value of #batch_size
         num_workers: number workers used in dataloader
         {min|max}_token_num: boundary of the token length
-        min_batch_size: minimum value of #batch_size
         adapt_token_num: used for #batch_size reduction
         chunk_size_for_sort: #chunk_size for mini-batch sorting, we perform sort
                              in each chunk (because LM corpus may very big)
@@ -55,7 +55,7 @@ def DataLoader(text: str = "",
                          sos=sos,
                          eos=eos,
                          shuffle=train,
-                         batch_size=batch_size,
+                         max_batch_size=max_batch_size,
                          distributed=distributed,
                          num_workers=num_workers,
                          min_token_num=min_token_num,
@@ -117,7 +117,7 @@ class BatchSampler(dat.Sampler):
     A custom batch sampler for LM dataset
     Args:
         dataset: instance of dat.Dataset
-        batch_size: maximum value of #batch_size
+        max_batch_size: maximum value of #batch_size
         shuffle: shuffle batches or not
         distributed: in distributed mode or not
         {min|max}_token_num: boundary of the token length
@@ -128,7 +128,7 @@ class BatchSampler(dat.Sampler):
 
     def __init__(self,
                  dataset: dat.Dataset,
-                 batch_size: int,
+                 max_batch_size: int,
                  shuffle: bool = False,
                  distributed: bool = False,
                  min_token_num: int = 2,
@@ -161,7 +161,7 @@ class BatchSampler(dat.Sampler):
             indices = self._sort_indices(dataset, [
                 kept_index[i]
                 for i in range(base, min(base + chunk_size, total_utts))
-            ], batch_size)
+            ], max_batch_size)
             self.batches += indices
             done = min(base + chunk_size, total_utts) * 100 / float(total_utts)
             print(f"{self.header}: done {done:.2f}% ...", flush=True)
@@ -195,7 +195,7 @@ class BatchSampler(dat.Sampler):
         return kept_index
 
     def _sort_indices(self, dataset: dat.Dataset, subset: List[int],
-                      batch_size: int) -> List[List[int]]:
+                      max_batch_size: int) -> List[List[int]]:
         """
         Sort mini-batches in each subset
         """
@@ -203,11 +203,12 @@ class BatchSampler(dat.Sampler):
         # long -> short
         sort_idx = np.argsort(toks_len)[::-1]
         batches = []
-        beg, cur_bz = 0, batch_size
+        beg, cur_bz = 0, max_batch_size
         while beg + cur_bz <= len(sort_idx):
             cur_len = toks_len[sort_idx[beg]]
             factor = (cur_len - 1) // self.const["adapt"]
-            cur_bz = int(max(self.const["floor"], batch_size // (1 + factor)))
+            cur_bz = int(
+                max(self.const["floor"], max_batch_size // (1 + factor)))
             batches.append([subset[i] for i in sort_idx[beg:beg + cur_bz]])
             beg += cur_bz
         return batches
@@ -239,7 +240,7 @@ class UttDataLoader(dat.DataLoader):
         dataset: instance of dat.Dataset
         sos|eos: sos|eos ID
         shuffle: shuffle batches or not
-        batch_size: maximum value of #batch_size
+        max_batch_size: maximum value of #batch_size
         num_workers: number workers used in dataloader
         min|max_token_num: boundary of the token length
         min_batch_size: minimum value of #batch_size
@@ -253,7 +254,7 @@ class UttDataLoader(dat.DataLoader):
                  sos: int = -1,
                  eos: int = -1,
                  shuffle: bool = True,
-                 batch_size: int = 64,
+                 max_batch_size: int = 64,
                  distributed: bool = False,
                  num_workers: int = 0,
                  min_token_num: int = 2,
@@ -266,7 +267,7 @@ class UttDataLoader(dat.DataLoader):
         self.eos = eos
         self.sos = sos
         sampler = BatchSampler(dataset,
-                               batch_size,
+                               max_batch_size,
                                shuffle=shuffle,
                                distributed=distributed,
                                min_token_num=min_token_num,

@@ -23,10 +23,10 @@ class AsrDataset(dat.Dataset):
         text: path of the token file
         utt2dur: path of the duration file
         vocab_dict: vocabulary dictionary object
-        {min,max}_token_num: filter the utterances if the token number not in [#min_token_num, #max_token_num]
-        {min|max}_dur: filter the utterances when length is not in [#min_wav_dur, #max_wav_dur]
-        skip_utts: skips utterances that the file shows
         dur_axis: duration axis index for input_reader
+        skip_utts: skips utterances that the file shows
+        {min|max}_token_num: filter the utterances if the token number not in [#min_token_num, #max_token_num]
+        {min|max}_dur: filter the utterances when length is not in [#min_wav_dur, #max_wav_dur]
     """
 
     def __init__(self,
@@ -34,12 +34,12 @@ class AsrDataset(dat.Dataset):
                  text: str,
                  utt2dur: str,
                  vocab_dict: Optional[Dict],
+                 dur_axis: int = -1,
+                 skip_utts: str = "",
                  max_token_num: int = 400,
                  min_token_num: int = 2,
                  max_dur: float = 3000,
-                 min_dur: float = 40,
-                 skip_utts: str = "",
-                 dur_axis: int = -1) -> None:
+                 min_dur: float = 40) -> None:
         self.input_reader = input_reader
         self.token_reader = TokenReader(text,
                                         utt2dur,
@@ -168,17 +168,17 @@ class BatchSampler(dat.Sampler):
     A custom batch sampler that can used in distributed/non-distributed mode
     Args:
         dataset: dataset object
-        batch_size: maxnimum #batch_size
+        max_batch_size: maximum #batch_size
+        min_batch_size: minimum #batch_size
         shuffle: shuffle batches or not
         batch_mode: "adaptive" or "constraint"
         adapt_dur|adapt_token_num: used in adaptive mode, see _work_adapt_batch_index
-        min_batch_size: minimum #batch_size
         distributed: distributed or not
     """
 
     def __init__(self,
                  dataset: dat.Dataset,
-                 batch_size: int,
+                 max_batch_size: int,
                  shuffle: bool = False,
                  batch_mode: str = "adaptive",
                  adapt_dur: float = 800,
@@ -196,10 +196,10 @@ class BatchSampler(dat.Sampler):
                 dataset,
                 adapt_dur,
                 adapt_token_num,
-                batch_size,
+                max_batch_size,
                 min_batch_size=min_batch_size)
         else:
-            batches = self._work_const_batch_index(dataset, batch_size)
+            batches = self._work_const_batch_index(dataset, max_batch_size)
         if distributed:
             self.num_batches = len(batches) // self.world_size
         else:
@@ -209,7 +209,7 @@ class BatchSampler(dat.Sampler):
         self.epoch = 0
 
     def _work_const_batch_index(self, dataset: dat.Dataset,
-                                batch_size: int) -> List[Tuple[int, int]]:
+                                max_batch_size: int) -> List[Tuple[int, int]]:
         """
         In constraint mode, the batch [utt_1, utt_2, ..., utt_N] satisfies
             sum([len(utt_1), ..., len(utt_N)]) <= #batch_size
@@ -222,11 +222,11 @@ class BatchSampler(dat.Sampler):
         for idx in range(tot):
             cur = dataset.token_reader[idx]
             if idx == 0:
-                if cur["dur"] > batch_size:
+                if cur["dur"] > max_batch_size:
                     raise ValueError("batch_size is smaller than maximum "
                                      "length of the utterances")
             utt_dur = cur["dur"]
-            if cur_dur < batch_size:
+            if cur_dur < max_batch_size:
                 cur_dur += utt_dur
             else:
                 idx_bz.append((beg, idx))
@@ -241,24 +241,24 @@ class BatchSampler(dat.Sampler):
             dataset: dat.Dataset,
             adapt_dur: float,
             adapt_num: int,
-            batch_size: int,
+            max_batch_size: int,
             min_batch_size: int = 4) -> List[Tuple[int, int]]:
         """
         In adaptive mode, we compute #batch_size using
-            cur_bz = int(max(#min_batch_size, #batch_size // (1 + factor)))
+            cur_bz = int(max(#min_batch_size, #max_batch_size // (1 + factor)))
         where:
             factor = max(cur_ilen // #adapt_dur, (cur_olen - 1) // #adapt_num)
         """
         beg = 0
         tot = len(dataset)
-        cur_bz = batch_size
+        cur_bz = max_batch_size
         idx_bz = []
         while beg + cur_bz <= tot:
             cur = dataset.token_reader[beg]
             cur_ilen = cur["dur"]
             cur_olen = cur["len"]
             factor = max(cur_ilen // adapt_dur, (cur_olen - 1) // adapt_num)
-            cur_bz = int(max(min_batch_size, batch_size // (1 + factor)))
+            cur_bz = int(max(min_batch_size, max_batch_size // (1 + factor)))
             idx_bz.append((beg, beg + cur_bz))
             beg += cur_bz
         return idx_bz
@@ -294,8 +294,8 @@ class AsrDataLoader(dat.DataLoader):
         distributed: in distributed mode or not
         num_workers: number of the workers used in dat.DataLoader
         adapt_dur|adapt_token_num: used in adaptive mode dataloader
-        batch_size: maximum #batch_size
         batch_mode: adaptive or constraint
+        max_batch_size: maximum #batch_size
         min_batch_size: minimum #batch_size
     """
 
@@ -307,17 +307,17 @@ class AsrDataLoader(dat.DataLoader):
                  num_workers: int = 0,
                  adapt_dur: float = 800,
                  adapt_token_num: int = 150,
-                 batch_size: int = 32,
                  batch_mode: str = "adaptive",
+                 max_batch_size: int = 32,
                  min_batch_size: int = 4) -> None:
         sampler = BatchSampler(dataset,
-                               batch_size,
+                               max_batch_size,
                                shuffle=shuffle,
                                adapt_dur=adapt_dur,
                                batch_mode=batch_mode,
                                distributed=distributed,
-                               adapt_token_num=adapt_token_num,
-                               min_batch_size=min_batch_size)
+                               min_batch_size=min_batch_size,
+                               adapt_token_num=adapt_token_num)
         super(AsrDataLoader, self).__init__(dataset,
                                             collate_fn=collate_fn,
                                             num_workers=num_workers,

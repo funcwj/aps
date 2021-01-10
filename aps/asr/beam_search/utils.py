@@ -214,7 +214,7 @@ class BeamTracker(BaseBeamTracker):
             self.token.append(topk_token.view(-1)[topk_index])
             # point to father's node
             self.point.append(topk_index // self.param.beam_size)
-            # update accmulated score (AM + LM)
+            # update accumulated score (AM + LM)
             self.acmu_score = acmu_score.view(-1)[topk_index]
         # gather stats
         self.trans = self.gather(self.trans, self.point[-1], self.token[-1])

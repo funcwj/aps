@@ -22,8 +22,8 @@ def test_am_raw_loader(batch_size, num_workers):
                             train=False,
                             sr=16000,
                             adapt_dur=10,
-                            batch_size=batch_size,
                             num_workers=num_workers,
+                            max_batch_size=batch_size,
                             min_batch_size=1)
     for egs in loader:
         for key in ["src_pad", "tgt_pad", "tgt_len", "src_len"]:
@@ -45,8 +45,7 @@ def test_am_raw_loader_const(batch_size, num_workers):
                             vocab_dict=load_dict(f"{egs_dir}/dict"),
                             train=False,
                             sr=16000,
-                            audio_norm=False,
-                            batch_size=batch_size,
+                            max_batch_size=batch_size,
                             batch_mode="constraint",
                             num_workers=num_workers)
     for egs in loader:
@@ -66,8 +65,8 @@ def test_am_kaldi_loader(batch_size, num_workers):
                             utt2dur=f"{egs_dir}/egs.fbank.num_frames",
                             train=False,
                             adapt_dur=900,
-                            batch_size=batch_size,
                             num_workers=num_workers,
+                            max_batch_size=batch_size,
                             min_batch_size=1)
     for egs in loader:
         for key in ["src_pad", "tgt_pad", "tgt_len", "src_len"]:
@@ -89,8 +88,8 @@ def test_ss_chunk_loader(batch_size, chunk_size, num_workers):
                             ref_scp=f"{egs_dir}/wav.1.scp",
                             sr=16000,
                             batch_size=batch_size,
-                            num_workers=num_workers,
-                            chunk_size=chunk_size)
+                            chunk_size=chunk_size,
+                            num_workers=num_workers)
     for egs in loader:
         assert egs["mix"].shape == th.Size([batch_size, chunk_size])
         assert egs["ref"].shape == th.Size([batch_size, chunk_size])
@@ -99,8 +98,8 @@ def test_ss_chunk_loader(batch_size, chunk_size, num_workers):
                             ref_scp=f"{egs_dir}/wav.1.scp,{egs_dir}/wav.1.scp",
                             sr=16000,
                             batch_size=batch_size,
-                            num_workers=num_workers,
-                            chunk_size=chunk_size)
+                            chunk_size=chunk_size,
+                            num_workers=num_workers)
     for egs in loader:
         assert egs["mix"].shape == th.Size([batch_size, chunk_size])
         assert len(egs["ref"]) == 2
@@ -116,8 +115,8 @@ def test_ss_online_loader(batch_size, chunk_size, num_workers):
                             simu_cfg=f"{egs_dir}/online.opts",
                             sr=16000,
                             batch_size=batch_size,
-                            num_workers=num_workers,
-                            chunk_size=chunk_size)
+                            chunk_size=chunk_size,
+                            num_workers=num_workers)
     for egs in loader:
         assert egs["mix"].shape == th.Size([batch_size, chunk_size])
         assert len(egs["ref"]) == 2
@@ -133,7 +132,7 @@ def test_lm_utt_loader(batch_size, obj):
                             eos=2,
                             text=f"{egs_dir}/{obj}",
                             vocab_dict=load_dict(f"{egs_dir}/dict"),
-                            batch_size=batch_size,
+                            max_batch_size=batch_size,
                             min_batch_size=batch_size)
     for egs in loader:
         assert egs["src"].shape == egs["tgt"].shape

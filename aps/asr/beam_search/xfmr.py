@@ -57,15 +57,15 @@ def beam_search(decoder: nn.Module,
     nbest = min(beam, nbest)
     device = enc_out.device
 
-    beam_tracker = BeamTracker(
-        BeamSearchParam(beam_size=beam,
-                        sos=sos,
-                        eos=eos,
-                        device=device,
-                        penalty=penalty,
-                        len_norm=len_norm,
-                        lm_weight=lm_weight,
-                        eos_threshold=eos_threshold))
+    beam_param = BeamSearchParam(beam_size=beam,
+                                 sos=sos,
+                                 eos=eos,
+                                 device=device,
+                                 penalty=penalty,
+                                 len_norm=len_norm,
+                                 lm_weight=lm_weight,
+                                 eos_threshold=eos_threshold)
+    beam_tracker = BeamTracker(beam_param)
     hypos = []
     pre_emb = None
     lm_state = None
@@ -85,7 +85,7 @@ def beam_search(decoder: nn.Module,
         # compute prob: beam x V, nagetive
         am_prob = tf.log_softmax(dec_out / temperature, dim=-1)
 
-        if lm:
+        if lm and beam_param.lm_weight > 0:
             # beam x V
             lm_prob, lm_state = lm_score_impl(lm, point, pre_out, lm_state)
         else:
@@ -184,7 +184,7 @@ def beam_search_batch(decoder: nn.Module,
         # compute prob: N*beam x V, nagetive
         am_prob = tf.log_softmax(dec_out / temperature, dim=-1)
 
-        if lm:
+        if lm and beam_param.lm_weight > 0:
             # beam x V
             lm_prob, lm_state = lm_score_impl(lm, point, pre_out, lm_state)
         else:
