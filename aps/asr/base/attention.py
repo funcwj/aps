@@ -431,8 +431,8 @@ class MHLocAttention(Attention):
                  enc_dim: int,
                  dec_dim: int,
                  att_dim: int = 512,
-                 att_channels: int = 128,
-                 att_kernel: int = 11,
+                 conv_channels: int = 10,
+                 loc_context: int = 64,
                  att_head: int = 4):
         super(MHLocAttention, self).__init__()
         # value, key, query
@@ -440,18 +440,18 @@ class MHLocAttention(Attention):
         self.key_proj = nn.Linear(enc_dim, att_dim * att_head, bias=False)
         self.dec_proj = nn.Linear(dec_dim, att_dim * att_head, bias=False)
         # N x D_conv*H x T => N x D_att*H x T
-        self.att = nn.Conv1d(att_channels * att_head,
+        self.att = nn.Conv1d(conv_channels * att_head,
                              att_dim * att_head,
                              1,
                              groups=att_head,
                              bias=False)
         # N x H x T => N x D_att*H x T
         self.F = nn.Conv1d(att_head,
-                           att_channels * att_head,
-                           att_kernel,
+                           conv_channels * att_head,
+                           loc_context * 2 + 1,
                            stride=1,
                            groups=att_head,
-                           padding=(att_kernel - 1) // 2)
+                           padding=loc_context)
         self.w = nn.Conv1d(att_dim * att_head,
                            att_head,
                            1,
