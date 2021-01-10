@@ -75,9 +75,11 @@ def beam_search(decoder: nn.Module,
                 sos: int = -1,
                 eos: int = -1,
                 penalty: float = 0,
-                coverage: float = 0,
                 len_norm: bool = True,
-                temperature: float = 1) -> List[Dict]:
+                cov_weight: float = 0,
+                temperature: float = 1,
+                cov_threshold: float = 0.5,
+                eos_threshold: float = 0) -> List[Dict]:
     """
     Vectorized beam search algothrim (see batch version beam_search_batch)
     Args
@@ -118,9 +120,11 @@ def beam_search(decoder: nn.Module,
                         eos=eos,
                         device=device,
                         penalty=penalty,
-                        coverage=coverage,
+                        len_norm=len_norm,
                         lm_weight=lm_weight,
-                        len_norm=len_norm))
+                        cov_weight=cov_weight,
+                        cov_threshold=cov_threshold,
+                        eos_threshold=eos_threshold))
 
     lm_state = None
     hypos = []
@@ -181,10 +185,12 @@ def beam_search_batch(decoder: nn.Module,
                       max_len: int = -1,
                       sos: int = -1,
                       eos: int = -1,
-                      coverage: float = 0,
-                      len_norm: bool = True,
                       penalty: float = 0,
-                      temperature: float = 1) -> List[Dict]:
+                      len_norm: bool = True,
+                      cov_weight: float = 0,
+                      temperature: float = 1,
+                      cov_threshold: float = 0.5,
+                      eos_threshold: float = 0) -> List[Dict]:
     """
     Batch level vectorized beam search algothrim
     Args
@@ -224,9 +230,11 @@ def beam_search_batch(decoder: nn.Module,
                                  eos=eos,
                                  device=device,
                                  penalty=penalty,
-                                 coverage=coverage,
+                                 len_norm=len_norm,
                                  lm_weight=lm_weight,
-                                 len_norm=len_norm)
+                                 cov_weight=cov_weight,
+                                 cov_threshold=cov_threshold,
+                                 eos_threshold=eos_threshold)
     beam_tracker = BatchBeamTracker(N, beam_param)
 
     # for each utterance

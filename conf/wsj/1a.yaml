@@ -1,7 +1,7 @@
 # WER (%) Report:
-# Total (503 utterances): 1357/8334 = 16.28%, SUB/INS/DEL = 1003/163/191
+# Total (503 utterances): 1358/8334 = 16.29%, SUB/INS/DEL = 1004/163/191
 # WER (%) Report:
-# Total (333 utterances): 752/5700 = 13.19%, SUB/INS/DEL = 560/94/98
+# Total (333 utterances): 751/5700 = 13.18%, SUB/INS/DEL = 559/94/98
 
 nnet: "att"
 

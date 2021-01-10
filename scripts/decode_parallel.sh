@@ -12,6 +12,7 @@ space=""
 nbest=1
 channel=-1
 max_len=100
+min_len=1
 penalty=0
 beam_size=16
 function="beam_search"
@@ -66,6 +67,7 @@ $cmd JOB=1:$nj $log_dir/decode.JOB.log \
   --nbest $nbest \
   --dump-nbest $log_dir/beam${beam_size}.JOB.${nbest}best \
   --max-len $max_len \
+  --min-len $min_len \
   --function $function \
   --len-norm $len_norm
 

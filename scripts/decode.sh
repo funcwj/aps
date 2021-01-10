@@ -11,6 +11,7 @@ space=""
 nbest=1
 channel=-1
 max_len=100
+min_len=1
 beam_size=16
 batch_size=""
 function="beam_search"
@@ -66,6 +67,7 @@ if [ -z $batch_size ]; then
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
     --dump-alignment "$dump_align" \
     --max-len $max_len \
+    --min-len $min_len \
     --len-norm $len_norm \
     --function $function \
     > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
@@ -91,6 +93,7 @@ else
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
     --dump-alignment "$dump_align" \
     --max-len $max_len \
+    --min-len $min_len \
     --len-norm $len_norm \
     > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
 fi

@@ -9,7 +9,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from aps.asr.beam_search.utils import BeamTracker, BatchBeamTracker
+from aps.asr.beam_search.utils import BeamSearchParam, BeamTracker, BatchBeamTracker
 from aps.asr.beam_search.lm import rnnlm_score, ngram_score, LmType
 
 from typing import List, Dict, Optional
@@ -25,9 +25,11 @@ def beam_search(decoder: nn.Module,
                 sos: int = -1,
                 eos: int = -1,
                 penalty: float = 0,
-                coverage: float = 0,
                 len_norm: bool = True,
-                temperature: float = 1) -> List[Dict]:
+                cov_weight: float = 0,
+                temperature: float = 1,
+                cov_threshold: float = 0.5,
+                eos_threshold: float = 0) -> List[Dict]:
     """
     Vectorized beam search algothrim for transformer decoder
     Args
@@ -55,13 +57,15 @@ def beam_search(decoder: nn.Module,
     nbest = min(beam, nbest)
     device = enc_out.device
 
-    beam_tracker = BeamTracker(beam,
-                               sos=sos,
-                               eos=eos,
-                               device=device,
-                               penalty=penalty,
-                               lm_weight=lm_weight,
-                               len_norm=len_norm)
+    beam_tracker = BeamTracker(
+        BeamSearchParam(beam_size=beam,
+                        sos=sos,
+                        eos=eos,
+                        device=device,
+                        penalty=penalty,
+                        len_norm=len_norm,
+                        lm_weight=lm_weight,
+                        eos_threshold=eos_threshold))
     hypos = []
     pre_emb = None
     lm_state = None
@@ -120,9 +124,11 @@ def beam_search_batch(decoder: nn.Module,
                       sos: int = -1,
                       eos: int = -1,
                       penalty: float = 0,
-                      coverage: float = 0,
                       len_norm: bool = True,
-                      temperature: float = 1) -> List[Dict]:
+                      cov_weight: float = 0,
+                      temperature: float = 1,
+                      cov_threshold: float = 0.5,
+                      eos_threshold: float = 0) -> List[Dict]:
     """
     Batch level vectorized beam search algothrim
     Args
@@ -152,15 +158,15 @@ def beam_search_batch(decoder: nn.Module,
 
     pre_emb = None
     lm_state = None
-    beam_tracker = BatchBeamTracker(beam,
-                                    N,
-                                    sos=sos,
-                                    eos=eos,
-                                    device=device,
-                                    penalty=penalty,
-                                    lm_weight=lm_weight,
-                                    len_norm=len_norm)
-
+    beam_param = BeamSearchParam(beam_size=beam,
+                                 sos=sos,
+                                 eos=eos,
+                                 device=device,
+                                 penalty=penalty,
+                                 len_norm=len_norm,
+                                 lm_weight=lm_weight,
+                                 eos_threshold=eos_threshold)
+    beam_tracker = BatchBeamTracker(N, beam_param)
     # for each utterance
     hypos = [[] for _ in range(N)]
     stop_batch = [False] * N

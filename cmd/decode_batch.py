@@ -106,9 +106,10 @@ def run(args):
                                   beam=args.beam_size,
                                   nbest=args.nbest,
                                   max_len=args.max_len,
+                                  min_len=args.min_len,
                                   penalty=args.penalty,
-                                  lm_weight=args.lm_weight,
                                   len_norm=args.len_norm,
+                                  lm_weight=args.lm_weight,
                                   temperature=args.temperature)
         keys = [bz["key"] for bz in batches]
         for key, nbest in zip(keys, batch_nbest):
@@ -123,6 +124,9 @@ def run(args):
                 if idx == 0:
                     top1.write(f"{key}\t{trans}\n")
                 if ali_dir:
+                    if hyp["align"] is None:
+                        raise RuntimeError(
+                            "Can not dump alignment out as it's None")
                     np.save(f"{ali_dir}/{key}-nbest{idx+1}",
                             hyp["align"].numpy())
             if topn:

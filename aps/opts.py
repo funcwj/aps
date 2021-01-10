@@ -158,6 +158,10 @@ def get_aps_decode_parser():
                         type=int,
                         default=100,
                         help="Maximum steps to do during decoding stage")
+    parser.add_argument("--min-len",
+                        type=int,
+                        default=1,
+                        help="Minimum decoding sequence length we can have")
     parser.add_argument("--space",
                         type=str,
                         default="",
