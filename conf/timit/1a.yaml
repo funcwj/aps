@@ -1,5 +1,7 @@
-# WER(%) Report:
-# Total: 26.86%, 192 utterances (1938 errors, 7215 units in total)
+# WER (%) Report:
+# Total (400 utterances): 3218/15057 = 21.37%, SUB/INS/DEL = 2161/568/489
+# WER (%) Report:
+# Total (192 utterances): 1636/7215 = 22.67%, SUB/INS/DEL = 1150/252/234
 
 nnet: "att"
 
@@ -9,26 +11,24 @@ nnet_conf:
   enc_proj: 512
   enc_kwargs:
     rnn: "lstm"
-    hidden: 512
-    num_layers: 4
+    hidden: 320
+    num_layers: 3
     bidirectional: true
     dropout: 0.2
     project: 512
   dec_dim: 512
   dec_kwargs:
     dec_rnn: "lstm"
-    dropout_on: "input"
     rnn_layers: 2
     rnn_hidden: 512
     rnn_dropout: 0.2
     emb_dropout: 0.2
     input_feeding: true
-    vocab_embeded: true
   att_type: "loc"
   att_kwargs:
-    att_dim: 512
-    att_channels: 256
-    att_kernel: 11
+    att_dim: 256
+    conv_channels: 10
+    loc_context: 100
 
 task: "ctc_xent"
 
@@ -37,36 +37,27 @@ task_conf:
   ctc_weight: 0.2
 
 asr_transform:
-  feats: "fbank-log-cmvn-aug-splice"
+  feats: "perturb-fbank-log-cmvn-delta"
   frame_len: 400
   frame_hop: 160
+  audio_norm: false
+  pre_emphasis: 0.96
   window: "hamm"
-  use_power: true
   round_pow_of_two: true
   sr: 16000
   num_mels: 80
-  lctx: 1
-  rctx: 1
-  subsampling_factor: 3
-  aug_prob: 0.3
-  num_aug_bands: 1
-  num_aug_frame: 1
-  aug_mask_zero: false
 
 trainer_conf:
   optimizer: "adam"
   optimizer_kwargs:
     lr: 1.0e-3
     weight_decay: 1.0e-5
-  lr_scheduler: "exp_lr"
-  lr_scheduler_period: "step"
   lr_scheduler_kwargs:
-    time_stamps: [300, 4000, 10000]
-    peak_lr: 1.0e-3
-    stop_lr: 1.0e-5
+    min_lr: 1.0e-8
+    patience: 1
+    factor: 0.5
   no_impr: 6
   no_impr_thres: 0.1
-  weight_noise_std: 0
   clip_gradient: 1
   report_metrics: ["loss", "accu", "@ctc"]
   stop_criterion: "accu"
@@ -74,11 +65,11 @@ trainer_conf:
 data_conf:
   fmt: "am_raw"
   loader:
-    max_token_num: 400
-    adapt_token_num: 150
     max_dur: 30 # (s)
     min_dur: 0.4 # (s)
     adapt_dur: 10 # (s)
+    max_token_num: 400
+    adapt_token_num: 150
   train:
     wav_scp: "data/timit/train/wav.scp"
     utt2dur: "data/timit/train/utt2dur"

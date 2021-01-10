@@ -88,7 +88,8 @@ class EncDecASRBase(nn.Module):
         # T x N x D
         enc_out = pad_sequence(outs, batch_first=False)
         enc_len = th.tensor(lens, device=enc_out.device)
-        return enc_out, enc_len
+        # N x T x D
+        return enc_out.transpose(0, 1), enc_len
 
     def _decoding_prep(self,
                        x: th.Tensor,

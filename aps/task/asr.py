@@ -54,7 +54,7 @@ def compute_accu(outs: th.Tensor, tgts: th.Tensor) -> Tuple[float]:
     return (accu.item(), total.item())
 
 
-def prep_asr_target(
+def prep_asr_label(
         tgt_pad: th.Tensor,
         tgt_len: th.Tensor,
         pad_value: int,
@@ -147,10 +147,10 @@ class CtcXentHybridTask(Task):
         """
         # tgt_pad: N x To (replace ignore_id with eos)
         # tgts: N x To+1 (add eos)
-        tgt_pad, tgts = prep_asr_target(egs["tgt_pad"],
-                                        egs["tgt_len"],
-                                        pad_value=self.eos,
-                                        eos_value=self.eos)
+        tgt_pad, tgts = prep_asr_label(egs["tgt_pad"],
+                                       egs["tgt_len"],
+                                       pad_value=self.eos,
+                                       eos_value=self.eos)
         # outs: N x (To+1) x V
         # alis: N x (To+1) x Ti
         if "ssr" in egs:
@@ -164,13 +164,13 @@ class CtcXentHybridTask(Task):
                                                   egs["src_len"], tgt_pad)
         # compute loss
         if self.lsm_factor > 0:
-            loss = ls_objf(outs,
-                           tgts,
-                           method=self.lsm_method,
-                           lsm_factor=self.lsm_factor,
-                           label_count=self.label_count)
+            xent_loss = ls_objf(outs,
+                                tgts,
+                                method=self.lsm_method,
+                                lsm_factor=self.lsm_factor,
+                                label_count=self.label_count)
         else:
-            loss = ce_objf(outs, tgts)
+            xent_loss = ce_objf(outs, tgts)
 
         stats = {}
         if self.ctc_weight > 0:
@@ -180,8 +180,11 @@ class CtcXentHybridTask(Task):
                                 egs["tgt_len"],
                                 blank=self.ctc_blank,
                                 add_softmax=True)
-            loss = self.ctc_weight * ctc_loss + (1 - self.ctc_weight) * loss
             stats["@ctc"] = ctc_loss.item()
+            stats["xent"] = xent_loss.item()
+        else:
+            ctc_loss = 0
+        loss = self.ctc_weight * ctc_loss + (1 - self.ctc_weight) * xent_loss
         # compute accu
         accu, den = compute_accu(outs, tgts)
         # check coding error
@@ -236,9 +239,9 @@ class TransducerTask(Task):
             tgt_len: N
         """
         # tgt_pad: N x To (replace ignore_id with blank)
-        tgt_pad, _ = prep_asr_target(egs["tgt_pad"],
-                                     egs["tgt_len"],
-                                     pad_value=self.blank)
+        tgt_pad, _ = prep_asr_label(egs["tgt_pad"],
+                                    egs["tgt_len"],
+                                    pad_value=self.blank)
         tgt_len = egs["tgt_len"]
         # N x Ti x To+1 x V
         outs, enc_len = self.nnet(egs["src_pad"], egs["src_len"], tgt_pad,

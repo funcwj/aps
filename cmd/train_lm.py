@@ -21,18 +21,15 @@ def run(args):
     conf, vocab = load_lm_conf(args.conf, args.dict)
     print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     print(f"Arguments in yaml:\n{pprint.pformat(conf)}", flush=True)
-    eos = vocab["<eos>"]
-    sos = vocab["<sos>"]
-    conf["nnet_conf"]["vocab_size"] = len(vocab)
 
     data_conf = conf["data_conf"]
     load_conf = {
         "vocab_dict": vocab,
-        "batch_size": args.batch_size,
         "num_workers": args.num_workers,
-        "sos": sos,
-        "eos": eos,
-        "fmt": data_conf["fmt"]
+        "sos": vocab["<sos>"],
+        "eos": vocab["<eos>"],
+        "fmt": data_conf["fmt"],
+        "max_batch_size": args.batch_size
     }
     load_conf.update(data_conf["loader"])
     trn_loader = aps_dataloader(train=True, **data_conf["train"], **load_conf)

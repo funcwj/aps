@@ -10,8 +10,8 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Optional, List, Dict
-from aps.asr.beam_search.utils import BeamTracker, BatchBeamTracker
-from aps.asr.beam_search.lm import lm_score
+from aps.asr.beam_search.utils import BeamSearchParam, BeamTracker, BatchBeamTracker
+from aps.asr.beam_search.lm import rnnlm_score, ngram_score, LmType
 
 
 def greedy_search(decoder: nn.Module,
@@ -67,7 +67,7 @@ def greedy_search(decoder: nn.Module,
 def beam_search(decoder: nn.Module,
                 att_net: nn.Module,
                 enc_out: th.Tensor,
-                lm: Optional[nn.Module] = None,
+                lm: Optional[LmType] = None,
                 lm_weight: float = 0,
                 beam: int = 8,
                 nbest: int = 1,
@@ -75,9 +75,11 @@ def beam_search(decoder: nn.Module,
                 sos: int = -1,
                 eos: int = -1,
                 penalty: float = 0,
-                coverage: float = 0,
                 len_norm: bool = True,
-                temperature: float = 1) -> List[Dict]:
+                cov_weight: float = 0,
+                temperature: float = 1,
+                cov_threshold: float = 0.5,
+                eos_threshold: float = 0) -> List[Dict]:
     """
     Vectorized beam search algothrim (see batch version beam_search_batch)
     Args
@@ -97,6 +99,12 @@ def beam_search(decoder: nn.Module,
     if beam > decoder.vocab_size:
         raise RuntimeError(f"Beam size({beam}) > vocabulary size")
 
+    if lm:
+        if isinstance(lm, nn.Module):
+            lm_score_impl = rnnlm_score
+        else:
+            lm_score_impl = ngram_score
+
     nbest = min(beam, nbest)
     device = enc_out.device
     att_ali = None
@@ -106,14 +114,17 @@ def beam_search(decoder: nn.Module,
     att_ctx = th.zeros([N * beam, D_enc], device=device)
     proj = th.zeros([N * beam, D_enc], device=device)
 
-    beam_tracker = BeamTracker(beam,
-                               sos=sos,
-                               eos=eos,
-                               device=device,
-                               penalty=penalty,
-                               coverage=coverage,
-                               lm_weight=lm_weight,
-                               len_norm=len_norm)
+    beam_param = BeamSearchParam(beam_size=beam,
+                                 sos=sos,
+                                 eos=eos,
+                                 device=device,
+                                 penalty=penalty,
+                                 len_norm=len_norm,
+                                 lm_weight=lm_weight,
+                                 cov_weight=cov_weight,
+                                 cov_threshold=cov_threshold,
+                                 eos_threshold=eos_threshold)
+    beam_tracker = BeamTracker(beam_param)
 
     lm_state = None
     hypos = []
@@ -135,9 +146,9 @@ def beam_search(decoder: nn.Module,
         # compute prob: beam x V, nagetive
         am_prob = tf.log_softmax(pred / temperature, dim=-1)
 
-        if lm:
+        if lm and beam_param.lm_weight > 0:
             # beam x V
-            lm_prob, lm_state = lm_score(lm, point, pre_out, lm_state)
+            lm_prob, lm_state = lm_score_impl(lm, point, pre_out, lm_state)
         else:
             lm_prob = 0
 
@@ -167,17 +178,19 @@ def beam_search_batch(decoder: nn.Module,
                       att_net: nn.Module,
                       enc_out: th.Tensor,
                       enc_len: th.Tensor,
-                      lm: Optional[nn.Module] = None,
+                      lm: Optional[LmType] = None,
                       lm_weight: float = 0,
                       beam: int = 8,
                       nbest: int = 1,
                       max_len: int = -1,
                       sos: int = -1,
                       eos: int = -1,
-                      coverage: float = 0,
-                      len_norm: bool = True,
                       penalty: float = 0,
-                      temperature: float = 1) -> List[Dict]:
+                      len_norm: bool = True,
+                      cov_weight: float = 0,
+                      temperature: float = 1,
+                      cov_threshold: float = 0.5,
+                      eos_threshold: float = 0) -> List[Dict]:
     """
     Batch level vectorized beam search algothrim
     Args
@@ -194,6 +207,12 @@ def beam_search_batch(decoder: nn.Module,
     if beam > decoder.vocab_size:
         raise RuntimeError(f"Beam size({beam}) > vocabulary size")
 
+    if lm:
+        if isinstance(lm, nn.Module):
+            lm_score_impl = rnnlm_score
+        else:
+            lm_score_impl = ngram_score
+
     N, _, D_enc = enc_out.shape
     nbest = min(beam, nbest)
     device = enc_out.device
@@ -206,15 +225,17 @@ def beam_search_batch(decoder: nn.Module,
     proj = th.zeros([N * beam, D_enc], device=device)
 
     lm_state = None
-    beam_tracker = BatchBeamTracker(beam,
-                                    N,
-                                    sos=sos,
-                                    eos=eos,
-                                    device=device,
-                                    penalty=penalty,
-                                    coverage=coverage,
-                                    lm_weight=lm_weight,
-                                    len_norm=len_norm)
+    beam_param = BeamSearchParam(beam_size=beam,
+                                 sos=sos,
+                                 eos=eos,
+                                 device=device,
+                                 penalty=penalty,
+                                 len_norm=len_norm,
+                                 lm_weight=lm_weight,
+                                 cov_weight=cov_weight,
+                                 cov_threshold=cov_threshold,
+                                 eos_threshold=eos_threshold)
+    beam_tracker = BatchBeamTracker(N, beam_param)
 
     # for each utterance
     hypos = [[] for _ in range(N)]
@@ -238,9 +259,9 @@ def beam_search_batch(decoder: nn.Module,
         # compute prob: N*beam x V, nagetive
         am_prob = tf.log_softmax(pred / temperature, dim=-1)
 
-        if lm:
+        if lm and beam_param.lm_weight > 0:
             # beam x V
-            lm_prob, lm_state = lm_score(lm, point, pre_out, lm_state)
+            lm_prob, lm_state = lm_score_impl(lm, point, pre_out, lm_state)
         else:
             lm_prob = 0
 

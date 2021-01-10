@@ -30,14 +30,13 @@ nnet_conf:
 
 asr_transform:
   aug_mask_zero: false
-  aug_max_frame: 100
+  aug_freq_args: [30, 1]
+  aug_time_args: [100, 1]
   aug_prob: 1
   feats: perturb-emph-fbank-log-aug
   frame_hop: 160
   frame_len: 400
   min_freq: 20
-  num_aug_bands: 1
-  num_aug_frame: 1
   num_mels: 80
   pre_emphasis: 0.97
   round_pow_of_two: true
@@ -52,7 +51,7 @@ task_conf:
 
 trainer_conf:
   clip_gradient: 5
-  lr_scheduler: noam_lr
+  lr_scheduler: warmup_noam_lr
   lr_scheduler_kwargs:
     factor: 1
     transformer_dim: 512

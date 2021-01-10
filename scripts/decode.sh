@@ -11,16 +11,19 @@ space=""
 nbest=1
 channel=-1
 max_len=100
+min_len=1
 beam_size=16
 batch_size=""
 function="beam_search"
 penalty=0
-wav_norm=true
 len_norm=true
 temperature=1
+am_tag="best"
+lm_tag="best"
 lm=""
 lm_weight=0
 spm=""
+dump_align=""
 log_suffix=""
 
 echo "$0 $*"
@@ -48,11 +51,13 @@ if [ -z $batch_size ]; then
     $tst_scp \
     $dec_dir/beam${beam_size}.decode \
     --beam-size $beam_size \
-    --checkpoint $exp_dir \
     --device-id $gpu \
     --channel $channel \
     --dict "$dict" \
+    --am $exp_dir \
     --lm "$lm" \
+    --am-tag $am_tag \
+    --lm-tag $lm_tag \
     --spm "$spm" \
     --penalty $penalty \
     --temperature $temperature \
@@ -60,8 +65,9 @@ if [ -z $batch_size ]; then
     --space "$space" \
     --nbest $nbest \
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
+    --dump-alignment "$dump_align" \
     --max-len $max_len \
-    --wav-norm $wav_norm \
+    --min-len $min_len \
     --len-norm $len_norm \
     --function $function \
     > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
@@ -71,11 +77,13 @@ else
     $dec_dir/beam${beam_size}.decode \
     --beam-size $beam_size \
     --batch-size $batch_size \
-    --checkpoint $exp_dir \
     --device-id $gpu \
     --channel $channel \
     --dict "$dict" \
+    --am $exp_dir \
     --lm "$lm" \
+    --am-tag $am_tag \
+    --lm-tag $lm_tag \
     --spm "$spm" \
     --space "$space" \
     --penalty $penalty \
@@ -83,8 +91,9 @@ else
     --lm-weight $lm_weight \
     --nbest $nbest \
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
+    --dump-alignment "$dump_align" \
     --max-len $max_len \
-    --wav-norm $wav_norm \
+    --min-len $min_len \
     --len-norm $len_norm \
     > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
 fi

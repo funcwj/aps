@@ -12,12 +12,14 @@ space=""
 nbest=1
 channel=-1
 max_len=100
+min_len=1
 penalty=0
 beam_size=16
 function="beam_search"
 temperature=1
-wav_norm=true
 len_norm=true
+am_tag="best"
+lm_tag="best"
 lm=""
 lm_weight=0
 spm=""
@@ -50,9 +52,11 @@ $cmd JOB=1:$nj $log_dir/decode.JOB.log \
   $log_dir/wav.JOB.scp \
   $log_dir/beam${beam_size}.JOB.decode \
   --beam-size $beam_size \
-  --checkpoint $exp_dir \
+  --am $exp_dir \
   --device-id -1 \
   --channel $channel \
+  --am-tag $am_tag \
+  --lm-tag $lm_tag \
   --dict "$dict" \
   --lm "$lm" \
   --spm "$spm" \
@@ -63,8 +67,8 @@ $cmd JOB=1:$nj $log_dir/decode.JOB.log \
   --nbest $nbest \
   --dump-nbest $log_dir/beam${beam_size}.JOB.${nbest}best \
   --max-len $max_len \
+  --min-len $min_len \
   --function $function \
-  --wav-norm $wav_norm \
   --len-norm $len_norm
 
 cat $log_dir/beam${beam_size}.*.decode | \

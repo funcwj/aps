@@ -280,20 +280,19 @@ class FSMN(nn.Module):
                  inp_features: int,
                  out_features: int,
                  proj_features: int,
-                 lctx: int = 3,
-                 rctx: int = 3,
+                 context: int = 3,
                  norm: int = "BN",
                  dilation: int = 0,
                  dropout: float = 0):
         super(FSMN, self).__init__()
         self.inp_proj = nn.Linear(inp_features, proj_features, bias=False)
-        self.ctx_size = lctx + rctx + 1
+        self.ctx_size = 2 * context + 1
         self.ctx_conv = nn.Conv1d(proj_features,
                                   proj_features,
                                   kernel_size=self.ctx_size,
                                   dilation=dilation,
                                   groups=proj_features,
-                                  padding=(self.ctx_size - 1) // 2,
+                                  padding=context,
                                   bias=False)
         self.out_proj = nn.Linear(proj_features, out_features)
         self.out_drop = nn.Dropout(p=dropout)

@@ -298,11 +298,9 @@ Almost all the hyper-parameters are configured in the yaml files. You can check 
       norm_var: True
       speed_perturb: 0.9,1.0,1.1
       aug_prob: 1
-      aug_max_frame: 100
-      aug_max_bands: 27
+      aug_time_args: [100, 1]
+      aug_freq_args: [27, 1]
       aug_mask_zero: true
-      num_aug_bands: 2
-      num_aug_frame: 2
     ```
 
 The other options, e.g., batch size, number of the epochs, are passed as the script arguments. See `aps/scripts/train_{lm,ss,am}.sh` and `aps/scripts/distributed_train_{ss,am}.sh`.

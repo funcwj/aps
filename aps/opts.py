@@ -102,11 +102,11 @@ def get_aps_decode_parser():
                         type=int,
                         default=16000,
                         help="Sample rate of the original audio")
-    parser.add_argument("--checkpoint",
+    parser.add_argument("--am",
                         type=str,
                         required=True,
-                        help="Checkpoint directory of the model")
-    parser.add_argument("--tag",
+                        help="Checkpoint directory of the AM")
+    parser.add_argument("--am-tag",
                         type=str,
                         default="best",
                         help="Tag name to load the checkpoint: (tag).pt.tar")
@@ -117,12 +117,16 @@ def get_aps_decode_parser():
     parser.add_argument("--lm",
                         type=str,
                         default="",
-                        help="Checkpoint of the nerual network LM "
-                        "used in shallow fusion")
+                        help="Experimental directory of the RNNLM "
+                        "or path of the ngram LM")
     parser.add_argument("--lm-weight",
                         type=float,
                         default=0.1,
                         help="LM score weight used in shallow fusion")
+    parser.add_argument("--lm-tag",
+                        type=str,
+                        default="best",
+                        help="Tag name for RNNLM")
     parser.add_argument("--temperature",
                         type=float,
                         default=1,
@@ -154,6 +158,10 @@ def get_aps_decode_parser():
                         type=int,
                         default=100,
                         help="Maximum steps to do during decoding stage")
+    parser.add_argument("--min-len",
+                        type=int,
+                        default=1,
+                        help="Minimum decoding sequence length we can have")
     parser.add_argument("--space",
                         type=str,
                         default="",
@@ -172,11 +180,11 @@ def get_aps_decode_parser():
                         default="false",
                         help="If ture, using length normalized "
                         "when sort nbest hypos")
-    parser.add_argument("--wav-norm",
-                        action=StrToBoolAction,
-                        default="false",
-                        help="If true, do not normalize "
-                        "audio samples to [-1.0, 1.0]")
+    parser.add_argument("--dump-alignment",
+                        type=str,
+                        default="",
+                        help="If assigned, dump alignment "
+                        "weight to the directory")
     return parser
 
 

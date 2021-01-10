@@ -1,12 +1,12 @@
 nnet: "rnn_lm"
 
 nnet_conf:
-  embed_size: 2048
+  embed_size: 1024
   tie_weights: true
   rnn: lstm
   dropout: 0.2
   num_layers: 3
-  hidden_size: 2048
+  hidden_size: 1024
 
 task: "lm"
 
@@ -28,10 +28,10 @@ trainer_conf:
 data_conf:
   fmt: "lm_utt"
   loader:
-    min_token_num: 10
+    min_token_num: 20
     max_token_num: 300
-    min_batch_size: 4
-    adapt_token_num: 50
+    min_batch_size: 8
+    adapt_token_num: 100
     chunk_size_for_sort: 48000
   train:
     text: "data/librispeech/lm/train.token"

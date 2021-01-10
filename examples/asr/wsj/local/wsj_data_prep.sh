@@ -27,10 +27,10 @@ fi
 cd $dir
 # Make directory of links to the WSJ disks such as 11-13.1.  This relies on the command
 # line arguments being absolute pathnames.
-rm -r links/ 2>/dev/null
+rm -rf links/ 2>/dev/null
 mkdir links/
-ln -s $* links
 
+ln -s $* links
 # Do some basic checks that we have what we expected.
 if [ ! -d links/11-13.1 -o ! -d links/13-34.1 -o ! -d links/11-2.1 ]; then
   echo "wsj_data_prep.sh: Spot check of command line arguments failed"

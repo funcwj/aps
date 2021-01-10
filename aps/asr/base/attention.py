@@ -82,19 +82,19 @@ class LocAttention(Attention):
                  enc_dim: int,
                  dec_dim: int,
                  att_dim: int = 512,
-                 att_channels: int = 128,
-                 att_kernel: int = 11):
+                 conv_channels: int = 10,
+                 loc_context: int = 64):
         super(LocAttention, self).__init__()
         self.enc_proj = nn.Linear(enc_dim, att_dim)
         self.dec_proj = nn.Linear(dec_dim, att_dim, bias=False)
         # N x D_conv x T => N x D_att x T
-        self.att = nn.Conv1d(att_channels, att_dim, 1, bias=False)
+        self.att = nn.Conv1d(conv_channels, att_dim, 1, bias=False)
         # N x 1 x T => N x D_att x T
         self.F = nn.Conv1d(1,
-                           att_channels,
-                           att_kernel,
+                           conv_channels,
+                           loc_context * 2 + 1,
                            stride=1,
-                           padding=(att_kernel - 1) // 2)
+                           padding=loc_context)
         self.w = nn.Linear(att_dim, 1, bias=False)
         # clear variables
         self.clear()
@@ -141,13 +141,13 @@ class LocAttention(Attention):
         # N x D_dec =>  N x D_att
         dec_part = self.dec_proj(dec_prev)
         # N x Ti x D_att
-        sum_part = th.tanh(att_part + dec_part.unsqueeze(1) + self.enc_part)
+        sum_part = th.tanh(att_part + dec_part[:, None] + self.enc_part)
         # N x Ti
         score = self.w(sum_part).squeeze(-1)
         # ali: N x Ti
         ali = self.softmax(score, enc_len, self.pad_mask)
         # ctx: N x D_enc
-        ctx = th.sum(ali.unsqueeze(-1) * enc_pad, 1)
+        ctx = th.sum(ali[..., None] * enc_pad, 1)
         # return alignment weight & context
         return ali, ctx
 
@@ -193,13 +193,13 @@ class CtxAttention(Attention):
         # N x D_att
         dec_part = self.dec_proj(dec_prev)
         # N x Ti x D_att
-        sum_part = th.tanh(self.enc_part + dec_part.unsqueeze(1))
+        sum_part = th.tanh(self.enc_part + dec_part[:, None])
         # N x Ti
         score = self.w(sum_part).squeeze(-1)
         # ali: N x Ti
         ali = self.softmax(score, enc_len, self.pad_mask)
         # ctx: N x D_enc
-        ctx = th.sum(ali.unsqueeze(-1) * enc_pad, 1)
+        ctx = th.sum(ali[..., None] * enc_pad, 1)
         # return alignment weight & context
         return ali, ctx
 
@@ -212,11 +212,16 @@ class DotAttention(Attention):
         "Vocabulary Conversational Speech Recognition"
     """
 
-    def __init__(self, enc_dim: int, dec_dim: int, att_dim: int = 512):
+    def __init__(self,
+                 enc_dim: int,
+                 dec_dim: int,
+                 att_dim: int = 512,
+                 scaled: bool = True):
         super(DotAttention, self).__init__()
         self.enc_proj = nn.Linear(enc_dim, att_dim)
         self.dec_proj = nn.Linear(dec_dim, att_dim)
         self.att_dim = att_dim
+        self.scaled = scaled
         self.clear()
 
     def clear(self):
@@ -245,12 +250,13 @@ class DotAttention(Attention):
         # N x D_att
         dec_part = self.dec_proj(dec_prev)
         # N x Ti
-        score = th.bmm(self.enc_part, dec_part.unsqueeze(-1)).squeeze(-1)
-        score = score / (self.att_dim**0.5)
+        score = th.bmm(self.enc_part, dec_part[..., None]).squeeze(-1)
+        if self.scaled:
+            score = score / (self.att_dim**0.5)
         # ali: N x Ti
         ali = self.softmax(score, enc_len, self.pad_mask)
         # ctx: N x D_enc
-        ctx = th.sum(ali.unsqueeze(-1) * enc_pad, 1)
+        ctx = th.sum(ali[..., None] * enc_pad, 1)
         # return alignment weight & context
         return ali, ctx
 
@@ -325,13 +331,13 @@ class MHCtxAttention(Attention):
         # N x H x D_att
         dec_part = dec_part.view(-1, self.att_head, self.att_dim)
         # N x H x D_att x Ti
-        sum_part = th.tanh(self.key_part + dec_part.unsqueeze(-1))
+        sum_part = th.tanh(self.key_part + dec_part[..., None])
         # N x H x Ti
         score = self.w(sum_part.view(N, -1, T))
         # N x H x Ti
         ali = self.softmax(score, enc_len, self.pad_mask)
         # N x H x D_att
-        ctx = th.sum(ali.unsqueeze(-1) * self.enc_part, -2)
+        ctx = th.sum(ali[..., None] * self.enc_part, -2)
         # N x D_enc
         ctx = self.ctx_proj(ctx.view(N, -1))
         return ali, ctx
@@ -347,7 +353,8 @@ class MHDotAttention(Attention):
                  enc_dim: int,
                  dec_dim: int,
                  att_dim: int = 512,
-                 att_head: int = 4):
+                 att_head: int = 4,
+                 scaled: bool = True):
         super(MHDotAttention, self).__init__()
         # value, key, query
         self.enc_proj = nn.Linear(enc_dim, att_dim * att_head, bias=False)
@@ -357,6 +364,7 @@ class MHDotAttention(Attention):
         self.ctx_proj = nn.Linear(att_dim * att_head, enc_dim)
         self.att_dim = att_dim
         self.att_head = att_head
+        self.scaled = scaled
         self.clear()
 
     def clear(self):
@@ -400,13 +408,14 @@ class MHDotAttention(Attention):
         # N x H x D_att
         dec_part = dec_part.view(-1, self.att_head, self.att_dim)
         # N x H x Ti x 1
-        score = th.matmul(self.key_part, dec_part[..., None])
+        score = th.matmul(self.key_part, dec_part[..., None]).squeeze(-1)
         # N x H x Ti
-        score = score.squeeze(-1) / (self.att_dim**0.5)
+        if self.scaled:
+            score = score / (self.att_dim**0.5)
         # N x H x Ti
         ali = self.softmax(score, enc_len, self.pad_mask)
         # N x H x D_att
-        ctx = th.sum(ali.unsqueeze(-1) * self.enc_part, -2)
+        ctx = th.sum(ali[..., None] * self.enc_part, -2)
         # N x D_enc
         ctx = self.ctx_proj(ctx.view(N, -1))
         return ali, ctx
@@ -422,8 +431,8 @@ class MHLocAttention(Attention):
                  enc_dim: int,
                  dec_dim: int,
                  att_dim: int = 512,
-                 att_channels: int = 128,
-                 att_kernel: int = 11,
+                 conv_channels: int = 10,
+                 loc_context: int = 64,
                  att_head: int = 4):
         super(MHLocAttention, self).__init__()
         # value, key, query
@@ -431,18 +440,18 @@ class MHLocAttention(Attention):
         self.key_proj = nn.Linear(enc_dim, att_dim * att_head, bias=False)
         self.dec_proj = nn.Linear(dec_dim, att_dim * att_head, bias=False)
         # N x D_conv*H x T => N x D_att*H x T
-        self.att = nn.Conv1d(att_channels * att_head,
+        self.att = nn.Conv1d(conv_channels * att_head,
                              att_dim * att_head,
                              1,
                              groups=att_head,
                              bias=False)
         # N x H x T => N x D_att*H x T
         self.F = nn.Conv1d(att_head,
-                           att_channels * att_head,
-                           att_kernel,
+                           conv_channels * att_head,
+                           loc_context * 2 + 1,
                            stride=1,
                            groups=att_head,
-                           padding=(att_kernel - 1) // 2)
+                           padding=loc_context)
         self.w = nn.Conv1d(att_dim * att_head,
                            att_head,
                            1,
@@ -509,13 +518,13 @@ class MHLocAttention(Attention):
         # N x H x D_att
         dec_part = dec_part.view(-1, self.att_head, self.att_dim)
         # N x H x D_att x Ti
-        sum_part = th.tanh(att_part + self.key_part + dec_part.unsqueeze(-1))
+        sum_part = th.tanh(att_part + self.key_part + dec_part[..., None])
         # N x H x Ti
         score = self.w(sum_part.view(N, -1, T))
         # N x H x Ti
         ali = self.softmax(score, enc_len, self.pad_mask)
         # N x H x D_att
-        ctx = th.sum(ali.unsqueeze(-1) * self.enc_part, -2)
+        ctx = th.sum(ali[..., None] * self.enc_part, -2)
         # N x D_enc
         ctx = self.ctx_proj(ctx.view(N, -1))
         return ali, ctx

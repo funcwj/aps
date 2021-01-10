@@ -34,6 +34,8 @@ def run(args):
     dst_std, dst = io_wrapper(args.dst_tok, "w")
 
     def add_to_vocab(vocab, units):
+        if vocab is None:
+            return
         for unit in units:
             if unit not in vocab:
                 vocab[unit] = len(vocab)
@@ -57,6 +59,7 @@ def run(args):
         if args.space:
             add_to_vocab(vocab, [args.space])
     filter_units = args.filter_units.split(",")
+    print(f"Filter units: {filter_units}")
     for raw_line in src:
         line = raw_line.strip()
         raw_tokens = line.split()
@@ -66,24 +69,23 @@ def run(args):
         else:
             sets = raw_tokens
         kept_tokens = []
-        for tok in sets:
+        for n, tok in enumerate(sets):
             # remove tokens
-            if tok in filter_units:
+            is_filter_tok = tok in filter_units
+            if is_filter_tok and args.unit != "char":
                 continue
             # word => char
-            if args.unit == "char":
+            if args.unit == "char" and not is_filter_tok:
                 toks = [t for t in tok]
             else:
                 toks = [tok]
             kept_tokens += toks
-            if vocab is not None:
-                add_to_vocab(vocab, toks)
+            add_to_vocab(vocab, toks)
+            if args.space and n != len(sets) - 1:
+                kept_tokens += [args.space]
         if args.unit == "subword":
             kept_tokens = sp_mdl.encode(" ".join(kept_tokens), out_type=str)
-        if args.space:
-            dst.write(f" {args.space} ".join(kept_tokens) + "\n")
-        else:
-            dst.write(" ".join(kept_tokens) + "\n")
+        dst.write(" ".join(kept_tokens) + "\n")
     if vocab:
         _, dump_vocab = io_wrapper(args.dump_vocab, "w")
         for unit, idx in vocab.items():

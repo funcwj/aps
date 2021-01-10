@@ -17,10 +17,10 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from typing import Optional, Union
-from aps.transform.utils import STFT, init_melfilter, speed_perturb_filter
+from typing import Optional, Union, Tuple
+from aps.transform.utils import STFT, init_melfilter, splice_feature, speed_perturb_filter
 from aps.transform.augment import tf_mask, perturb_speed
-from aps.const import EPSILON
+from aps.const import EPSILON, MAX_INT16
 from aps.libs import ApsRegisters
 from aps.cplx import ComplexTensor
 
@@ -41,9 +41,63 @@ def detect_nan(feature: th.Tensor) -> th.Tensor:
     return feature
 
 
+class RescaleTransform(nn.Module):
+    """
+    Rescale audio samples (e.g., [-1, 1] to MAX_INT16 scale)
+
+    By define this layer, we can avoid using "audio_norm" parameters in dataloader
+    and make it easy to control during training and evaluation (decoding)
+
+    Args:
+        rescale: rescale number, MAX_INT16 by default
+    """
+
+    def __init__(self, rescale: float = MAX_INT16 * 1.0) -> None:
+        super(RescaleTransform, self).__init__()
+        self.rescale = rescale
+
+    def extra_repr(self) -> str:
+        return f"rescale={self.rescale}"
+
+    def forward(self, wav: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            wav (Tensor): input signal, N x (C) x S
+        Return:
+            wav (Tensor): output signal, N x (C) x S
+        """
+        return th.round(wav * self.rescale)
+
+
+class PreEmphasisTransform(nn.Module):
+    """
+    Do utterance level preemphasis (we do frame-level preemphasis in STFT layer)
+    Args:
+        pre_emphasis: preemphasis factor
+    """
+
+    def __init__(self, pre_emphasis: float = 0) -> None:
+        super(PreEmphasisTransform, self).__init__()
+        self.pre_emphasis = pre_emphasis
+
+    def extra_repr(self) -> str:
+        return f"pre_emphasis={self.pre_emphasis}"
+
+    def forward(self, wav: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            wav (Tensor): input signal, N x (C) x S
+        Return:
+            wav (Tensor): output signal, N x (C) x S
+        """
+        if self.pre_emphasis > 0:
+            wav[..., 1:] = wav[..., 1:] - self.pre_emphasis * wav[..., :-1]
+        return wav
+
+
 class SpeedPerturbTransform(nn.Module):
     """
-    Transform layer for speed perturb
+    Transform layer for performing speed perturb
     Args:
         sr: sample rate of source signal
         perturb: speed perturb factors
@@ -125,35 +179,9 @@ class TFTransposeTransform(nn.Module):
         return tensor.transpose(-1, -2)
 
 
-class PreEmphasisTransform(nn.Module):
-    """
-    Do utterance level preemphasis
-    Args:
-        pre_emphasis: preemphasis factor
-    """
-
-    def __init__(self, pre_emphasis: float = 0) -> None:
-        super(PreEmphasisTransform, self).__init__()
-        self.pre_emphasis = pre_emphasis
-
-    def extra_repr(self) -> str:
-        return f"pre_emphasis={self.pre_emphasis}"
-
-    def forward(self, wav: th.Tensor) -> th.Tensor:
-        """
-        Args:
-            wav (Tensor): input signal, N x (C) x S
-        Return:
-            wav (Tensor): output signal, N x (C) x S
-        """
-        if self.pre_emphasis > 0:
-            wav[..., 1:] = wav[..., 1:] - self.pre_emphasis * wav[..., :-1]
-        return wav
-
-
 class SpectrogramTransform(STFT):
     """
-    Compute spectrogram as a layer
+    (Power|Linear) spectrogram feature extraction
     Args:
         frame_len: length of the frame
         frame_hop: hop size between frames
@@ -259,7 +287,7 @@ class PowerTransform(nn.Module):
 
 class MelTransform(nn.Module):
     """
-    Mel tranform as a layer
+    Perform mel tranform (multiply mel filters)
     Args:
         frame_len: length of the frame
         round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
@@ -315,7 +343,7 @@ class MelTransform(nn.Module):
 
 class LogTransform(nn.Module):
     """
-    Transform linear domain to log domain
+    Transform feature from linear domain to log domain
     Args:
         eps: floor value to avoid nagative values
         lower_bound: lower bound value
@@ -348,7 +376,7 @@ class LogTransform(nn.Module):
 
 class DiscreteCosineTransform(nn.Module):
     """
-    DCT as a layer (for mfcc features)
+    Perform DCT (for mfcc features)
     Args:
         num_ceps: number of the cepstrum coefficients
         num_mels: number of mel bands
@@ -475,23 +503,22 @@ class SpecAugTransform(nn.Module):
     Args:
         p: probability to do spec-augment
         p_time: p in SpecAugment paper
+        time_args: (T, m_T) in the SpecAugment paper
+        freq_args: (F, m_F) in the SpecAugment paper
         mask_zero: use zero value or mean in the masked region
-        num_freq_masks|num_time_masks: m_F, m_T in the SpecAugment paper
-        max_bands|max_frame: F, T in the SpecAugment paper
     """
 
     def __init__(self,
                  p: float = 0.5,
                  p_time: float = 1.0,
-                 max_bands: int = 30,
-                 max_frame: int = 40,
-                 num_freq_masks: int = 2,
-                 num_time_masks: int = 2,
+                 time_args: Tuple[int] = [40, 1],
+                 freq_args: Tuple[int] = [30, 1],
                  mask_zero: bool = True) -> None:
         super(SpecAugTransform, self).__init__()
-        self.fnum, self.tnum = num_freq_masks, num_time_masks
+        assert len(freq_args) == 2 and len(time_args) == 2
+        self.fnum, self.tnum = freq_args[1], time_args[1]
         self.mask_zero = mask_zero
-        self.F, self.T = max_bands, max_frame
+        self.F, self.T = freq_args[0], time_args[0]
         # prob to do spec-augment
         self.p = p
         # max portion constraint on time axis
@@ -535,10 +562,10 @@ class SpecAugTransform(nn.Module):
 
 class SpliceTransform(nn.Module):
     """
-    Do feature splicing as well as downsampling if needed
+    Do feature splicing & subsampling if needed
     Args:
         lctx: left context
-        rctx: right contex
+        rctx: right context
         subsampling_factor: subsampling factor
     """
 
@@ -565,17 +592,11 @@ class SpliceTransform(nn.Module):
         return:
             slice (Tensor): spliced feature, N x ... x To x FD
         """
-        T = feats.shape[-2]
-        T = T - T % self.subsampling_factor
-        if self.lctx + self.rctx != 0:
-            ctx = []
-            for c in range(-self.lctx, self.rctx + 1):
-                idx = th.arange(c, c + T, device=feats.device, dtype=th.int64)
-                idx = th.clamp(idx, min=0, max=T - 1)
-                # N x ... x T x F
-                ctx.append(th.index_select(feats, -2, idx))
-            # N x ... x T x FD
-            feats = th.cat(ctx, -1)
+        # N x ... x T x FD
+        feats = splice_feature(feats,
+                               lctx=self.lctx,
+                               rctx=self.rctx,
+                               subsampling_factor=self.subsampling_factor)
         if self.subsampling_factor != 1:
             feats = feats[..., ::self.subsampling_factor, :]
         return feats
@@ -589,26 +610,23 @@ class DeltaTransform(nn.Module):
         order: delta order
     """
 
-    def __init__(self, ctx: int = 2, order: int = 2) -> None:
+    def __init__(self,
+                 ctx: int = 2,
+                 order: int = 2,
+                 delta_as_channel: bool = False) -> None:
         super(DeltaTransform, self).__init__()
         self.ctx = ctx
         self.order = order
+        scale = th.arange(-ctx, ctx + 1, dtype=th.float32)
+        normalizer = sum(i * i for i in range(-ctx, ctx + 1))
+        self.scale = nn.Parameter(scale / normalizer, requires_grad=False)
+        self.delta_as_channel = delta_as_channel
 
     def extra_repr(self) -> str:
-        return f"context={self.ctx}, order={self.order}"
+        return f"context={self.ctx}, order={self.order}, delta_as_channel={self.delta_as_channel}"
 
     def dim_scale(self) -> int:
         return self.order
-
-    def _add_delta(self, x: th.Tensor) -> th.Tensor:
-        dx = th.zeros_like(x)
-        for i in range(1, self.ctx + 1):
-            dx[..., :-i, :] += i * x[..., i:, :]
-            dx[..., i:, :] += -i * x[..., :-i, :]
-            dx[..., -i:, :] += i * x[..., -1:, :]
-            dx[..., :i, :] += -i * x[..., :1, :]
-        dx = dx / (2 * sum(i**2 for i in range(1, self.ctx + 1)))
-        return dx
 
     def forward(self, feats: th.Tensor) -> th.Tensor:
         """
@@ -619,17 +637,28 @@ class DeltaTransform(nn.Module):
         """
         delta = [feats]
         for _ in range(self.order):
-            delta.append(self._add_delta(delta[-1]))
-        # N x ... x T x FD
-        return th.cat(delta, -1)
+            # N x T x F x (2C+1)
+            splice = splice_feature(delta[-1],
+                                    lctx=self.ctx,
+                                    rctx=self.ctx,
+                                    op="stack")
+            # N x T x F
+            delta.append(th.sum(splice * self.scale, -1))
+        if self.delta_as_channel:
+            # N x C x T x F
+            return th.stack(delta, 1)
+        else:
+            # N x ... x T x FD
+            return th.cat(delta, -1)
 
 
 @ApsRegisters.transform.register("asr")
 class FeatureTransform(nn.Module):
     """
     Feature transform for ASR tasks
-        - SpeedPerturbTransform
+        - RescaleTransform
         - PreEmphasisTransform
+        - SpeedPerturbTransform
         - SpectrogramTransform
         - TFTransposeTransform
         - PowerTransform
@@ -650,6 +679,7 @@ class FeatureTransform(nn.Module):
         center: center flag (similar with that in librosa.stft)
         round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
         stft_normalized: use normalized DFT kernel
+        audio_norm: use audio samples normalized between [-1, 1] or [-MAX-INT16, MAX-INT16]
         stft_mode: "kaldi"|"librosa", slight difference on windowing
         pre_emphasis: factor of preemphasis
         use_power: use power spectrogram or not
@@ -663,8 +693,8 @@ class FeatureTransform(nn.Module):
         aug_prob: probability to do spec-augment
         aug_maxp_time: p in SpecAugment paper
         aug_mask_zero: use zero value or mean in the masked region
-        num_aug_bands|num_aug_frame: m_F, m_T in the SpecAugment paper
-        aug_max_bands|aug_max_frame: F, T in the SpecAugment paper
+        aug_time_args: (T, m_T) in the SpecAugment paper
+        aug_freq_args: (F, m_F) in the SpecAugment paper
         norm_mean|norm_var: normalize mean/var or not (cmvn)
         norm_per_band: do cmvn per-band or not (cmvn)
         gcmvn: global cmvn statistics (cmvn)
@@ -684,6 +714,7 @@ class FeatureTransform(nn.Module):
                  round_pow_of_two: bool = True,
                  stft_normalized: bool = False,
                  stft_mode: str = "librosa",
+                 audio_norm: bool = True,
                  pre_emphasis: float = 0.97,
                  use_power: bool = False,
                  sr: int = 16000,
@@ -695,12 +726,10 @@ class FeatureTransform(nn.Module):
                  max_freq: Optional[int] = None,
                  lifter: float = 0,
                  aug_prob: float = 0,
-                 aug_maxp_time: float = 1.0,
-                 aug_max_bands: int = 30,
-                 aug_max_frame: int = 40,
+                 aug_maxp_time: float = 0.5,
                  aug_mask_zero: bool = True,
-                 num_aug_bands: int = 1,
-                 num_aug_frame: int = 1,
+                 aug_time_args: Tuple[int] = (40, 1),
+                 aug_freq_args: Tuple[int] = (30, 1),
                  norm_mean: bool = True,
                  norm_var: bool = True,
                  norm_per_band: bool = True,
@@ -710,21 +739,22 @@ class FeatureTransform(nn.Module):
                  rctx: int = 1,
                  delta_ctx: int = 2,
                  delta_order: int = 2,
+                 delta_as_channel: bool = False,
                  requires_grad: bool = False,
                  eps: float = EPSILON) -> None:
         super(FeatureTransform, self).__init__()
         if not feats:
             raise ValueError("FeatureTransform: \'feats\' can not be empty")
         feat_tokens = feats.split("-")
-        transform = []
+        transform = [] if audio_norm else [RescaleTransform()]
         feats_dim = 0
         stft_kwargs = {
             "mode": stft_mode,
             "window": window,
             "center": center,
             "use_power": use_power,
-            "pre_emphasis": pre_emphasis,
             "normalized": stft_normalized,
+            "pre_emphasis": pre_emphasis,
             "round_pow_of_two": round_pow_of_two
         }
         mel_kwargs = {
@@ -737,36 +767,37 @@ class FeatureTransform(nn.Module):
         }
         self.spectra_index = -1
         self.perturb_index = -1
-        for idx, tok in enumerate(feat_tokens):
+        for tok in feat_tokens:
             if tok == "perturb":
+                self.perturb_index = len(transform)
                 transform.append(
                     SpeedPerturbTransform(sr=sr, perturb=speed_perturb))
-                self.perturb_index = idx
             elif tok == "emph":
                 transform.append(
                     PreEmphasisTransform(pre_emphasis=pre_emphasis))
             elif tok == "spectrogram":
+                self.spectra_index = len(transform)
                 spectrogram = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
                     TFTransposeTransform(),
                 ]
                 transform += spectrogram
                 feats_dim = transform[-2].dim()
-                self.spectra_index = idx
             elif tok == "trans":
                 transform.append(TFTransposeTransform())
             elif tok == "power":
                 transform.append(PowerTransform())
             elif tok == "fbank":
+                self.spectra_index = len(transform)
                 fbank = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
                     TFTransposeTransform(),
                     MelTransform(frame_len, **mel_kwargs)
                 ]
-                self.spectra_index = idx
                 transform += fbank
                 feats_dim = transform[-1].dim()
             elif tok == "mfcc":
+                self.spectra_index = len(transform)
                 mfcc = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
                     TFTransposeTransform(),
@@ -776,7 +807,6 @@ class FeatureTransform(nn.Module):
                                             num_mels=num_mels,
                                             lifter=lifter)
                 ]
-                self.spec_index = idx
                 transform += mfcc
                 feats_dim = transform[-1].dim()
             elif tok == "mel":
@@ -804,11 +834,9 @@ class FeatureTransform(nn.Module):
                 transform.append(
                     SpecAugTransform(p=aug_prob,
                                      p_time=aug_maxp_time,
-                                     max_bands=aug_max_bands,
-                                     max_frame=aug_max_frame,
-                                     mask_zero=aug_mask_zero,
-                                     num_freq_masks=num_aug_bands,
-                                     num_time_masks=num_aug_frame))
+                                     freq_args=aug_freq_args,
+                                     time_args=aug_time_args,
+                                     mask_zero=aug_mask_zero))
             elif tok == "splice":
                 transform.append(
                     SpliceTransform(lctx=lctx,
@@ -817,7 +845,9 @@ class FeatureTransform(nn.Module):
                 feats_dim *= (1 + lctx + rctx)
             elif tok == "delta":
                 transform.append(
-                    DeltaTransform(ctx=delta_ctx, order=delta_order))
+                    DeltaTransform(ctx=delta_ctx,
+                                   order=delta_order,
+                                   delta_as_channel=delta_as_channel))
                 feats_dim *= (1 + delta_order)
             else:
                 raise RuntimeError(f"Unknown token {tok} in {feats}")

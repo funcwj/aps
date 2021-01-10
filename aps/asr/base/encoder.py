@@ -205,7 +205,7 @@ class JitLSTMEncoder(EncoderBase):
             inp_len (Tensor): (N) x Ti
         """
         if inp.dim() != 3:
-            inp = th.unsqueeze(inp, 0)
+            inp = inp[..., None]
         if self.proj:
             inp = tf.relu(self.proj(inp))
         rnn_out, _ = self.rnns(inp)
@@ -370,6 +370,7 @@ class Conv2dEncoder(EncoderBase):
                  inp_features: int,
                  out_features: int,
                  channel: Union[int, List[int]] = 32,
+                 in_channels: int = 1,
                  num_layers: int = 3,
                  kernel_size: Conv2dParam = 3,
                  padding: Conv2dParam = 0,
@@ -392,7 +393,7 @@ class Conv2dEncoder(EncoderBase):
         stride = param2need(stride, num_layers)
 
         self.enc_layers = nn.ModuleList([
-            Conv2d(1 if i == 0 else channel[i - 1],
+            Conv2d(in_channels if i == 0 else channel[i - 1],
                    channel[i],
                    kernel_size=kernel_size[i],
                    stride=stride[i],
@@ -444,8 +445,7 @@ class FSMNEncoder(EncoderBase):
                  project: int = 512,
                  num_layers: int = 4,
                  residual: bool = True,
-                 lctx: int = 3,
-                 rctx: int = 3,
+                 context: int = 3,
                  norm: str = "BN",
                  dilation: Union[List[int], int] = 1,
                  dropout: float = 0):
@@ -456,9 +456,8 @@ class FSMNEncoder(EncoderBase):
             FSMN(inp_features if i == 0 else out_features,
                  out_features,
                  project,
-                 lctx=lctx,
-                 rctx=rctx,
-                 norm="" if i == num_layers - 1 else norm,
+                 context=context,
+                 norm=norm,
                  dilation=dilation[i],
                  dropout=dropout) for i in range(num_layers)
         ])

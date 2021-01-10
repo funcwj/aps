@@ -39,7 +39,7 @@ def read_nbest(nbest_fd: str) -> Tuple[int, Dict]:
 
 def run(args):
     nbest, nbest_hypos = read_nbest(args.nbest)
-    ngram = kenlm.Model(args.lm)
+    ngram = kenlm.LanguageModel(args.lm)
 
     stdout, top1 = io_wrapper(args.top1, "w")
     for key, nbest_dict in nbest_hypos.items():
@@ -49,7 +49,7 @@ def run(args):
             lm_score = ngram.score(trans, bos=True, eos=True)
             if args.len_norm:
                 am_score /= num_tokens
-            score = am_score + args.alpha * lm_score
+            score = am_score + args.lm_weight * lm_score
             rescore.append((score, trans))
         rescore = sorted(rescore, key=lambda n: n[0], reverse=True)
         top1.write(f"{key}\t{rescore[0][1]}\n")
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     parser.add_argument("nbest", type=str, help="Nbest hypothesis")
     parser.add_argument("lm", type=str, help="Ngram LM")
     parser.add_argument("top1", type=str, help="Rescored best hypothesis")
-    parser.add_argument("--alpha",
+    parser.add_argument("--lm-weight",
                         type=float,
                         default=0.1,
                         help="Language model weight")

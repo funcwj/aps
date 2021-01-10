@@ -59,8 +59,7 @@ fsmn_enc_kwargs = {
     "project": 512,
     "num_layers": 4,
     "residual": True,
-    "lctx": 10,
-    "rctx": 10,
+    "context": 10,
     "norm": "BN",
     "dropout": 0.2
 }
@@ -110,8 +109,7 @@ conv1d_fsmn_enc_kwargs = {
     },
     "fsmn": {
         "num_layers": 3,
-        "lctx": 10,
-        "rctx": 10,
+        "context": 10,
         "norm": "LN",
         "residual": False,
         "dilation": 1,
@@ -216,8 +214,8 @@ def test_conv2d_encoder(inp_len, num_layers, kernel_size):
     pytest.param("dot", {"att_dim": 512}),
     pytest.param("loc", {
         "att_dim": 512,
-        "att_channels": 128,
-        "att_kernel": 11
+        "conv_channels": 8,
+        "loc_context": 100
     }),
     pytest.param("mhctx", {
         "att_dim": 512,
@@ -229,8 +227,8 @@ def test_conv2d_encoder(inp_len, num_layers, kernel_size):
     }),
     pytest.param("mhloc", {
         "att_dim": 512,
-        "att_channels": 128,
-        "att_kernel": 11,
+        "conv_channels": 8,
+        "loc_context": 64,
         "att_head": 4
     }),
 ])

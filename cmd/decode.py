@@ -6,8 +6,10 @@
 import pprint
 import argparse
 
+import numpy as np
 import torch as th
 
+from pathlib import Path
 from aps.eval import NnetEvaluator, TextPostProcessor
 from aps.opts import DecodingParser
 from aps.utils import get_logger, io_wrapper, SimpleTimer
@@ -42,6 +44,7 @@ class FasterDecoder(NnetEvaluator):
                  function: str = "beam_search",
                  device_id: int = -1) -> None:
         super(FasterDecoder, self).__init__(cpt_dir,
+                                            task="asr",
                                             cpt_tag=cpt_tag,
                                             device_id=device_id)
         if not hasattr(self.nnet, function):
@@ -49,7 +52,8 @@ class FasterDecoder(NnetEvaluator):
                 f"AM doesn't have the decoding function: {function}")
         self.decode = getattr(self.nnet, function)
         self.function = function
-        logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
+        logger.info(f"Load checkpoint from {cpt_dir}, epoch: " +
+                    f"{self.epoch}, tag: {cpt_tag}")
         logger.info(f"Using decoding function: {function}")
 
     def run(self, src, **kwargs):
@@ -63,23 +67,30 @@ class FasterDecoder(NnetEvaluator):
 def run(args):
     print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
 
-    decoder = FasterDecoder(args.checkpoint,
-                            cpt_tag=args.tag,
+    decoder = FasterDecoder(args.am,
+                            cpt_tag=args.am_tag,
                             function=args.function,
                             device_id=args.device_id)
     if decoder.accept_raw:
         src_reader = AudioReader(args.feats_or_wav_scp,
                                  sr=args.sr,
-                                 norm=args.wav_norm,
                                  channel=args.channel)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
     if args.lm:
-        lm = NnetEvaluator(args.lm, device_id=args.device_id)
-        logger.info(f"Load lm from {args.lm}: epoch {lm.epoch}, " +
-                    f"weight = {args.lm_weight}")
-        lm = lm.nnet
+        if Path(args.lm).is_file():
+            from aps.asr.lm.ngram import NgramLM
+            lm = NgramLM(args.lm, args.dict)
+            logger.info(
+                f"Load ngram LM from {args.lm}, weight = {args.lm_weight}")
+        else:
+            lm = NnetEvaluator(args.lm,
+                               device_id=args.device_id,
+                               cpt_tag=args.lm_tag)
+            logger.info(f"Load RNN LM from {args.lm}: epoch {lm.epoch}, " +
+                        f"weight = {args.lm_weight}")
+            lm = lm.nnet
     else:
         lm = None
 
@@ -93,7 +104,10 @@ def run(args):
         stdout_topn, topn = io_wrapper(args.dump_nbest, "w")
         nbest = min(args.beam_size, args.nbest)
         topn.write(f"{nbest}\n")
-
+    ali_dir = args.dump_alignment
+    if ali_dir:
+        Path(ali_dir).mkdir(exist_ok=True, parents=True)
+        logger.info(f"Dump alignments to dir: {ali_dir}")
     N = 0
     timer = SimpleTimer()
     for key, src in src_reader:
@@ -103,9 +117,10 @@ def run(args):
                                   beam=args.beam_size,
                                   nbest=args.nbest,
                                   max_len=args.max_len,
+                                  min_len=args.min_len,
                                   penalty=args.penalty,
-                                  lm_weight=args.lm_weight,
                                   len_norm=args.len_norm,
+                                  lm_weight=args.lm_weight,
                                   temperature=args.temperature)
         nbest = [f"{key}\n"]
         for idx, hyp in enumerate(nbest_hypos):
@@ -116,6 +131,11 @@ def run(args):
             nbest.append(f"{score:.3f}\t{len(token):d}\t{trans}\n")
             if idx == 0:
                 top1.write(f"{key}\t{trans}\n")
+            if ali_dir:
+                if hyp["align"] is None:
+                    raise RuntimeError(
+                        "Can not dump alignment out as it's None")
+                np.save(f"{ali_dir}/{key}-nbest{idx+1}", hyp["align"].numpy())
         if topn:
             topn.write("".join(nbest))
         if not (N + 1) % 10:

@@ -25,9 +25,9 @@ def run(args):
     data_conf = conf["data_conf"]
     load_conf = {
         "fmt": data_conf["fmt"],
-        "batch_size": args.batch_size,
         "vocab_dict": vocab_dict,
         "num_workers": args.num_workers,
+        "max_batch_size": args.batch_size
     }
     load_conf.update(data_conf["loader"])
     trn_loader = aps_dataloader(train=True, **data_conf["train"], **load_conf)

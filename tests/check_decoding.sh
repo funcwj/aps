@@ -14,7 +14,7 @@ cpt_dir=data/checkpoint/aishell_att_1a
     --beam-size 16 \
     --nbest 8 \
     --dump-nbest beam.nbest \
-    --checkpoint $cpt_dir \
+    --am $cpt_dir \
     --device-id -1 \
     --channel -1 \
     --dict $cpt_dir/dict \
@@ -22,7 +22,7 @@ cpt_dir=data/checkpoint/aishell_att_1a
     --len-norm true
 ../cmd/decode.py $cpt_dir/egs.scp - \
     --dump-nbest greedy.nbest \
-    --checkpoint $cpt_dir \
+    --am $cpt_dir \
     --device-id -1 \
     --channel -1 \
     --dict $cpt_dir/dict \
@@ -34,7 +34,7 @@ cpt_dir=data/checkpoint/aishell_att_1a
     --beam-size 16 \
     --nbest 8 \
     --batch-size 1 \
-    --checkpoint $cpt_dir \
+    --am $cpt_dir \
     --device-id -1 \
     --channel -1 \
     --dict $cpt_dir/dict \
@@ -45,7 +45,7 @@ cpt_dir=data/checkpoint/aishell_att_1a
 cpt_dir=data/checkpoint/timit_rnnt_1a
 ../cmd/decode.py $cpt_dir/egs.scp - \
     --beam-size 4 \
-    --checkpoint $cpt_dir \
+    --am $cpt_dir \
     --device-id -1 \
     --channel -1 \
     --dict $cpt_dir/dict \
@@ -53,7 +53,7 @@ cpt_dir=data/checkpoint/timit_rnnt_1a
     --len-norm true
 ../cmd/decode.py $cpt_dir/egs.scp - \
     --function "greedy_search" \
-    --checkpoint $cpt_dir \
+    --am $cpt_dir \
     --device-id -1 \
     --channel -1 \
     --dict $cpt_dir/dict \

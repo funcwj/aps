@@ -7,8 +7,10 @@ import pprint
 import argparse
 import warnings
 
+import numpy as np
 import torch as th
 
+from pathlib import Path
 from aps.opts import DecodingParser
 from aps.eval import NnetEvaluator, TextPostProcessor
 from aps.utils import get_logger, io_wrapper, SimpleTimer
@@ -24,9 +26,16 @@ class BatchDecoder(NnetEvaluator):
     Decoder wrapper
     """
 
-    def __init__(self, cpt_dir, device_id=-1):
-        super(BatchDecoder, self).__init__(cpt_dir, device_id=device_id)
-        logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
+    def __init__(self,
+                 cpt_dir: str,
+                 device_id: int = -1,
+                 cpt_tag: str = "best") -> None:
+        super(BatchDecoder, self).__init__(cpt_dir,
+                                           task="asr",
+                                           device_id=device_id,
+                                           cpt_tag=cpt_tag)
+        logger.info(f"Load checkpoint from {cpt_dir}, epoch: " +
+                    f"{self.epoch}, tag: {cpt_tag}")
 
     def run(self, inps, **kwargs):
         return self.nnet.beam_search_batch(
@@ -37,20 +46,29 @@ def run(args):
     print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     if args.batch_size == 1:
         warnings.warn("can use decode.py instead as batch_size == 1")
-    decoder = BatchDecoder(args.checkpoint, device_id=args.device_id)
+    decoder = BatchDecoder(args.am,
+                           device_id=args.device_id,
+                           cpt_tag=args.am_tag)
     if decoder.accept_raw:
         src_reader = AudioReader(args.feats_or_wav_scp,
                                  sr=args.sr,
-                                 norm=args.wav_norm,
                                  channel=args.channel)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
 
     if args.lm:
-        lm = NnetEvaluator(args.lm, device_id=args.device_id)
-        logger.info(f"Load lm from {args.lm}: epoch {lm.epoch}, " +
-                    f"weight = {args.lm_weight}")
-        lm = lm.nnet
+        if Path(args.lm).is_file():
+            from aps.asr.lm.ngram import NgramLM
+            lm = NgramLM(args.lm, args.dict)
+            logger.info(
+                f"Load ngram LM from {args.lm}, weight = {args.lm_weight}")
+        else:
+            lm = NnetEvaluator(args.lm,
+                               device_id=args.device_id,
+                               cpt_tag=args.lm_tag)
+            logger.info(f"Load RNN LM from {args.lm}: epoch {lm.epoch}, " +
+                        f"weight = {args.lm_weight}")
+            lm = lm.nnet
     else:
         lm = None
 
@@ -64,7 +82,10 @@ def run(args):
         stdout_topn, topn = io_wrapper(args.dump_nbest, "w")
         nbest = min(args.beam_size, args.nbest)
         topn.write(f"{nbest}\n")
-
+    ali_dir = args.dump_alignment
+    if ali_dir:
+        Path(ali_dir).mkdir(exist_ok=True, parents=True)
+        logger.info(f"Dump alignments to dir: {ali_dir}")
     done = 0
     timer = SimpleTimer()
     batches = []
@@ -85,9 +106,10 @@ def run(args):
                                   beam=args.beam_size,
                                   nbest=args.nbest,
                                   max_len=args.max_len,
+                                  min_len=args.min_len,
                                   penalty=args.penalty,
-                                  lm_weight=args.lm_weight,
                                   len_norm=args.len_norm,
+                                  lm_weight=args.lm_weight,
                                   temperature=args.temperature)
         keys = [bz["key"] for bz in batches]
         for key, nbest in zip(keys, batch_nbest):
@@ -98,9 +120,15 @@ def run(args):
                 token = hyp["trans"][1:-1]
                 trans = processor.run(token)
                 score = hyp["score"]
-                nbest.append(f"{score:.3f}\t{len(token):d}\t{trans}\n")
+                nbest_hypos.append(f"{score:.3f}\t{len(token):d}\t{trans}\n")
                 if idx == 0:
                     top1.write(f"{key}\t{trans}\n")
+                if ali_dir:
+                    if hyp["align"] is None:
+                        raise RuntimeError(
+                            "Can not dump alignment out as it's None")
+                    np.save(f"{ali_dir}/{key}-nbest{idx+1}",
+                            hyp["align"].numpy())
             if topn:
                 topn.write("".join(nbest_hypos))
         top1.flush()

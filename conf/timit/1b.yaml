@@ -1,7 +1,3 @@
-# 1b.yaml (beam-size/4)
-#   WER(%) Report:
-#   Total WER: 25.68%, 192 utterances
-
 nnet: "transducer"
 
 nnet_conf:
@@ -14,28 +10,28 @@ nnet_conf:
     hidden: 512
     dropout: 0.2
     project: 512
-    num_layers: 4
+    num_layers: 3
     bidirectional: true
   dec_kwargs:
     embed_size: 512
     jot_dim: 512
     dec_rnn: "lstm"
-    dec_layers: 3
+    dec_layers: 2
     dec_hidden: 512
     dec_dropout: 0.2
 
 task: "transducer"
 
 asr_transform:
-  feats: "fbank-log-cmvn-splice"
+  feats: "perturb-fbank-log-cmvn-delta"
   frame_len: 400
   frame_hop: 160
   window: "hamm"
+  audio_norm: false
   round_pow_of_two: true
+  pre_emphasis: 0.96
   sr: 16000
   num_mels: 80
-  lctx: 1
-  rctx: 1
 
 trainer_conf:
   optimizer: "adam"
@@ -47,19 +43,19 @@ trainer_conf:
     patience: 1
     factor: 0.5
   no_impr: 6
-  no_impr_thres: 0.1
-  clip_gradient: 0.25
+  no_impr_thres: 0.001
+  clip_gradient: 1
   report_metrics: ["loss"]
   stop_criterion: "loss"
 
 data_conf:
   fmt: "am_raw"
   loader:
-    max_token_num: 400
-    adapt_token_num: 150
     max_dur: 30 # (s)
     min_dur: 0.4 # (s)
     adapt_dur: 10 # (s)
+    max_token_num: 400
+    adapt_token_num: 150
   train:
     wav_scp: "data/timit/train/wav.scp"
     utt2dur: "data/timit/train/utt2dur"

@@ -48,6 +48,8 @@ trainer_conf:
   optimizer_kwargs:
     lr: 1.0e-4
     weight_decay: 1.0e-5
+  lr_scheduler: "reduce_lr"
+  lr_scheduler_period: "epoch"
   lr_scheduler_kwargs:
     min_lr: 1.0e-8
     patience: 1

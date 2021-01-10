@@ -16,7 +16,7 @@ import aps.distributed as dist
 @ApsRegisters.trainer.register("hvd")
 class HvdTrainer(Trainer):
     """
-    A Horovod Trainer
+    The Horovod Trainer
     """
 
     def __init__(self,
@@ -32,6 +32,7 @@ class HvdTrainer(Trainer):
                  ss_scheduler: str = "const",
                  ss_scheduler_kwargs: Optional[Dict] = None,
                  clip_gradient: Optional[float] = None,
+                 acmu_gradient: int = 1,
                  weight_noise_cfg: List[int] = [0, 1, -1],
                  weight_noise_std: Optional[float] = None,
                  prog_interval: int = 100,
@@ -42,6 +43,7 @@ class HvdTrainer(Trainer):
                  stop_criterion: str = "loss",
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
+                 average_checkpoint: bool = False,
                  report_metrics: List[str] = ["loss"],
                  reduction_tag: str = "none",
                  stop_on_errors: int = 10,
@@ -59,6 +61,7 @@ class HvdTrainer(Trainer):
                              ss_scheduler=ss_scheduler,
                              ss_scheduler_kwargs=ss_scheduler_kwargs,
                              clip_gradient=clip_gradient,
+                             acmu_gradient=acmu_gradient,
                              weight_noise_cfg=weight_noise_cfg,
                              weight_noise_std=weight_noise_std,
                              prog_interval=prog_interval,
@@ -69,6 +72,7 @@ class HvdTrainer(Trainer):
                              stop_criterion=stop_criterion,
                              no_impr=no_impr,
                              no_impr_thres=no_impr_thres,
+                             average_checkpoint=average_checkpoint,
                              report_metrics=report_metrics,
                              stop_on_errors=stop_on_errors,
                              reduction_tag=reduction_tag)
@@ -99,26 +103,33 @@ class HvdTrainer(Trainer):
         """
         Make one training step for hovorod
 
-        1) Zero optimizer
-        2) Forward & Backword
-        3) Clip Gradient
-        4) Step optimizer
+        1) Forward & Backword
+        2) Clip Gradient
+        3) Step optimizer
+        4) Zero optimizer
         """
-        self.optimizer.zero_grad()
-
         # add noise if needed
         if self.weight_noise_adder:
             self.weight_noise_adder(self.task, self.cur_step)
 
+        is_backward_step = (self.cur_step + 1) % self.acmu_gradient == 0
         stats = self.task(egs)
-        loss = dist.all_reduce(stats["loss"])
-        loss = loss.item()
+
+        if is_backward_step:
+            loss = dist.all_reduce(stats["loss"])
+            loss = loss.item()
+        else:
+            loss = stats["loss"].item()
         # backward if not nan/inf
         if math.isfinite(loss):
-            stats["loss"].backward()
+            (stats["loss"] / self.acmu_gradient).backward()
         else:
             self.reporter.log(f"Invalid loss {loss:.3f}, skip...")
             return False
+
+        # if not backward step, return
+        if not is_backward_step:
+            return True
 
         # clip gradient after backward
         norm = -1
@@ -135,6 +146,7 @@ class HvdTrainer(Trainer):
                     self.optimizer.step()
             else:
                 self.optimizer.step()
+            self.optimizer.zero_grad()
             if norm != -1:
                 stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]

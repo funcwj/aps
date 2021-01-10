@@ -24,13 +24,14 @@ def DataLoader(train: bool = True,
                vocab_dict: Optional[Dict] = None,
                max_dur: float = 3000,
                min_dur: float = 40,
-               max_token_num: int = 400,
                adapt_dur: float = 800,
+               min_token_num: int = 1,
+               max_token_num: int = 400,
                adapt_token_num: int = 150,
                skip_utts: str = "",
-               batch_size: int = 32,
                batch_mode: str = "adaptive",
                num_workers: int = 0,
+               max_batch_size: int = 32,
                min_batch_size: int = 4) -> Iterable[Dict]:
     """
     Args:
@@ -39,14 +40,14 @@ def DataLoader(train: bool = True,
         feats_scp: path of the feature script
         text: path of the text/token file
         utt2dur: path of the duration file (should be utt2num_frames here)
-        vocab_dict: vocabulary dictionary object
-        min_dur|max_dur: discard utterance when #num_frames not in [min_dur, max_dur]
-        max_token_num: discard the utterances when token length > max_token_num
         skip_utts: skips utterances if the key is in this file
+        vocab_dict: vocabulary dictionary object
+        {min|max}_dur: discard utterance when #num_frames not in [min_dur, max_dur]
+        {min|max}_token_num: filter the utterances if the token number not in [#min_token_num, #max_token_num]
         adapt_dur|adapt_token_num: used in adaptive mode dataloader
-        batch_size: maximum #batch_size
         batch_mode: adaptive or constraint
         num_workers: number of the workers
+        max_batch_size: maximum #batch_size
         min_batch_size: minimum #batch_size
     """
     dataset = Dataset(feats_scp,
@@ -54,6 +55,7 @@ def DataLoader(train: bool = True,
                       utt2dur,
                       vocab_dict,
                       skip_utts=skip_utts,
+                      min_token_num=min_token_num,
                       max_token_num=max_token_num,
                       max_frame_num=max_dur,
                       min_frame_num=min_dur)
@@ -64,14 +66,22 @@ def DataLoader(train: bool = True,
                          num_workers=num_workers,
                          adapt_dur=adapt_dur,
                          adapt_token_num=adapt_token_num,
-                         batch_size=batch_size,
                          batch_mode=batch_mode,
+                         max_batch_size=max_batch_size,
                          min_batch_size=min_batch_size)
 
 
 class Dataset(AsrDataset):
     """
     Dataset for kaldi features
+    Args:
+        feats_scp: path of the feature script
+        text: path of the text/token file
+        utt2dur: path of the duration file (should be utt2num_frames here)
+        vocab_dict: vocabulary dictionary object
+        skip_utts: skips utterances if the key is in this file
+        {min|max}_token_num: filter the utterances if the token number not in [#min_token_num, #max_token_num]
+        {min|max}_frame_num: discard utterance when #num_frames not in [#min_frame_num, #max_frame_num]
     """
 
     def __init__(self,
@@ -80,30 +90,21 @@ class Dataset(AsrDataset):
                  utt2num_frames: str,
                  vocab_dict: Optional[Dict],
                  skip_utts: str = "",
+                 min_token_num: int = 1,
                  max_token_num: int = 400,
                  max_frame_num: float = 3000,
                  min_frame_num: float = 40) -> None:
-        """
-        Args:
-            feats_scp: path of the feature script
-            text: path of the text/token file
-            utt2dur: path of the duration file (should be utt2num_frames here)
-            vocab_dict: vocabulary dictionary object
-            skip_utts: skips utterances if the key is in this file
-            max_token_num: discard utterance when token length > max_token_num
-            {min|max}_frame_num: discard utterance when #num_frames
-                                 not in [min_frame_num, max_frame_num]
-        """
         feats_reader = ScriptReader(feats_scp)
         super(Dataset, self).__init__(feats_reader,
                                       text,
                                       utt2num_frames,
                                       vocab_dict,
-                                      skip_utts=skip_utts,
                                       max_dur=max_frame_num,
                                       min_dur=min_frame_num,
-                                      max_token_num=max_token_num,
-                                      duration_axis=0)
+                                      dur_axis=0,
+                                      skip_utts=skip_utts,
+                                      min_token_num=min_token_num,
+                                      max_token_num=max_token_num)
 
 
 def egs_collate(egs: Dict) -> Dict:

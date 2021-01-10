@@ -371,8 +371,8 @@ class FeatureTransform(nn.Module):
         aug_prob: probability to do spec-augment
         aug_maxp_time: p in SpecAugment paper
         aug_mask_zero: use zero value or mean in the masked region
-        num_aug_bands|num_aug_frame: m_F, m_T in the SpecAugment paper
-        aug_max_bands|aug_max_frame: F, T in the SpecAugment paper
+        aug_time_args: (T, m_T) in the SpecAugment paper
+        aug_freq_args: (F, m_F) in the SpecAugment paper
         ipd_index: index pairs to compute IPD feature (ipd)
         cos_ipd|sin_ipd: using cos or sin IPDs
         eps: floor number
@@ -394,10 +394,10 @@ class FeatureTransform(nn.Module):
                  norm_var: bool = True,
                  norm_per_band: bool = True,
                  aug_prob: float = 0,
-                 aug_max_bands: int = 30,
-                 aug_max_frame: int = 40,
-                 num_aug_bands: int = 1,
-                 num_aug_frame: int = 1,
+                 aug_maxp_time: float = 1.0,
+                 aug_mask_zero: bool = True,
+                 aug_time_args: Tuple[int] = (40, 1),
+                 aug_freq_args: Tuple[int] = (30, 1),
                  ipd_index: str = "",
                  cos_ipd: bool = True,
                  sin_ipd: bool = False,
@@ -443,10 +443,10 @@ class FeatureTransform(nn.Module):
             elif tok == "aug":
                 transform.append(
                     SpecAugTransform(p=aug_prob,
-                                     max_bands=aug_max_bands,
-                                     max_frame=aug_max_frame,
-                                     num_freq_masks=num_aug_bands,
-                                     num_time_masks=num_aug_frame))
+                                     p_time=aug_maxp_time,
+                                     freq_args=aug_freq_args,
+                                     time_args=aug_time_args,
+                                     mask_zero=aug_mask_zero))
             elif tok == "ipd":
                 self.ipd_transform = nn.Sequential(
                     IpdTransform(ipd_index=ipd_index, cos=cos_ipd, sin=sin_ipd),

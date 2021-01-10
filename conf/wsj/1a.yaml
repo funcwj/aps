@@ -1,58 +1,56 @@
-# 8 GPU, DDP, 256 batch size
 # WER (%) Report:
-# Total (2620 utterances): 2356/52576 = 4.48%, SUB/INS/DEL = 1899/158/299
+# Total (503 utterances): 1358/8334 = 16.29%, SUB/INS/DEL = 1004/163/191
 # WER (%) Report:
-# Total (2939 utterances): 6035/52343 = 11.53%, SUB/INS/DEL = 4834/432/769
+# Total (333 utterances): 751/5700 = 13.18%, SUB/INS/DEL = 559/94/98
 
 nnet: "att"
 
 nnet_conf:
   input_size: 80
   enc_type: "concat"
-  enc_proj: 1024
+  enc_proj: 512
   enc_kwargs:
     conv2d:
       out_features: -1
       channel: 32
+      in_channels: 3
       num_layers: 2
       stride: 2
       padding: 1
       kernel_size: 3
     pytorch_rnn:
       bidirectional: true
-      dropout: 0.3
-      hidden: 1024
-      num_layers: 4
-  dec_dim: 1024
+      dropout: 0.2
+      hidden: 512
+      num_layers: 3
+  dec_dim: 512
   dec_kwargs:
     dec_rnn: "lstm"
     rnn_layers: 2
-    rnn_hidden: 1024
+    rnn_hidden: 512
     rnn_dropout: 0.2
     emb_dropout: 0.2
     dropout: 0.2
     input_feeding: true
-    vocab_embeded: true
   att_type: "ctx"
   att_kwargs:
-    att_dim: 1024
+    att_dim: 512
 
 task: "ctc_xent"
 
 task_conf:
   ctc_weight: 0.2
-  label_count: data/librispeech/16k.train.label_count
   lsm_factor: 0.1
-  lsm_method: unigram
 
 asr_transform:
-  feats: "perturb-emph-fbank-log-aug"
+  feats: "perturb-fbank-log-aug-delta"
   frame_len: 400
   frame_hop: 160
   window: "hamm"
   round_pow_of_two: true
   use_power: true
   pre_emphasis: 0.97
+  audio_norm: false
   sr: 16000
   num_mels: 80
   min_freq: 20
@@ -60,40 +58,43 @@ asr_transform:
   norm_var: true
   norm_per_band: false
   aug_prob: 1
-  aug_freq_args: [27, 2]
-  aug_time_args: [100, 2]
+  aug_maxp_time: 0.5
+  aug_freq_args: [25, 1]
+  aug_time_args: [100, 1]
   aug_mask_zero: true
+  delta_as_channel: true
 
 trainer_conf:
   optimizer: "adam"
   optimizer_kwargs:
     lr: 1.0e-3
     weight_decay: 1.0e-5
-  lr_scheduler: "warmup_exp_decay_lr"
-  lr_scheduler_period: "step"
+  lr_scheduler: "reduce_lr"
   lr_scheduler_kwargs:
-    time_stamps: [500, 40000, 160000]
-    peak_lr: 1.0e-3
-    stop_lr: 1.0e-5
+    min_lr: 1.0e-8
+    patience: 1
+    factor: 0.5
   no_impr: 6
-  no_impr_thres: 0.1
-  clip_gradient: 1
+  no_impr_thres: 0
+  clip_gradient: 5
   report_metrics: ["loss", "accu", "@ctc"]
   stop_criterion: "accu"
+  average_checkpoint: true
+
 
 data_conf:
   fmt: "am_raw"
   loader:
+    max_dur: 30
+    min_dur: 0.4
+    adapt_dur: 10
     max_token_num: 400
-    adapt_token_num: 150
-    max_dur: 30 # (s)
-    min_dur: 0.4 # (s)
-    adapt_dur: 10 # (s)
+    adapt_token_num: 200
   train:
-    text: data/librispeech/train/token
-    utt2dur: data/librispeech/train/utt2dur
-    wav_scp: data/librispeech/train/wav.scp
+    wav_scp: "data/wsj/train_si284/wav.scp"
+    utt2dur: "data/wsj/train_si284/utt2dur"
+    text: "data/wsj/train_si284/token"
   valid:
-    text: data/librispeech/dev/token
-    utt2dur: data/librispeech/dev/utt2dur
-    wav_scp: data/librispeech/dev/wav.scp
+    wav_scp: "data/wsj/test_dev93/wav.scp"
+    utt2dur: "data/wsj/test_dev93/utt2dur"
+    text: "data/wsj/test_dev93/token"
