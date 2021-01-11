@@ -23,7 +23,7 @@ from aps.libs import ApsRegisters
 logger = get_logger(__name__)
 
 
-@ApsRegisters.loader.register("lm_utt")
+@ApsRegisters.loader.register("lm@utt")
 def DataLoader(text: str = "",
                vocab_dict: Optional[Dict] = None,
                train: bool = True,

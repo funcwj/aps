@@ -26,7 +26,7 @@ trainer_conf:
   stop_criterion: "loss"
 
 data_conf:
-  fmt: "lm_utt"
+  fmt: "lm@utt"
   loader:
     min_token_num: 2
     max_token_num: 300

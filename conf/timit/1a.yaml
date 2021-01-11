@@ -63,7 +63,7 @@ trainer_conf:
   stop_criterion: "accu"
 
 data_conf:
-  fmt: "am_raw"
+  fmt: "am@raw"
   loader:
     max_dur: 30 # (s)
     min_dur: 0.4 # (s)

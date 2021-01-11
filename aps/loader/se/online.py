@@ -16,7 +16,7 @@ from aps.libs import ApsRegisters
 from aps.loader.simu import run_simu, make_argparse
 
 
-@ApsRegisters.loader.register("se_online")
+@ApsRegisters.loader.register("se@online")
 def DataLoader(train: bool = True,
                sr: int = 16000,
                simu_cfg: str = "",

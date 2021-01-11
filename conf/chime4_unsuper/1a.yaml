@@ -36,7 +36,7 @@ trainer_conf:
   stop_criterion: "loss"
 
 data_conf:
-  fmt: "se_chunk"
+  fmt: "se@chunk"
   loader:
     sr: 16000
     chunk_size: 64000

@@ -51,7 +51,7 @@ trainer_conf:
   stop_criterion: "loss"
 
 data_conf:
-  fmt: "am_raw"
+  fmt: "am@raw"
   loader:
     max_token_num: 400
     adapt_token_num: 150

@@ -15,7 +15,7 @@ from aps.const import IGNORE_ID
 from aps.libs import ApsRegisters
 
 
-@ApsRegisters.loader.register("am_raw")
+@ApsRegisters.loader.register("am@raw")
 def DataLoader(train: bool = True,
                distributed: bool = False,
                wav_scp: str = "",

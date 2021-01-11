@@ -14,7 +14,7 @@ from aps.loader.am.raw import egs_collate
 from aps.libs import ApsRegisters
 
 
-@ApsRegisters.loader.register("am_online")
+@ApsRegisters.loader.register("am@online")
 def DataLoader(train: bool = True,
                distributed: bool = False,
                simu_cfg: str = "",

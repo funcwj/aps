@@ -14,7 +14,7 @@ from aps.conf import load_dict
 @pytest.mark.parametrize("num_workers", [0, 2, 4])
 def test_am_raw_loader(batch_size, num_workers):
     egs_dir = "data/dataloader/am"
-    loader = aps_dataloader(fmt="am_raw",
+    loader = aps_dataloader(fmt="am@raw",
                             wav_scp=f"{egs_dir}/egs.wav.scp",
                             text=f"{egs_dir}/egs.fake.text",
                             utt2dur=f"{egs_dir}/egs.utt2dur",
@@ -38,7 +38,7 @@ def test_am_raw_loader(batch_size, num_workers):
 @pytest.mark.parametrize("num_workers", [2, 4])
 def test_am_raw_loader_const(batch_size, num_workers):
     egs_dir = "data/dataloader/am"
-    loader = aps_dataloader(fmt="am_raw",
+    loader = aps_dataloader(fmt="am@raw",
                             wav_scp=f"{egs_dir}/egs.wav.scp",
                             text=f"{egs_dir}/egs.fake.text",
                             utt2dur=f"{egs_dir}/egs.utt2dur",
@@ -58,7 +58,7 @@ def test_am_raw_loader_const(batch_size, num_workers):
 @pytest.mark.parametrize("num_workers", [0, 2, 4])
 def test_am_kaldi_loader(batch_size, num_workers):
     egs_dir = "data/dataloader/am"
-    loader = aps_dataloader(fmt="am_kaldi",
+    loader = aps_dataloader(fmt="am@kaldi",
                             feats_scp=f"{egs_dir}/egs.fbank.scp",
                             text=f"{egs_dir}/egs.fake.text",
                             vocab_dict=load_dict(f"{egs_dir}/dict"),
@@ -83,7 +83,7 @@ def test_am_kaldi_loader(batch_size, num_workers):
 @pytest.mark.parametrize("num_workers", [0, 2])
 def test_ss_chunk_loader(batch_size, chunk_size, num_workers):
     egs_dir = "data/dataloader/se"
-    loader = aps_dataloader(fmt="se_chunk",
+    loader = aps_dataloader(fmt="se@chunk",
                             mix_scp=f"{egs_dir}/wav.1.scp",
                             ref_scp=f"{egs_dir}/wav.1.scp",
                             sr=16000,
@@ -93,7 +93,7 @@ def test_ss_chunk_loader(batch_size, chunk_size, num_workers):
     for egs in loader:
         assert egs["mix"].shape == th.Size([batch_size, chunk_size])
         assert egs["ref"].shape == th.Size([batch_size, chunk_size])
-    loader = aps_dataloader(fmt="se_chunk",
+    loader = aps_dataloader(fmt="se@chunk",
                             mix_scp=f"{egs_dir}/wav.1.scp",
                             ref_scp=f"{egs_dir}/wav.1.scp,{egs_dir}/wav.1.scp",
                             sr=16000,
@@ -111,7 +111,7 @@ def test_ss_chunk_loader(batch_size, chunk_size, num_workers):
 @pytest.mark.parametrize("num_workers", [0, 2])
 def test_ss_online_loader(batch_size, chunk_size, num_workers):
     egs_dir = "data/dataloader/se"
-    loader = aps_dataloader(fmt="se_online",
+    loader = aps_dataloader(fmt="se@online",
                             simu_cfg=f"{egs_dir}/online.opts",
                             sr=16000,
                             batch_size=batch_size,
@@ -127,7 +127,7 @@ def test_ss_online_loader(batch_size, chunk_size, num_workers):
 @pytest.mark.parametrize("obj", ["egs.token", "egs.token.gz"])
 def test_lm_utt_loader(batch_size, obj):
     egs_dir = "data/dataloader/lm"
-    loader = aps_dataloader(fmt="lm_utt",
+    loader = aps_dataloader(fmt="lm@utt",
                             sos=1,
                             eos=2,
                             text=f"{egs_dir}/{obj}",
@@ -143,7 +143,7 @@ def test_lm_utt_loader(batch_size, obj):
 @pytest.mark.parametrize("obj", ["egs.token", "egs.token.gz"])
 def test_lm_bptt_loader(batch_size, obj):
     egs_dir = "data/dataloader/lm"
-    loader = aps_dataloader(fmt="lm_bptt",
+    loader = aps_dataloader(fmt="lm@bptt",
                             sos=1,
                             eos=2,
                             text=f"{egs_dir}/{obj}",

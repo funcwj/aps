@@ -67,7 +67,7 @@ trainer_conf:
   stop_criterion: accu
 
 data_conf:
-  fmt: am_raw
+  fmt: "am@raw"
   loader:
     adapt_dur: 10
     adapt_token_num: 150

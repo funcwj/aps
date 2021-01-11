@@ -20,7 +20,7 @@ from aps.libs import ApsRegisters
 logger = get_logger(__name__)
 
 
-@ApsRegisters.loader.register("lm_bptt")
+@ApsRegisters.loader.register("lm@bptt")
 def DataLoader(text: str = "",
                vocab_dict: Optional[Dict] = None,
                train: bool = True,

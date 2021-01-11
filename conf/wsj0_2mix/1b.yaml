@@ -35,7 +35,7 @@ trainer_conf:
   no_impr_thres: 0.1
 
 data_conf:
-  fmt: "se_chunk"
+  fmt: "se@chunk"
   loader:
     chunk_size: 32000
     sr: 8000

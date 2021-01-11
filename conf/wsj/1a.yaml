@@ -83,7 +83,7 @@ trainer_conf:
 
 
 data_conf:
-  fmt: "am_raw"
+  fmt: "am@raw"
   loader:
     max_dur: 30
     min_dur: 0.4
