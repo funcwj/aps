@@ -11,6 +11,7 @@ from aps.const import NEG_INF
 from aps.utils import get_logger
 
 logger = get_logger(__name__)
+verbose = False
 
 
 @dataclass
@@ -178,10 +179,10 @@ class BeamTracker(BaseBeamTracker):
         # filter short utterances
         if hyp:
             hyp = [h for h in hyp if len(h["trans"]) >= self.param.min_len + 2]
-            for h in hyp:
-                logger.info(
-                    f"--- get decoding sequence {h['trans']}, score = {h['score']:.2f}"
-                )
+            if verbose:
+                for h in hyp:
+                    logger.info("--- get decoding sequence " +
+                                f"{h['trans']}, score = {h['score']:.2f}")
         return hyp
 
     def prune_beam(self,

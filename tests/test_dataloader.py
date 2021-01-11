@@ -137,3 +137,20 @@ def test_lm_utt_loader(batch_size, obj):
     for egs in loader:
         assert egs["src"].shape == egs["tgt"].shape
         assert egs["src"].shape[0] == batch_size
+
+
+@pytest.mark.parametrize("batch_size", [1, 4, 16])
+@pytest.mark.parametrize("obj", ["egs.token", "egs.token.gz"])
+def test_lm_bptt_loader(batch_size, obj):
+    egs_dir = "data/dataloader/lm"
+    loader = aps_dataloader(fmt="lm_bptt",
+                            sos=1,
+                            eos=2,
+                            text=f"{egs_dir}/{obj}",
+                            vocab_dict=load_dict(f"{egs_dir}/dict"),
+                            bptt_size=10,
+                            max_batch_size=batch_size)
+    for egs in loader:
+        print(egs)
+        assert egs["src"].shape == egs["tgt"].shape
+        assert egs["src"].shape == th.Size([batch_size, 10])

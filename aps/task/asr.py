@@ -264,14 +264,14 @@ class LmXentTask(Task):
     For LM training (Xent loss)
     Args:
         nnet: language model
-        repackage_hidden: reuse hidden state in previous batch
+        bptt_mode: reuse hidden state in previous batch (for BPTT)
     """
 
-    def __init__(self, nnet: nn.Module, repackage_hidden: bool = False) -> None:
+    def __init__(self, nnet: nn.Module, bptt_mode: bool = False) -> None:
         super(LmXentTask, self).__init__(nnet,
                                          description="Xent for LM training")
         self.hidden = None
-        self.repackage_hidden = repackage_hidden
+        self.bptt_mode = bptt_mode
 
     def forward(self, egs: Dict) -> Dict:
         """
@@ -281,7 +281,9 @@ class LmXentTask(Task):
             len: N
         """
         # pred: N x T+1 x V
-        if self.repackage_hidden:
+        if self.bptt_mode:
+            if "reset" in egs and egs["reset"]:
+                self.hidden = None
             pred, self.hidden = self.nnet(egs["src"], self.hidden)
         else:
             pred, _ = self.nnet(egs["src"], None, egs["len"])

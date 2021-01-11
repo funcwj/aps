@@ -139,8 +139,7 @@ def egs_collate(egs: Dict) -> Dict:
 
     def pad_seq(seq, value=0):
         peek_dim = seq[0].dim()
-        if peek_dim not in [1, 2]:
-            raise RuntimeError("Now only supports 1/2D tensor")
+        assert peek_dim in [1, 2]
         # C x S => S x C
         if peek_dim == 2:
             seq = [s.transpose(0, 1) for s in seq]
