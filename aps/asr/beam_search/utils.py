@@ -24,9 +24,10 @@ class BeamSearchParam(object):
     eos: int = 2
     min_len: int = 1
     lm_weight: float = 0
-    eos_threshold: float = 1
+    eos_threshold: float = 0
     device: Union[th.device, str] = "cpu"
     len_penalty: float = 0
+    cov_method: str = "v1"
     cov_penalty: float = 0
     cov_threshold: float = 0.5
     len_norm: bool = True
@@ -43,7 +44,7 @@ class BaseBeamTracker(object):
         self.trans = None  # B x U
         self.none_eos_idx = None
 
-    def gather(self, prev_: Optional[th.Tensor], point: Optional[th.Tensor],
+    def concat(self, prev_: Optional[th.Tensor], point: Optional[th.Tensor],
                next_: th.Tensor) -> th.Tensor:
         """
         Concat the alignment or transcription step by step
@@ -61,7 +62,7 @@ class BaseBeamTracker(object):
 
     def coverage(self, att_ali: Optional[th.Tensor]) -> Union[th.Tensor, float]:
         """
-        Compute coverage score
+        Compute coverage score (found 2 way for computation)
         Args:
             att_ali (Tensor): N x T, alignment score (weight)
         Return
@@ -71,15 +72,19 @@ class BaseBeamTracker(object):
             cov_score = 0
         else:
             assert att_ali is not None
-            # N x T x U
-            att_mat = self.gather(self.align, None, att_ali)
+            # N x T x V
+            att_mat = self.concat(self.align, None, att_ali)
+            # sum over V, N x T
+            att_sum_vocab = th.sum(att_mat, -1)
             # N x 1
-            cov = th.sum(th.clamp_max(th.sum(att_mat, -1),
-                                      self.param.cov_threshold).log(),
-                         -1,
-                         keepdim=True)
-            cov_score = self.param.cov_penalty * cov
-        return cov_score
+            if self.param.cov_method == "v2":
+                cov = th.clamp_max(att_sum_vocab,
+                                   self.param.cov_threshold).log()
+            else:
+                cov = (att_sum_vocab > self.param.cov_threshold).float()
+            # sum over T
+            cov_score = th.sum(cov, -1, keepdim=True)
+        return cov_score * self.param.cov_penalty
 
     def beam_select(self, am_prob: th.Tensor,
                     lm_prob: Union[th.Tensor, float]) -> Tuple[th.Tensor]:
@@ -95,7 +100,7 @@ class BaseBeamTracker(object):
         # N x V, AM + LM
         fusion_prob = am_prob + self.param.lm_weight * lm_prob
         # process eos
-        if self.param.eos_threshold > 1:
+        if self.param.eos_threshold > 0:
             if self.none_eos_idx is None:
                 none_eos_idx = [
                     i for i in range(fusion_prob.shape[-1])
@@ -106,10 +111,13 @@ class BaseBeamTracker(object):
             # current eos score
             eos_prob = fusion_prob[:, self.param.eos]
             # none_eos best score
-            none_eos, _ = th.max(fusion_prob[:, self.none_eos_idx], dim=-1)
+            none_eos_best, _ = th.max(fusion_prob[:, self.none_eos_idx], dim=-1)
             # set inf to disable the eos
-            disable_eos = eos_prob < none_eos * self.param.eos_threshold
+            disable_eos = eos_prob < none_eos_best * self.param.eos_threshold
             fusion_prob[disable_eos, self.param.eos] = NEG_INF
+            if verbose and th.sum(disable_eos):
+                disable_index = [i for i, s in enumerate(disable_eos) if s]
+                logger.info(f"disable <eos> in beam index: {disable_index}")
         # local pruning: N*beam x beam
         topk_score, topk_token = th.topk(fusion_prob,
                                          self.param.beam_size,
@@ -203,6 +211,27 @@ class BeamTracker(BaseBeamTracker):
                                 f"{h['trans']}, score = {h['score']:.2f}")
         return hyp
 
+    def init_beam(self,
+                  am_prob: th.Tensor,
+                  lm_prob: Union[th.Tensor, float],
+                  att_ali: Optional[th.Tensor] = None) -> NoReturn:
+        """
+        Kick off the beam search (to be used at the first step)
+        Args:
+            am_prob (Tensor): N x V, acoustic prob
+            lm_prob (Tensor): N x V, language prob
+            att_ali (Tensor): N x T, alignment score (weight)
+        """
+        assert len(self.point) == 1
+        # local pruning: beam x V => beam x beam
+        topk_score, topk_token = self.beam_select(am_prob, lm_prob)
+        self.score += topk_score[0] + self.coverage(att_ali)[:, 0]
+        self.acmu_score += topk_score[0]
+        self.token.append(topk_token[0])
+        self.point.append(self.point[-1])
+        self.trans = topk_token[0][..., None]
+        self.align = att_ali[..., None]
+
     def prune_beam(self,
                    am_prob: th.Tensor,
                    lm_prob: Union[th.Tensor, float],
@@ -216,28 +245,21 @@ class BeamTracker(BaseBeamTracker):
         """
         # local pruning: beam x V => beam x beam
         topk_score, topk_token = self.beam_select(am_prob, lm_prob)
-        # first step
-        if len(self.point) == 1:
-            self.score += topk_score[0]
-            self.acmu_score += topk_score[0]
-            token = topk_token[0]
-            point = self.point[-1]
-        else:
-            # beam x beam
-            acmu_score = self.acmu_score[..., None] + topk_score
-            score = acmu_score + self.coverage(att_ali)
-            # beam*beam => beam
-            self.score, topk_index = th.topk(score.view(-1),
-                                             self.param.beam_size,
-                                             dim=-1)
-            # update accumulated score (AM + LM)
-            self.acmu_score = acmu_score.view(-1)[topk_index]
-            # point to father's node
-            token = topk_token.view(-1)[topk_index]
-            point = topk_index // self.param.beam_size
-        # gather stats
-        self.trans = self.gather(self.trans, point, token)
-        self.align = None if att_ali is None else self.gather(
+        # beam x beam
+        acmu_score = self.acmu_score[..., None] + topk_score
+        score = acmu_score + self.coverage(att_ali)
+        # beam*beam => beam
+        self.score, topk_index = th.topk(score.view(-1),
+                                         self.param.beam_size,
+                                         dim=-1)
+        # update accumulated score (AM + LM)
+        self.acmu_score = acmu_score.view(-1)[topk_index]
+        # point to father's node
+        token = topk_token.view(-1)[topk_index]
+        point = topk_index // self.param.beam_size
+        # concat stats
+        self.trans = self.concat(self.trans, point, token)
+        self.align = None if att_ali is None else self.concat(
             self.align, point, att_ali)
         # collect
         self.token.append(token)
@@ -260,6 +282,27 @@ class BeamTracker(BaseBeamTracker):
                                 self.point,
                                 self.token,
                                 final=final)
+
+    def step(self,
+             step_num: int,
+             am_prob: th.Tensor,
+             lm_prob: Union[th.Tensor, float],
+             att_ali: Optional[th.Tensor] = None) -> Optional[List[Dict]]:
+        """
+        Run one beam search step
+        Args:
+            step_num (int): step number
+            am_prob (Tensor): N x V, acoustic prob
+            lm_prob (Tensor): N x V, language prob
+            att_ali (Tensor): N x T, alignment score (weight)
+        """
+        # local pruning
+        if step_num == 0:
+            self.init_beam(am_prob, lm_prob, att_ali=att_ali)
+        else:
+            self.prune_beam(am_prob, lm_prob, att_ali=att_ali)
+        # trace back sequence
+        return self.trace_back(final=False)
 
 
 class BatchBeamTracker(BaseBeamTracker):
@@ -314,6 +357,28 @@ class BatchBeamTracker(BaseBeamTracker):
             hyp = [h for h in hyp if len(h["trans"]) >= self.param.min_len + 2]
         return hyp
 
+    def init_beam(self,
+                  am_prob: th.Tensor,
+                  lm_prob: Union[th.Tensor, float],
+                  att_ali: Optional[th.Tensor] = None) -> NoReturn:
+        """
+        Kick off the beam search (to be used at the first step)
+        Args:
+            am_prob (Tensor): N x V, acoustic prob
+            lm_prob (Tensor): N x V, language prob
+            att_ali (Tensor): N x T, alignment score (weight)
+        """
+        assert len(self.point) == 1
+        # local pruning: beam x V => beam x beam
+        topk_score, topk_token = self.beam_select(am_prob, lm_prob)
+        # N x beam
+        self.score += topk_score[::self.param.beam_size]
+        self.acmu_score += topk_score[::self.param.beam_size]
+        self.token.append(topk_token[::self.param.beam_size].clone())
+        self.point.append(self.point[-1])
+        self.trans = topk_token[0][..., None]
+        self.align = att_ali[..., None]
+
     def prune_beam(self,
                    am_prob: th.Tensor,
                    lm_prob: Union[th.Tensor, float],
@@ -327,32 +392,23 @@ class BatchBeamTracker(BaseBeamTracker):
         """
         # local pruning: beam x V => beam x beam
         topk_score, topk_token = self.beam_select(am_prob, lm_prob)
-        # first step
-        if len(self.point) == 1:
-            # N x beam
-            self.score += topk_score[::self.param.beam_size]
-            self.acmu_score += topk_score[::self.param.beam_size]
-            point = self.point[-1]
-            token = topk_token[::self.param.beam_size]
-        else:
-            # N*beam x beam = N*beam x 1 + N*beam x beam
-            acmu_score = self.acmu_score.view(-1, 1) + topk_score
-            score = acmu_score + self.coverage(att_ali)
-            # N x beam*beam => N x beam
-            self.score, topk_index = th.topk(score.view(self.batch_size, -1),
-                                             self.param.beam_size,
-                                             dim=-1)
-            # update accmulated score (AM + LM)
-            self.acmu_score = th.gather(acmu_score.view(self.batch_size, -1),
-                                        -1, topk_index)
-            # N x beam, point to father's node
-            point = topk_index // self.param.beam_size
-            # N x beam*beam => N x beam
-            token = th.gather(topk_token.view(self.batch_size, -1), -1,
-                              topk_index)
-        # gather stats
-        self.trans = self.gather(self.trans, point, token)
-        self.align = None if att_ali is None else self.gather(
+        # N*beam x beam = N*beam x 1 + N*beam x beam
+        acmu_score = self.acmu_score.view(-1, 1) + topk_score
+        score = acmu_score + self.coverage(att_ali)
+        # N x beam*beam => N x beam
+        self.score, topk_index = th.topk(score.view(self.batch_size, -1),
+                                         self.param.beam_size,
+                                         dim=-1)
+        # update accmulated score (AM + LM)
+        self.acmu_score = th.gather(acmu_score.view(self.batch_size, -1), -1,
+                                    topk_index)
+        # N x beam, point to father's node
+        point = topk_index // self.param.beam_size
+        # N x beam*beam => N x beam
+        token = th.gather(topk_token.view(self.batch_size, -1), -1, topk_index)
+        # concat stats
+        self.trans = self.concat(self.trans, point, token)
+        self.align = None if att_ali is None else self.concat(
             self.align, point, att_ali)
         # collect
         self.token.append(token.clone())

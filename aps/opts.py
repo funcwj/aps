@@ -151,7 +151,7 @@ def get_aps_decode_parser():
                         help="Coverage threshold value")
     parser.add_argument("--eos-threshold",
                         type=float,
-                        default=1,
+                        default=0,
                         help="Threshold of the EOS symbol")
     parser.add_argument("--dict",
                         type=str,
