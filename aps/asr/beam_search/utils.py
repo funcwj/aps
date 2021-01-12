@@ -45,7 +45,7 @@ class BaseBeamTracker(object):
         self.none_eos_idx = None
 
     def concat(self, prev_: Optional[th.Tensor], point: Optional[th.Tensor],
-               next_: th.Tensor) -> th.Tensor:
+               next_: Optional[th.Tensor]) -> th.Tensor:
         """
         Concat the alignment or transcription step by step
         Args:
@@ -53,7 +53,9 @@ class BaseBeamTracker(object):
             next_ (Tensor): N x ...
             point (Tensor): traceback point
         """
-        if prev_ is None:
+        if next_ is None:
+            return prev_
+        elif prev_ is None:
             return next_[..., None]
         elif point is None:
             return th.cat([prev_, next_[..., None]], -1)
@@ -72,10 +74,8 @@ class BaseBeamTracker(object):
             cov_score = 0
         else:
             assert att_ali is not None
-            # N x T x V
-            att_mat = self.concat(self.align, None, att_ali)
             # sum over V, N x T
-            att_sum_vocab = th.sum(att_mat, -1)
+            att_sum_vocab = th.sum(self.align, -1)
             # N x 1
             if self.param.cov_method == "v2":
                 cov = th.clamp_max(att_sum_vocab,
@@ -211,10 +211,10 @@ class BeamTracker(BaseBeamTracker):
                                 f"{h['trans']}, score = {h['score']:.2f}")
         return hyp
 
-    def init_beam(self,
-                  am_prob: th.Tensor,
-                  lm_prob: Union[th.Tensor, float],
-                  att_ali: Optional[th.Tensor] = None) -> NoReturn:
+    def init_search(self,
+                    am_prob: th.Tensor,
+                    lm_prob: Union[th.Tensor, float],
+                    att_ali: Optional[th.Tensor] = None) -> NoReturn:
         """
         Kick off the beam search (to be used at the first step)
         Args:
@@ -225,17 +225,17 @@ class BeamTracker(BaseBeamTracker):
         assert len(self.point) == 1
         # local pruning: beam x V => beam x beam
         topk_score, topk_token = self.beam_select(am_prob, lm_prob)
-        self.score += topk_score[0] + self.coverage(att_ali)[:, 0]
+        self.score += topk_score[0]
         self.acmu_score += topk_score[0]
         self.token.append(topk_token[0])
         self.point.append(self.point[-1])
         self.trans = topk_token[0][..., None]
         self.align = att_ali[..., None]
 
-    def prune_beam(self,
-                   am_prob: th.Tensor,
-                   lm_prob: Union[th.Tensor, float],
-                   att_ali: Optional[th.Tensor] = None) -> NoReturn:
+    def step_search(self,
+                    am_prob: th.Tensor,
+                    lm_prob: Union[th.Tensor, float],
+                    att_ali: Optional[th.Tensor] = None) -> NoReturn:
         """
         Prune and update score & token & backward point
         Args:
@@ -259,8 +259,7 @@ class BeamTracker(BaseBeamTracker):
         point = topk_index // self.param.beam_size
         # concat stats
         self.trans = self.concat(self.trans, point, token)
-        self.align = None if att_ali is None else self.concat(
-            self.align, point, att_ali)
+        self.align = self.concat(self.align, None, att_ali[point])
         # collect
         self.token.append(token)
         self.point.append(point)
@@ -298,9 +297,9 @@ class BeamTracker(BaseBeamTracker):
         """
         # local pruning
         if step_num == 0:
-            self.init_beam(am_prob, lm_prob, att_ali=att_ali)
+            self.init_search(am_prob, lm_prob, att_ali=att_ali)
         else:
-            self.prune_beam(am_prob, lm_prob, att_ali=att_ali)
+            self.step_search(am_prob, lm_prob, att_ali=att_ali)
         # trace back sequence
         return self.trace_back(final=False)
 
@@ -357,10 +356,10 @@ class BatchBeamTracker(BaseBeamTracker):
             hyp = [h for h in hyp if len(h["trans"]) >= self.param.min_len + 2]
         return hyp
 
-    def init_beam(self,
-                  am_prob: th.Tensor,
-                  lm_prob: Union[th.Tensor, float],
-                  att_ali: Optional[th.Tensor] = None) -> NoReturn:
+    def init_search(self,
+                    am_prob: th.Tensor,
+                    lm_prob: Union[th.Tensor, float],
+                    att_ali: Optional[th.Tensor] = None) -> NoReturn:
         """
         Kick off the beam search (to be used at the first step)
         Args:
@@ -379,10 +378,10 @@ class BatchBeamTracker(BaseBeamTracker):
         self.trans = topk_token[0][..., None]
         self.align = att_ali[..., None]
 
-    def prune_beam(self,
-                   am_prob: th.Tensor,
-                   lm_prob: Union[th.Tensor, float],
-                   att_ali: Optional[th.Tensor] = None) -> NoReturn:
+    def step_search(self,
+                    am_prob: th.Tensor,
+                    lm_prob: Union[th.Tensor, float],
+                    att_ali: Optional[th.Tensor] = None) -> NoReturn:
         """
         Prune and update score & token & backward point
         Args:
@@ -408,8 +407,7 @@ class BatchBeamTracker(BaseBeamTracker):
         token = th.gather(topk_token.view(self.batch_size, -1), -1, topk_index)
         # concat stats
         self.trans = self.concat(self.trans, point, token)
-        self.align = None if att_ali is None else self.concat(
-            self.align, point, att_ali)
+        self.align = self.concat(self.align, None, att_ali[point])
         # collect
         self.token.append(token.clone())
         self.point.append(point)

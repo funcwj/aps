@@ -196,9 +196,9 @@ def beam_search_batch(decoder: nn.Module,
 
         # local pruning: N*beam x beam
         if t == 0:
-            beam_tracker.init_beam(am_prob, lm_prob)
+            beam_tracker.init_search(am_prob, lm_prob)
         else:
-            beam_tracker.prune_beam(am_prob, lm_prob)
+            beam_tracker.step_search(am_prob, lm_prob)
 
         # process eos nodes
         for u in range(N):
