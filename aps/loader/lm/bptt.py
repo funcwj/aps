@@ -136,7 +136,7 @@ class BpttDataloader(object):
 
     def __iter__(self) -> Iterator[Dict]:
         # B x N
-        # TODO: is slow when dataset is large
+        # TODO: may be slow when dataset is large
         batch = concat_data(self.batch_size,
                             self.dataset,
                             self.sampler,

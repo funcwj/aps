@@ -25,7 +25,7 @@ class BeamSearchParam(object):
     eos: int = 2
     min_len: int = 1
     lm_weight: float = 0
-    eos_threshold: float = 0
+    eos_threshold: float = 1
     device: Union[th.device, str] = "cpu"
     penalty: float = 0
     cov_weight: float = 0
@@ -42,6 +42,7 @@ class BaseBeamTracker(object):
         self.param = param
         self.align = None  # B x T x U
         self.trans = None  # B x U
+        self.none_eos_idx = None
 
     def gather(self, prev_: Optional[th.Tensor], point: Optional[th.Tensor],
                next_: th.Tensor) -> th.Tensor:
@@ -73,8 +74,9 @@ class BaseBeamTracker(object):
             assert att_ali is not None
             # N x T x U
             att_mat = self.gather(self.align, None, att_ali)
-            # N
-            cov = th.sum(th.sum(att_mat, -1) > self.param.cov_threshold,
+            # N x 1
+            cov = th.sum(th.clamp_max(th.sum(att_mat, -1),
+                                      self.param.cov_threshold).log(),
                          -1,
                          keepdim=True)
             cov_score = self.param.cov_weight * cov
@@ -91,9 +93,25 @@ class BaseBeamTracker(object):
             topk_score (Tensor): N x K, topk score
             topk_token (Tensor): N x K, topk token ID
         """
+        # N x V, AM + LM
+        fusion_prob = am_prob + self.param.lm_weight * lm_prob
+        # process eos
+        if self.param.eos_threshold > 1:
+            if self.none_eos_idx is None:
+                none_eos_idx = [
+                    i for i in range(fusion_prob.shape[-1])
+                    if i != self.param.eos
+                ]
+                self.none_eos_idx = th.tensor(none_eos_idx,
+                                              device=am_prob.device)
+            # N
+            eos_prob = fusion_prob[:, self.param.eos]
+            none_eos, _ = th.max(fusion_prob[:, self.none_eos_idx], dim=-1)
+            kept_eos = eos_prob > none_eos * self.param.eos_threshold
+            # set inf
+            fusion_prob[kept_eos, self.param.eos] = NEG_INF
         # local pruning: N*beam x beam
-        topk_score, topk_token = th.topk(am_prob +
-                                         self.param.lm_weight * lm_prob,
+        topk_score, topk_token = th.topk(fusion_prob,
                                          self.param.beam_size,
                                          dim=-1)
         return (topk_score, topk_token)
@@ -198,12 +216,12 @@ class BeamTracker(BaseBeamTracker):
         """
         # local pruning: beam x V => beam x beam
         topk_score, topk_token = self.beam_select(am_prob, lm_prob)
-
+        # first step
         if len(self.point) == 1:
             self.score += topk_score[0]
             self.acmu_score += topk_score[0]
-            self.token.append(topk_token[0])
-            self.point.append(self.point[-1])
+            token = topk_token[0]
+            point = self.point[-1]
         else:
             # beam x beam
             acmu_score = self.acmu_score[..., None] + topk_score
@@ -212,15 +230,18 @@ class BeamTracker(BaseBeamTracker):
             self.score, topk_index = th.topk(score.view(-1),
                                              self.param.beam_size,
                                              dim=-1)
-            self.token.append(topk_token.view(-1)[topk_index])
-            # point to father's node
-            self.point.append(topk_index // self.param.beam_size)
             # update accumulated score (AM + LM)
             self.acmu_score = acmu_score.view(-1)[topk_index]
+            # point to father's node
+            token = topk_token.view(-1)[topk_index]
+            point = topk_index // self.param.beam_size
         # gather stats
-        self.trans = self.gather(self.trans, self.point[-1], self.token[-1])
-        if att_ali is not None:
-            self.align = self.gather(self.align, self.point[-1], att_ali)
+        self.trans = self.gather(self.trans, point, token)
+        self.align = None if att_ali is None else self.gather(
+            self.align, point, att_ali)
+        # collect
+        self.token.append(token)
+        self.point.append(point)
 
     def _trace_back_hypos(self,
                           point: th.Tensor,
@@ -306,11 +327,12 @@ class BatchBeamTracker(BaseBeamTracker):
         """
         # local pruning: beam x V => beam x beam
         topk_score, topk_token = self.beam_select(am_prob, lm_prob)
+        # first step
         if len(self.point) == 1:
             # N x beam
             self.score += topk_score[::self.param.beam_size]
             self.acmu_score += topk_score[::self.param.beam_size]
-            self.point.append(self.point[-1])
+            point = self.point[-1]
             token = topk_token[::self.param.beam_size]
         else:
             # N*beam x beam = N*beam x 1 + N*beam x beam
@@ -324,16 +346,17 @@ class BatchBeamTracker(BaseBeamTracker):
             self.acmu_score = th.gather(acmu_score.view(self.batch_size, -1),
                                         -1, topk_index)
             # N x beam, point to father's node
-            self.point.append(topk_index // self.param.beam_size)
+            point = topk_index // self.param.beam_size
             # N x beam*beam => N x beam
             token = th.gather(topk_token.view(self.batch_size, -1), -1,
                               topk_index)
-        self.token.append(token.clone())
         # gather stats
-        token, point = self[-1]
         self.trans = self.gather(self.trans, point, token)
-        if att_ali is not None:
-            self.align = self.gather(self.align, point, att_ali)
+        self.align = None if att_ali is None else self.gather(
+            self.align, point, att_ali)
+        # collect
+        self.token.append(token.clone())
+        self.point.append(point)
 
     def _trace_back_hypos(self,
                           batch: int,
