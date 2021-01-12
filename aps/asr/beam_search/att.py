@@ -69,7 +69,7 @@ def beam_search(decoder: nn.Module,
                 enc_out: th.Tensor,
                 lm: Optional[LmType] = None,
                 lm_weight: float = 0,
-                beam: int = 8,
+                beam_size: int = 8,
                 nbest: int = 1,
                 max_len: int = -1,
                 min_len: int = 0,
@@ -97,8 +97,8 @@ def beam_search(decoder: nn.Module,
             f"Got batch size {N:d}, now only support one utterance")
     if not hasattr(decoder, "step"):
         raise RuntimeError("Function step should defined in decoder network")
-    if beam > decoder.vocab_size:
-        raise RuntimeError(f"Beam size({beam}) > vocabulary size")
+    if beam_size > decoder.vocab_size:
+        raise RuntimeError(f"Beam size({beam_size}) > vocabulary size")
 
     if lm:
         if isinstance(lm, nn.Module):
@@ -106,16 +106,16 @@ def beam_search(decoder: nn.Module,
         else:
             lm_score_impl = ngram_score
 
-    nbest = min(beam, nbest)
+    nbest = min(beam_size, nbest)
     device = enc_out.device
     att_ali = None
     dec_hid = None
     # N x T x F => N*beam x T x F
-    enc_out = th.repeat_interleave(enc_out, beam, 0)
-    att_ctx = th.zeros([N * beam, D_enc], device=device)
-    proj = th.zeros([N * beam, D_enc], device=device)
+    enc_out = th.repeat_interleave(enc_out, beam_size, 0)
+    att_ctx = th.zeros([N * beam_size, D_enc], device=device)
+    proj = th.zeros([N * beam_size, D_enc], device=device)
 
-    beam_param = BeamSearchParam(beam_size=beam,
+    beam_param = BeamSearchParam(beam_size=beam_size,
                                  sos=sos,
                                  eos=eos,
                                  device=device,
@@ -163,7 +163,7 @@ def beam_search(decoder: nn.Module,
         if hyp_ended:
             hypos += hyp_ended
 
-        if len(hypos) >= beam:
+        if len(hypos) >= beam_size:
             break
 
         # process non-eos nodes at the final step
@@ -182,7 +182,7 @@ def beam_search_batch(decoder: nn.Module,
                       enc_len: th.Tensor,
                       lm: Optional[LmType] = None,
                       lm_weight: float = 0,
-                      beam: int = 8,
+                      beam_size: int = 8,
                       nbest: int = 1,
                       max_len: int = -1,
                       min_len: int = 0,
@@ -207,8 +207,8 @@ def beam_search_batch(decoder: nn.Module,
         raise RuntimeError(f"Invalid max_len: {max_len:d}")
     if not hasattr(decoder, "step"):
         raise RuntimeError("Function step should defined in decoder network")
-    if beam > decoder.vocab_size:
-        raise RuntimeError(f"Beam size({beam}) > vocabulary size")
+    if beam_size > decoder.vocab_size:
+        raise RuntimeError(f"Beam size({beam_size}) > vocabulary size")
 
     if lm:
         if isinstance(lm, nn.Module):
@@ -217,18 +217,18 @@ def beam_search_batch(decoder: nn.Module,
             lm_score_impl = ngram_score
 
     N, _, D_enc = enc_out.shape
-    nbest = min(beam, nbest)
+    nbest = min(beam_size, nbest)
     device = enc_out.device
     att_ali = None
     dec_hid = None
     # N x T x F => N*beam x T x F
-    enc_out = th.repeat_interleave(enc_out, beam, 0)
-    enc_len = th.repeat_interleave(enc_len, beam, 0)
-    att_ctx = th.zeros([N * beam, D_enc], device=device)
-    proj = th.zeros([N * beam, D_enc], device=device)
+    enc_out = th.repeat_interleave(enc_out, beam_size, 0)
+    enc_len = th.repeat_interleave(enc_len, beam_size, 0)
+    att_ctx = th.zeros([N * beam_size, D_enc], device=device)
+    proj = th.zeros([N * beam_size, D_enc], device=device)
 
     lm_state = None
-    beam_param = BeamSearchParam(beam_size=beam,
+    beam_param = BeamSearchParam(beam_size=beam_size,
                                  sos=sos,
                                  eos=eos,
                                  device=device,
@@ -278,7 +278,7 @@ def beam_search_batch(decoder: nn.Module,
             if hyp_ended:
                 hypos[u] += hyp_ended
 
-            if len(hypos[u]) >= beam:
+            if len(hypos[u]) >= beam_size:
                 stop_batch[u] = True
 
         # all True, break search

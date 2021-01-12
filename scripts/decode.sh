@@ -92,7 +92,6 @@ else
     --lm-tag $lm_tag \
     --spm "$spm" \
     --space "$space" \
-    --penalty $penalty \
     --temperature $temperature \
     --lm-weight $lm_weight \
     --nbest $nbest \

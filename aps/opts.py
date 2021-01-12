@@ -134,7 +134,7 @@ def get_aps_decode_parser():
                         "the acoustic scores")
     parser.add_argument("--len-norm",
                         action=StrToBoolAction,
-                        default="false",
+                        default="true",
                         help="If ture, using length normalized "
                         "when sort nbest hypos")
     parser.add_argument("--len-penalty",
@@ -151,7 +151,7 @@ def get_aps_decode_parser():
                         help="Coverage threshold value")
     parser.add_argument("--eos-threshold",
                         type=float,
-                        default=0.5,
+                        default=1,
                         help="Threshold of the EOS symbol")
     parser.add_argument("--dict",
                         type=str,
