@@ -20,15 +20,14 @@ class BeamSearchParam(object):
     Parameters used in beam search
     """
     beam_size: int = 8
-    batch_size: Optional[int] = None
     sos: int = 1
     eos: int = 2
     min_len: int = 1
     lm_weight: float = 0
     eos_threshold: float = 1
     device: Union[th.device, str] = "cpu"
-    penalty: float = 0
-    cov_weight: float = 0
+    len_penalty: float = 0
+    cov_penalty: float = 0
     cov_threshold: float = 0.5
     len_norm: bool = True
 
@@ -68,7 +67,7 @@ class BaseBeamTracker(object):
         Return
             cov_score: coverage score
         """
-        if att_ali is None or self.param.cov_weight <= 0:
+        if att_ali is None or self.param.cov_penalty <= 0:
             cov_score = 0
         else:
             assert att_ali is not None
@@ -79,7 +78,7 @@ class BaseBeamTracker(object):
                                       self.param.cov_threshold).log(),
                          -1,
                          keepdim=True)
-            cov_score = self.param.cov_weight * cov
+            cov_score = self.param.cov_penalty * cov
         return cov_score
 
     def beam_select(self, am_prob: th.Tensor,
@@ -104,12 +103,13 @@ class BaseBeamTracker(object):
                 ]
                 self.none_eos_idx = th.tensor(none_eos_idx,
                                               device=am_prob.device)
-            # N
+            # current eos score
             eos_prob = fusion_prob[:, self.param.eos]
+            # none_eos best score
             none_eos, _ = th.max(fusion_prob[:, self.none_eos_idx], dim=-1)
-            kept_eos = eos_prob > none_eos * self.param.eos_threshold
-            # set inf
-            fusion_prob[kept_eos, self.param.eos] = NEG_INF
+            # set inf to disable the eos
+            disable_eos = eos_prob < none_eos * self.param.eos_threshold
+            fusion_prob[disable_eos, self.param.eos] = NEG_INF
         # local pruning: N*beam x beam
         topk_score, topk_token = th.topk(fusion_prob,
                                          self.param.beam_size,
@@ -148,7 +148,7 @@ class BaseBeamTracker(object):
             # double check impl of beam search
             assert token[1:] == check_trans[i]
             token_len = len(token) if final else len(token) - 1
-            score = s + token_len * self.param.penalty
+            score = s + token_len * self.param.len_penalty
             hypos.append({
                 "score": score / (token_len if self.param.len_norm else 1),
                 "trans": token + [self.param.eos] if final else token,

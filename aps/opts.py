@@ -132,10 +132,27 @@ def get_aps_decode_parser():
                         default=1,
                         help="Temperature value used to smooth "
                         "the acoustic scores")
-    parser.add_argument("--penalty",
+    parser.add_argument("--len-norm",
+                        action=StrToBoolAction,
+                        default="false",
+                        help="If ture, using length normalized "
+                        "when sort nbest hypos")
+    parser.add_argument("--len-penalty",
                         type=float,
                         default=0,
-                        help="Length penalty factor for beam search")
+                        help="Length penalty factor")
+    parser.add_argument("--cov-penalty",
+                        type=float,
+                        default=0,
+                        help="Coverage penalty factor")
+    parser.add_argument("--cov-threshold",
+                        type=float,
+                        default=0.5,
+                        help="Coverage threshold value")
+    parser.add_argument("--eos-threshold",
+                        type=float,
+                        default=0.5,
+                        help="Threshold of the EOS symbol")
     parser.add_argument("--dict",
                         type=str,
                         default="",
@@ -175,12 +192,7 @@ def get_aps_decode_parser():
                         type=str,
                         default="",
                         help="If not empty, dump n-best hypothesis")
-    parser.add_argument("--len-norm",
-                        action=StrToBoolAction,
-                        default="false",
-                        help="If ture, using length normalized "
-                        "when sort nbest hypos")
-    parser.add_argument("--dump-alignment",
+    parser.add_argument("--dump-align",
                         type=str,
                         default="",
                         help="If assigned, dump alignment "

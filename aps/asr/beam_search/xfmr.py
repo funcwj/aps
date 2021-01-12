@@ -22,11 +22,12 @@ def beam_search(decoder: nn.Module,
                 beam: int = 8,
                 nbest: int = 1,
                 max_len: int = -1,
+                min_len: int = 0,
                 sos: int = -1,
                 eos: int = -1,
-                penalty: float = 0,
                 len_norm: bool = True,
-                cov_weight: float = 0,
+                len_penalty: float = 0,
+                cov_penalty: float = 0,
                 temperature: float = 1,
                 cov_threshold: float = 0.5,
                 eos_threshold: float = 0) -> List[Dict]:
@@ -57,13 +58,15 @@ def beam_search(decoder: nn.Module,
     nbest = min(beam, nbest)
     device = enc_out.device
 
+    # cov_* are diabled
     beam_param = BeamSearchParam(beam_size=beam,
                                  sos=sos,
                                  eos=eos,
                                  device=device,
-                                 penalty=penalty,
+                                 min_len=min_len,
                                  len_norm=len_norm,
                                  lm_weight=lm_weight,
+                                 len_penalty=len_penalty,
                                  eos_threshold=eos_threshold)
     beam_tracker = BeamTracker(beam_param)
     hypos = []
@@ -121,14 +124,15 @@ def beam_search_batch(decoder: nn.Module,
                       beam: int = 8,
                       nbest: int = 1,
                       max_len: int = -1,
+                      min_len: int = 0,
                       sos: int = -1,
                       eos: int = -1,
-                      penalty: float = 0,
                       len_norm: bool = True,
-                      cov_weight: float = 0,
+                      len_penalty: float = 0,
+                      cov_penalty: float = 0,
                       temperature: float = 1,
                       cov_threshold: float = 0.5,
-                      eos_threshold: float = 0) -> List[Dict]:
+                      eos_threshold: float = 1) -> List[Dict]:
     """
     Batch level vectorized beam search algothrim
     Args
@@ -158,13 +162,15 @@ def beam_search_batch(decoder: nn.Module,
 
     pre_emb = None
     lm_state = None
+    # cov_* are diabled
     beam_param = BeamSearchParam(beam_size=beam,
                                  sos=sos,
                                  eos=eos,
                                  device=device,
-                                 penalty=penalty,
+                                 min_len=min_len,
                                  len_norm=len_norm,
                                  lm_weight=lm_weight,
+                                 len_penalty=len_penalty,
                                  eos_threshold=eos_threshold)
     beam_tracker = BatchBeamTracker(N, beam_param)
     # for each utterance

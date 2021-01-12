@@ -15,8 +15,11 @@ min_len=1
 beam_size=16
 batch_size=""
 function="beam_search"
-penalty=0
 len_norm=true
+len_penalty=0
+cov_penalty=0
+cov_threshold=0
+eos_threshold=1
 temperature=1
 am_tag="best"
 lm_tag="best"
@@ -59,17 +62,20 @@ if [ -z $batch_size ]; then
     --am-tag $am_tag \
     --lm-tag $lm_tag \
     --spm "$spm" \
-    --penalty $penalty \
     --temperature $temperature \
     --lm-weight $lm_weight \
     --space "$space" \
     --nbest $nbest \
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
-    --dump-alignment "$dump_align" \
+    --dump-align "$dump_align" \
     --max-len $max_len \
     --min-len $min_len \
     --len-norm $len_norm \
     --function $function \
+    --len-penalty $len_penalty \
+    --cov-penalty $cov_penalty \
+    --cov-threshold $cov_threshold \
+    --eos-threshold $eos_threshold \
     > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
 else
   cmd/decode_batch.py \
@@ -91,11 +97,17 @@ else
     --lm-weight $lm_weight \
     --nbest $nbest \
     --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
-    --dump-alignment "$dump_align" \
+    --dump-align "$dump_align" \
     --max-len $max_len \
     --min-len $min_len \
     --len-norm $len_norm \
+    --len-penalty $len_penalty \
+    --cov-penalty $cov_penalty \
+    --cov-threshold $cov_threshold \
+    --eos-threshold $eos_threshold \
     > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
 fi
+
+cp $mdl_id.decode.$exp_id.${log_suffix}log $dec_dir
 
 echo "$0 $*: Done"
