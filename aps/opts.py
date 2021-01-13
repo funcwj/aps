@@ -173,12 +173,20 @@ def get_aps_decode_parser():
                         "-1 means running on CPU")
     parser.add_argument("--max-len",
                         type=int,
-                        default=100,
-                        help="Maximum steps to do during decoding stage")
+                        default=1000,
+                        help="Maximum decoding sequence length we can have")
+    parser.add_argument("--max-len-ratio",
+                        type=float,
+                        default=0.5,
+                        help="To derive #max_len (max_len_ratio * #inp_length)")
     parser.add_argument("--min-len",
                         type=int,
                         default=1,
                         help="Minimum decoding sequence length we can have")
+    parser.add_argument("--min-len-ratio",
+                        type=float,
+                        default=1.0,
+                        help="To derive #min_len (min_len_ratio * #inp_length)")
     parser.add_argument("--space",
                         type=str,
                         default="",

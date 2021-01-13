@@ -62,9 +62,7 @@ class EncDecASRBase(nn.Module):
             self.is_xfmr_encoder = False
         self.ctc = nn.Linear(enc_proj, vocab_size) if ctc else None
 
-    def _batch_decoding_prep(self,
-                             batch: List[th.Tensor],
-                             max_len: int = -1) -> Tuple[th.Tensor]:
+    def _batch_decoding_prep(self, batch: List[th.Tensor]) -> Tuple[th.Tensor]:
         """
         Prepare data for batch decoding
         """
@@ -84,16 +82,13 @@ class EncDecASRBase(nn.Module):
             outs.append(enc_out[0])
 
         lens = [out.shape[0] for out in outs]
-        max_len = max(lens) if max_len <= 0 else min(max(lens), max_len)
         # T x N x D
         enc_out = pad_sequence(outs, batch_first=False)
         enc_len = th.tensor(lens, device=enc_out.device)
         # N x T x D
         return enc_out.transpose(0, 1), enc_len
 
-    def _decoding_prep(self,
-                       x: th.Tensor,
-                       max_len: int = -1) -> Tuple[int, th.Tensor]:
+    def _decoding_prep(self, x: th.Tensor) -> th.Tensor:
         """
         Prepare data for decoding
         """
@@ -113,9 +108,7 @@ class EncDecASRBase(nn.Module):
         inp_len = x.shape[-2]
         #  N x Ti x D
         enc_out, _ = self.encoder(x, None)
-        # work out max_len
-        max_len = inp_len if max_len <= 0 else min(inp_len, max_len)
-        return max_len, enc_out
+        return enc_out
 
     def _training_prep(
         self, x_pad: th.Tensor, x_len: Optional[th.Tensor], y_pad: th.Tensor
@@ -214,7 +207,6 @@ class AttASR(EncDecASRBase):
 
     def greedy_search(self,
                       x: th.Tensor,
-                      max_len: int = -1,
                       len_norm: bool = True,
                       **kwargs) -> List[Dict]:
         """
@@ -223,7 +215,7 @@ class AttASR(EncDecASRBase):
             x: audio samples or acoustic features, S or Ti x F
         """
         with th.no_grad():
-            max_len, enc_out = self._decoding_prep(x, max_len=max_len)
+            enc_out = self._decoding_prep(x)
             return att_api.greedy_search(self.decoder,
                                          self.att_net,
                                          enc_out,
@@ -231,41 +223,33 @@ class AttASR(EncDecASRBase):
                                          eos=self.eos,
                                          len_norm=len_norm)
 
-    def beam_search(self,
-                    x: th.Tensor,
-                    max_len: int = -1,
-                    **kwargs) -> List[Dict]:
+    def beam_search(self, x: th.Tensor, **kwargs) -> List[Dict]:
         """
         Vectorized beam search
         Args
             x (Tensor): audio samples or acoustic features, S or Ti x F
         """
         with th.no_grad():
-            max_len, enc_out = self._decoding_prep(x, max_len=max_len)
+            enc_out = self._decoding_prep(x)
             return att_api.beam_search(self.decoder,
                                        self.att_net,
                                        enc_out,
-                                       max_len=max_len,
                                        sos=self.sos,
                                        eos=self.eos,
                                        **kwargs)
 
-    def beam_search_batch(self,
-                          batch: List[th.Tensor],
-                          max_len: int = -1,
-                          **kwargs) -> List[Dict]:
+    def beam_search_batch(self, batch: List[th.Tensor], **kwargs) -> List[Dict]:
         """
         Batch version of beam search
         Args
             batch (list[Tensor]): audio samples or acoustic features, S or Ti x F
         """
         with th.no_grad():
-            enc_out, enc_len = self._batch_decoding_prep(batch, max_len=max_len)
+            enc_out, enc_len = self._batch_decoding_prep(batch)
             return att_api.beam_search_batch(self.decoder,
                                              self.att_net,
                                              enc_out,
                                              enc_len,
-                                             max_len=max_len,
                                              sos=self.sos,
                                              eos=self.eos,
                                              **kwargs)
@@ -331,29 +315,24 @@ class XfmrASR(EncDecASRBase):
         Beam search for Transformer
         """
         with th.no_grad():
-            max_len, enc_out = self._decoding_prep(x, max_len=max_len)
+            enc_out = self._decoding_prep(x)
             # beam search
             return xfmr_api.beam_search(self.decoder,
                                         enc_out,
                                         sos=self.sos,
                                         eos=self.eos,
-                                        max_len=max_len,
                                         **kwargs)
 
-    def beam_search_batch(self,
-                          batch: List[th.Tensor],
-                          max_len: int = -1,
-                          **kwargs) -> List[Dict]:
+    def beam_search_batch(self, batch: List[th.Tensor], **kwargs) -> List[Dict]:
         """
         Beam search for Transformer (batch version)
         """
         with th.no_grad():
-            enc_out, enc_len = self._batch_decoding_prep(batch, max_len=max_len)
+            enc_out, enc_len = self._batch_decoding_prep(batch)
             # beam search
             return xfmr_api.beam_search_batch(self.decoder,
                                               enc_out,
                                               enc_len,
                                               sos=self.sos,
                                               eos=self.eos,
-                                              max_len=max_len,
                                               **kwargs)

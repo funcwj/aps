@@ -11,8 +11,10 @@ import torch.nn.functional as tf
 
 from aps.asr.beam_search.utils import BeamSearchParam, BeamTracker, BatchBeamTracker
 from aps.asr.beam_search.lm import rnnlm_score, ngram_score, LmType
-
+from aps.utils import get_logger
 from typing import List, Dict, Optional
+
+logger = get_logger(__name__)
 
 
 def beam_search(decoder: nn.Module,
@@ -22,7 +24,9 @@ def beam_search(decoder: nn.Module,
                 beam_size: int = 8,
                 nbest: int = 1,
                 max_len: int = -1,
+                max_len_ratio: float = 1,
                 min_len: int = 0,
+                min_len_ratio: float = 0,
                 sos: int = -1,
                 eos: int = -1,
                 len_norm: bool = True,
@@ -38,9 +42,7 @@ def beam_search(decoder: nn.Module,
     """
     if sos < 0 or eos < 0:
         raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
-    if max_len <= 0:
-        raise RuntimeError(f"Invalid max_len: {max_len:d}")
-    N, _, _ = enc_out.shape
+    N, T, _ = enc_out.shape
     if N != 1:
         raise RuntimeError(
             f"Got batch size {N:d}, now only support one utterance")
@@ -55,6 +57,8 @@ def beam_search(decoder: nn.Module,
         else:
             lm_score_impl = ngram_score
 
+    min_len = max(min_len, int(min_len_ratio * T))
+    max_len = min(max_len, int(max_len_ratio * T))
     nbest = min(beam_size, nbest)
     device = enc_out.device
 
@@ -69,7 +73,6 @@ def beam_search(decoder: nn.Module,
                                  len_penalty=len_penalty,
                                  eos_threshold=eos_threshold)
     beam_tracker = BeamTracker(beam_param)
-    hypos = []
     pre_emb = None
     lm_state = None
     # Ti x beam x D
@@ -97,6 +100,7 @@ def beam_search(decoder: nn.Module,
         # one beam search step
         stop = beam_tracker.step(t, am_prob, lm_prob)
         if stop:
+            logger.info(f"beam search ended at step {t + 1}")
             break
     return beam_tracker.nbest_hypos(nbest, auto_stop=stop)
 
@@ -109,7 +113,9 @@ def beam_search_batch(decoder: nn.Module,
                       beam_size: int = 8,
                       nbest: int = 1,
                       max_len: int = -1,
+                      max_len_ratio: float = 1,
                       min_len: int = 0,
+                      min_len_ratio: float = 0,
                       sos: int = -1,
                       eos: int = -1,
                       len_norm: bool = True,
@@ -126,8 +132,6 @@ def beam_search_batch(decoder: nn.Module,
     """
     if sos < 0 or eos < 0:
         raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
-    if max_len <= 0:
-        raise RuntimeError(f"Invalid max_len: {max_len:d}")
     if not hasattr(decoder, "step"):
         raise RuntimeError("Function step should defined in decoder network")
     if beam_size > decoder.vocab_size:
@@ -138,7 +142,11 @@ def beam_search_batch(decoder: nn.Module,
         else:
             lm_score_impl = ngram_score
 
-    N, _, _ = enc_out.shape
+    N, T, _ = enc_out.shape
+    min_len = max(min_len, int(min_len_ratio * T))
+    max_len = min(max_len, int(max_len_ratio * T))
+    logger.info(
+        f"length constraint of the decoding sequence: ({min_len}, {max_len})")
     nbest = min(beam_size, nbest)
     device = enc_out.device
     # N x T x F => N*beam x T x F

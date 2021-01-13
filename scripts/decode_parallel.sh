@@ -11,8 +11,10 @@ dict=""
 space=""
 nbest=1
 channel=-1
-max_len=100
+max_len=500
 min_len=1
+max_len_ratio=0.5
+min_len_ratio=0
 len_norm=true
 len_penalty=0
 cov_penalty=0
@@ -72,6 +74,8 @@ $cmd JOB=1:$nj $log_dir/decode.JOB.log \
   --dump-align "$dump_align" \
   --max-len $max_len \
   --min-len $min_len \
+  --max-len-ratio $max_len_ratio \
+  --min-len-ratio $min_len_ratio \
   --function $function \
   --len-norm $len_norm \
   --len-penalty $len_penalty \

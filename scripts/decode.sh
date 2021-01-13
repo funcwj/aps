@@ -10,8 +10,10 @@ dict=""
 space=""
 nbest=1
 channel=-1
-max_len=100
+max_len=500
 min_len=1
+max_len_ratio=0.5
+min_len_ratio=0
 beam_size=16
 batch_size=""
 function="beam_search"
@@ -70,6 +72,9 @@ if [ -z $batch_size ]; then
     --dump-align "$dump_align" \
     --max-len $max_len \
     --min-len $min_len \
+    --max-len-ratio $max_len_ratio \
+    --min-len-ratio $min_len_ratio \
+    --max-len 1
     --len-norm $len_norm \
     --function $function \
     --len-penalty $len_penalty \
@@ -99,6 +104,8 @@ else
     --dump-align "$dump_align" \
     --max-len $max_len \
     --min-len $min_len \
+    --max-len-ratio $max_len_ratio \
+    --min-len-ratio $min_len_ratio \
     --len-norm $len_norm \
     --len-penalty $len_penalty \
     --cov-penalty $cov_penalty \

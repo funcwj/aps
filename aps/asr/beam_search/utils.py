@@ -321,10 +321,12 @@ class BeamTracker(BaseBeamTracker):
             self._step_search(am_prob, lm_prob, att_ali=att_ali)
         # trace back ended sequence (process eos nodes)
         hyp_ended = self._trace_back(final=False)
+        stop = False
         if hyp_ended:
             self.hypos += hyp_ended
-        # all eos, stop beam search
-        return len(hyp_ended) == self.param.beam_size
+            # all eos, stop beam search
+            stop = len(hyp_ended) == self.param.beam_size
+        return stop
 
     def nbest_hypos(self, nbest: int, auto_stop: bool = True) -> List[Dict]:
         """
@@ -335,10 +337,12 @@ class BeamTracker(BaseBeamTracker):
         """
         # not auto stop, add unfinished hypos
         if not auto_stop:
+            logger.info(f"trace back at the final step ...")
             hyp_final = self._trace_back(final=True)
             if hyp_final:
                 self.hypos += hyp_final
         # sort and get nbest
+        logger.info(f"get {nbest}best from {len(self.hypos)} hypos ...")
         sort_hypos = sorted(self.hypos, key=lambda n: n["score"], reverse=True)
         return sort_hypos[:nbest]
 
@@ -502,11 +506,14 @@ class BatchBeamTracker(BaseBeamTracker):
             hyp_ended = self._trace_back(u, final=False)
             if hyp_ended:
                 self.hypos[u] += hyp_ended
-
-            if len(hyp_ended) == self.param.beam_size:
-                self.stop_batch[u] = True
+                # all eos
+                if len(hyp_ended) == self.param.beam_size:
+                    logger.info(
+                        f"beam search end (batch[{u}]) at step {step_num + 1}")
+                    self.stop_batch[u] = True
         # all True, stop search
-        return sum(self.stop_batch) == self.batch_size
+        stop = sum(self.stop_batch) == self.batch_size
+        return stop
 
     def nbest_hypos(self,
                     nbest: int,
@@ -524,12 +531,15 @@ class BatchBeamTracker(BaseBeamTracker):
                 if self.stop_batch[u]:
                     continue
                 # process end
+                logger.info(f"trace back at the final step for batch[{u}] ...")
                 hyp_final = self._trace_back(u, final=True)
                 if hyp_final:
                     self.hypos[u] += hyp_final
         # sort and get nbest
         nbest_batch = []
-        for utt_bypos in self.hypos:
+        for u, utt_bypos in enumerate(self.hypos):
+            logger.info(
+                f"get {nbest}best (batch[{u}]) from {len(utt_bypos)} hypos ...")
             sort_hypos = sorted(utt_bypos,
                                 key=lambda n: n["score"],
                                 reverse=True)
