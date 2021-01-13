@@ -164,6 +164,22 @@ class BaseBeamTracker(object):
             })
         return hypos
 
+    def step(self,
+             step_num: int,
+             am_prob: th.Tensor,
+             lm_prob: Union[th.Tensor, float],
+             att_ali: Optional[th.Tensor] = None) -> bool:
+        """
+        Make one beam search step
+        """
+        raise NotImplementedError
+
+    def nbest_hypos(self, nbest: int, auto_stop: bool = True) -> List[Dict]:
+        """
+        Return nbest sequence
+        """
+        raise NotImplementedError
+
 
 class BeamTracker(BaseBeamTracker):
     """
@@ -177,6 +193,7 @@ class BeamTracker(BaseBeamTracker):
         ]
         self.point = [th.tensor(range(param.beam_size), device=param.device)]
         self.score = th.zeros(param.beam_size, device=param.device)
+        self.hypos = []
         self.acmu_score = th.zeros_like(self.score)
 
     def __getitem__(self, t: int) -> Tuple[th.Tensor, th.Tensor]:
@@ -185,7 +202,7 @@ class BeamTracker(BaseBeamTracker):
         """
         return (self.token[t], self.point[t])
 
-    def trace_back(self, final: bool = False) -> Optional[List[Dict]]:
+    def _trace_back(self, final: bool = False) -> Optional[List[Dict]]:
         """
         Return decoding hypothesis
         Args:
@@ -211,10 +228,10 @@ class BeamTracker(BaseBeamTracker):
                                 f"{h['trans']}, score = {h['score']:.2f}")
         return hyp
 
-    def init_search(self,
-                    am_prob: th.Tensor,
-                    lm_prob: Union[th.Tensor, float],
-                    att_ali: Optional[th.Tensor] = None) -> NoReturn:
+    def _init_search(self,
+                     am_prob: th.Tensor,
+                     lm_prob: Union[th.Tensor, float],
+                     att_ali: Optional[th.Tensor] = None) -> NoReturn:
         """
         Kick off the beam search (to be used at the first step)
         Args:
@@ -232,10 +249,10 @@ class BeamTracker(BaseBeamTracker):
         self.trans = topk_token[0][..., None]
         self.align = att_ali[..., None]
 
-    def step_search(self,
-                    am_prob: th.Tensor,
-                    lm_prob: Union[th.Tensor, float],
-                    att_ali: Optional[th.Tensor] = None) -> NoReturn:
+    def _step_search(self,
+                     am_prob: th.Tensor,
+                     lm_prob: Union[th.Tensor, float],
+                     att_ali: Optional[th.Tensor] = None) -> NoReturn:
         """
         Prune and update score & token & backward point
         Args:
@@ -286,7 +303,7 @@ class BeamTracker(BaseBeamTracker):
              step_num: int,
              am_prob: th.Tensor,
              lm_prob: Union[th.Tensor, float],
-             att_ali: Optional[th.Tensor] = None) -> Optional[List[Dict]]:
+             att_ali: Optional[th.Tensor] = None) -> bool:
         """
         Run one beam search step
         Args:
@@ -294,14 +311,36 @@ class BeamTracker(BaseBeamTracker):
             am_prob (Tensor): N x V, acoustic prob
             lm_prob (Tensor): N x V, language prob
             att_ali (Tensor): N x T, alignment score (weight)
+        Return:
+            stop (bool): stop beam search or not
         """
         # local pruning
         if step_num == 0:
-            self.init_search(am_prob, lm_prob, att_ali=att_ali)
+            self._init_search(am_prob, lm_prob, att_ali=att_ali)
         else:
-            self.step_search(am_prob, lm_prob, att_ali=att_ali)
-        # trace back sequence
-        return self.trace_back(final=False)
+            self._step_search(am_prob, lm_prob, att_ali=att_ali)
+        # trace back ended sequence (process eos nodes)
+        hyp_ended = self._trace_back(final=False)
+        if hyp_ended:
+            self.hypos += hyp_ended
+        # all eos, stop beam search
+        return len(hyp_ended) == self.param.beam_size
+
+    def nbest_hypos(self, nbest: int, auto_stop: bool = True) -> List[Dict]:
+        """
+        Return nbest sequence
+        Args:
+            nbest (int): nbest size
+            auto_stop: beam search is auto-stopped or not
+        """
+        # not auto stop, add unfinished hypos
+        if not auto_stop:
+            hyp_final = self._trace_back(final=True)
+            if hyp_final:
+                self.hypos += hyp_final
+        # sort and get nbest
+        sort_hypos = sorted(self.hypos, key=lambda n: n["score"], reverse=True)
+        return sort_hypos[:nbest]
 
 
 class BatchBeamTracker(BaseBeamTracker):
@@ -322,6 +361,8 @@ class BatchBeamTracker(BaseBeamTracker):
                       device=param.device)
         ]
         self.score = th.zeros(batch_size, param.beam_size, device=param.device)
+        self.hypos = [[] for _ in range(batch_size)]
+        self.stop_batch = [False] * batch_size
         self.acmu_score = th.zeros_like(self.score)
         self.step_point = th.arange(0,
                                     param.beam_size * batch_size,
@@ -336,7 +377,7 @@ class BatchBeamTracker(BaseBeamTracker):
         token = self.token[t]
         return (token.view(-1), point.view(-1))
 
-    def trace_back(self, batch, final: bool = False) -> Optional[List[Dict]]:
+    def _trace_back(self, batch, final: bool = False) -> Optional[List[Dict]]:
         """
         Return end flags
         """
@@ -356,10 +397,10 @@ class BatchBeamTracker(BaseBeamTracker):
             hyp = [h for h in hyp if len(h["trans"]) >= self.param.min_len + 2]
         return hyp
 
-    def init_search(self,
-                    am_prob: th.Tensor,
-                    lm_prob: Union[th.Tensor, float],
-                    att_ali: Optional[th.Tensor] = None) -> NoReturn:
+    def _init_search(self,
+                     am_prob: th.Tensor,
+                     lm_prob: Union[th.Tensor, float],
+                     att_ali: Optional[th.Tensor] = None) -> NoReturn:
         """
         Kick off the beam search (to be used at the first step)
         Args:
@@ -378,10 +419,10 @@ class BatchBeamTracker(BaseBeamTracker):
         self.trans = topk_token[0][..., None]
         self.align = att_ali[..., None]
 
-    def step_search(self,
-                    am_prob: th.Tensor,
-                    lm_prob: Union[th.Tensor, float],
-                    att_ali: Optional[th.Tensor] = None) -> NoReturn:
+    def _step_search(self,
+                     am_prob: th.Tensor,
+                     lm_prob: Union[th.Tensor, float],
+                     att_ali: Optional[th.Tensor] = None) -> NoReturn:
         """
         Prune and update score & token & backward point
         Args:
@@ -435,3 +476,62 @@ class BatchBeamTracker(BaseBeamTracker):
                                 points,
                                 tokens,
                                 final=final)
+
+    def step(self,
+             step_num: int,
+             am_prob: th.Tensor,
+             lm_prob: Union[th.Tensor, float],
+             att_ali: Optional[th.Tensor] = None) -> bool:
+        """
+        Run one beam search step
+        Args:
+            step_num (int): step number
+            am_prob (Tensor): N x V, acoustic prob
+            lm_prob (Tensor): N x V, language prob
+            att_ali (Tensor): N x T, alignment score (weight)
+        Return:
+            stop (bool): stop beam search or not
+        """
+        # local pruning
+        if step_num == 0:
+            self._init_search(am_prob, lm_prob, att_ali=att_ali)
+        else:
+            self._step_search(am_prob, lm_prob, att_ali=att_ali)
+        # trace back ended sequence (process eos nodes)
+        for u in range(self.batch_size):
+            hyp_ended = self._trace_back(u, final=False)
+            if hyp_ended:
+                self.hypos[u] += hyp_ended
+
+            if len(hyp_ended) == self.param.beam_size:
+                self.stop_batch[u] = True
+        # all True, stop search
+        return sum(self.stop_batch) == self.batch_size
+
+    def nbest_hypos(self,
+                    nbest: int,
+                    auto_stop: bool = True) -> List[List[Dict]]:
+        """
+        Return nbest sequence
+        Args:
+            nbest (int): nbest size
+            auto_stop: beam search is auto-stopped or not
+        """
+        # not auto stop, add unfinished hypos
+        if not auto_stop:
+            for u in range(self.batch_size):
+                # skip utterance u
+                if self.stop_batch[u]:
+                    continue
+                # process end
+                hyp_final = self._trace_back(u, final=True)
+                if hyp_final:
+                    self.hypos[u] += hyp_final
+        # sort and get nbest
+        nbest_batch = []
+        for utt_bypos in self.hypos:
+            sort_hypos = sorted(utt_bypos,
+                                key=lambda n: n["score"],
+                                reverse=True)
+            nbest_batch.append(sort_hypos[:nbest])
+        return nbest_batch

@@ -94,24 +94,11 @@ def beam_search(decoder: nn.Module,
         else:
             lm_prob = 0
 
-        # finished sequence
-        hyp_ended = beam_tracker.step(t, am_prob, lm_prob)
-
-        # process eos nodes
-        if hyp_ended:
-            hypos += hyp_ended
-
-        if len(hypos) >= beam_size:
+        # one beam search step
+        stop = beam_tracker.step(t, am_prob, lm_prob)
+        if stop:
             break
-
-        # process non-eos nodes at the final step
-        if t == max_len - 1:
-            hyp_final = beam_tracker.trace_back(final=True)
-            if hyp_final:
-                hypos += hyp_final
-
-    nbest_hypos = sorted(hypos, key=lambda n: n["score"], reverse=True)
-    return nbest_hypos[:nbest]
+    return beam_tracker.nbest_hypos(nbest, auto_stop=stop)
 
 
 def beam_search_batch(decoder: nn.Module,
@@ -130,7 +117,7 @@ def beam_search_batch(decoder: nn.Module,
                       cov_penalty: float = 0,
                       temperature: float = 1,
                       cov_threshold: float = 0.5,
-                      eos_threshold: float = 1) -> List[Dict]:
+                      eos_threshold: float = 1) -> List[List[Dict]]:
     """
     Batch level vectorized beam search algothrim
     Args
@@ -171,9 +158,6 @@ def beam_search_batch(decoder: nn.Module,
                                  len_penalty=len_penalty,
                                  eos_threshold=eos_threshold)
     beam_tracker = BatchBeamTracker(N, beam_param)
-    # for each utterance
-    hypos = [[] for _ in range(N)]
-    stop_batch = [False] * N
     # clear states
     # step by step
     for t in range(max_len):
@@ -195,37 +179,8 @@ def beam_search_batch(decoder: nn.Module,
             lm_prob = 0
 
         # local pruning: N*beam x beam
-        if t == 0:
-            beam_tracker.init_search(am_prob, lm_prob)
-        else:
-            beam_tracker.step_search(am_prob, lm_prob)
-
-        # process eos nodes
-        for u in range(N):
-            hyp_ended = beam_tracker.trace_back(u, final=False)
-            if hyp_ended:
-                hypos[u] += hyp_ended
-
-            if len(hypos[u]) >= beam_size:
-                stop_batch[u] = True
-
-        # all True, break search
-        if sum(stop_batch) == N:
+        stop = beam_tracker.step(t, am_prob, lm_prob)
+        if stop:
             break
 
-        # process non-eos nodes at the final step
-        if t == max_len - 1:
-            for u in range(N):
-                # skip utterance u
-                if stop_batch[u]:
-                    continue
-                # process end
-                hyp_final = beam_tracker.trace_back(u, final=True)
-                if hyp_final:
-                    hypos[u] += hyp_final
-
-    nbest_hypos = []
-    for utt_bypos in hypos:
-        hypos = sorted(utt_bypos, key=lambda n: n["score"], reverse=True)
-        nbest_hypos.append(hypos[:nbest])
-    return nbest_hypos
+    return beam_tracker.nbest_hypos(nbest, auto_stop=stop)

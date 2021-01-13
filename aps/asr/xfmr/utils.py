@@ -72,10 +72,12 @@ class Conv1dProj(nn.Module):
     def __init__(self,
                  input_size: int,
                  embed_dim: int = 512,
-                 inner_channels: int = 256) -> None:
+                 norm: str = "BN",
+                 dropout: float = 0,
+                 dim: int = 256) -> None:
         super(Conv1dProj, self).__init__()
-        self.conv1 = Conv1d(input_size, inner_channels)
-        self.conv2 = Conv1d(inner_channels, embed_dim)
+        self.conv1 = Conv1d(input_size, dim, dropout=dropout, norm=norm)
+        self.conv2 = Conv1d(dim, embed_dim, dropout=dropout, norm=norm)
 
     def check_args(self, inp: th.Tensor) -> NoReturn:
         """
@@ -122,14 +124,15 @@ class Conv2dProj(nn.Module):
     def __init__(self,
                  input_size: int,
                  embed_dim: int = 512,
-                 input_channels: int = 1) -> None:
+                 in_channels: int = 1,
+                 conv_channels: int = 256) -> None:
         super(Conv2dProj, self).__init__()
-        inner_channels = embed_dim // 2
-        self.conv1 = Conv2d(input_channels, inner_channels)
+        # kernel size = 3, stride = 2
+        self.conv1 = Conv2d(in_channels, conv_channels)
         input_size = self.conv1.compute_outp_dim(input_size, 1)
-        self.conv2 = Conv2d(inner_channels, inner_channels)
+        self.conv2 = Conv2d(conv_channels, conv_channels)
         input_size = self.conv1.compute_outp_dim(input_size, 1)
-        self.proj = nn.Linear(input_size * inner_channels, embed_dim)
+        self.proj = nn.Linear(input_size * conv_channels, embed_dim)
 
     def check_args(self, inp: th.Tensor) -> NoReturn:
         """
