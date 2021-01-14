@@ -27,7 +27,8 @@ def greedy_search(decoder: nn.Module,
     """
     if sos < 0 or eos < 0:
         raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
-    N, _, _ = enc_out.shape
+    # T x N x D
+    _, N, _ = enc_out.shape
     if N != 1:
         raise RuntimeError(
             f"Got batch size {N:d}, now only support one utterance")
@@ -77,11 +78,11 @@ def beam_search(decoder: nn.Module,
     """
     Vectorized beam search algothrim for transformer decoder
     Args
-        enc_out (Tensor): 1 x T x F, encoder output
+        enc_out (Tensor): T x 1 x F, encoder output
     """
     if sos < 0 or eos < 0:
         raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
-    N, T, _ = enc_out.shape
+    T, N, _ = enc_out.shape
     if N != 1:
         raise RuntimeError(
             f"Got batch size {N:d}, now only support one utterance")
@@ -109,6 +110,7 @@ def beam_search(decoder: nn.Module,
                                  eos=eos,
                                  device=device,
                                  min_len=min_len,
+                                 max_len=max_len,
                                  len_norm=len_norm,
                                  lm_weight=lm_weight,
                                  len_penalty=len_penalty,
@@ -116,10 +118,8 @@ def beam_search(decoder: nn.Module,
     beam_tracker = BeamTracker(beam_param)
     pre_emb = None
     lm_state = None
-    # 1 x T x D => beam x T x D
-    enc_out = th.repeat_interleave(enc_out, beam_size, 0)
-    # T x beam x D (shape is different with that in att.py)
-    enc_out = enc_out.transpose(0, 1)
+    # T x 1 x D => T x beam x D
+    enc_out = th.repeat_interleave(enc_out, beam_size, 1)
     # step by step
     stop = False
     while not stop:
@@ -167,7 +167,7 @@ def beam_search_batch(decoder: nn.Module,
     """
     Batch level vectorized beam search algothrim
     Args
-        enc_out (Tensor): N x T x F, encoder output
+        enc_out (Tensor): T x N x F, encoder output
         enc_len (Tensor): N, length of the encoder output
     """
     if sos < 0 or eos < 0:
@@ -182,7 +182,7 @@ def beam_search_batch(decoder: nn.Module,
         else:
             lm_score_impl = ngram_score
 
-    N, _, _ = enc_out.shape
+    _, N, _ = enc_out.shape
     min_len = [
         max(min_len, int(min_len_ratio * elen.item())) for elen in enc_len
     ]
@@ -190,15 +190,13 @@ def beam_search_batch(decoder: nn.Module,
         min(max_len, int(max_len_ratio * elen.item())) for elen in enc_len
     ]
     logger.info("--- length constraint of the decoding " +
-                f"sequence: ({[i, j] for i, j in zip(min_len, max_len)})")
+                f"sequence: {[(i, j) for i, j in zip(min_len, max_len)]}")
 
     nbest = min(beam_size, nbest)
     device = enc_out.device
     enc_len = th.repeat_interleave(enc_len, beam_size, 0)
-    # N x T x F => N*beam x T x F
-    enc_out = th.repeat_interleave(enc_out, beam_size, 0)
-    # N*beam x T x D (shape is different with that in att.py)
-    enc_out = enc_out.transpose(0, 1)
+    # T x N x D => T x N*beam x D
+    enc_out = th.repeat_interleave(enc_out, beam_size, 1)
 
     pre_emb = None
     lm_state = None
@@ -208,6 +206,7 @@ def beam_search_batch(decoder: nn.Module,
                                  eos=eos,
                                  device=device,
                                  min_len=min_len,
+                                 max_len=max_len,
                                  len_norm=len_norm,
                                  lm_weight=lm_weight,
                                  len_penalty=len_penalty,
@@ -215,7 +214,7 @@ def beam_search_batch(decoder: nn.Module,
     beam_tracker = BatchBeamTracker(N, beam_param)
     # step by step
     stop = False
-    for _ in range(max_len):
+    while not stop:
         # N*beam
         pre_tok, point = beam_tracker[-1]
         # beam x V
@@ -235,7 +234,5 @@ def beam_search_batch(decoder: nn.Module,
 
         # one beam search step
         stop = beam_tracker.step(am_prob, lm_prob)
-        if stop:
-            break
-
+    # return nbest
     return beam_tracker.nbest_hypos(nbest, auto_stop=stop)

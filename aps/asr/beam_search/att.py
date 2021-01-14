@@ -127,6 +127,7 @@ def beam_search(decoder: nn.Module,
                                  eos=eos,
                                  device=device,
                                  min_len=min_len,
+                                 max_len=max_len,
                                  len_norm=len_norm,
                                  lm_weight=lm_weight,
                                  len_penalty=len_penalty,
@@ -213,7 +214,7 @@ def beam_search_batch(decoder: nn.Module,
         min(max_len, int(max_len_ratio * elen.item())) for elen in enc_len
     ]
     logger.info("--- length constraint of the decoding " +
-                f"sequence: ({[i, j] for i, j in zip(min_len, max_len)})")
+                f"sequence: {[(i, j) for i, j in zip(min_len, max_len)]}")
 
     nbest = min(beam_size, nbest)
     device = enc_out.device
@@ -244,7 +245,7 @@ def beam_search_batch(decoder: nn.Module,
     att_net.clear()
     # step by step
     stop = False
-    for _ in range(max_len):
+    while not stop:
         # N*beam
         pre_tok, point = beam_tracker[-1]
         # step forward
@@ -268,6 +269,5 @@ def beam_search_batch(decoder: nn.Module,
 
         # one beam search step
         stop = beam_tracker.step(am_prob, lm_prob, att_ali=att_ali)
-        if stop:
-            break
+    # return nbest
     return beam_tracker.nbest_hypos(nbest, auto_stop=stop)

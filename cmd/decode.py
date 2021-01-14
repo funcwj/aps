@@ -153,7 +153,7 @@ def run(args):
         topn.close()
     cost = timer.elapsed()
     logger.info(
-        f"Decode {len(src_reader)} utterance done, time cost = {cost:.2f}s")
+        f"Decode {len(src_reader)} utterance done, time cost = {cost:.2f}m")
 
 
 if __name__ == "__main__":

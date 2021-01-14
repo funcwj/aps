@@ -12,6 +12,7 @@ from aps.utils import get_logger
 
 logger = get_logger(__name__)
 verbose = False
+double_check = True
 
 
 @dataclass
@@ -148,17 +149,19 @@ class BaseBeamTracker(object):
         """
         if align is not None:
             align = align[point].cpu()
-        final_trans = []
-        check_trans = trans[point].tolist()
-        for ptr, tok in zip(point_list[::-1], token_list[::-1]):
-            final_trans.append(tok[point].tolist())
-            point = ptr[point]
+        final_trans = trans[point].tolist()
+        # we compute final sequence in two ways to verify the implmentation of beam search
+        if double_check:
+            check_trans = []
+            for ptr, tok in zip(point_list[::-1], token_list[::-1]):
+                check_trans.append(tok[point].tolist())
+                point = ptr[point]
+            check_trans = check_trans[::-1]
         hypos = []
-        final_trans = final_trans[::-1]
         for i, s in enumerate(score):
-            token = [t[i] for t in final_trans]
-            # double check impl of beam search
-            assert token[1:] == check_trans[i]
+            token = final_trans[i]
+            # NOTE: double check implementation of the beam search
+            assert not double_check or token == [t[i] for t in check_trans]
             token_len = len(token) if final else len(token) - 1
             score = s + token_len * self.param.len_penalty
             hypos.append({
@@ -191,9 +194,9 @@ class BeamTracker(BaseBeamTracker):
 
     def __init__(self, param: BeamSearchParam) -> None:
         super(BeamTracker, self).__init__(param)
-        self.token = [
-            th.tensor([param.sos] * param.beam_size, device=param.device)
-        ]
+        init_sos = th.tensor([param.sos] * param.beam_size, device=param.device)
+        self.trans = init_sos[:, None]
+        self.token = [init_sos]
         self.point = [th.tensor(range(param.beam_size), device=param.device)]
         self.score = th.zeros(param.beam_size, device=param.device)
         self.hypos = []
@@ -228,7 +231,7 @@ class BeamTracker(BaseBeamTracker):
             hyp = [h for h in hyp if len(h["trans"]) >= self.param.min_len + 2]
             if verbose:
                 for h in hyp:
-                    logger.info("--- get decoding sequence " +
+                    logger.info("--- beam search gets decoding sequence " +
                                 f"{h['trans']}, score = {h['score']:.2f}")
         return hyp
 
@@ -250,7 +253,7 @@ class BeamTracker(BaseBeamTracker):
         self.acmu_score += topk_score[0]
         self.token.append(topk_token[0])
         self.point.append(self.point[-1])
-        self.trans = topk_token[0][..., None]
+        self.trans = self.concat(self.trans, None, topk_token[0])
         self.align = None if att_ali is None else att_ali[..., None]
 
     def _step_search(self,
@@ -331,7 +334,7 @@ class BeamTracker(BaseBeamTracker):
             # all eos, stop beam search
             stop = len(hyp_ended) == self.param.beam_size
         if stop:
-            logger.info(f"--- beam search ended at step {self.step_num}")
+            logger.info(f"--- beam search ends at step {self.step_num}")
         # update auto_step flag
         self.auto_stop = stop
         # if reach max_len, also return true
@@ -345,12 +348,13 @@ class BeamTracker(BaseBeamTracker):
         """
         # not auto stop, add unfinished hypos
         if not self.auto_stop:
-            logger.info(f"--- reach the final step ...")
+            logger.info("--- beam search reaches the final step ...")
             hyp_final = self._trace_back(final=True)
             if hyp_final:
                 self.hypos += hyp_final
         # sort and get nbest
-        logger.info(f"--- fetch {nbest}best from {len(self.hypos)} hypos ...")
+        logger.info(f"--- beam search gets {nbest}best " +
+                    f"from {len(self.hypos)} hypos ...")
         sort_hypos = sorted(self.hypos, key=lambda n: n["score"], reverse=True)
         return sort_hypos[:nbest]
 
@@ -364,10 +368,12 @@ class BatchBeamTracker(BaseBeamTracker):
         super(BatchBeamTracker, self).__init__(param)
         self.param = param
         self.batch_size = batch_size
-        self.token = [
-            th.tensor([[param.sos] * param.beam_size] * batch_size,
-                      device=param.device)
-        ]
+        init_sos = th.tensor([param.sos] * param.beam_size * batch_size,
+                             device=param.device)
+        # [batch*beam, T]
+        self.trans = init_sos[:, None]
+        # [batch x beam, ...]
+        self.token = [init_sos.view(batch_size, -1)]
         self.point = [
             th.tensor([list(range(param.beam_size))] * batch_size,
                       device=param.device)
@@ -412,8 +418,10 @@ class BatchBeamTracker(BaseBeamTracker):
             ]
             if verbose:
                 for h in hyp:
-                    logger.info(f"--- get decoding sequence (batch[{batch}]) " +
-                                f"{h['trans']}, score = {h['score']:.2f}")
+                    logger.info(
+                        "--- beam search gets decoding sequence " +
+                        f"(batch[{batch}]) {h['trans']}, score = {h['score']:.2f}"
+                    )
         return hyp
 
     def _init_search(self,
@@ -428,14 +436,16 @@ class BatchBeamTracker(BaseBeamTracker):
             att_ali (Tensor): N x T, alignment score (weight)
         """
         assert len(self.point) == 1 and self.step_num == 0
-        # local pruning: beam x V => beam x beam
+        # local pruning: N*beam x V => N*beam x beam
         topk_score, topk_token = self.beam_select(am_prob, lm_prob)
+        init_score = topk_score[::self.param.beam_size]
+        init_token = topk_token[::self.param.beam_size]
         # N x beam
-        self.score += topk_score[::self.param.beam_size]
-        self.acmu_score += topk_score[::self.param.beam_size]
-        self.token.append(topk_token[::self.param.beam_size].clone())
+        self.score += init_score
+        self.acmu_score += init_score
+        self.token.append(init_token.clone())
         self.point.append(self.point[-1])
-        self.trans = topk_token[0][..., None]
+        self.trans = self.concat(self.trans, None, self.token[-1].view(-1))
         self.align = None if att_ali is None else att_ali[..., None]
 
     def _step_search(self,
@@ -465,13 +475,14 @@ class BatchBeamTracker(BaseBeamTracker):
         point = topk_index // self.param.beam_size
         # N x beam*beam => N x beam
         token = th.gather(topk_token.view(self.batch_size, -1), -1, topk_index)
+        # append stats
+        self.token.append(token.clone())
+        self.point.append(point)
+        token, point = self[-1]
         # concat stats
         self.trans = self.concat(self.trans, point, token)
         self.align = self.concat(self.align, None,
                                  None if att_ali is None else att_ali[point])
-        # collect
-        self.token.append(token.clone())
-        self.point.append(point)
 
     def _trace_back_hypos(self,
                           batch: int,
@@ -521,24 +532,25 @@ class BatchBeamTracker(BaseBeamTracker):
         for u in range(self.batch_size):
             # reach the max_len of utterance u, skip
             max_len = self.param.max_len[u]
-            if self.step_num > max_len:
+            if self.step_num >= max_len:
                 if self.step_num == max_len:
                     logger.info(
-                        f"--- beam search (batch[{u}]) reach max_len {max_len}")
+                        f"--- beam search (batch[{u}]) reaches max_len {max_len}"
+                    )
                 continue
             hyp_ended = self._trace_back(u, final=False)
             if hyp_ended:
                 self.hypos[u] += hyp_ended
                 # all eos
                 if len(hyp_ended) == self.param.beam_size:
-                    logger.info(f"--- beam search end (batch[{u}]) at " +
+                    logger.info(f"--- beam search ends (batch[{u}]) at " +
                                 f"step {self.step_num + 1}")
                     self.auto_stop[u] = True
         # all True, stop search
         stop = sum(self.auto_stop) == self.batch_size
         if stop:
             logger.info(
-                f"--- beam search (all batches) ended at step {self.step_num}")
+                f"--- beam search (all batches) ends at step {self.step_num}")
         # if reach max(max_len), also return true to stop batch beam search
         return stop or self.step_num == max(self.param.max_len)
 
@@ -558,14 +570,15 @@ class BatchBeamTracker(BaseBeamTracker):
                 if self.auto_stop[u]:
                     continue
                 # process end
-                logger.info(f"--- reach the final step for batch[{u}] ...")
+                logger.info("--- beam search reaches the final step " +
+                            f"for batch[{u}] ...")
                 hyp_final = self._trace_back(u, final=True)
                 if hyp_final:
                     self.hypos[u] += hyp_final
         # sort and get nbest
         nbest_batch = []
         for u, utt_bypos in enumerate(self.hypos):
-            logger.info(f"-- fetch {nbest}best (batch[{u}]) " +
+            logger.info(f"--- beam search gets {nbest}best (batch[{u}]) " +
                         f"from {len(utt_bypos)} hypos ...")
             sort_hypos = sorted(utt_bypos,
                                 key=lambda n: n["score"],
