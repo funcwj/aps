@@ -104,8 +104,6 @@ class EncDecASRBase(nn.Module):
                 raise RuntimeError(
                     f"Expect 2/3D(multi-channel) tensor, but got {x.dim()}")
             x = x[None, ...]
-        # Ti x F
-        inp_len = x.shape[-2]
         #  N x Ti x D
         enc_out, _ = self.encoder(x, None)
         return enc_out
@@ -305,6 +303,23 @@ class XfmrASR(EncDecASRBase):
         # N x To+1 x D
         dec_out = self.decoder(enc_out, enc_len, tgt_pad)
         return dec_out, None, enc_ctc, enc_len
+
+    def greedy_search(self,
+                      x: th.Tensor,
+                      len_norm: bool = True,
+                      **kwargs) -> List[Dict]:
+        """
+        Greedy search (numbers should be same as beam_search with #beam-size == 1)
+        Args
+            x: audio samples or acoustic features, S or Ti x F
+        """
+        with th.no_grad():
+            enc_out = self._decoding_prep(x)
+            return xfmr_api.greedy_search(self.decoder,
+                                          enc_out,
+                                          sos=self.sos,
+                                          eos=self.eos,
+                                          len_norm=len_norm)
 
     def beam_search(self,
                     x: th.Tensor,

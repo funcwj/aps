@@ -12,7 +12,7 @@ nbest=1
 channel=-1
 max_len=500
 min_len=1
-max_len_ratio=0.5
+max_len_ratio=1
 min_len_ratio=0
 beam_size=16
 batch_size=""
@@ -74,7 +74,6 @@ if [ -z $batch_size ]; then
     --min-len $min_len \
     --max-len-ratio $max_len_ratio \
     --min-len-ratio $min_len_ratio \
-    --max-len 1
     --len-norm $len_norm \
     --function $function \
     --len-penalty $len_penalty \

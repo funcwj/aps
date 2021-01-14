@@ -177,8 +177,9 @@ def get_aps_decode_parser():
                         help="Maximum decoding sequence length we can have")
     parser.add_argument("--max-len-ratio",
                         type=float,
-                        default=0.5,
-                        help="To derive #max_len (max_len_ratio * #inp_length)")
+                        default=1,
+                        help="To derive max_len=min(#enc_len*max_len_ratio, "
+                        "#max_len)")
     parser.add_argument("--min-len",
                         type=int,
                         default=1,
@@ -186,11 +187,12 @@ def get_aps_decode_parser():
     parser.add_argument("--min-len-ratio",
                         type=float,
                         default=1.0,
-                        help="To derive #min_len (min_len_ratio * #inp_length)")
+                        help="To derive min_len=max(#enc_len*min_len_ratio, "
+                        "#min_len)")
     parser.add_argument("--space",
                         type=str,
                         default="",
-                        help="space flag for language like EN "
+                        help="Space flag for language like EN "
                         "to merge characters to words")
     parser.add_argument("--nbest",
                         type=int,

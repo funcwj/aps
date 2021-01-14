@@ -47,15 +47,15 @@ def greedy_search(decoder: nn.Module,
     while True:
         pre_tok = th.tensor([dec_tok[-1]], device=device)
         # make one step
-        pred, att_ctx, dec_hid, att_ali, proj = decoder.step(att_net,
-                                                             pre_tok,
-                                                             enc_out,
-                                                             att_ctx,
-                                                             dec_hid=dec_hid,
-                                                             att_ali=att_ali,
-                                                             enc_len=None,
-                                                             proj=proj)
-        prob = tf.log_softmax(pred, dim=-1)
+        dec_out, att_ctx, dec_hid, att_ali, proj = decoder.step(att_net,
+                                                                pre_tok,
+                                                                enc_out,
+                                                                att_ctx,
+                                                                dec_hid=dec_hid,
+                                                                att_ali=att_ali,
+                                                                enc_len=None,
+                                                                proj=proj)
+        prob = tf.log_softmax(dec_out, dim=-1)
         pred_score, pred_token = th.topk(prob, 1, dim=-1)
         dec_tok.append(pred_token.item())
         score += pred_score.item()
@@ -111,8 +111,8 @@ def beam_search(decoder: nn.Module,
 
     min_len = max(min_len, int(min_len_ratio * T))
     max_len = min(max_len, int(max_len_ratio * T))
-    logger.info(
-        f"length constraint of the decoding sequence: ({min_len}, {max_len})")
+    logger.info("--- length constraint of the decoding " +
+                f"sequence: ({min_len}, {max_len})")
     nbest = min(beam_size, nbest)
     device = enc_out.device
     att_ali = None
@@ -141,22 +141,22 @@ def beam_search(decoder: nn.Module,
     # step by step
     for t in range(max_len):
         # beam
-        pre_out, point = beam_tracker[-1] if t else beam_tracker[0]
+        pre_tok, point = beam_tracker[-1] if t else beam_tracker[0]
         # step forward
-        pred, att_ctx, dec_hid, att_ali, proj = decoder.step(att_net,
-                                                             pre_out,
-                                                             enc_out,
-                                                             att_ctx,
-                                                             dec_hid=dec_hid,
-                                                             att_ali=att_ali,
-                                                             proj=proj,
-                                                             point=point)
+        dec_out, att_ctx, dec_hid, att_ali, proj = decoder.step(att_net,
+                                                                pre_tok,
+                                                                enc_out,
+                                                                att_ctx,
+                                                                dec_hid=dec_hid,
+                                                                att_ali=att_ali,
+                                                                proj=proj,
+                                                                point=point)
         # compute prob: beam x V, nagetive
-        am_prob = tf.log_softmax(pred / temperature, dim=-1)
+        am_prob = tf.log_softmax(dec_out / temperature, dim=-1)
 
         if lm and beam_param.lm_weight > 0:
             # beam x V
-            lm_prob, lm_state = lm_score_impl(lm, point, pre_out, lm_state)
+            lm_prob, lm_state = lm_score_impl(lm, point, pre_tok, lm_state)
         else:
             lm_prob = 0
 
@@ -240,30 +240,30 @@ def beam_search_batch(decoder: nn.Module,
     # step by step
     for t in range(max_len):
         # N*beam
-        pre_out, point = beam_tracker[-1] if t else beam_tracker[0]
+        pre_tok, point = beam_tracker[-1] if t else beam_tracker[0]
         # step forward
-        pred, att_ctx, dec_hid, att_ali, proj = decoder.step(att_net,
-                                                             pre_out,
-                                                             enc_out,
-                                                             att_ctx,
-                                                             enc_len=enc_len,
-                                                             dec_hid=dec_hid,
-                                                             att_ali=att_ali,
-                                                             proj=proj,
-                                                             point=point)
+        dec_out, att_ctx, dec_hid, att_ali, proj = decoder.step(att_net,
+                                                                pre_tok,
+                                                                enc_out,
+                                                                att_ctx,
+                                                                enc_len=enc_len,
+                                                                dec_hid=dec_hid,
+                                                                att_ali=att_ali,
+                                                                proj=proj,
+                                                                point=point)
         # compute prob: N*beam x V, nagetive
-        am_prob = tf.log_softmax(pred / temperature, dim=-1)
+        am_prob = tf.log_softmax(dec_out / temperature, dim=-1)
 
         if lm and beam_param.lm_weight > 0:
             # beam x V
-            lm_prob, lm_state = lm_score_impl(lm, point, pre_out, lm_state)
+            lm_prob, lm_state = lm_score_impl(lm, point, pre_tok, lm_state)
         else:
             lm_prob = 0
 
         # local pruning: N*beam x beam
         stop = beam_tracker.step(t, am_prob, lm_prob, att_ali=att_ali)
         if stop:
-            logger.info(f"beam search ended at step {t + 1}")
+            logger.info(f"--- beam search ended at step {t + 1}")
             break
 
     return beam_tracker.nbest_hypos(nbest, auto_stop=stop)

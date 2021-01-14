@@ -117,7 +117,7 @@ class BaseBeamTracker(object):
             fusion_prob[disable_eos, self.param.eos] = NEG_INF
             if verbose and th.sum(disable_eos):
                 disable_index = [i for i, s in enumerate(disable_eos) if s]
-                logger.info(f"disable <eos> in beam index: {disable_index}")
+                logger.info(f"--- disable <eos> in beam index: {disable_index}")
         # local pruning: N*beam x beam
         topk_score, topk_token = th.topk(fusion_prob,
                                          self.param.beam_size,
@@ -337,12 +337,12 @@ class BeamTracker(BaseBeamTracker):
         """
         # not auto stop, add unfinished hypos
         if not auto_stop:
-            logger.info(f"trace back at the final step ...")
+            logger.info(f"--- reach the final step ...")
             hyp_final = self._trace_back(final=True)
             if hyp_final:
                 self.hypos += hyp_final
         # sort and get nbest
-        logger.info(f"get {nbest}best from {len(self.hypos)} hypos ...")
+        logger.info(f"--- fetch {nbest}best from {len(self.hypos)} hypos ...")
         sort_hypos = sorted(self.hypos, key=lambda n: n["score"], reverse=True)
         return sort_hypos[:nbest]
 
@@ -509,7 +509,8 @@ class BatchBeamTracker(BaseBeamTracker):
                 # all eos
                 if len(hyp_ended) == self.param.beam_size:
                     logger.info(
-                        f"beam search end (batch[{u}]) at step {step_num + 1}")
+                        f"--- beam search end (batch[{u}]) at step {step_num + 1}"
+                    )
                     self.stop_batch[u] = True
         # all True, stop search
         stop = sum(self.stop_batch) == self.batch_size
@@ -531,7 +532,7 @@ class BatchBeamTracker(BaseBeamTracker):
                 if self.stop_batch[u]:
                     continue
                 # process end
-                logger.info(f"trace back at the final step for batch[{u}] ...")
+                logger.info(f"--- reach the final step for batch[{u}] ...")
                 hyp_final = self._trace_back(u, final=True)
                 if hyp_final:
                     self.hypos[u] += hyp_final
@@ -539,7 +540,8 @@ class BatchBeamTracker(BaseBeamTracker):
         nbest_batch = []
         for u, utt_bypos in enumerate(self.hypos):
             logger.info(
-                f"get {nbest}best (batch[{u}]) from {len(utt_bypos)} hypos ...")
+                f"-- fetch {nbest}best (batch[{u}]) from {len(utt_bypos)} hypos ..."
+            )
             sort_hypos = sorted(utt_bypos,
                                 key=lambda n: n["score"],
                                 reverse=True)

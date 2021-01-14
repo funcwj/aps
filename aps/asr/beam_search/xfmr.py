@@ -17,6 +17,45 @@ from typing import List, Dict, Optional
 logger = get_logger(__name__)
 
 
+def greedy_search(decoder: nn.Module,
+                  enc_out: th.Tensor,
+                  sos: int = -1,
+                  eos: int = -1,
+                  len_norm: bool = True) -> List[Dict]:
+    """
+    Greedy search (for debugging, should equal to beam search with #beam-size == 1)
+    """
+    if sos < 0 or eos < 0:
+        raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
+    N, _, _ = enc_out.shape
+    if N != 1:
+        raise RuntimeError(
+            f"Got batch size {N:d}, now only support one utterance")
+    if not hasattr(decoder, "step"):
+        raise RuntimeError("Function step should defined in decoder network")
+    device = enc_out.device
+    dec_tok = [sos]
+    pre_emb = None
+    score = 0
+    while True:
+        pre_tok = th.tensor([dec_tok[-1]], device=device)
+        # make one step
+        dec_out, pre_emb = decoder.step(enc_out,
+                                        pre_tok[:, None],
+                                        out_idx=-1,
+                                        pre_emb=pre_emb)
+        prob = tf.log_softmax(dec_out, dim=-1)
+        pred_score, pred_token = th.topk(prob, 1, dim=-1)
+        dec_tok.append(pred_token.item())
+        score += pred_score.item()
+        if dec_tok[-1] == eos:
+            break
+    return [{
+        "score": score / (len(dec_tok) - 1) if len_norm else score,
+        "trans": dec_tok
+    }]
+
+
 def beam_search(decoder: nn.Module,
                 enc_out: th.Tensor,
                 lm: Optional[LmType] = None,
@@ -80,10 +119,10 @@ def beam_search(decoder: nn.Module,
     # step by step
     for t in range(max_len):
         # beam
-        pre_out, point = beam_tracker[-1] if t else beam_tracker[0]
+        pre_tok, point = beam_tracker[-1] if t else beam_tracker[0]
         # beam x V
         dec_out, pre_emb = decoder.step(enc_out,
-                                        pre_out[:, None],
+                                        pre_tok[:, None],
                                         out_idx=-1,
                                         pre_emb=pre_emb,
                                         point=point)
@@ -93,14 +132,14 @@ def beam_search(decoder: nn.Module,
 
         if lm and beam_param.lm_weight > 0:
             # beam x V
-            lm_prob, lm_state = lm_score_impl(lm, point, pre_out, lm_state)
+            lm_prob, lm_state = lm_score_impl(lm, point, pre_tok, lm_state)
         else:
             lm_prob = 0
 
         # one beam search step
         stop = beam_tracker.step(t, am_prob, lm_prob)
         if stop:
-            logger.info(f"beam search ended at step {t + 1}")
+            logger.info(f"--- beam search ended at step {t + 1}")
             break
     return beam_tracker.nbest_hypos(nbest, auto_stop=stop)
 
@@ -145,8 +184,8 @@ def beam_search_batch(decoder: nn.Module,
     N, T, _ = enc_out.shape
     min_len = max(min_len, int(min_len_ratio * T))
     max_len = min(max_len, int(max_len_ratio * T))
-    logger.info(
-        f"length constraint of the decoding sequence: ({min_len}, {max_len})")
+    logger.info("--- length constraint of the decoding " +
+                f"sequence: ({min_len}, {max_len})")
     nbest = min(beam_size, nbest)
     device = enc_out.device
     # N x T x F => N*beam x T x F
@@ -170,10 +209,10 @@ def beam_search_batch(decoder: nn.Module,
     # step by step
     for t in range(max_len):
         # N*beam
-        pre_out, point = beam_tracker[-1] if t else beam_tracker[0]
+        pre_tok, point = beam_tracker[-1] if t else beam_tracker[0]
         # beam x V
         dec_out, pre_emb = decoder.step(enc_out,
-                                        pre_out[:, None],
+                                        pre_tok[:, None],
                                         out_idx=-1,
                                         pre_emb=pre_emb,
                                         point=point)
@@ -182,7 +221,7 @@ def beam_search_batch(decoder: nn.Module,
 
         if lm and beam_param.lm_weight > 0:
             # beam x V
-            lm_prob, lm_state = lm_score_impl(lm, point, pre_out, lm_state)
+            lm_prob, lm_state = lm_score_impl(lm, point, pre_tok, lm_state)
         else:
             lm_prob = 0
 
