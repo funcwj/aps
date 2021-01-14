@@ -140,7 +140,7 @@ def beam_search(decoder: nn.Module,
     att_net.clear()
     # step by step
     stop = False
-    for _ in range(max_len):
+    while not stop:
         # beam
         pre_tok, point = beam_tracker[-1]
         # step forward
@@ -154,18 +154,15 @@ def beam_search(decoder: nn.Module,
                                                                 point=point)
         # compute prob: beam x V, nagetive
         am_prob = tf.log_softmax(dec_out / temperature, dim=-1)
-
         if lm and beam_param.lm_weight > 0:
             # beam x V
             lm_prob, lm_state = lm_score_impl(lm, point, pre_tok, lm_state)
         else:
             lm_prob = 0
-
         # one beam search step
         stop = beam_tracker.step(am_prob, lm_prob, att_ali=att_ali)
-        if stop:
-            break
-    return beam_tracker.nbest_hypos(nbest, auto_stop=stop)
+    # return nbest
+    return beam_tracker.nbest_hypos(nbest)
 
 
 def beam_search_batch(decoder: nn.Module,
@@ -208,9 +205,15 @@ def beam_search_batch(decoder: nn.Module,
         else:
             lm_score_impl = ngram_score
 
-    N, T, D_enc = enc_out.shape
-    min_len = max(min_len, int(min_len_ratio * T))
-    max_len = min(max_len, int(max_len_ratio * T))
+    N, _, D_enc = enc_out.shape
+    min_len = [
+        max(min_len, int(min_len_ratio * elen.item())) for elen in enc_len
+    ]
+    max_len = [
+        min(max_len, int(max_len_ratio * elen.item())) for elen in enc_len
+    ]
+    logger.info("--- length constraint of the decoding " +
+                f"sequence: ({[i, j] for i, j in zip(min_len, max_len)})")
 
     nbest = min(beam_size, nbest)
     device = enc_out.device

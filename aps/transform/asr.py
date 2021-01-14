@@ -15,7 +15,7 @@ import math
 
 import torch as th
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as tf
 
 from typing import Optional, Union, Tuple
 from aps.transform.utils import STFT, init_melfilter, splice_feature, speed_perturb_filter
@@ -337,7 +337,7 @@ class MelTransform(nn.Module):
             raise RuntimeError("MelTransform expect 3/4D tensor, " +
                                f"but got {linear.dim()} instead")
         # N x T x F => N x T x M
-        fbank = F.linear(linear, self.filters, bias=None)
+        fbank = tf.linear(linear, self.filters, bias=None)
         return fbank
 
 
@@ -418,7 +418,7 @@ class DiscreteCosineTransform(nn.Module):
         Return:
             mfcc (Tensor): mfcc feature, N x (C) x T x P
         """
-        mfcc = F.linear(log_mel, self.dct, bias=None)
+        mfcc = tf.linear(log_mel, self.dct, bias=None)
         if self.cepstral_lifter is not None:
             mfcc = mfcc * self.cepstral_lifter
         return mfcc

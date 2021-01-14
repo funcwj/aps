@@ -22,8 +22,9 @@ class BeamSearchParam(object):
     beam_size: int = 8
     sos: int = 1
     eos: int = 2
-    min_len: int = 1
-    max_len: int = 1000
+    # for batch version, it's list
+    min_len: Union[int, List[int]] = 1
+    max_len: Union[int, List[int]] = 1000
     lm_weight: float = 0
     eos_threshold: float = 0
     device: Union[th.device, str] = "cpu"
@@ -176,7 +177,7 @@ class BaseBeamTracker(object):
         """
         raise NotImplementedError
 
-    def nbest_hypos(self, nbest: int, auto_stop: bool = True) -> List[Dict]:
+    def nbest_hypos(self, nbest: int) -> List[Dict]:
         """
         Return nbest sequence
         """
@@ -196,6 +197,7 @@ class BeamTracker(BaseBeamTracker):
         self.point = [th.tensor(range(param.beam_size), device=param.device)]
         self.score = th.zeros(param.beam_size, device=param.device)
         self.hypos = []
+        self.auto_stop = False
         self.acmu_score = th.zeros_like(self.score)
 
     def __getitem__(self, t: int) -> Tuple[th.Tensor, th.Tensor]:
@@ -330,17 +332,19 @@ class BeamTracker(BaseBeamTracker):
             stop = len(hyp_ended) == self.param.beam_size
         if stop:
             logger.info(f"--- beam search ended at step {self.step_num}")
-        return stop
+        # update auto_step flag
+        self.auto_stop = stop
+        # if reach max_len, also return true
+        return stop or self.step_num == self.param.max_len
 
-    def nbest_hypos(self, nbest: int, auto_stop: bool = True) -> List[Dict]:
+    def nbest_hypos(self, nbest: int) -> List[Dict]:
         """
         Return nbest sequence
         Args:
             nbest (int): nbest size
-            auto_stop: beam search is auto-stopped or not
         """
         # not auto stop, add unfinished hypos
-        if not auto_stop:
+        if not self.auto_stop:
             logger.info(f"--- reach the final step ...")
             hyp_final = self._trace_back(final=True)
             if hyp_final:
@@ -370,7 +374,7 @@ class BatchBeamTracker(BaseBeamTracker):
         ]
         self.score = th.zeros(batch_size, param.beam_size, device=param.device)
         self.hypos = [[] for _ in range(batch_size)]
-        self.stop_batch = [False] * batch_size
+        self.auto_stop = [False] * batch_size
         self.acmu_score = th.zeros_like(self.score)
         self.step_point = th.arange(0,
                                     param.beam_size * batch_size,
@@ -402,7 +406,14 @@ class BatchBeamTracker(BaseBeamTracker):
             hyp = self._trace_back_hypos(batch, idx, final=True)
         # filter short utterances
         if hyp:
-            hyp = [h for h in hyp if len(h["trans"]) >= self.param.min_len + 2]
+            hyp = [
+                h for h in hyp
+                if len(h["trans"]) >= self.param.min_len[batch] + 2
+            ]
+            if verbose:
+                for h in hyp:
+                    logger.info(f"--- get decoding sequence (batch[{batch}]) " +
+                                f"{h['trans']}, score = {h['score']:.2f}")
         return hyp
 
     def _init_search(self,
@@ -508,6 +519,13 @@ class BatchBeamTracker(BaseBeamTracker):
         self.step_num += 1
         # trace back ended sequence (process eos nodes)
         for u in range(self.batch_size):
+            # reach the max_len of utterance u, skip
+            max_len = self.param.max_len[u]
+            if self.step_num > max_len:
+                if self.step_num == max_len:
+                    logger.info(
+                        f"--- beam search (batch[{u}]) reach max_len {max_len}")
+                continue
             hyp_ended = self._trace_back(u, final=False)
             if hyp_ended:
                 self.hypos[u] += hyp_ended
@@ -515,13 +533,14 @@ class BatchBeamTracker(BaseBeamTracker):
                 if len(hyp_ended) == self.param.beam_size:
                     logger.info(f"--- beam search end (batch[{u}]) at " +
                                 f"step {self.step_num + 1}")
-                    self.stop_batch[u] = True
+                    self.auto_stop[u] = True
         # all True, stop search
-        stop = sum(self.stop_batch) == self.batch_size
+        stop = sum(self.auto_stop) == self.batch_size
         if stop:
             logger.info(
                 f"--- beam search (all batches) ended at step {self.step_num}")
-        return stop
+        # if reach max(max_len), also return true to stop batch beam search
+        return stop or self.step_num == max(self.param.max_len)
 
     def nbest_hypos(self,
                     nbest: int,
@@ -536,7 +555,7 @@ class BatchBeamTracker(BaseBeamTracker):
         if not auto_stop:
             for u in range(self.batch_size):
                 # skip utterance u
-                if self.stop_batch[u]:
+                if self.auto_stop[u]:
                     continue
                 # process end
                 logger.info(f"--- reach the final step for batch[{u}] ...")
@@ -546,9 +565,8 @@ class BatchBeamTracker(BaseBeamTracker):
         # sort and get nbest
         nbest_batch = []
         for u, utt_bypos in enumerate(self.hypos):
-            logger.info(
-                f"-- fetch {nbest}best (batch[{u}]) from {len(utt_bypos)} hypos ..."
-            )
+            logger.info(f"-- fetch {nbest}best (batch[{u}]) " +
+                        f"from {len(utt_bypos)} hypos ...")
             sort_hypos = sorted(utt_bypos,
                                 key=lambda n: n["score"],
                                 reverse=True)

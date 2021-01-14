@@ -4,10 +4,7 @@
 import torch as th
 import torch.nn as nn
 
-import torch.nn.functional as F
-
 from typing import Optional, NoReturn, Union, List
-
 from aps.sse.utils import MaskNonLinear
 from aps.libs import ApsRegisters
 
@@ -305,7 +302,7 @@ class TimeConvTasNet(nn.Module):
         """
         self.check_args(mix, training=True)
         # n x 1 x S => n x N x T
-        w = F.relu(self.encoder(mix))
+        w = th.relu(self.encoder(mix))
         # n x B x T
         y = self.proj(self.ln(w))
         # n x B x T

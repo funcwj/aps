@@ -116,11 +116,13 @@ def beam_search(decoder: nn.Module,
     beam_tracker = BeamTracker(beam_param)
     pre_emb = None
     lm_state = None
-    # Ti x beam x D
-    enc_out = th.repeat_interleave(enc_out, beam_size, 1)
+    # 1 x T x D => beam x T x D
+    enc_out = th.repeat_interleave(enc_out, beam_size, 0)
+    # T x beam x D (shape is different with that in att.py)
+    enc_out = enc_out.transpose(0, 1)
     # step by step
     stop = False
-    for _ in range(max_len):
+    while not stop:
         # beam
         pre_tok, point = beam_tracker[-1]
         # beam x V
@@ -132,19 +134,15 @@ def beam_search(decoder: nn.Module,
 
         # compute prob: beam x V, nagetive
         am_prob = tf.log_softmax(dec_out / temperature, dim=-1)
-
         if lm and beam_param.lm_weight > 0:
             # beam x V
             lm_prob, lm_state = lm_score_impl(lm, point, pre_tok, lm_state)
         else:
             lm_prob = 0
-
         # one beam search step
         stop = beam_tracker.step(am_prob, lm_prob)
-        if stop:
-            break
-
-    return beam_tracker.nbest_hypos(nbest, auto_stop=stop)
+    # return nbest
+    return beam_tracker.nbest_hypos(nbest)
 
 
 def beam_search_batch(decoder: nn.Module,
@@ -184,16 +182,23 @@ def beam_search_batch(decoder: nn.Module,
         else:
             lm_score_impl = ngram_score
 
-    N, T, _ = enc_out.shape
-    min_len = max(min_len, int(min_len_ratio * T))
-    max_len = min(max_len, int(max_len_ratio * T))
+    N, _, _ = enc_out.shape
+    min_len = [
+        max(min_len, int(min_len_ratio * elen.item())) for elen in enc_len
+    ]
+    max_len = [
+        min(max_len, int(max_len_ratio * elen.item())) for elen in enc_len
+    ]
     logger.info("--- length constraint of the decoding " +
-                f"sequence: ({min_len}, {max_len})")
+                f"sequence: ({[i, j] for i, j in zip(min_len, max_len)})")
+
     nbest = min(beam_size, nbest)
     device = enc_out.device
-    # N x T x F => N*beam x T x F
-    enc_out = th.repeat_interleave(enc_out, beam_size, 1)
     enc_len = th.repeat_interleave(enc_len, beam_size, 0)
+    # N x T x F => N*beam x T x F
+    enc_out = th.repeat_interleave(enc_out, beam_size, 0)
+    # N*beam x T x D (shape is different with that in att.py)
+    enc_out = enc_out.transpose(0, 1)
 
     pre_emb = None
     lm_state = None
