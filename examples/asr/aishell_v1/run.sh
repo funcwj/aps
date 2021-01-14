@@ -70,6 +70,8 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
   echo "Stage 3: decoding ..."
   # decoding
   ./scripts/decode.sh \
+    --score true \
+    --text data/$dataset/test/text \
     --gpu $gpu \
     --beam-size $beam_size \
     --nbest $nbest \
@@ -78,10 +80,6 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
     $dataset $am_exp \
     data/$dataset/test/wav.scp \
     exp/$dataset/$am_exp/dec
-  # wer
-  ./cmd/compute_wer.py \
-    exp/$dataset/$am_exp/dec/beam${beam_size}.decode \
-    data/$dataset/test/text
 fi
 
 if [ $end -ge 4 ] && [ $beg -le 4 ]; then
@@ -97,6 +95,8 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
   name=dec_${ngram}gram_$lm_weight
   # decoding
   ./scripts/decode.sh \
+    --score true \
+    --text data/$dataset/test/text \
     --lm exp/aishell_v1/nnlm/$lm_exp \
     --gpu $gpu \
     --dict data/$dataset/dict \
@@ -109,10 +109,6 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
     $dataset $am_exp \
     data/$dataset/test/wav.scp \
     exp/$dataset/$am_exp/$name
-  # wer
-  ./cmd/compute_wer.py \
-    exp/$dataset/$am_exp/$name/beam${beam_size}.decode \
-    data/$dataset/test/text
 fi
 
 if [ $end -ge 6 ] && [ $beg -le 6 ]; then
@@ -133,6 +129,8 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
   name=dec_lm${lm_exp}_$lm_weight
   # decoding
   ./scripts/decode.sh \
+    --score true \
+    --text data/$dataset/test/text \
     --lm exp/aishell_v1/nnlm/$lm_exp \
     --gpu $gpu \
     --dict data/$dataset/dict \

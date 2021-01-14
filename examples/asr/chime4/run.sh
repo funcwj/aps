@@ -50,6 +50,8 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
   echo "Stage 3: decoding ..."
   for name in chime4 wsj0; do
   ./scripts/decode.sh \
+    --score true \
+    --text data/$name/tst/text \
     --gpu $gpu \
     --beam-size $beam_size \
     --nbest $nbest \
@@ -58,9 +60,7 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
     --dict data/$dataset/dict \
     $dataset $exp \
     data/$name/tst/wav.scp \
-    exp/$dataset/$exp/$name
-  ./cmd/compute_wer.py \
-    exp/$dataset/$exp/$name/beam${beam_size}.decode \
-    data/$name/tst/text
+    exp/$dataset/$exp/$name &
   done
+  wait
 fi

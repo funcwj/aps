@@ -77,6 +77,8 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   echo "Stage 4: decoding ..."
   for name in $test_sets; do
     ./scripts/decode.sh \
+      --score true
+      --text data/wsj/$name/text \
       --log-suffix $name \
       --beam-size $beam_size \
       --max-len 220 \
@@ -90,12 +92,6 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
       exp/wsj/$am_exp/$name &
   done
   wait
-  for name in $test_sets; do
-    # WER
-    ./cmd/compute_wer.py \
-      exp/wsj/$am_exp/$name/beam$beam_size.decode \
-      data/wsj/$name/text
-  done
 fi
 
 if [ $end -ge 5 ] && [ $beg -le 5 ]; then
@@ -131,6 +127,8 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
   echo "Stage 7: decoding ..."
   for name in $test_sets; do
     ./scripts/decode.sh \
+      --score true \
+      --text data/wsj/$name/text \
       --log-suffix $name \
       --beam-size $beam_size \
       --max-len 220 \
@@ -146,11 +144,4 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
       exp/wsj/$am_exp/${name}_lm${lm_exp}_$lm_weight &
   done
   wait
-  for name in $test_sets; do
-    # WER
-    dir=${name}_lm${lm_exp}_$lm_weight
-    ./cmd/compute_wer.py \
-      exp/wsj/$am_exp/$dir/beam$beam_size.decode \
-      data/wsj/$name/text
-  done
 fi

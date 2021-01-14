@@ -98,6 +98,8 @@ def beam_search(decoder: nn.Module,
 
     min_len = max(min_len, int(min_len_ratio * T))
     max_len = min(max_len, int(max_len_ratio * T))
+    logger.info("--- length constraint of the decoding " +
+                f"sequence: ({min_len}, {max_len})")
     nbest = min(beam_size, nbest)
     device = enc_out.device
 
@@ -117,9 +119,10 @@ def beam_search(decoder: nn.Module,
     # Ti x beam x D
     enc_out = th.repeat_interleave(enc_out, beam_size, 1)
     # step by step
-    for t in range(max_len):
+    stop = False
+    for _ in range(max_len):
         # beam
-        pre_tok, point = beam_tracker[-1] if t else beam_tracker[0]
+        pre_tok, point = beam_tracker[-1]
         # beam x V
         dec_out, pre_emb = decoder.step(enc_out,
                                         pre_tok[:, None],
@@ -137,10 +140,10 @@ def beam_search(decoder: nn.Module,
             lm_prob = 0
 
         # one beam search step
-        stop = beam_tracker.step(t, am_prob, lm_prob)
+        stop = beam_tracker.step(am_prob, lm_prob)
         if stop:
-            logger.info(f"--- beam search ended at step {t + 1}")
             break
+
     return beam_tracker.nbest_hypos(nbest, auto_stop=stop)
 
 
@@ -205,11 +208,11 @@ def beam_search_batch(decoder: nn.Module,
                                  len_penalty=len_penalty,
                                  eos_threshold=eos_threshold)
     beam_tracker = BatchBeamTracker(N, beam_param)
-    # clear states
     # step by step
-    for t in range(max_len):
+    stop = False
+    for _ in range(max_len):
         # N*beam
-        pre_tok, point = beam_tracker[-1] if t else beam_tracker[0]
+        pre_tok, point = beam_tracker[-1]
         # beam x V
         dec_out, pre_emb = decoder.step(enc_out,
                                         pre_tok[:, None],
@@ -225,8 +228,8 @@ def beam_search_batch(decoder: nn.Module,
         else:
             lm_prob = 0
 
-        # local pruning: N*beam x beam
-        stop = beam_tracker.step(t, am_prob, lm_prob)
+        # one beam search step
+        stop = beam_tracker.step(am_prob, lm_prob)
         if stop:
             break
 

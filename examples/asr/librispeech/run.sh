@@ -84,6 +84,8 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   echo "Stage 4: decoding ..."
   for name in $test_sets; do
     ./scripts/decode.sh \
+      --score true \
+      --text data/librispeech/$name/text \
       --log-suffix $name \
       --beam-size $beam_size \
       --max-len 150 \
@@ -95,12 +97,6 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
       exp/librispeech/$am_exp/$name &
   done
   wait
-  for name in $test_sets; do
-    # WER
-    ./cmd/compute_wer.py \
-      exp/librispeech/$am_exp/$name/beam$beam_size.decode \
-      data/librispeech/$name/text
-  done
 fi
 
 if [ $end -ge 5 ] && [ $beg -le 5 ]; then
@@ -137,6 +133,8 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
   for name in $test_sets; do
     dec_name=${name}_lm${lm_exp}_$lm_weight
     ./scripts/decode.sh \
+      --score true \
+      --text data/librispeech/$name/text \
       --log-suffix $name \
       --spm exp/librispeech/$wp_name/$wp_mode.model \
       --lm exp/librispeech/nnlm/$lm_exp \
@@ -150,11 +148,4 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
       exp/librispeech/$am_exp/$dec_name &
   done
   wait
-  for name in $test_sets; do
-    dec_name=${name}_lm${lm_exp}_$lm_weight
-    # WER
-    ./cmd/compute_wer.py \
-      exp/librispeech/$am_exp/${dec_name}/beam$beam_size.decode \
-      data/librispeech/$name/text
-  done
 fi

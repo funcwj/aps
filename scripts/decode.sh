@@ -30,6 +30,8 @@ lm_weight=0
 spm=""
 dump_align=""
 log_suffix=""
+text=""
+score=false
 
 echo "$0 $*"
 
@@ -114,5 +116,10 @@ else
 fi
 
 cp $mdl_id.decode.$exp_id.${log_suffix}log $dec_dir
+
+if $score ; then
+  [ -z $text ] && echo "for --score true, you must given --text <reference-transcription>" && exit -1
+  ./cmd/compute_wer.py $dec_dir/beam${beam_size}.decode $text
+fi
 
 echo "$0 $*: Done"

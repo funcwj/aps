@@ -321,11 +321,7 @@ class XfmrASR(EncDecASRBase):
                                           eos=self.eos,
                                           len_norm=len_norm)
 
-    def beam_search(self,
-                    x: th.Tensor,
-                    beam: int = 16,
-                    max_len: int = -1,
-                    **kwargs) -> List[Dict]:
+    def beam_search(self, x: th.Tensor, **kwargs) -> List[Dict]:
         """
         Beam search for Transformer
         """

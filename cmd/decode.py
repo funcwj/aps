@@ -108,7 +108,10 @@ def run(args):
     topn = None
     if args.dump_nbest:
         stdout_topn, topn = io_wrapper(args.dump_nbest, "w")
-        nbest = min(args.beam_size, args.nbest)
+        if args.function == "greedy_search":
+            nbest = min(args.beam_size, args.nbest)
+        else:
+            nbest = 1
         topn.write(f"{nbest}\n")
     ali_dir = args.dump_align
     if ali_dir:

@@ -139,9 +139,10 @@ def beam_search(decoder: nn.Module,
     # clear states
     att_net.clear()
     # step by step
-    for t in range(max_len):
+    stop = False
+    for _ in range(max_len):
         # beam
-        pre_tok, point = beam_tracker[-1] if t else beam_tracker[0]
+        pre_tok, point = beam_tracker[-1]
         # step forward
         dec_out, att_ctx, dec_hid, att_ali, proj = decoder.step(att_net,
                                                                 pre_tok,
@@ -161,7 +162,7 @@ def beam_search(decoder: nn.Module,
             lm_prob = 0
 
         # one beam search step
-        stop = beam_tracker.step(t, am_prob, lm_prob, att_ali=att_ali)
+        stop = beam_tracker.step(am_prob, lm_prob, att_ali=att_ali)
         if stop:
             break
     return beam_tracker.nbest_hypos(nbest, auto_stop=stop)
@@ -227,6 +228,7 @@ def beam_search_batch(decoder: nn.Module,
                                  eos=eos,
                                  device=device,
                                  min_len=min_len,
+                                 max_len=max_len,
                                  len_norm=len_norm,
                                  lm_weight=lm_weight,
                                  len_penalty=len_penalty,
@@ -238,9 +240,10 @@ def beam_search_batch(decoder: nn.Module,
     # clear states
     att_net.clear()
     # step by step
-    for t in range(max_len):
+    stop = False
+    for _ in range(max_len):
         # N*beam
-        pre_tok, point = beam_tracker[-1] if t else beam_tracker[0]
+        pre_tok, point = beam_tracker[-1]
         # step forward
         dec_out, att_ctx, dec_hid, att_ali, proj = decoder.step(att_net,
                                                                 pre_tok,
@@ -260,10 +263,8 @@ def beam_search_batch(decoder: nn.Module,
         else:
             lm_prob = 0
 
-        # local pruning: N*beam x beam
-        stop = beam_tracker.step(t, am_prob, lm_prob, att_ali=att_ali)
+        # one beam search step
+        stop = beam_tracker.step(am_prob, lm_prob, att_ali=att_ali)
         if stop:
-            logger.info(f"--- beam search ended at step {t + 1}")
             break
-
     return beam_tracker.nbest_hypos(nbest, auto_stop=stop)

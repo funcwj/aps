@@ -29,6 +29,8 @@ lm=""
 lm_weight=0
 spm=""
 dump_align=""
+text=""
+score=false
 
 echo "$0 $*"
 
@@ -87,5 +89,10 @@ cat $log_dir/beam${beam_size}.*.decode | \
   sort -k1 > $dec_dir/beam${beam_size}.decode
 cat $log_dir/beam${beam_size}.*.${nbest}best | \
   sort -k1 > $dec_dir/beam${beam_size}.${nbest}best
+
+if $score ; then
+  [ -z $text ] && echo "for --score true, you must given --text <reference-transcription>" && exit -1
+  ./cmd/compute_wer.py $dec_dir/beam${beam_size}.decode $text
+fi
 
 echo "$0 $*: Done"

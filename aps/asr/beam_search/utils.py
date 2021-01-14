@@ -23,6 +23,7 @@ class BeamSearchParam(object):
     sos: int = 1
     eos: int = 2
     min_len: int = 1
+    max_len: int = 1000
     lm_weight: float = 0
     eos_threshold: float = 0
     device: Union[th.device, str] = "cpu"
@@ -43,6 +44,7 @@ class BaseBeamTracker(object):
         self.align = None  # B x T x U
         self.trans = None  # B x U
         self.none_eos_idx = None
+        self.step_num = 0
 
     def concat(self, prev_: Optional[th.Tensor], point: Optional[th.Tensor],
                next_: Optional[th.Tensor]) -> th.Tensor:
@@ -143,7 +145,8 @@ class BaseBeamTracker(object):
             token_list (list[Tensor]): token sequence
             final (bool): is final step or not
         """
-        align = align[point].cpu()
+        if align is not None:
+            align = align[point].cpu()
         final_trans = []
         check_trans = trans[point].tolist()
         for ptr, tok in zip(point_list[::-1], token_list[::-1]):
@@ -165,7 +168,6 @@ class BaseBeamTracker(object):
         return hypos
 
     def step(self,
-             step_num: int,
              am_prob: th.Tensor,
              lm_prob: Union[th.Tensor, float],
              att_ali: Optional[th.Tensor] = None) -> bool:
@@ -239,7 +241,7 @@ class BeamTracker(BaseBeamTracker):
             lm_prob (Tensor): N x V, language prob
             att_ali (Tensor): N x T, alignment score (weight)
         """
-        assert len(self.point) == 1
+        assert len(self.point) == 1 and self.step_num == 0
         # local pruning: beam x V => beam x beam
         topk_score, topk_token = self.beam_select(am_prob, lm_prob)
         self.score += topk_score[0]
@@ -247,7 +249,7 @@ class BeamTracker(BaseBeamTracker):
         self.token.append(topk_token[0])
         self.point.append(self.point[-1])
         self.trans = topk_token[0][..., None]
-        self.align = att_ali[..., None]
+        self.align = None if att_ali is None else att_ali[..., None]
 
     def _step_search(self,
                      am_prob: th.Tensor,
@@ -276,7 +278,8 @@ class BeamTracker(BaseBeamTracker):
         point = topk_index // self.param.beam_size
         # concat stats
         self.trans = self.concat(self.trans, point, token)
-        self.align = self.concat(self.align, None, att_ali[point])
+        self.align = self.concat(self.align, None,
+                                 None if att_ali is None else att_ali[point])
         # collect
         self.token.append(token)
         self.point.append(point)
@@ -300,14 +303,12 @@ class BeamTracker(BaseBeamTracker):
                                 final=final)
 
     def step(self,
-             step_num: int,
              am_prob: th.Tensor,
              lm_prob: Union[th.Tensor, float],
              att_ali: Optional[th.Tensor] = None) -> bool:
         """
         Run one beam search step
         Args:
-            step_num (int): step number
             am_prob (Tensor): N x V, acoustic prob
             lm_prob (Tensor): N x V, language prob
             att_ali (Tensor): N x T, alignment score (weight)
@@ -315,10 +316,11 @@ class BeamTracker(BaseBeamTracker):
             stop (bool): stop beam search or not
         """
         # local pruning
-        if step_num == 0:
+        if self.step_num == 0:
             self._init_search(am_prob, lm_prob, att_ali=att_ali)
         else:
             self._step_search(am_prob, lm_prob, att_ali=att_ali)
+        self.step_num += 1
         # trace back ended sequence (process eos nodes)
         hyp_ended = self._trace_back(final=False)
         stop = False
@@ -326,6 +328,8 @@ class BeamTracker(BaseBeamTracker):
             self.hypos += hyp_ended
             # all eos, stop beam search
             stop = len(hyp_ended) == self.param.beam_size
+        if stop:
+            logger.info(f"--- beam search ended at step {self.step_num}")
         return stop
 
     def nbest_hypos(self, nbest: int, auto_stop: bool = True) -> List[Dict]:
@@ -412,7 +416,7 @@ class BatchBeamTracker(BaseBeamTracker):
             lm_prob (Tensor): N x V, language prob
             att_ali (Tensor): N x T, alignment score (weight)
         """
-        assert len(self.point) == 1
+        assert len(self.point) == 1 and self.step_num == 0
         # local pruning: beam x V => beam x beam
         topk_score, topk_token = self.beam_select(am_prob, lm_prob)
         # N x beam
@@ -421,7 +425,7 @@ class BatchBeamTracker(BaseBeamTracker):
         self.token.append(topk_token[::self.param.beam_size].clone())
         self.point.append(self.point[-1])
         self.trans = topk_token[0][..., None]
-        self.align = att_ali[..., None]
+        self.align = None if att_ali is None else att_ali[..., None]
 
     def _step_search(self,
                      am_prob: th.Tensor,
@@ -452,7 +456,8 @@ class BatchBeamTracker(BaseBeamTracker):
         token = th.gather(topk_token.view(self.batch_size, -1), -1, topk_index)
         # concat stats
         self.trans = self.concat(self.trans, point, token)
-        self.align = self.concat(self.align, None, att_ali[point])
+        self.align = self.concat(self.align, None,
+                                 None if att_ali is None else att_ali[point])
         # collect
         self.token.append(token.clone())
         self.point.append(point)
@@ -482,7 +487,6 @@ class BatchBeamTracker(BaseBeamTracker):
                                 final=final)
 
     def step(self,
-             step_num: int,
              am_prob: th.Tensor,
              lm_prob: Union[th.Tensor, float],
              att_ali: Optional[th.Tensor] = None) -> bool:
@@ -497,10 +501,11 @@ class BatchBeamTracker(BaseBeamTracker):
             stop (bool): stop beam search or not
         """
         # local pruning
-        if step_num == 0:
+        if self.step_num == 0:
             self._init_search(am_prob, lm_prob, att_ali=att_ali)
         else:
             self._step_search(am_prob, lm_prob, att_ali=att_ali)
+        self.step_num += 1
         # trace back ended sequence (process eos nodes)
         for u in range(self.batch_size):
             hyp_ended = self._trace_back(u, final=False)
@@ -508,12 +513,14 @@ class BatchBeamTracker(BaseBeamTracker):
                 self.hypos[u] += hyp_ended
                 # all eos
                 if len(hyp_ended) == self.param.beam_size:
-                    logger.info(
-                        f"--- beam search end (batch[{u}]) at step {step_num + 1}"
-                    )
+                    logger.info(f"--- beam search end (batch[{u}]) at " +
+                                f"step {self.step_num + 1}")
                     self.stop_batch[u] = True
         # all True, stop search
         stop = sum(self.stop_batch) == self.batch_size
+        if stop:
+            logger.info(
+                f"--- beam search (all batches) ended at step {self.step_num}")
         return stop
 
     def nbest_hypos(self,
