@@ -274,7 +274,7 @@ class DPRNN(nn.Module):
             return masks
 
 
-@ApsRegisters.sse.register("time_dprnn")
+@ApsRegisters.sse.register("sse@time_dprnn")
 class TimeDPRNN(DPRNN):
     """
     Time domain DP (dual-path) RNN
@@ -356,7 +356,7 @@ class TimeDPRNN(DPRNN):
             ]
 
 
-@ApsRegisters.sse.register("freq_dprnn")
+@ApsRegisters.sse.register("sse@freq_dprnn")
 class FreqDPRNN(DPRNN):
     """
     Frequency domain DP (dual-path) RNN

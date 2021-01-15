@@ -64,7 +64,7 @@ class CRNLayer(nn.Module):
             return tf.elu(x)
 
 
-@ApsRegisters.sse.register("crn")
+@ApsRegisters.sse.register("sse@crn")
 class CRNet(nn.Module):
     """
     Reference:

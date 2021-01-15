@@ -12,7 +12,7 @@ from aps.sse.utils import MaskNonLinear
 from aps.libs import ApsRegisters
 
 
-@ApsRegisters.sse.register("freq_xfmr_rel")
+@ApsRegisters.sse.register("sse@freq_xfmr_rel")
 class FreqRelXfmr(RelTransformerEncoder):
     """
     Frequency domain Transformer model

@@ -1,4 +1,4 @@
-nnet: "att"
+nnet: "asr@att"
 
 nnet_conf:
   input_size: 80
@@ -28,7 +28,7 @@ nnet_conf:
   att_kwargs:
     att_dim: 512
 
-task: "ctc_xent"
+task: "sse@ctc_xent"
 
 task_conf:
   lsm_factor: 0.1

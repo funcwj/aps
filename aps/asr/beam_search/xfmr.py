@@ -82,7 +82,7 @@ def beam_search(decoder: nn.Module,
     """
     if sos < 0 or eos < 0:
         raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
-    T, N, _ = enc_out.shape
+    T, N, D_enc = enc_out.shape
     if N != 1:
         raise RuntimeError(
             f"Got batch size {N:d}, now only support one utterance")
@@ -99,6 +99,7 @@ def beam_search(decoder: nn.Module,
 
     min_len = max(min_len, int(min_len_ratio * T))
     max_len = min(max_len, int(max_len_ratio * T))
+    logger.info(f"--- shape of the encoder output: {T} x {D_enc}")
     logger.info("--- length constraint of the decoding " +
                 f"sequence: ({min_len}, {max_len})")
     nbest = min(beam_size, nbest)

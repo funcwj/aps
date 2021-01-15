@@ -267,7 +267,7 @@ class Decoder(nn.Module):
         return x
 
 
-@ApsRegisters.sse.register("dcunet")
+@ApsRegisters.sse.register("sse@dcunet")
 class DCUNet(nn.Module):
     """
     Real or Complex UNet for Speech Enhancement

@@ -1,6 +1,6 @@
 # Conv-TasNet
 
-nnet: time_tasnet
+nnet: sse@time_tasnet
 
 nnet_conf:
   L: 20
@@ -14,7 +14,7 @@ nnet_conf:
   num_spks: 2
   non_linear: "relu"
 
-task: "sisnr"
+task: "sse@sisnr"
 
 task_conf:
   num_spks: 2

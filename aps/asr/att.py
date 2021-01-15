@@ -140,7 +140,7 @@ class EncDecASRBase(nn.Module):
         return enc_out, enc_len, enc_ctc, tgt_pad
 
 
-@ApsRegisters.asr.register("att")
+@ApsRegisters.asr.register("asr@att")
 class AttASR(EncDecASRBase):
     """
     Attention based ASR model with (Non-)Transformer encoder + attention + RNN decoder
@@ -258,7 +258,7 @@ class AttASR(EncDecASRBase):
                                              **kwargs)
 
 
-@ApsRegisters.asr.register("xfmr")
+@ApsRegisters.asr.register("asr@xfmr")
 class XfmrASR(EncDecASRBase):
     """
     Attention based ASR model with (Non-)Transformer encoder + Transformer decoder

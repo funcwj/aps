@@ -49,18 +49,19 @@ fi
 if [ $end -ge 3 ] && [ $beg -le 3 ]; then
   echo "Stage 3: decoding ..."
   for name in chime4 wsj0; do
-  ./scripts/decode.sh \
-    --score true \
-    --text data/$name/tst/text \
-    --gpu $gpu \
-    --beam-size $beam_size \
-    --nbest $nbest \
-    --max-len 100 \
-    --space "<space>" \
-    --dict data/$dataset/dict \
-    $dataset $exp \
-    data/$name/tst/wav.scp \
-    exp/$dataset/$exp/$name &
+    ./scripts/decode.sh \
+      --score true \
+      --text data/$name/tst/text \
+      --gpu $gpu \
+      --beam-size $beam_size \
+      --nbest $nbest \
+      --max-len 100 \
+      --space "<space>" \
+      --dict data/$dataset/dict \
+      --log-suffix $name \
+      $dataset $exp \
+      data/$name/tst/wav.scp \
+      exp/$dataset/$exp/$name &
   done
   wait
 fi

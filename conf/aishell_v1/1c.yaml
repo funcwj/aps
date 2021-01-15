@@ -1,4 +1,4 @@
-nnet: "xfmr_transducer"
+nnet: "asr@xfmr_transducer"
 
 nnet_conf:
   input_size: 80
@@ -19,7 +19,7 @@ nnet_conf:
     att_dropout: 0.2
     num_layers: 6
 
-task: "transducer"
+task: "asr@transducer"
 
 asr_transform:
   feats: "fbank-log-cmvn-aug"

@@ -104,7 +104,7 @@ def load_label_count(label_count: str) -> Optional[th.Tensor]:
     return th.clamp_min(counts, 1)
 
 
-@ApsRegisters.task.register("ctc_xent")
+@ApsRegisters.task.register("asr@ctc_xent")
 class CtcXentHybridTask(Task):
     """
     For encoder/decoder attention based AM training. (CTC for encoder, Xent for decoder)
@@ -195,7 +195,7 @@ class CtcXentHybridTask(Task):
         return stats
 
 
-@ApsRegisters.task.register("transducer")
+@ApsRegisters.task.register("asr@transducer")
 class TransducerTask(Task):
     """
     For RNNT objective function training.
@@ -258,7 +258,7 @@ class TransducerTask(Task):
         return {"loss": loss}
 
 
-@ApsRegisters.task.register("lm")
+@ApsRegisters.task.register("asr@lm")
 class LmXentTask(Task):
     """
     For LM training (Xent loss)

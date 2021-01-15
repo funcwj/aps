@@ -3,7 +3,7 @@
 # WER (%) Report:
 # Total (2939 utterances): 6117/52343 = 11.69%, SUB/INS/DEL = 4697/706/714
 
-nnet: xfmr
+nnet: asr@xfmr
 
 nnet_conf:
   input_size: 80
@@ -44,7 +44,7 @@ asr_transform:
   use_power: true
   window: hamm
 
-task: ctc_xent
+task: asr@ctc_xent
 task_conf:
   ctc_weight: 0.2
   lsm_factor: 0.1

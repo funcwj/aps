@@ -83,7 +83,7 @@ def permu_aligner(masks: np.ndarray, transpose: bool = False) -> np.ndarray:
     return permu_masks
 
 
-@ApsRegisters.sse.register("unsuper_rnn_enh")
+@ApsRegisters.sse.register("sse@rnn_enh_ml")
 class UnsupervisedRNNEnh(PyTorchRNNEncoder):
     """
     A recurrent network example for unsupervised training

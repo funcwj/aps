@@ -1,4 +1,4 @@
-nnet: "rnn_lm"
+nnet: "asr@rnn_lm"
 
 nnet_conf:
   embed_size: 1024
@@ -8,7 +8,7 @@ nnet_conf:
   num_layers: 2
   hidden_size: 1024
 
-task: "lm"
+task: "asr@lm"
 
 trainer_conf:
   optimizer: "adam"

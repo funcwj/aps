@@ -1,6 +1,10 @@
-# Total: 9.04%, 7176 utterances (9468 errors, 104765 units in total)
+# beam = 16
+# WER (%) Report:
+# Total (14326 utterances): 16475/205341 = 8.02%, SUB/INS/DEL = 15936/265/274
+# WER (%) Report:
+# Total (7176 utterances): 9638/104765 = 9.20%, SUB/INS/DEL = 9199/245/194
 
-nnet: "att"
+nnet: "asr@att"
 
 nnet_conf:
   input_size: 80
@@ -31,7 +35,7 @@ nnet_conf:
   att_kwargs:
     att_dim: 512
 
-task: "ctc_xent"
+task: "asr@ctc_xent"
 
 task_conf:
   lsm_factor: 0.1
@@ -44,6 +48,7 @@ asr_transform:
   window: "hamm"
   round_pow_of_two: true
   sr: 16000
+  pre_emphasis: 0.97
   num_mels: 80
   norm_mean: true
   norm_var: true
@@ -62,7 +67,7 @@ trainer_conf:
   lr_scheduler_kwargs:
     time_stamps: [800, 40000, 100000]
     peak_lr: 1.0e-3
-    stop_lr: 1.0e-5
+    stop_lr: 1.0e-6
   ss_scheduler: "linear"
   ss_scheduler_kwargs:
     ssr: 0.2

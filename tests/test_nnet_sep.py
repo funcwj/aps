@@ -16,7 +16,7 @@ from aps.transform import EnhTransform
     pytest.param(2, "relu")
 ])
 def test_base_rnn(num_spks, nonlinear):
-    nnet_cls = aps_sse_nnet("base_rnn")
+    nnet_cls = aps_sse_nnet("sse@base_rnn")
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
                              frame_hop=256)
@@ -40,7 +40,7 @@ def test_base_rnn(num_spks, nonlinear):
 
 
 def test_crn():
-    nnet_cls = aps_sse_nnet("crn")
+    nnet_cls = aps_sse_nnet("sse@crn")
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=320,
                              frame_hop=160,
@@ -57,7 +57,7 @@ def test_crn():
 
 
 def test_phasen():
-    nnet_cls = aps_sse_nnet("phasen")
+    nnet_cls = aps_sse_nnet("sse@phasen")
     transform = EnhTransform(feats="", frame_len=512, frame_hop=256)
     phasen = nnet_cls(12,
                       4,
@@ -79,7 +79,7 @@ def test_phasen():
 @pytest.mark.parametrize("num_branch", [1, 2])
 @pytest.mark.parametrize("cplx", [True, False])
 def test_dcunet(num_branch, cplx):
-    nnet_cls = aps_sse_nnet("dcunet")
+    nnet_cls = aps_sse_nnet("sse@dcunet")
     transform = EnhTransform(feats="", frame_len=512, frame_hop=256)
     dcunet = nnet_cls(enh_transform=transform,
                       K="7,5;7,5;5,3;5,3;3,3;3,3",
@@ -106,7 +106,7 @@ def test_dcunet(num_branch, cplx):
 @pytest.mark.parametrize("num_spks", [1, 2])
 @pytest.mark.parametrize("non_linear", ["", "sigmoid"])
 def test_dense_unet(num_spks, non_linear):
-    nnet_cls = aps_sse_nnet("dense_unet")
+    nnet_cls = aps_sse_nnet("sse@dense_unet")
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
                              frame_hop=256)
@@ -142,7 +142,7 @@ def test_dense_unet(num_spks, non_linear):
 
 @pytest.mark.parametrize("num_spks", [1, 2])
 def test_freq_xfmr_rel(num_spks):
-    nnet_cls = aps_sse_nnet("freq_xfmr_rel")
+    nnet_cls = aps_sse_nnet("sse@freq_xfmr_rel")
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
                              frame_hop=256)
@@ -179,7 +179,7 @@ def test_freq_xfmr_rel(num_spks):
     pytest.param(2, "relu")
 ])
 def test_tasnet(num_spks, nonlinear):
-    nnet_cls = aps_sse_nnet("time_tasnet")
+    nnet_cls = aps_sse_nnet("sse@time_tasnet")
     tasnet = nnet_cls(L=40,
                       N=256,
                       X=8,
@@ -205,7 +205,7 @@ def test_tasnet(num_spks, nonlinear):
 
 
 def test_dprnn():
-    nnet_cls = aps_sse_nnet("time_dprnn")
+    nnet_cls = aps_sse_nnet("sse@time_dprnn")
     dprnn = nnet_cls(num_spks=1,
                      input_norm="cLN",
                      conv_kernels=16,
@@ -227,7 +227,7 @@ def test_dprnn():
 @pytest.mark.parametrize("num_spks", [1, 2])
 @pytest.mark.parametrize("cplx", [True, False])
 def test_dccrn(num_spks, cplx):
-    nnet_cls = aps_sse_nnet("dccrn")
+    nnet_cls = aps_sse_nnet("sse@dccrn")
     transform = EnhTransform(feats="spectrogram", frame_len=512, frame_hop=256)
     dccrn = nnet_cls(enh_transform=transform,
                      cplx=cplx,
@@ -252,14 +252,14 @@ def test_dccrn(num_spks, cplx):
 
 
 def test_unsuper_enh():
-    nnet_cls = aps_sse_nnet("unsuper_rnn_enh")
+    nnet_cls = aps_sse_nnet("sse@rnn_enh_ml")
     transform = EnhTransform(feats="spectrogram-log-cmvn-ipd",
                              frame_len=512,
                              frame_hop=256,
-                             ipd_index="0,1;0,2;0,3;0,4")
+                             ipd_index="0,1;0,2;0,3")
     unsuper_enh = nnet_cls(enh_transform=transform,
                            num_bins=257,
-                           input_size=1285,
+                           input_size=257 * 4,
                            input_project=512,
                            num_layers=2,
                            hidden=512)

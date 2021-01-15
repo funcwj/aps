@@ -16,13 +16,14 @@ def toy_rnn(mode, num_spks):
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
                              frame_hop=256)
-    return aps_sse_nnet("base_rnn")(enh_transform=transform,
-                                    num_bins=257,
-                                    input_size=257,
-                                    num_layers=2,
-                                    num_spks=num_spks,
-                                    hidden=256,
-                                    training_mode=mode)
+    base_rnn_cls = aps_sse_nnet("sse@base_rnn")
+    return base_rnn_cls(enh_transform=transform,
+                        num_bins=257,
+                        input_size=257,
+                        num_layers=2,
+                        num_spks=num_spks,
+                        hidden=256,
+                        training_mode=mode)
 
 
 def gen_egs(num_spks):
@@ -54,7 +55,7 @@ def run_epochs(task, egs, iters):
 def test_wa(num_branch, num_spks, permute):
     nnet = toy_rnn("time", num_branch)
     kwargs = {"permute": permute, "num_spks": num_spks, "objf": "L1"}
-    task = aps_task("wa", nnet, **kwargs)
+    task = aps_task("sse@wa", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
 
@@ -67,7 +68,7 @@ def test_wa(num_branch, num_spks, permute):
 def test_sisnr(num_branch, num_spks, permute):
     nnet = toy_rnn("time", num_branch)
     kwargs = {"permute": permute, "num_spks": num_spks, "non_nagetive": True}
-    task = aps_task("sisnr", nnet, **kwargs)
+    task = aps_task("sse@sisnr", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
 
@@ -80,7 +81,7 @@ def test_sisnr(num_branch, num_spks, permute):
 def test_snr(num_branch, num_spks, permute):
     nnet = toy_rnn("time", num_branch)
     kwargs = {"permute": permute, "num_spks": num_spks, "non_nagetive": True}
-    task = aps_task("snr", nnet, **kwargs)
+    task = aps_task("sse@snr", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
 
@@ -99,7 +100,7 @@ def test_linear_freq_sa(num_branch, num_spks, permute):
         "num_spks": num_spks,
         "objf": "L2"
     }
-    task = aps_task("freq_linear_sa", nnet, **kwargs)
+    task = aps_task("sse@freq_linear_sa", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
 
@@ -118,7 +119,7 @@ def test_mel_freq_sa(num_branch, num_spks, permute):
         "num_spks": num_spks,
         "num_mels": 80
     }
-    task = aps_task("freq_mel_sa", nnet, **kwargs)
+    task = aps_task("sse@freq_mel_sa", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
 
@@ -140,7 +141,7 @@ def test_linear_time_sa(num_branch, num_spks, permute):
         "num_spks": num_spks,
         "objf": "L2"
     }
-    task = aps_task("time_linear_sa", nnet, **kwargs)
+    task = aps_task("sse@time_linear_sa", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
 
@@ -162,6 +163,24 @@ def test_mel_time_sa(num_branch, num_spks, permute):
         "num_mels": 80,
         "num_spks": num_spks
     }
-    task = aps_task("time_mel_sa", nnet, **kwargs)
+    task = aps_task("sse@time_mel_sa", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
+
+
+@pytest.mark.parametrize("num_channels", [3])
+def test_enh_ml(num_channels):
+    nnet_cls = aps_sse_nnet("sse@rnn_enh_ml")
+    transform = EnhTransform(feats="spectrogram-log-cmvn-ipd",
+                             frame_len=512,
+                             frame_hop=256,
+                             ipd_index="0,1;0,2")
+    rnn_ml = nnet_cls(enh_transform=transform,
+                      num_bins=257,
+                      input_size=257 * 3,
+                      input_project=512,
+                      num_layers=2,
+                      hidden=512)
+    task = aps_task("sse@enh_ml", rnn_ml)
+    egs = {"mix": th.rand(4, num_channels, 64000)}
+    run_epochs(task, egs, 3)

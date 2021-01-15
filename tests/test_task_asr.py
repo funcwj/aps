@@ -69,7 +69,7 @@ def gen_asr_egs(batch_size, vocab_size):
 
 def test_ctc_xent():
     # th.random.manual_seed(666)
-    nnet_cls = aps_asr_nnet("att")
+    nnet_cls = aps_asr_nnet("asr@att")
     vocab_size = 100
     batch_size = 4
     att_asr = nnet_cls(input_size=80,
@@ -85,7 +85,7 @@ def test_ctc_xent():
                        enc_kwargs=att_enc_kwargs,
                        dec_dim=512,
                        dec_kwargs=att_dec_kwargs)
-    task = aps_task("ctc_xent",
+    task = aps_task("asr@ctc_xent",
                     att_asr,
                     lsm_factor=0.1,
                     ctc_weight=1,
@@ -97,7 +97,7 @@ def test_ctc_xent():
 
 
 def test_rnnt():
-    nnet_cls = aps_asr_nnet("transducer")
+    nnet_cls = aps_asr_nnet("asr@transducer")
     vocab_size = 100
     batch_size = 4
     rnnt_asr = nnet_cls(input_size=80,
@@ -108,7 +108,7 @@ def test_rnnt():
                         enc_kwargs=att_enc_kwargs,
                         enc_proj=512,
                         dec_kwargs=rnnt_dec_kwargs)
-    task = aps_task("transducer",
+    task = aps_task("asr@transducer",
                     rnnt_asr,
                     blank=vocab_size - 1,
                     interface="warprnnt_pytorch")
@@ -118,7 +118,7 @@ def test_rnnt():
 
 
 def test_lm_xent():
-    nnet_cls = aps_asr_nnet("rnn_lm")
+    nnet_cls = aps_asr_nnet("asr@rnn_lm")
     vocab_size = 100
     batch_size = 4
     rnnlm = nnet_cls(embed_size=256,
@@ -128,7 +128,7 @@ def test_lm_xent():
                      hidden_size=512,
                      dropout=0.2,
                      tie_weights=False)
-    task = aps_task("lm", rnnlm)
+    task = aps_task("asr@lm", rnnlm)
     U = th.randint(10, 20, (1,)).item()
     x = th.randint(0, vocab_size - 1, (batch_size, U + 1))
     egs = {

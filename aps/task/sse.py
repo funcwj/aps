@@ -201,7 +201,7 @@ class TimeDomainTask(SepTask):
         return {"loss": th.mean(loss)}
 
 
-@ApsRegisters.task.register("sisnr")
+@ApsRegisters.task.register("sse@sisnr")
 class SisnrTask(TimeDomainTask):
     """
     Time domain sisnr loss function
@@ -238,7 +238,7 @@ class SisnrTask(TimeDomainTask):
             out, ref, zero_mean=self.zero_mean, non_nagetive=self.non_nagetive)
 
 
-@ApsRegisters.task.register("snr")
+@ApsRegisters.task.register("sse@snr")
 class SnrTask(TimeDomainTask):
     """
     Time domain sisnr loss function
@@ -265,7 +265,7 @@ class SnrTask(TimeDomainTask):
         return -snr(out, ref, non_nagetive=self.non_nagetive)
 
 
-@ApsRegisters.task.register("wa")
+@ApsRegisters.task.register("sse@wa")
 class WaTask(TimeDomainTask):
     """
     Time domain waveform approximation loss function
@@ -397,7 +397,7 @@ class FreqSaTask(SepTask):
         return {"loss": th.mean(loss)}
 
 
-@ApsRegisters.task.register("freq_linear_sa")
+@ApsRegisters.task.register("sse@freq_linear_sa")
 class LinearFreqSaTask(FreqSaTask):
     """
     Frequency domain linear spectral approximation (MSA or tPSA) loss function
@@ -451,7 +451,7 @@ class LinearFreqSaTask(FreqSaTask):
         return tensor
 
 
-@ApsRegisters.task.register("freq_mel_sa")
+@ApsRegisters.task.register("sse@freq_mel_sa")
 class MelFreqSaTask(FreqSaTask):
     """
     Frequency domain mel-spectrogram approximation
@@ -614,7 +614,7 @@ class TimeSaTask(SepTask):
         return {"loss": th.mean(loss)}
 
 
-@ApsRegisters.task.register("time_linear_sa")
+@ApsRegisters.task.register("sse@time_linear_sa")
 class LinearTimeSaTask(TimeSaTask):
     """
     Time domain linear spectral approximation loss function
@@ -675,7 +675,7 @@ class LinearTimeSaTask(TimeSaTask):
         return tensor
 
 
-@ApsRegisters.task.register("time_mel_sa")
+@ApsRegisters.task.register("sse@time_mel_sa")
 class MelTimeSaTask(TimeSaTask):
     """
     Time domain mel spectral approximation loss function
@@ -756,7 +756,7 @@ class MelTimeSaTask(TimeSaTask):
         return loss
 
 
-@ApsRegisters.task.register("complex_mapping")
+@ApsRegisters.task.register("sse@complex_mapping")
 class ComplexMappingTask(SepTask):
     """
     Frequency domain complex spectral mapping loss function

@@ -111,6 +111,7 @@ def beam_search(decoder: nn.Module,
 
     min_len = max(min_len, int(min_len_ratio * T))
     max_len = min(max_len, int(max_len_ratio * T))
+    logger.info(f"--- shape of the encoder output: {T} x {D_enc}")
     logger.info("--- length constraint of the decoding " +
                 f"sequence: ({min_len}, {max_len})")
     nbest = min(beam_size, nbest)
@@ -209,13 +210,14 @@ def beam_search_batch(decoder: nn.Module,
         else:
             lm_score_impl = ngram_score
 
-    N, _, D_enc = enc_out.shape
+    N, T, D_enc = enc_out.shape
     min_len = [
         max(min_len, int(min_len_ratio * elen.item())) for elen in enc_len
     ]
     max_len = [
         min(max_len, int(max_len_ratio * elen.item())) for elen in enc_len
     ]
+    logger.info(f"--- shape of the encoder output: {T} x {D_enc}")
     logger.info("--- length constraint of the decoding " +
                 f"sequence: {[(i, j) for i, j in zip(min_len, max_len)]}")
 

@@ -23,7 +23,7 @@ def repackage_hidden(h):
         raise TypeError(f"Unsupport type: {type(h)}")
 
 
-@ApsRegisters.asr.register("rnn_lm")
+@ApsRegisters.asr.register("asr@rnn_lm")
 class TorchRNNLM(nn.Module):
     """
     A simple Torch RNN LM

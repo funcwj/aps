@@ -115,7 +115,7 @@ class TransducerASRBase(nn.Module):
                                len_norm=len_norm)
 
 
-@ApsRegisters.asr.register("transducer")
+@ApsRegisters.asr.register("asr@transducer")
 class TransducerASR(TransducerASRBase):
     """
     Transducer based ASR model with (Non-)Transformer encoder + RNN decoder
@@ -166,7 +166,7 @@ class TransducerASR(TransducerASRBase):
         return dec_out, enc_len
 
 
-@ApsRegisters.asr.register("xfmr_transducer")
+@ApsRegisters.asr.register("asr@xfmr_transducer")
 class XfmrTransducerASR(TransducerASRBase):
     """
     Transducer based ASR model with (Non-)Transformer encoder + Transformer decoder

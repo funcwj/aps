@@ -103,7 +103,7 @@ class EnhASRBase(nn.Module):
             return self.asr.beam_search_batch(batch_enh, **kwargs)
 
 
-@ApsRegisters.asr.register("enh_att")
+@ApsRegisters.asr.register("asr@enh_att")
 class EnhAttASR(EnhASRBase):
     """
     AttASR with enhancement front-end
@@ -178,7 +178,7 @@ class EnhAttASR(EnhASRBase):
         return self.asr(x_enh, x_len, y_pad, ssr=ssr)
 
 
-@ApsRegisters.asr.register("enh_xfmr")
+@ApsRegisters.asr.register("asr@enh_xfmr")
 class EnhXfmrASR(EnhASRBase):
     """
     Transformer with enhancement front-end

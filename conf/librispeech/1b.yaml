@@ -4,7 +4,7 @@
 # WER (%) Report:
 # Total (2939 utterances): 6035/52343 = 11.53%, SUB/INS/DEL = 4834/432/769
 
-nnet: "att"
+nnet: "asr@att"
 
 nnet_conf:
   input_size: 80
@@ -35,7 +35,7 @@ nnet_conf:
   att_kwargs:
     att_dim: 1024
 
-task: "ctc_xent"
+task: "asr@ctc_xent"
 
 task_conf:
   ctc_weight: 0.2
