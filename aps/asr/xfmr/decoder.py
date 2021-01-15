@@ -43,10 +43,11 @@ class TorchTransformerDecoder(nn.Module):
                  scale_embed: bool = False,
                  pos_dropout: float = 0,
                  att_dropout: float = 0.1,
-                 pos_enc: bool = True,
                  num_layers: int = 6) -> None:
         super(TorchTransformerDecoder, self).__init__()
+        # default normal init (std=1), do not need to scale
         self.vocab_embed = nn.Embedding(vocab_size, att_dim)
+        # use absolute positional embedding here
         self.abs_pos_enc = get_xfmr_pose("inp_sin",
                                          att_dim,
                                          dropout=pos_dropout,
@@ -64,8 +65,7 @@ class TorchTransformerDecoder(nn.Module):
              tgt_pad: th.Tensor,
              enc_len: Optional[th.Tensor] = None,
              pre_emb: Optional[th.Tensor] = None,
-             out_idx: Optional[int] = None,
-             point: Optional[th.Tensor] = None) -> Tuple[th.Tensor]:
+             out_idx: Optional[int] = None) -> Tuple[th.Tensor]:
         """
         Args:
             enc_out (Tensor): T x N x D
@@ -81,16 +81,13 @@ class TorchTransformerDecoder(nn.Module):
         memory_mask = None if enc_len is None else (padding_mask(enc_len) == 1)
         tgt_mask = prep_sub_mask(tgt_pad.shape[-1] + offset,
                                  device=tgt_pad.device)
+        # N x T x E
         tgt_emb = self.vocab_embed(tgt_pad)
-        if offset:
-            # T + T' x N x E
-            tgt_emb = self.abs_pos_enc(tgt_emb, t=offset)
-            if point is not None:
-                pre_emb = pre_emb[:, point]
+        # T x N x E
+        tgt_emb = self.abs_pos_enc(tgt_emb, t=offset)
+        # T+T' x N x E
+        if pre_emb is not None:
             tgt_emb = th.cat([pre_emb, tgt_emb], dim=0)
-        else:
-            # T x N x E
-            tgt_emb = self.abs_pos_enc(tgt_emb)
         # To+1 x N x D
         dec_out = self.decoder(tgt_emb,
                                enc_out,

@@ -143,7 +143,7 @@ def test_df_transform(num_bins, num_doas):
 
 
 def debug_visualize_feature():
-    transform = AsrTransform(feats="fbank-log",
+    transform = AsrTransform(feats="fbank-log-cmvn-delta",
                              frame_len=400,
                              frame_hop=160,
                              use_power=True,

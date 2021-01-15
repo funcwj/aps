@@ -11,7 +11,6 @@ import torch.nn.functional as tf
 
 from typing import Optional, Tuple, Union
 from aps.asr.base.layer import OneHotEmbedding, PyTorchRNN
-from aps.asr.beam_search.lm import adjust_hidden
 
 HiddenType = Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]
 
@@ -29,7 +28,6 @@ class PyTorchRNNDecoder(nn.Module):
                  rnn_hidden: int = 512,
                  rnn_dropout: float = 0.0,
                  emb_dropout: float = 0.0,
-                 dropout: float = 0.0,
                  input_feeding: bool = False,
                  vocab_embeded: bool = True) -> None:
         super(PyTorchRNNDecoder, self).__init__()
@@ -47,7 +45,7 @@ class PyTorchRNNDecoder(nn.Module):
                                   dropout=rnn_dropout,
                                   bidirectional=False)
         self.proj = nn.Linear(rnn_hidden + enc_proj, enc_proj)
-        self.drop = nn.Dropout(p=dropout)
+        self.drop = nn.Dropout(p=rnn_dropout)
         self.pred = nn.Linear(enc_proj, vocab_size)
         self.input_feeding = input_feeding
         self.vocab_size = vocab_size
@@ -80,18 +78,12 @@ class PyTorchRNNDecoder(nn.Module):
         att_ali: Optional[th.Tensor] = None,
         proj: Optional[th.Tensor] = None,
         enc_len: Optional[th.Tensor] = None,
-        point: Optional[th.Tensor] = None,
     ) -> Tuple[th.Tensor, th.Tensor, HiddenType, th.Tensor, th.Tensor]:
         """
         Make a prediction step
         """
         # N x D_emb or N x V
         emb_pre = self.vocab_embed(out_pre)
-        if point is not None:
-            att_ctx = att_ctx[point]
-            proj = proj[point]
-            dec_hid = adjust_hidden(point, dec_hid)
-            att_ali = None if att_ali is None else att_ali[point]
         # dec_out: N x D_dec
         if self.input_feeding:
             dec_out, dec_hid = self.step_decoder(emb_pre, proj, dec_hid=dec_hid)

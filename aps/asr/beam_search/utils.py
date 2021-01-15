@@ -12,7 +12,7 @@ from aps.utils import get_logger
 
 logger = get_logger(__name__)
 verbose = False
-double_check = True
+double_check = False
 
 
 @dataclass
@@ -34,11 +34,12 @@ class BeamSearchParam(object):
     cov_penalty: float = 0
     cov_threshold: float = 0.5
     len_norm: bool = True
+    end_detect: bool = False
 
 
 class BaseBeamTracker(object):
     """
-    Base class (to be inheried)
+    Base class for implementation of the beam search (to be inheried)
     """
 
     def __init__(self, param: BeamSearchParam) -> None:
@@ -47,6 +48,25 @@ class BaseBeamTracker(object):
         self.trans = None  # B x U
         self.none_eos_idx = None
         self.step_num = 0
+
+    def end_detect(self,
+                   hyp_ended: List[Dict],
+                   look_back: int = 3,
+                   end_threshold: float = 10) -> bool:
+        """
+        To stop beam search before reaching max_len
+        """
+        if not len(hyp_ended):
+            return False
+        global_best = max([h["score"] for h in hyp_ended])
+        count = 0
+        for l in range(self.step_num - look_back, self.step_num):
+            hset = [h for h in hyp_ended if len(h["trans"]) - 1 == l]
+            if len(hset):
+                cur_best = max([h["score"] for h in hset])
+                if global_best - cur_best >= end_threshold:
+                    count += 1
+        return count == look_back
 
     def concat(self, prev_: Optional[th.Tensor], point: Optional[th.Tensor],
                next_: Optional[th.Tensor]) -> th.Tensor:
@@ -332,9 +352,15 @@ class BeamTracker(BaseBeamTracker):
         if hyp_ended:
             self.hypos += hyp_ended
             # all eos, stop beam search
-            stop = len(hyp_ended) == self.param.beam_size
-        if stop:
-            logger.info(f"--- beam search ends at step {self.step_num}")
+            if len(hyp_ended) == self.param.beam_size:
+                logger.info(
+                    f"--- beam search ends (all eos) at step {self.step_num}")
+                stop = True
+            # auto detected
+            if self.param.end_detect and self.end_detect(self.hypos):
+                logger.info(
+                    f"--- beam search ends (detected) at step {self.step_num}")
+                stop = True
         # update auto_step flag
         self.auto_stop = stop
         # if reach max_len, also return true
@@ -534,17 +560,23 @@ class BatchBeamTracker(BaseBeamTracker):
             max_len = self.param.max_len[u]
             if self.step_num >= max_len:
                 if self.step_num == max_len:
-                    logger.info(
-                        f"--- beam search (batch[{u}]) reaches max_len {max_len}"
-                    )
+                    logger.info(f"--- beam search (batch[{u}]) reaches " +
+                                f"max_len {max_len}")
                 continue
             hyp_ended = self._trace_back(u, final=False)
             if hyp_ended:
                 self.hypos[u] += hyp_ended
-                # all eos
+                # all eos, stop beam search
                 if len(hyp_ended) == self.param.beam_size:
-                    logger.info(f"--- beam search ends (batch[{u}]) at " +
-                                f"step {self.step_num + 1}")
+                    logger.info(
+                        f"--- beam search ends (all eos, batch[{u}]) at " +
+                        f"step {self.step_num}")
+                    self.auto_stop[u] = True
+                # auto detected
+                if self.param.end_detect and self.end_detect(self.hypos[u]):
+                    logger.info(
+                        f"--- beam search ends (detected, batch[{u}]) at " +
+                        f"step {self.step_num}")
                     self.auto_stop[u] = True
         # all True, stop search
         stop = sum(self.auto_stop) == self.batch_size

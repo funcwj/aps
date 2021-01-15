@@ -126,11 +126,11 @@ def beam_search(decoder: nn.Module,
         # beam
         pre_tok, point = beam_tracker[-1]
         # beam x V
-        dec_out, pre_emb = decoder.step(enc_out,
-                                        pre_tok[:, None],
-                                        out_idx=-1,
-                                        pre_emb=pre_emb,
-                                        point=point)
+        dec_out, pre_emb = decoder.step(
+            enc_out,
+            pre_tok[:, None],
+            out_idx=-1,
+            pre_emb=None if pre_emb is None else pre_emb[:, point])
 
         # compute prob: beam x V, nagetive
         am_prob = tf.log_softmax(dec_out / temperature, dim=-1)
@@ -218,11 +218,11 @@ def beam_search_batch(decoder: nn.Module,
         # N*beam
         pre_tok, point = beam_tracker[-1]
         # beam x V
-        dec_out, pre_emb = decoder.step(enc_out,
-                                        pre_tok[:, None],
-                                        out_idx=-1,
-                                        pre_emb=pre_emb,
-                                        point=point)
+        dec_out, pre_emb = decoder.step(
+            enc_out,
+            pre_tok[:, None],
+            out_idx=-1,
+            pre_emb=None if pre_emb is None else pre_emb[:, point])
         # compute prob: N*beam x V, nagetive
         am_prob = tf.log_softmax(dec_out / temperature, dim=-1)
 

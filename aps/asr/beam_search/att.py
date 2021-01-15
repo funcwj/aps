@@ -11,7 +11,7 @@ import torch.nn.functional as tf
 
 from typing import Optional, List, Dict
 from aps.asr.beam_search.utils import BeamSearchParam, BeamTracker, BatchBeamTracker
-from aps.asr.beam_search.lm import rnnlm_score, ngram_score, LmType
+from aps.asr.beam_search.lm import rnnlm_score, ngram_score, adjust_hidden, LmType
 from aps.utils import get_logger
 
 logger = get_logger(__name__)
@@ -144,15 +144,18 @@ def beam_search(decoder: nn.Module,
     while not stop:
         # beam
         pre_tok, point = beam_tracker[-1]
+
         # step forward
-        dec_out, att_ctx, dec_hid, att_ali, proj = decoder.step(att_net,
-                                                                pre_tok,
-                                                                enc_out,
-                                                                att_ctx,
-                                                                dec_hid=dec_hid,
-                                                                att_ali=att_ali,
-                                                                proj=proj,
-                                                                point=point)
+        dec_hid = adjust_hidden(point, dec_hid)
+        att_ali = None if att_ali is None else att_ali[point]
+        dec_out, att_ctx, dec_hid, att_ali, proj = decoder.step(
+            att_net,
+            pre_tok,
+            enc_out,
+            att_ctx[point],
+            dec_hid=dec_hid,
+            att_ali=att_ali,
+            proj=proj[point])
         # compute prob: beam x V, nagetive
         am_prob = tf.log_softmax(dec_out / temperature, dim=-1)
         if lm and beam_param.lm_weight > 0:
@@ -249,15 +252,16 @@ def beam_search_batch(decoder: nn.Module,
         # N*beam
         pre_tok, point = beam_tracker[-1]
         # step forward
-        dec_out, att_ctx, dec_hid, att_ali, proj = decoder.step(att_net,
-                                                                pre_tok,
-                                                                enc_out,
-                                                                att_ctx,
-                                                                enc_len=enc_len,
-                                                                dec_hid=dec_hid,
-                                                                att_ali=att_ali,
-                                                                proj=proj,
-                                                                point=point)
+        dec_hid = adjust_hidden(point, dec_hid)
+        att_ali = None if att_ali is None else att_ali[point]
+        dec_out, att_ctx, dec_hid, att_ali, proj = decoder.step(
+            att_net,
+            pre_tok,
+            enc_out,
+            att_ctx[point],
+            dec_hid=dec_hid,
+            att_ali=att_ali,
+            proj=proj[point])
         # compute prob: N*beam x V, nagetive
         am_prob = tf.log_softmax(dec_out / temperature, dim=-1)
 

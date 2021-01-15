@@ -30,9 +30,7 @@ nnet_conf:
     rnn_hidden: 1024
     rnn_dropout: 0.2
     emb_dropout: 0.2
-    dropout: 0.2
     input_feeding: true
-    vocab_embeded: true
   att_type: "ctx"
   att_kwargs:
     att_dim: 1024

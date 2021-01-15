@@ -48,7 +48,7 @@ class NoamLR(lr._LRScheduler):
 
     const = factor * transformer_dim^{-0.5}
     1) cur_step > warmup:   const * cur_step**(-0.5)
-    2) cur_step < warmup:   const * cur_step * warmup**(-1.5)
+    2) cur_step < warmup:   const * cur_step/warmup * warmup**(-0.5)
     3) cur_step = warmup:   const * warmup**(-0.5)
 
     Args:

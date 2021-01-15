@@ -35,7 +35,6 @@ nnet_conf:
     rnn_hidden: 512
     rnn_dropout: 0.2
     emb_dropout: 0.2
-    dropout: 0.2
     input_feeding: true
   att_type: "ctx"
   att_kwargs:
