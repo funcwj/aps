@@ -98,7 +98,7 @@ def dynamic_importlib(sstr: str) -> Any:
         raise ImportError(f"Import {sstr} failed")
 
 
-def aps_dataloader(fmt: str = "am_raw", **kwargs) -> Iterable[Dict]:
+def aps_dataloader(fmt: str = "am@raw", **kwargs) -> Iterable[Dict]:
     """
     Return DataLoader class supported by aps
     """

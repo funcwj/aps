@@ -149,8 +149,7 @@ def run(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=
-        "Command to do end-to-end decoding using batch version beam search "
-        "(WER may different with non-batch version when #batch_size != 1)",
+        "Command to do end-to-end decoding using batch version beam search",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[DecodingParser.parser])
     parser.add_argument("--batch-size",
