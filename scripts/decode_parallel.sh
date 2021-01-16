@@ -83,7 +83,7 @@ $cmd JOB=1:$nj $log_dir/decode.JOB.log \
   --len-penalty $len_penalty \
   --cov-penalty $cov_penalty \
   --cov-threshold $cov_threshold \
-  --eos-threshold $eos_threshold \
+  --eos-threshold $eos_threshold
 
 cat $log_dir/beam${beam_size}.*.decode | \
   sort -k1 > $dec_dir/beam${beam_size}.decode

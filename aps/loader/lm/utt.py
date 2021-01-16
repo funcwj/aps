@@ -181,7 +181,7 @@ class BatchSampler(dat.Sampler):
                       min_batch_size: int = 4,
                       adapt_token_num: int = 400) -> List[List[int]]:
         """
-        Sort mini-batches in each subset
+        Return utterance index used for training (pass short/long utterances)
         """
         toks_len = [len(dataset[i]) for i in subset]
         # long -> short

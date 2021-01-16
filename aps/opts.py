@@ -186,7 +186,7 @@ def get_aps_decode_parser():
                         help="Minimum decoding sequence length we can have")
     parser.add_argument("--min-len-ratio",
                         type=float,
-                        default=1.0,
+                        default=0.0,
                         help="To derive min_len=max(#enc_len*min_len_ratio, "
                         "#min_len)")
     parser.add_argument("--space",

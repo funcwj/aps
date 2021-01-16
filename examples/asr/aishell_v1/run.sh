@@ -30,6 +30,9 @@ lm_epochs=30
 lm_batch_size=32
 lm_num_workers=4
 
+# for ngram lm
+ngram=5
+
 # decoding
 beam_size=24
 nbest=8
