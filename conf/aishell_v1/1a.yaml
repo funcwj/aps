@@ -1,8 +1,3 @@
-# beam = 16
-# WER (%) Report:
-# Total (14326 utterances): 16475/205341 = 8.02%, SUB/INS/DEL = 15936/265/274
-# WER (%) Report:
-# Total (7176 utterances): 9638/104765 = 9.20%, SUB/INS/DEL = 9199/245/194
 
 nnet: "asr@att"
 

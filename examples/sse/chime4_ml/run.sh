@@ -9,7 +9,7 @@ stage=1
 chime4_data=/scratch/jwu/CHiME4
 cache_dir=data/chime4_wav
 
-dataset="chime4_unsuper"
+dataset="chime4_ml"
 exp="1a"
 gpu=0
 seed=777
@@ -27,8 +27,10 @@ prog_interval=50
 
 if [ $stage -le 2 ]; then
   ./scripts/train.sh \
-    --gpu $gpu --seed $seed \
-    --epochs $epochs --batch-size $batch_size \
+    --gpu $gpu \
+    --seed $seed \
+    --epochs $epochs \
+    --batch-size $batch_size \
     --num-workers $num_workers \
     --eval-interval $eval_interval \
     --save-interval $save_interval \

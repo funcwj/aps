@@ -11,24 +11,28 @@ import numpy as np
 
 from aps.loader import AudioReader
 from aps.utils import get_logger, SimpleTimer
-from aps.eval import Computer
-from aps.sep.unsupervised_enh import permu_aligner
+from aps.eval import NnetEvaluator
+from aps.sse.unsuper.rnn import permu_aligner
 
 logger = get_logger(__name__)
 
 
-class Separator(Computer):
+class Separator(NnetEvaluator):
     """
     Decoder wrapper
     """
 
-    def __init__(self, cpt_dir, device_id=-1):
+    def __init__(self,
+                 cpt_dir: str,
+                 device_id: int = -1,
+                 cpt_tag: str = "best") -> None:
         super(Separator, self).__init__(cpt_dir,
+                                        cpt_tag=cpt_tag,
                                         device_id=device_id,
                                         task="enh")
         logger.info(f"Load checkpoint from {cpt_dir}: epoch {self.epoch}")
 
-    def run(self, src):
+    def run(self, src: np.ndarray) -> th.Tensor:
         """
         Args:
             src (Array): (C) x S
