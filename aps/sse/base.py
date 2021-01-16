@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Optional, NoReturn
+from typing import Optional, Union, List, NoReturn
 
 supported_nonlinear = {
     "relu": th.relu,  # [0, +oo]
@@ -25,6 +25,50 @@ positive_nonlinear_wo_softplus = ["relu", "softplus", "sigmoid", "softmax"]
 common_nonlinear = ["relu", "sigmoid"]
 bounded_nonlinear = ["sigmoid", "softmax"]
 unbounded_nonlinear = ["relu", "tanh", "softplus"]
+
+
+class SseBase(nn.Module):
+    """
+    The base class for speech separation & enhancement models
+
+    Args:
+        transform (nn.Module): see aps.transform.enh
+        training_mode (str): training mode, frequency domain or time domain
+    """
+
+    def __init__(self,
+                 transform: Optional[nn.Module],
+                 training_mode: str = "freq"):
+        super(SseBase, self).__init__()
+        assert training_mode in ["freq", "time"]
+        self.enh_transform = transform
+        self.training_mode = training_mode
+
+    def check_args(self,
+                   mix: th.Tensor,
+                   training: bool = True,
+                   valid_dim: List[int] = [2]) -> NoReturn:
+        """
+        Check arguments during training or inference
+        """
+        if mix.dim() not in valid_dim:
+            supported_dim = "/".join([str(d) for d in valid_dim])
+            raise RuntimeError(
+                f"{self.__class__.__name__} expects {supported_dim}D " +
+                f"tensor ({'training' if training else 'inference'}), " +
+                f"got {mix.dim()} instead")
+
+    def infer(self,
+              mix: th.Tensor,
+              mode: str = "freq") -> Union[th.Tensor, List[th.Tensor]]:
+        """
+        Used for separation & enhancement inference
+        Args:
+            mix (Tensor): S or N x S (multi-channel)
+        Return:
+            Tensor: S
+        """
+        raise NotImplementedError
 
 
 class MaskNonLinear(nn.Module):
@@ -55,14 +99,6 @@ class MaskNonLinear(nn.Module):
         self.scale = scale
         self.non_linear = non_linear
 
-    def check_args(self, inp: th.Tensor) -> NoReturn:
-        if inp.dim() not in [3, 4]:
-            raise RuntimeError(
-                f"MaskNonLinear expects 3/4D tensor, got {inp.dim()}")
-        if self.non_linear == "softmax" and inp.dim() != 4:
-            raise RuntimeError(
-                f"MaskNonLinear(softmax) expects 4D tensor, got {inp.dim()}")
-
     def forward(self, inp: th.Tensor, **kwargs) -> th.Tensor:
         """
         Args:
@@ -70,7 +106,12 @@ class MaskNonLinear(nn.Module):
         Return:
             out (Tensor): same shape as inp
         """
-        self.check_args(inp)
+        if inp.dim() not in [3, 4]:
+            raise RuntimeError(
+                f"MaskNonLinear expects 3/4D tensor, got {inp.dim()}")
+        if self.non_linear == "softmax" and inp.dim() != 4:
+            raise RuntimeError(
+                f"MaskNonLinear (softmax) expects 4D tensor, got {inp.dim()}")
         out = self.func(inp, **kwargs)
         if self.non_linear == "softmax":
             return out

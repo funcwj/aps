@@ -4,8 +4,8 @@
 import torch as th
 import torch.nn as nn
 
-from typing import Optional, NoReturn, Union, List
-from aps.sse.utils import MaskNonLinear
+from typing import Optional, Union, List
+from aps.sse.base import SseBase, MaskNonLinear
 from aps.libs import ApsRegisters
 
 
@@ -214,7 +214,7 @@ class Conv1DBlock(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@time_tasnet")
-class TimeConvTasNet(nn.Module):
+class TimeConvTasNet(SseBase):
     """
     Y. Luo, N. Mesgarani. Conv-tasnet: Surpassing Ideal Time–frequency Magnitude
     Masking for Speech Separation[J]. IEEE/ACM transactions on audio, speech,
@@ -235,7 +235,7 @@ class TimeConvTasNet(nn.Module):
                  input_norm: str = "cLN",
                  block_residual: bool = False,
                  causal: bool = False) -> None:
-        super(TimeConvTasNet, self).__init__()
+        super(TimeConvTasNet, self).__init__(None, training_mode="time")
         self.non_linear_type = non_linear
         self.non_linear = MaskNonLinear(non_linear,
                                         enable="positive_wo_softplus")
@@ -266,17 +266,6 @@ class TimeConvTasNet(nn.Module):
         self.num_spks = num_spks
         self.block_residual = block_residual
 
-    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
-        """
-        Check args training | inference
-        """
-        if mix.dim() != 1 and not training:
-            raise RuntimeError("ConvTasNet expects 1D tensor (inference), " +
-                               f"got {mix.dim()} instead")
-        if mix.dim() != 2 and training:
-            raise RuntimeError("ConvTasNet expects 2D tensor (training), " +
-                               f"but got {mix.dim()}")
-
     def infer(self,
               mix: th.Tensor,
               mode: str = "time") -> Union[th.Tensor, List[th.Tensor]]:
@@ -286,7 +275,7 @@ class TimeConvTasNet(nn.Module):
         Return:
             sep ([Tensor, ...]): S
         """
-        self.check_args(mix, training=False)
+        self.check_args(mix, training=False, valid_dim=[1])
         with th.no_grad():
             # when inference, only one utt
             mix = mix[None, ...]
@@ -300,7 +289,7 @@ class TimeConvTasNet(nn.Module):
         Return:
             [Tensor, ...]: N x S
         """
-        self.check_args(mix, training=True)
+        self.check_args(mix, training=True, valid_dim=[2])
         # n x 1 x S => n x N x T
         w = th.relu(self.encoder(mix))
         # n x B x T
@@ -326,7 +315,7 @@ class TimeConvTasNet(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@freq_tasnet")
-class FreqConvTasNet(nn.Module):
+class FreqConvTasNet(SseBase):
     """
     Frequency domain ConvTasNet
     """
@@ -346,12 +335,9 @@ class FreqConvTasNet(nn.Module):
                  causal: bool = False,
                  block_residual: bool = False,
                  training_mode: str = "freq") -> None:
-        super(FreqConvTasNet, self).__init__()
-        if enh_transform is None:
-            raise RuntimeError(
-                "FreqConvTasNet: missing configuration for enh_transform")
-        if training_mode not in ["time", "freq"]:
-            raise ValueError(f"Unsupported mode: {training_mode}")
+        super(FreqConvTasNet, self).__init__(enh_transform,
+                                             training_mode=training_mode)
+        assert enh_transform is not None
         self.enh_transform = enh_transform
         self.non_linear = MaskNonLinear(non_linear, enable="common")
         self.proj = Conv1D(in_features, proj_channels, 1)
@@ -365,22 +351,7 @@ class FreqConvTasNet(nn.Module):
                                  norm=norm)
         self.mask = Conv1D(proj_channels, num_bins * num_spks, 1)
         self.num_spks = num_spks
-        self.mode = training_mode
         self.block_residual = block_residual
-
-    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
-        """
-        Check args training | inference
-        """
-        if not training and mix.dim() not in [1, 2]:
-            raise RuntimeError(
-                "FreqConvTasNet expects 1/2D tensor (inference), " +
-                f"got {mix.dim()} instead")
-
-        if training and mix.dim() not in [2, 3]:
-            raise RuntimeError(
-                "FreqConvTasNet expects 2/3D tensor (training), " +
-                f"got {mix.dim()} instead")
 
     def _forward(self, mix: th.Tensor,
                  mode: str) -> Union[th.Tensor, List[th.Tensor]]:
@@ -390,8 +361,8 @@ class FreqConvTasNet(nn.Module):
         # mix_feat: N x T x F
         # mix_stft: N x (C) x F x T
         mix_feat, mix_stft, _ = self.enh_transform(mix, None)
+        # N x F x T
         if mix_stft.dim() == 4:
-            # N x F x T
             mix_stft = mix_stft[:, 0]
         # N x F x T
         mix_feat = th.transpose(mix_feat, 1, 2)
@@ -429,7 +400,7 @@ class FreqConvTasNet(nn.Module):
         Args:
             mix (Tensor): N x S
         """
-        self.check_args(mix, training=False)
+        self.check_args(mix, training=False, valid_dim=[1, 2])
         with th.no_grad():
             mix = mix[None, :]
             ret = self._forward(mix, mode=mode)
@@ -443,5 +414,5 @@ class FreqConvTasNet(nn.Module):
             m (List(Tensor)): [N x F x T, ...] or
             s (List(Tensor)): [N x S, ...]
         """
-        self.check_args(mix, training=True)
-        return self._forward(mix, mode=self.mode)
+        self.check_args(mix, training=True, valid_dim=[2, 3])
+        return self._forward(mix, mode=self.training_mode)

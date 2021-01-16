@@ -9,9 +9,9 @@ stage="1-7"
 data=/scratch/jwu/LibriSpeech
 
 # word piece
-wp_name="wpm_6k"
+wp_name="wpm_16k"
 wp_mode="unigram"
-vocab_size=6000
+vocab_size=16000
 
 # am
 am_exp=1a

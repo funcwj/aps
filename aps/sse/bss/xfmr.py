@@ -6,14 +6,14 @@
 import torch as th
 import torch.nn as nn
 
-from typing import Optional, List, Union, NoReturn
+from typing import Optional, List, Union
 from aps.asr.xfmr.encoder import RelTransformerEncoder
-from aps.sse.utils import MaskNonLinear
+from aps.sse.base import SseBase, MaskNonLinear
 from aps.libs import ApsRegisters
 
 
 @ApsRegisters.sse.register("sse@freq_xfmr_rel")
-class FreqRelXfmr(RelTransformerEncoder):
+class FreqRelXfmr(SseBase):
     """
     Frequency domain Transformer model
     """
@@ -34,21 +34,20 @@ class FreqRelXfmr(RelTransformerEncoder):
                  num_layers: int = 6,
                  non_linear: str = "sigmoid",
                  training_mode: str = "freq") -> None:
-        super(FreqRelXfmr, self).__init__(input_size,
-                                          proj_layer="linear",
-                                          att_dim=att_dim,
-                                          radius=radius,
-                                          nhead=nhead,
-                                          feedforward_dim=feedforward_dim,
-                                          scale_embed=False,
-                                          ffn_dropout=ffn_dropout,
-                                          att_dropout=att_dropout,
-                                          post_norm=post_norm,
-                                          num_layers=num_layers)
-        if enh_transform is None:
-            raise RuntimeError("enh_transform can not be None")
-        self.enh_transform = enh_transform
-        self.mode = training_mode
+        super(FreqRelXfmr, self).__init__(enh_transform,
+                                          training_mode=training_mode)
+        assert enh_transform is not None
+        self.rel_xfmr = RelTransformerEncoder(input_size,
+                                              proj_layer="linear",
+                                              att_dim=att_dim,
+                                              radius=radius,
+                                              nhead=nhead,
+                                              feedforward_dim=feedforward_dim,
+                                              scale_embed=False,
+                                              ffn_dropout=ffn_dropout,
+                                              att_dropout=att_dropout,
+                                              post_norm=post_norm,
+                                              num_layers=num_layers)
         self.proj = nn.Sequential(nn.Linear(input_size, att_dim),
                                   nn.LayerNorm(att_dim),
                                   nn.Dropout(proj_dropout))
@@ -56,16 +55,6 @@ class FreqRelXfmr(RelTransformerEncoder):
         self.non_linear = MaskNonLinear(non_linear,
                                         enable="positive_wo_softmax")
         self.num_spks = num_spks
-
-    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
-        if not training and mix.dim() != 1:
-            raise RuntimeError(
-                "FreqRelTransformer expects 1D tensor (inference), " +
-                f"got {mix.dim()} instead")
-        if training and mix.dim() != 2:
-            raise RuntimeError(
-                "FreqRelTransformer expects 2D tensor (training), " +
-                f"got {mix.dim()} instead")
 
     def infer(self,
               mix: th.Tensor,
@@ -76,7 +65,7 @@ class FreqRelXfmr(RelTransformerEncoder):
         Return:
             Tensor: S or F x T
         """
-        self.check_args(mix, training=False)
+        self.check_args(mix, training=False, valid_dim=[1])
         with th.no_grad():
             mix = mix[None, :]
             sep = self._forward(mix, mode=mode)
@@ -93,14 +82,14 @@ class FreqRelXfmr(RelTransformerEncoder):
         """
         feats, stft, _ = self.enh_transform(mix, None)
         # stft: N x F x T
-        out, _ = super().forward(feats, None)
+        out, _ = self.rel_xfmr(feats, None)
         # N x T x F
         mask = self.non_linear(self.mask(out))
         # N x F x T
         mask = mask.transpose(1, 2)
         if self.num_spks > 1:
             mask = th.chunk(mask, self.num_spks, 1)
-        if self.mode == "freq":
+        if mode == "freq":
             return mask
         else:
             decoder = self.enh_transform.inverse_stft
@@ -121,5 +110,5 @@ class FreqRelXfmr(RelTransformerEncoder):
         Return:
             Tensor: N x S or N x F x T
         """
-        self.check_args(s, training=True)
-        return self._forward(s, mode=self.mode)
+        self.check_args(s, training=True, valid_dim=[2])
+        return self._forward(s, mode=self.training_mode)

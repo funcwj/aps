@@ -379,7 +379,7 @@ class BeamTracker(BaseBeamTracker):
             if hyp_final:
                 self.hypos += hyp_final
         # sort and get nbest
-        logger.info(f"--- beam search gets {nbest}best " +
+        logger.info(f"--- beam search gets top-{nbest} list " +
                     f"from {len(self.hypos)} hypos ...")
         sort_hypos = sorted(self.hypos, key=lambda n: n["score"], reverse=True)
         return sort_hypos[:nbest]
@@ -610,7 +610,7 @@ class BatchBeamTracker(BaseBeamTracker):
         # sort and get nbest
         nbest_batch = []
         for u, utt_bypos in enumerate(self.hypos):
-            logger.info(f"--- beam search gets {nbest}best (batch[{u}]) " +
+            logger.info(f"--- beam search gets top-{nbest} list (batch[{u}]) " +
                         f"from {len(utt_bypos)} hypos ...")
             sort_hypos = sorted(utt_bypos,
                                 key=lambda n: n["score"],

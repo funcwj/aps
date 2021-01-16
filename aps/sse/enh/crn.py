@@ -7,8 +7,8 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Tuple, Optional, NoReturn
-from aps.sse.utils import MaskNonLinear
+from typing import Tuple, Optional
+from aps.sse.base import SseBase, MaskNonLinear
 from aps.libs import ApsRegisters
 
 
@@ -65,7 +65,7 @@ class CRNLayer(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@crn")
-class CRNet(nn.Module):
+class CRNet(SseBase):
     """
     Reference:
         Tan K. and Wang D.L. (2018): A convolutional recurrent neural network for
@@ -79,12 +79,10 @@ class CRNet(nn.Module):
                  training_mode: str = "freq",
                  output_nonlinear: str = "softplus",
                  enh_transform: Optional[nn.Module] = None) -> None:
-        super(CRNet, self).__init__()
+        super(CRNet, self).__init__(enh_transform, training_mode=training_mode)
+        assert enh_transform is not None
         if num_bins != 161:
             raise RuntimeError(f"Do not support num_bins={num_bins}")
-        if not enh_transform:
-            raise RuntimeError(
-                "Need feature extractor: enh_transform can not be None")
         if enh_transform.feats_dim != num_bins:
             raise RuntimeError("Feature dimention != num_bins (num_bins)")
         if mode not in ["masking", "mapping"]:
@@ -92,7 +90,6 @@ class CRNet(nn.Module):
         num_encoders = 5
         K = [16, 32, 64, 128, 256]
         P = [0, 1, 0, 0, 0]
-        self.enh_transform = enh_transform
         self.out_nonlinear = MaskNonLinear(output_nonlinear,
                                            enable="positive_wo_softmax")
         self.encoders = nn.ModuleList([
@@ -116,15 +113,6 @@ class CRNet(nn.Module):
                             batch_first=True,
                             bidirectional=False)
         self.mode = mode
-        self.training_mode = training_mode
-
-    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
-        if not training and mix.dim() != 1:
-            raise RuntimeError("CRNet expects 1D tensor (inference), " +
-                               f"got {mix.dim()} instead")
-        if training and mix.dim() not in [2]:
-            raise RuntimeError("CRNet expects 2D tensor (training), " +
-                               f"got {mix.dim()} instead")
 
     def _forward(self, mix: th.Tensor, mode: str = "freq") -> th.Tensor:
         """
@@ -178,7 +166,7 @@ class CRNet(nn.Module):
         Return:
             Tensor: S
         """
-        self.check_args(mix, training=False)
+        self.check_args(mix, training=False, valid_dim=[1])
         with th.no_grad():
             return self._forward(mix[None, :], mode=mode)[0]
 
@@ -187,5 +175,5 @@ class CRNet(nn.Module):
         Args:
             mix (Tensor): N x S
         """
-        self.check_args(mix, training=True)
+        self.check_args(mix, training=True, valid_dim=[2])
         return self._forward(mix, mode=self.training_mode)
