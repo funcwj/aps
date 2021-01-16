@@ -20,7 +20,7 @@ ProjRetType = Tuple[th.Tensor, Optional[th.Tensor], Optional[th.Tensor]]
 
 def support_xfmr_encoder(encoder_name: str) -> Optional[nn.Module]:
     """
-    Return transformer decoder
+    Return transformer encoder
     """
     if encoder_name in TransformerEncoders:
         return TransformerEncoders[encoder_name]
@@ -30,7 +30,7 @@ def support_xfmr_encoder(encoder_name: str) -> Optional[nn.Module]:
 
 class TransformerEncoderBase(nn.Module):
     """
-    Base class for transformer based encoders
+    Base class for Transformer based encoders
     """
 
     def __init__(self,
@@ -63,7 +63,7 @@ class TransformerEncoderBase(nn.Module):
 @TransformerEncoders.register("xfmr")
 class TorchTransformerEncoder(TransformerEncoderBase):
     """
-    Wrapper for pytorch's Transformer Decoder
+    The standard Transformer encoder
     """
 
     def __init__(self,
@@ -76,8 +76,8 @@ class TorchTransformerEncoder(TransformerEncoderBase):
                  scale_embed: bool = False,
                  pos_dropout: float = 0.1,
                  att_dropout: float = 0.1,
+                 ffn_dropout: float = 0.1,
                  post_norm: bool = True,
-                 pos_enc: bool = True,
                  num_layers: int = 6) -> None:
         super(TorchTransformerEncoder,
               self).__init__(input_size,
@@ -93,7 +93,8 @@ class TorchTransformerEncoder(TransformerEncoderBase):
                                         att_dim,
                                         nhead,
                                         dim_feedforward=feedforward_dim,
-                                        dropout=att_dropout,
+                                        att_dropout=att_dropout,
+                                        ffn_dropout=ffn_dropout,
                                         pre_norm=not post_norm)
 
     def forward(self, inp_pad: th.Tensor,
@@ -133,6 +134,7 @@ class RelTransformerEncoder(TransformerEncoderBase):
                  scale_embed: bool = False,
                  pos_dropout: float = 0.1,
                  att_dropout: float = 0.1,
+                 ffn_dropout: float = 0.1,
                  post_norm: bool = True,
                  num_layers: int = 6) -> None:
         super(RelTransformerEncoder,
@@ -149,7 +151,8 @@ class RelTransformerEncoder(TransformerEncoderBase):
                                         att_dim,
                                         nhead,
                                         dim_feedforward=feedforward_dim,
-                                        dropout=att_dropout,
+                                        att_dropout=att_dropout,
+                                        ffn_dropout=ffn_dropout,
                                         pre_norm=not post_norm)
 
     def forward(self, inp_pad: th.Tensor,
@@ -180,7 +183,7 @@ class RelTransformerEncoder(TransformerEncoderBase):
 
 class XLTransformerEncoderBase(TransformerEncoderBase):
     """
-    Base class for encoder that use relative position encoding in Xfmr-XL
+    Base class for encoders using relative position encoding in Transformer-XL
     """
 
     def __init__(self,
@@ -237,6 +240,7 @@ class RelXLTransformerEncoder(XLTransformerEncoderBase):
                  feedforward_dim: int = 2048,
                  pos_dropout: float = 0.1,
                  att_dropout: float = 0.1,
+                 ffn_dropout: float = 0.1,
                  post_norm: bool = True,
                  untie_rel: bool = True,
                  num_layers: int = 6) -> None:
@@ -245,7 +249,8 @@ class RelXLTransformerEncoder(XLTransformerEncoderBase):
                                    att_dim,
                                    nhead,
                                    dim_feedforward=feedforward_dim,
-                                   dropout=att_dropout,
+                                   att_dropout=att_dropout,
+                                   ffn_dropout=ffn_dropout,
                                    pre_norm=not post_norm,
                                    untie_rel=untie_rel)
         super(RelXLTransformerEncoder,
@@ -260,7 +265,8 @@ class RelXLTransformerEncoder(XLTransformerEncoderBase):
 @TransformerEncoders.register("conformer")
 class ConformerEncoder(XLTransformerEncoderBase):
     """
-    Conformer encoder
+    Conformer encoder proposed by Google
+        Conformer: Convolution-augmented Transformer for Speech Recognition
     """
 
     def __init__(self,
@@ -269,18 +275,20 @@ class ConformerEncoder(XLTransformerEncoderBase):
                  proj_other_opts: Optional[Dict] = None,
                  att_dim: int = 512,
                  nhead: int = 8,
+                 untie_rel: bool = True,
                  feedforward_dim: int = 2048,
                  pos_dropout: float = 0.1,
                  att_dropout: float = 0.1,
+                 ffn_dropout: float = 0.1,
                  kernel_size: int = 16,
-                 untie_rel: bool = True,
                  num_layers: int = 6) -> None:
         encoder = get_xfmr_encoder("conformer",
                                    num_layers,
                                    att_dim,
                                    nhead,
                                    dim_feedforward=feedforward_dim,
-                                   dropout=att_dropout,
+                                   att_dropout=att_dropout,
+                                   ffn_dropout=ffn_dropout,
                                    kernel_size=kernel_size,
                                    pre_norm=False,
                                    untie_rel=untie_rel)

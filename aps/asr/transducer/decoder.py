@@ -123,6 +123,7 @@ class TorchTransformerDecoder(DecoderBase):
                  scale_embed: bool = False,
                  pos_dropout: float = 0.1,
                  att_dropout: float = 0.1,
+                 ffn_dropout: float = 0.1,
                  num_layers: int = 6,
                  post_norm: bool = True,
                  vocab_embeded: bool = True) -> None:
@@ -141,7 +142,8 @@ class TorchTransformerDecoder(DecoderBase):
                                         att_dim,
                                         nhead,
                                         dim_feedforward=feedforward_dim,
-                                        dropout=att_dropout,
+                                        att_dropout=att_dropout,
+                                        ffn_dropout=ffn_dropout,
                                         pre_norm=not post_norm)
 
     def forward(self, enc_out: th.Tensor, tgt_pad: th.Tensor,

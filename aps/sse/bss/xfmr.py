@@ -28,6 +28,7 @@ class FreqRelXfmr(RelTransformerEncoder):
                  radius: int = 256,
                  feedforward_dim: int = 2048,
                  att_dropout: float = 0.1,
+                 ffn_dropout: float = 0.1,
                  proj_dropout: float = 0.1,
                  post_norm: bool = True,
                  num_layers: int = 6,
@@ -40,7 +41,7 @@ class FreqRelXfmr(RelTransformerEncoder):
                                           nhead=nhead,
                                           feedforward_dim=feedforward_dim,
                                           scale_embed=False,
-                                          pos_dropout=0,
+                                          ffn_dropout=ffn_dropout,
                                           att_dropout=att_dropout,
                                           post_norm=post_norm,
                                           num_layers=num_layers)

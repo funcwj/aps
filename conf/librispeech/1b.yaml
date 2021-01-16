@@ -44,7 +44,7 @@ task_conf:
   lsm_method: unigram
 
 asr_transform:
-  feats: "perturb-emph-fbank-log-aug"
+  feats: "perturb-fbank-log-aug"
   frame_len: 400
   frame_hop: 160
   window: "hamm"

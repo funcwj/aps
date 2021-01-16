@@ -124,7 +124,8 @@ xfmr_enc_kwargs = {
     "nhead": 8,
     "feedforward_dim": 2048,
     "pos_dropout": 0.1,
-    "att_dropout": 0.1,
+    "att_dropout": 0.2,
+    "ffn_dropout": 0.3,
     "post_norm": True,
     "num_layers": 2
 }
@@ -136,7 +137,8 @@ xfmr_rel_enc_kwargs = {
     "radius": 128,
     "feedforward_dim": 2048,
     "pos_dropout": 0.1,
-    "att_dropout": 0.1,
+    "att_dropout": 0.2,
+    "ffn_dropout": 0.3,
     "post_norm": True,
     "num_layers": 2
 }
@@ -147,7 +149,8 @@ xfmr_xl_enc_kwargs = {
     "nhead": 8,
     "feedforward_dim": 2048,
     "pos_dropout": 0.1,
-    "att_dropout": 0.1,
+    "att_dropout": 0.2,
+    "ffn_dropout": 0.3,
     "post_norm": True,
     "num_layers": 2
 }
@@ -158,7 +161,8 @@ conformer_enc_kwargs = {
     "nhead": 8,
     "feedforward_dim": 2048,
     "pos_dropout": 0.1,
-    "att_dropout": 0.1,
+    "att_dropout": 0.2,
+    "ffn_dropout": 0.3,
     "num_layers": 2,
     "untie_rel": False
 }
