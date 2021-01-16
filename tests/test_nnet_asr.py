@@ -233,7 +233,7 @@ def test_conv2d_encoder(inp_len, num_layers, kernel_size):
     }),
 ])
 def test_att(att_type, att_kwargs):
-    nnet_cls = aps_asr_nnet("att")
+    nnet_cls = aps_asr_nnet("asr@att")
     vocab_size = 100
     batch_size = 4
     asr_transform = AsrTransform(feats="fbank-log-cmvn",
@@ -266,7 +266,7 @@ def test_att(att_type, att_kwargs):
     })
 ])
 def test_mvdr_att(att_type, att_kwargs):
-    nnet_cls = aps_asr_nnet("enh_att")
+    nnet_cls = aps_asr_nnet("asr@enh_att")
     vocab_size = 100
     batch_size = 4
     num_channels = 4
@@ -342,7 +342,7 @@ def test_mvdr_att(att_type, att_kwargs):
         })
 ])
 def test_beam_att(enh_type, enh_kwargs):
-    nnet_cls = aps_asr_nnet("enh_att")
+    nnet_cls = aps_asr_nnet("asr@enh_att")
     vocab_size = 100
     batch_size = 4
     num_channels = 4
@@ -385,7 +385,7 @@ def test_beam_att(enh_type, enh_kwargs):
     pytest.param("conformer", conformer_enc_kwargs)
 ])
 def test_att_encoder(enc_type, enc_kwargs):
-    nnet_cls = aps_asr_nnet("att")
+    nnet_cls = aps_asr_nnet("asr@att")
     vocab_size = 100
     batch_size = 4
     asr_transform = AsrTransform(feats="fbank-log-cmvn",
@@ -424,7 +424,7 @@ def test_att_encoder(enc_type, enc_kwargs):
     pytest.param("conformer", conformer_enc_kwargs)
 ])
 def test_xfmr_encoder(enc_type, enc_kwargs):
-    nnet_cls = aps_asr_nnet("xfmr")
+    nnet_cls = aps_asr_nnet("asr@xfmr")
     vocab_size = 100
     batch_size = 4
     asr_transform = AsrTransform(feats="fbank-log-cmvn",
@@ -460,7 +460,7 @@ def test_xfmr_encoder(enc_type, enc_kwargs):
     pytest.param("conformer", conformer_enc_kwargs)
 ])
 def test_common_transducer(enc_type, enc_kwargs):
-    nnet_cls = aps_asr_nnet("transducer")
+    nnet_cls = aps_asr_nnet("asr@transducer")
     vocab_size = 100
     batch_size = 4
     dec_kwargs = {
@@ -503,7 +503,7 @@ def test_common_transducer(enc_type, enc_kwargs):
     pytest.param("conformer", conformer_enc_kwargs)
 ])
 def test_xfmr_transducer(enc_type, enc_kwargs):
-    nnet_cls = aps_asr_nnet("xfmr_transducer")
+    nnet_cls = aps_asr_nnet("asr@xfmr_transducer")
     vocab_size = 100
     batch_size = 4
     dec_kwargs = {

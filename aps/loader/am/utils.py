@@ -14,6 +14,29 @@ from kaldi_python_io import Reader as BaseReader
 from aps.const import UNK_TOKEN
 
 
+def derive_indices(num_batches: int,
+                   epoch: int = 0,
+                   shuffle: bool = True,
+                   distributed: bool = False) -> List[int]:
+    """
+    Return indices for BatchSampler
+    """
+    if distributed:
+        rank = dist.rank()
+        world_size = dist.world_size()
+        num_batches = num_batches * world_size
+    if shuffle:
+        g = th.Generator()
+        g.manual_seed(epoch)
+        indices = th.randperm(num_batches, generator=g).tolist()
+    else:
+        indices = th.arange(num_batches).tolist()
+    if distributed:
+        return indices[rank:num_batches:world_size]
+    else:
+        return indices
+
+
 class AsrDataset(dat.Dataset):
     """
     A base dataset class for AM training
@@ -187,10 +210,6 @@ class BatchSampler(dat.Sampler):
                  distributed: bool = False) -> None:
         if batch_mode not in ["adaptive", "constraint"]:
             raise ValueError(f"Unsupported batch mode: {batch_mode}")
-        self.distributed = distributed
-        if distributed:
-            self.world_size = dist.world_size()
-            self.rank = dist.rank()
         if batch_mode == "adaptive":
             batches = self._work_adapt_batch_index(
                 dataset,
@@ -200,13 +219,12 @@ class BatchSampler(dat.Sampler):
                 min_batch_size=min_batch_size)
         else:
             batches = self._work_const_batch_index(dataset, max_batch_size)
-        if distributed:
-            self.num_batches = len(batches) // self.world_size
-        else:
-            self.num_batches = len(batches)
-        self.batches = batches
-        self.genfunc = th.randperm if shuffle else th.arange
         self.epoch = 0
+        self.batches = batches
+        self.shuffle = shuffle
+        self.world_size = dist.world_size() if distributed else 1
+        self.distributed = distributed
+        self.num_batches = len(batches) // self.world_size
 
     def _work_const_batch_index(self, dataset: dat.Dataset,
                                 max_batch_size: int) -> List[Tuple[int, int]]:
@@ -264,17 +282,12 @@ class BatchSampler(dat.Sampler):
         return idx_bz
 
     def __iter__(self):
-        if self.distributed:
-            # deterministically shuffle based on epoch
-            g = th.Generator()
-            g.manual_seed(self.epoch)
-            N = self.num_batches * self.world_size
-            indices = th.randperm(N, generator=g).tolist()
-            indices = indices[self.rank:N:self.world_size]
-        else:
-            indices = self.genfunc(self.num_batches).tolist()
-        for i in indices:
-            yield list(range(*self.batches[i]))
+        indices = derive_indices(self.num_batches,
+                                 epoch=self.epoch,
+                                 shuffle=self.shuffle,
+                                 distributed=self.distributed)
+        subset = [self.batches[i] for i in indices]
+        return iter([list(range(beg, end)) for beg, end in subset])
 
     def set_epoch(self, epoch: int) -> NoReturn:
         self.epoch = epoch

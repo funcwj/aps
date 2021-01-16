@@ -215,7 +215,7 @@ class TSBlock(nn.Module):
         return (amp, pha)
 
 
-@ApsRegisters.sse.register("phasen")
+@ApsRegisters.sse.register("sse@phasen")
 class Phasen(nn.Module):
     """
     PHASEN: A Phase-and-Harmonics-Aware Speech Enhancement Network

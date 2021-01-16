@@ -12,7 +12,7 @@ from aps.sse.utils import MaskNonLinear
 from aps.libs import ApsRegisters
 
 
-@ApsRegisters.sse.register("base_rnn")
+@ApsRegisters.sse.register("sse@base_rnn")
 class ToyRNN(PyTorchRNNEncoder):
     """
     Toy RNN structure for separation & enhancement

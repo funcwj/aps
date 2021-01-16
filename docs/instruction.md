@@ -194,7 +194,7 @@ Almost all the hyper-parameters are configured in the yaml files. You can check 
 * `data_conf`: Parameters for dataloader. An example of [raw waveform](../aps/loader/am/raw.py) dataloader for AM training:
     ```yaml
     data_conf:
-      fmt: "am_raw"
+      fmt: "am@raw"
       loader:
         # adaptive or constraint
         batch_mode: adaptive
@@ -221,7 +221,7 @@ Almost all the hyper-parameters are configured in the yaml files. You can check 
     and [chunk](../aps/loader/ss/chunk.py) dataloader for separation model training:
     ```yaml
     data_conf:
-      fmt: "ss_chunk"
+      fmt: "ss@chunk"
       loader:
         # chunk size (in samples)
         chunk_size: 32000
@@ -303,4 +303,4 @@ Almost all the hyper-parameters are configured in the yaml files. You can check 
       aug_mask_zero: true
     ```
 
-The other options, e.g., batch size, number of the epochs, are passed as the script arguments. See `aps/scripts/train_{lm,ss,am}.sh` and `aps/scripts/distributed_train_{ss,am}.sh`.
+The other options, e.g., batch size, number of the epochs, are passed as the script arguments. See `aps/scripts/train.sh` and `aps/scripts/distributed_train.sh`.

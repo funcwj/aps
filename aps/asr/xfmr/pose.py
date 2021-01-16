@@ -145,7 +145,7 @@ class InputSinPosEncoding(SinPosEncoding):
         Args:
             inp (Tensor): N x T x D
         Return:
-            out (Tensor): N x T x D
+            out (Tensor): T x N x D (for transformer input)
         """
         # T
         pos = th.arange(t, t + inp.shape[1], 1.0, device=inp.device)

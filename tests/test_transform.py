@@ -143,7 +143,7 @@ def test_df_transform(num_bins, num_doas):
 
 
 def debug_visualize_feature():
-    transform = AsrTransform(feats="fbank-log-delta",
+    transform = AsrTransform(feats="fbank-log-cmvn-delta",
                              frame_len=400,
                              frame_hop=160,
                              use_power=True,
@@ -153,9 +153,8 @@ def debug_visualize_feature():
                              aug_time_args=(100, 1),
                              aug_mask_zero=False)
     feats, _ = transform(th.from_numpy(egs1_wav[None, ...]), None)
-    import matplotlib.pyplot as plt
-    plt.imshow(feats[0].numpy().T)
-    plt.show()
+    from aps.plot import plot_feature
+    plot_feature(feats[0].numpy(), "egs")
 
 
 def debug_speed_perturb():

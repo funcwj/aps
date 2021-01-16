@@ -20,6 +20,12 @@ from kaldi_python_io import ScriptReader
 
 logger = get_logger(__name__)
 
+beam_search_params = [
+    "beam_size", "nbest", "max_len", "min_len", "max_len_ratio",
+    "min_len_ratio", "len_norm", "lm_weight", "temperature", "len_penalty",
+    "cov_penalty", "eos_threshold", "cov_threshold"
+]
+
 
 class BatchDecoder(NnetEvaluator):
     """
@@ -82,13 +88,17 @@ def run(args):
         stdout_topn, topn = io_wrapper(args.dump_nbest, "w")
         nbest = min(args.beam_size, args.nbest)
         topn.write(f"{nbest}\n")
-    ali_dir = args.dump_alignment
+    ali_dir = args.dump_align
     if ali_dir:
         Path(ali_dir).mkdir(exist_ok=True, parents=True)
         logger.info(f"Dump alignments to dir: {ali_dir}")
     done = 0
     timer = SimpleTimer()
     batches = []
+    dec_args = dict(
+        filter(lambda x: x[0] in beam_search_params,
+               vars(args).items()))
+    dec_args["lm"] = lm
     for key, src in src_reader:
         done += 1
         batches.append({
@@ -101,16 +111,7 @@ def run(args):
             continue
         # decode
         batches = sorted(batches, key=lambda b: b["len"], reverse=True)
-        batch_nbest = decoder.run([bz["inp"] for bz in batches],
-                                  lm=lm,
-                                  beam=args.beam_size,
-                                  nbest=args.nbest,
-                                  max_len=args.max_len,
-                                  min_len=args.min_len,
-                                  penalty=args.penalty,
-                                  len_norm=args.len_norm,
-                                  lm_weight=args.lm_weight,
-                                  temperature=args.temperature)
+        batch_nbest = decoder.run([bz["inp"] for bz in batches], **dec_args)
         keys = [bz["key"] for bz in batches]
         for key, nbest in zip(keys, batch_nbest):
             logger.info(f"Decoding utterance {key}...")
@@ -142,14 +143,13 @@ def run(args):
         topn.close()
     cost = timer.elapsed()
     logger.info(
-        f"Decode {len(src_reader)} utterance done, time cost = {cost:.2f}s")
+        f"Decode {len(src_reader)} utterance done, time cost = {cost:.2f}m")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=
-        "Command to do end-to-end decoding using batch version beam search "
-        "(WER may different with non-batch version when #batch_size != 1)",
+        "Command to do end-to-end decoding using batch version beam search",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[DecodingParser.parser])
     parser.add_argument("--batch-size",

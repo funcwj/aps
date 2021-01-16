@@ -249,16 +249,18 @@ class ErrorDetector(object):
         """
         Stop training or not
         """
-        return self.counter == self.stop_on_errors
+        return self.counter >= self.stop_on_errors
 
-    def step(self, status):
+    def step(self, succ: bool) -> bool:
         """
         Make one step
         """
         self.local_step += 1
-        if self.local_step - self.last_error_step == 1 and not status:
-            self.counter += 1
-            self.last_error_step = self.local_step
+        # failed
+        if not succ:
+            if self.counter == 0 or self.local_step - self.last_error_step == 1:
+                self.counter += 1
+                self.last_error_step = self.local_step
         else:
             self.counter = 0
         return self.stop()

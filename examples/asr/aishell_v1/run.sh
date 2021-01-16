@@ -36,7 +36,9 @@ ngram=5
 # decoding
 beam_size=24
 nbest=8
+ngram=5
 lm_weight=0.2
+test_sets="dev test"
 
 . ./utils/parse_options.sh || exit 1
 
@@ -69,50 +71,53 @@ fi
 if [ $end -ge 3 ] && [ $beg -le 3 ]; then
   echo "Stage 3: decoding ..."
   # decoding
-  ./scripts/decode.sh \
-    --gpu $gpu \
-    --beam-size $beam_size \
-    --nbest $nbest \
-    --max-len 50 \
-    --dict data/$dataset/dict \
-    $dataset $am_exp \
-    data/$dataset/test/wav.scp \
-    exp/$dataset/$am_exp/dec
-  # wer
-  ./cmd/compute_wer.py \
-    exp/$dataset/$am_exp/dec/beam${beam_size}.decode \
-    data/$dataset/test/text
+  for name in $test_sets; do
+    ./scripts/decode.sh \
+      --score true \
+      --text data/$dataset/$name/text \
+      --gpu $gpu \
+      --beam-size $beam_size \
+      --nbest $nbest \
+      --max-len 50 \
+      --dict data/$dataset/dict \
+      --log-suffix $name \
+      $dataset $am_exp \
+      data/$dataset/$name/wav.scp \
+      exp/$dataset/$am_exp/$name &
+  done
+  wait
 fi
 
 if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   echo "Stage 4: training ngram LM ..."
   exp_dir=exp/aishell_v1/ngram && mkdir -p $exp_dir
   cat data/aishell_v1/train/text | awk '{$1=""; print}' > $exp_dir/train.text
-  lmplz -o $ngram --text $exp_dir/train.text --arpa $exp_dir/$ngram.arpa
-  build_binary $exp_dir/$ngram.arpa $exp_dir/$ngram.arpa.bin
+  lmplz -o $ngram --text $exp_dir/train.text --arpa $exp_dir/${ngram}gram.arpa
+  build_binary $exp_dir/${ngram}gram.arpa $exp_dir/${ngram}gram.arpa.bin
 fi
 
 if [ $end -ge 5 ] && [ $beg -le 5 ]; then
   echo "Stage 5: decoding (ngram) ..."
-  name=dec_${ngram}gram_$lm_weight
-  # decoding
-  ./scripts/decode.sh \
-    --lm exp/aishell_v1/nnlm/$lm_exp \
-    --gpu $gpu \
-    --dict data/$dataset/dict \
-    --nbest $nbest \
-    --lm exp/aishell_v1/ngram/$ngram.arpa.bin \
-    --lm-weight $lm_weight \
-    --max-len 50 \
-    --beam-size $beam_size \
-    --lm-weight $lm_weight \
-    $dataset $am_exp \
-    data/$dataset/test/wav.scp \
-    exp/$dataset/$am_exp/$name
-  # wer
-  ./cmd/compute_wer.py \
-    exp/$dataset/$am_exp/$name/beam${beam_size}.decode \
-    data/$dataset/test/text
+  for name in $test_sets; do
+    dec_dir=${name}_${ngram}gram_$lm_weight
+    ./scripts/decode.sh \
+      --score true \
+      --text data/$dataset/$name/text \
+      --lm exp/aishell_v1/nnlm/$lm_exp \
+      --gpu $gpu \
+      --dict data/$dataset/dict \
+      --nbest $nbest \
+      --lm exp/aishell_v1/ngram/${ngram}gram.arpa.bin \
+      --lm-weight $lm_weight \
+      --max-len 50 \
+      --beam-size $beam_size \
+      --lm-weight $lm_weight \
+      --log-suffix $name \
+      $dataset $am_exp \
+      data/$dataset/$name/wav.scp \
+      exp/$dataset/$am_exp/$dec_dir &
+  done
+  wait
 fi
 
 if [ $end -ge 6 ] && [ $beg -le 6 ]; then
@@ -130,21 +135,22 @@ fi
 
 if [ $end -ge 7 ] && [ $beg -le 7 ]; then
   echo "Stage 7: decoding (RNNLM) ..."
-  name=dec_lm${lm_exp}_$lm_weight
-  # decoding
-  ./scripts/decode.sh \
-    --lm exp/aishell_v1/nnlm/$lm_exp \
-    --gpu $gpu \
-    --dict data/$dataset/dict \
-    --nbest $nbest \
-    --max-len 50 \
-    --beam-size $beam_size \
-    --lm-weight $lm_weight \
-    $dataset $am_exp \
-    data/$dataset/test/wav.scp \
-    exp/$dataset/$am_exp/$name
-  # wer
-  ./cmd/compute_wer.py \
-    exp/$dataset/$am_exp/$name/beam${beam_size}.decode \
-    data/$dataset/test/text
+  for name in $test_sets; do
+    dec_dir=${name}_lm${lm_exp}_$lm_weight
+    ./scripts/decode.sh \
+      --score true \
+      --text data/$dataset/$name/text \
+      --lm exp/aishell_v1/nnlm/$lm_exp \
+      --gpu $gpu \
+      --dict data/$dataset/dict \
+      --nbest $nbest \
+      --max-len 50 \
+      --beam-size $beam_size \
+      --lm-weight $lm_weight \
+      --log-suffix $name \
+      $dataset $am_exp \
+      data/$dataset/$name/wav.scp \
+      exp/$dataset/$am_exp/$dec_dir &
+  done
+  wait
 fi

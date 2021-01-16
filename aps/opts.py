@@ -132,10 +132,27 @@ def get_aps_decode_parser():
                         default=1,
                         help="Temperature value used to smooth "
                         "the acoustic scores")
-    parser.add_argument("--penalty",
+    parser.add_argument("--len-norm",
+                        action=StrToBoolAction,
+                        default="true",
+                        help="If ture, using length normalized "
+                        "when sort nbest hypos")
+    parser.add_argument("--len-penalty",
                         type=float,
                         default=0,
-                        help="Length penalty factor for beam search")
+                        help="Length penalty factor")
+    parser.add_argument("--cov-penalty",
+                        type=float,
+                        default=0,
+                        help="Coverage penalty factor")
+    parser.add_argument("--cov-threshold",
+                        type=float,
+                        default=0.5,
+                        help="Coverage threshold value")
+    parser.add_argument("--eos-threshold",
+                        type=float,
+                        default=0,
+                        help="Threshold of the EOS symbol")
     parser.add_argument("--dict",
                         type=str,
                         default="",
@@ -156,16 +173,26 @@ def get_aps_decode_parser():
                         "-1 means running on CPU")
     parser.add_argument("--max-len",
                         type=int,
-                        default=100,
-                        help="Maximum steps to do during decoding stage")
+                        default=1000,
+                        help="Maximum decoding sequence length we can have")
+    parser.add_argument("--max-len-ratio",
+                        type=float,
+                        default=1,
+                        help="To derive max_len=min(#enc_len*max_len_ratio, "
+                        "#max_len)")
     parser.add_argument("--min-len",
                         type=int,
                         default=1,
                         help="Minimum decoding sequence length we can have")
+    parser.add_argument("--min-len-ratio",
+                        type=float,
+                        default=0.0,
+                        help="To derive min_len=max(#enc_len*min_len_ratio, "
+                        "#min_len)")
     parser.add_argument("--space",
                         type=str,
                         default="",
-                        help="space flag for language like EN "
+                        help="Space flag for language like EN "
                         "to merge characters to words")
     parser.add_argument("--nbest",
                         type=int,
@@ -175,12 +202,7 @@ def get_aps_decode_parser():
                         type=str,
                         default="",
                         help="If not empty, dump n-best hypothesis")
-    parser.add_argument("--len-norm",
-                        action=StrToBoolAction,
-                        default="false",
-                        help="If ture, using length normalized "
-                        "when sort nbest hypos")
-    parser.add_argument("--dump-alignment",
+    parser.add_argument("--dump-align",
                         type=str,
                         default="",
                         help="If assigned, dump alignment "

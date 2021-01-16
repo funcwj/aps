@@ -16,8 +16,6 @@ from aps.utils import get_logger, io_wrapper, SimpleTimer
 from aps.loader import AudioReader
 
 from kaldi_python_io import ScriptReader
-
-logger = get_logger(__name__)
 """
 Nbest format:
 Number: n
@@ -31,6 +29,14 @@ score-1 num-tok-in-hyp-1 hyp-1
 ...
 score-n num-tok-in-hyp-n hyp-n
 """
+
+logger = get_logger(__name__)
+
+beam_search_params = [
+    "beam_size", "nbest", "max_len", "min_len", "max_len_ratio",
+    "min_len_ratio", "len_norm", "lm_weight", "temperature", "len_penalty",
+    "cov_penalty", "eos_threshold", "cov_threshold"
+]
 
 
 class FasterDecoder(NnetEvaluator):
@@ -102,26 +108,24 @@ def run(args):
     topn = None
     if args.dump_nbest:
         stdout_topn, topn = io_wrapper(args.dump_nbest, "w")
-        nbest = min(args.beam_size, args.nbest)
+        if args.function == "greedy_search":
+            nbest = min(args.beam_size, args.nbest)
+        else:
+            nbest = 1
         topn.write(f"{nbest}\n")
-    ali_dir = args.dump_alignment
+    ali_dir = args.dump_align
     if ali_dir:
         Path(ali_dir).mkdir(exist_ok=True, parents=True)
         logger.info(f"Dump alignments to dir: {ali_dir}")
     N = 0
     timer = SimpleTimer()
+    dec_args = dict(
+        filter(lambda x: x[0] in beam_search_params,
+               vars(args).items()))
+    dec_args["lm"] = lm
     for key, src in src_reader:
         logger.info(f"Decoding utterance {key}...")
-        nbest_hypos = decoder.run(src,
-                                  lm=lm,
-                                  beam=args.beam_size,
-                                  nbest=args.nbest,
-                                  max_len=args.max_len,
-                                  min_len=args.min_len,
-                                  penalty=args.penalty,
-                                  len_norm=args.len_norm,
-                                  lm_weight=args.lm_weight,
-                                  temperature=args.temperature)
+        nbest_hypos = decoder.run(src, **dec_args)
         nbest = [f"{key}\n"]
         for idx, hyp in enumerate(nbest_hypos):
             # remove SOS/EOS
@@ -149,7 +153,7 @@ def run(args):
         topn.close()
     cost = timer.elapsed()
     logger.info(
-        f"Decode {len(src_reader)} utterance done, time cost = {cost:.2f}s")
+        f"Decode {len(src_reader)} utterance done, time cost = {cost:.2f}m")
 
 
 if __name__ == "__main__":

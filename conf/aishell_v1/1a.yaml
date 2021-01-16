@@ -1,6 +1,5 @@
-# Total: 9.04%, 7176 utterances (9468 errors, 104765 units in total)
 
-nnet: "att"
+nnet: "asr@att"
 
 nnet_conf:
   input_size: 80
@@ -22,18 +21,16 @@ nnet_conf:
   dec_dim: 512
   dec_kwargs:
     dec_rnn: "lstm"
-    dropout_on: "input"
     rnn_layers: 2
-    rnn_hidden: 512  # must eq decoder_dim
+    rnn_hidden: 512
     rnn_dropout: 0.2
     emb_dropout: 0.3
     input_feeding: true
-    vocab_embeded: true
   att_type: "ctx"
   att_kwargs:
     att_dim: 512
 
-task: "ctc_xent"
+task: "asr@ctc_xent"
 
 task_conf:
   lsm_factor: 0.1
@@ -46,6 +43,7 @@ asr_transform:
   window: "hamm"
   round_pow_of_two: true
   sr: 16000
+  pre_emphasis: 0.97
   num_mels: 80
   norm_mean: true
   norm_var: true
@@ -64,7 +62,7 @@ trainer_conf:
   lr_scheduler_kwargs:
     time_stamps: [800, 40000, 100000]
     peak_lr: 1.0e-3
-    stop_lr: 1.0e-5
+    stop_lr: 1.0e-6
   ss_scheduler: "linear"
   ss_scheduler_kwargs:
     ssr: 0.2
@@ -78,13 +76,13 @@ trainer_conf:
   stop_criterion: "accu"
 
 data_conf:
-  fmt: "am_raw"
+  fmt: "am@raw"
   loader:
-    max_token_num: 400
-    adapt_token_num: 150
     max_dur: 30 # (s)
     min_dur: 0.4 # (s)
     adapt_dur: 10 # (s)
+    max_token_num: 400
+    adapt_token_num: 150
   train:
     wav_scp: "data/aishell_v1/train/wav.scp"
     utt2dur: "data/aishell_v1/train/utt2dur"

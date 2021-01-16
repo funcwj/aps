@@ -12,7 +12,7 @@ from aps.asr.base.attention import padding_mask
 from aps.libs import ApsRegisters
 
 
-@ApsRegisters.asr.register("xfmr_lm")
+@ApsRegisters.asr.register("asr@xfmr_lm")
 class TorchXfmrLM(nn.Module):
     """
     Torch Transformer LM

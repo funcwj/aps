@@ -17,7 +17,7 @@ from aps.loader.audio import AudioReader
 from aps.libs import ApsRegisters
 
 
-@ApsRegisters.loader.register("se_chunk")
+@ApsRegisters.loader.register("se@chunk")
 def DataLoader(train: bool = True,
                sr: int = 16000,
                mix_scp: str = "",

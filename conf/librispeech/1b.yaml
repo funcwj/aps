@@ -4,7 +4,7 @@
 # WER (%) Report:
 # Total (2939 utterances): 6035/52343 = 11.53%, SUB/INS/DEL = 4834/432/769
 
-nnet: "att"
+nnet: "asr@att"
 
 nnet_conf:
   input_size: 80
@@ -30,14 +30,12 @@ nnet_conf:
     rnn_hidden: 1024
     rnn_dropout: 0.2
     emb_dropout: 0.2
-    dropout: 0.2
     input_feeding: true
-    vocab_embeded: true
   att_type: "ctx"
   att_kwargs:
     att_dim: 1024
 
-task: "ctc_xent"
+task: "asr@ctc_xent"
 
 task_conf:
   ctc_weight: 0.2
@@ -82,7 +80,7 @@ trainer_conf:
   stop_criterion: "accu"
 
 data_conf:
-  fmt: "am_raw"
+  fmt: "am@raw"
   loader:
     max_token_num: 400
     adapt_token_num: 150

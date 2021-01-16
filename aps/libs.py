@@ -74,7 +74,7 @@ class ApsModules(object):
         "bss.dccrn", "bss.dprnn", "bss.tasnet", "bss.xfmr", "bss.dense_unet"
     ]
     loader_submodules = [
-        "am.kaldi", "am.raw", "se.chunk", "se.online", "lm.utt"
+        "am.kaldi", "am.raw", "se.chunk", "se.online", "lm.utt", "lm.bptt"
     ]
     asr = Module("aps.asr", asr_submodules)
     sse = Module("aps.sse", sse_submodules)
@@ -98,7 +98,7 @@ def dynamic_importlib(sstr: str) -> Any:
         raise ImportError(f"Import {sstr} failed")
 
 
-def aps_dataloader(fmt: str = "am_raw", **kwargs) -> Iterable[Dict]:
+def aps_dataloader(fmt: str = "am@raw", **kwargs) -> Iterable[Dict]:
     """
     Return DataLoader class supported by aps
     """

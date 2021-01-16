@@ -4,10 +4,7 @@
 import torch as th
 import torch.nn as nn
 
-import torch.nn.functional as F
-
 from typing import Optional, NoReturn, Union, List
-
 from aps.sse.utils import MaskNonLinear
 from aps.libs import ApsRegisters
 
@@ -216,7 +213,7 @@ class Conv1DBlock(nn.Module):
         return x
 
 
-@ApsRegisters.sse.register("time_tasnet")
+@ApsRegisters.sse.register("sse@time_tasnet")
 class TimeConvTasNet(nn.Module):
     """
     Y. Luo, N. Mesgarani. Conv-tasnet: Surpassing Ideal Time–frequency Magnitude
@@ -305,7 +302,7 @@ class TimeConvTasNet(nn.Module):
         """
         self.check_args(mix, training=True)
         # n x 1 x S => n x N x T
-        w = F.relu(self.encoder(mix))
+        w = th.relu(self.encoder(mix))
         # n x B x T
         y = self.proj(self.ln(w))
         # n x B x T
@@ -328,7 +325,7 @@ class TimeConvTasNet(nn.Module):
         return spk[0] if self.num_spks == 1 else spk
 
 
-@ApsRegisters.sse.register("freq_tasnet")
+@ApsRegisters.sse.register("sse@freq_tasnet")
 class FreqConvTasNet(nn.Module):
     """
     Frequency domain ConvTasNet

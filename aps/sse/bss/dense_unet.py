@@ -316,7 +316,7 @@ class Decoder(nn.Module):
         return x
 
 
-@ApsRegisters.sse.register("dense_unet")
+@ApsRegisters.sse.register("sse@dense_unet")
 class DenseUnet(nn.Module):
     """
     Boosted Unet proposed by Wang

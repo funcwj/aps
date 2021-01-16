@@ -60,15 +60,17 @@ def estimate_covar(mask: th.Tensor,
     return Bk
 
 
-@ApsRegisters.task.register("unsuper_enh")
-class UnsuperEnhTask(Task):
+@ApsRegisters.task.register("sse@enh_ml")
+class MlEnhTask(Task):
     """
-    Unsupervised enhancement using ML functions
+    Unsupervised multi-channel speech enhancement using ML (maximum likelihood) function
     """
 
     def __init__(self, nnet: nn.Module, eps: float = EPSILON) -> None:
-        super(UnsuperEnhTask,
-              self).__init__(nnet, description="unsupervised enhancement")
+        super(MlEnhTask,
+              self).__init__(nnet,
+                             description="unsupervised speech enhancement "
+                             "using ML objective function")
         self.eps = eps
 
     def log_pdf(self, mask: th.Tensor, obs: ComplexTensor) -> th.Tensor:

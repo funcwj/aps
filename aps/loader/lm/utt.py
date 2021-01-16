@@ -3,10 +3,9 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
-for RNNLM (utterance corpus)
+for RNNLM (utterance corpus, we batchfy several utterances as one minibatch, with necessary padding)
 """
 import gzip
-import warnings
 import numpy as np
 import torch as th
 
@@ -15,11 +14,16 @@ import aps.distributed as dist
 
 from torch.nn.utils.rnn import pad_sequence
 from typing import NoReturn, List, Dict, Optional, Iterator, Iterable
-from aps.libs import ApsRegisters
+from aps.loader.lm.utils import filter_utts
+from aps.loader.am.utils import derive_indices
+from aps.utils import get_logger
 from aps.const import IGNORE_ID, UNK_TOKEN
+from aps.libs import ApsRegisters
+
+logger = get_logger(__name__)
 
 
-@ApsRegisters.loader.register("lm_utt")
+@ApsRegisters.loader.register("lm@utt")
 def DataLoader(text: str = "",
                vocab_dict: Optional[Dict] = None,
                train: bool = True,
@@ -136,68 +140,48 @@ class BatchSampler(dat.Sampler):
                  min_batch_size: int = 8,
                  adapt_token_num: int = 400,
                  chunk_size_for_sort: int = 10000) -> None:
-        self.distributed = distributed
         if distributed:
             self.world_size = dist.world_size()
-            self.rank = dist.rank()
-            self.header = f"BatchSampler (rank {self.rank})"
+            self.header = f"BatchSampler (rank {dist.rank()})"
         else:
+            self.world_size = 1
             self.header = "BatchSampler"
-        self.const = {
-            "min": min_token_num,
-            "max": max_token_num,
-            "floor": min_batch_size,
-            "adapt": adapt_token_num
-        }
-        self.genfunc = th.randperm if shuffle else th.arange
-        self.batches = []
+        batches = []
         chunk_size = chunk_size_for_sort
-        kept_index = self._filter_indices(dataset)
+        logger.info(f"{self.header}: filtering utterances ...")
+        kept_index = filter_utts(dataset,
+                                 min_token_num=min_token_num,
+                                 max_token_num=max_token_num)
         total_utts = len(kept_index)
         num_parts = total_utts // chunk_size + 1
-        print(f"{self.header}: sort indices ({num_parts} parts) ...",
-              flush=True)
+        logger.info(f"{self.header}: sort indices ({num_parts} parts) ...")
         for base in range(0, total_utts, chunk_size):
-            indices = self._sort_indices(dataset, [
+            subset = [
                 kept_index[i]
                 for i in range(base, min(base + chunk_size, total_utts))
-            ], max_batch_size)
-            self.batches += indices
+            ]
+            indices = self._sort_indices(dataset,
+                                         subset,
+                                         max_batch_size,
+                                         min_batch_size=min_batch_size,
+                                         adapt_token_num=adapt_token_num)
+            batches += indices
             done = min(base + chunk_size, total_utts) * 100 / float(total_utts)
-            print(f"{self.header}: done {done:.2f}% ...", flush=True)
-        if distributed:
-            self.num_batches = len(self.batches) // self.world_size
-        else:
-            self.num_batches = len(self.batches)
+            logger.info(f"{self.header}: done {done:.2f}% ...")
         self.epoch = 0
+        self.batches = batches
+        self.shuffle = shuffle
+        self.distributed = distributed
+        self.num_batches = len(batches) // self.world_size
 
-    def _filter_indices(self, dataset: dat.Dataset) -> List[int]:
+    def _sort_indices(self,
+                      dataset: dat.Dataset,
+                      subset: List[int],
+                      max_batch_size: int,
+                      min_batch_size: int = 4,
+                      adapt_token_num: int = 400) -> List[List[int]]:
         """
         Return utterance index used for training (pass short/long utterances)
-        """
-        print(f"{self.header}: filtering indices ...", flush=True)
-        kept_index = []
-        filter_sutt, filter_lutt = 0, 0
-        for i in range(len(dataset)):
-            tok_len = len(dataset[i])
-            if tok_len < self.const["min"]:
-                filter_sutt += 1
-            elif tok_len > self.const["max"]:
-                filter_lutt += 1
-            else:
-                kept_index.append(i)
-        if filter_lutt or filter_sutt:
-            ratio_lutt = filter_lutt * 100.0 / len(dataset)
-            ratio_sutt = filter_sutt * 100.0 / len(dataset)
-            warnings.warn(
-                f"{self.header}: filter {ratio_lutt:.2f}/{ratio_sutt:.2f}% " +
-                "long/short utterances...")
-        return kept_index
-
-    def _sort_indices(self, dataset: dat.Dataset, subset: List[int],
-                      max_batch_size: int) -> List[List[int]]:
-        """
-        Sort mini-batches in each subset
         """
         toks_len = [len(dataset[i]) for i in subset]
         # long -> short
@@ -206,23 +190,17 @@ class BatchSampler(dat.Sampler):
         beg, cur_bz = 0, max_batch_size
         while beg + cur_bz <= len(sort_idx):
             cur_len = toks_len[sort_idx[beg]]
-            factor = (cur_len - 1) // self.const["adapt"]
-            cur_bz = int(
-                max(self.const["floor"], max_batch_size // (1 + factor)))
+            factor = (cur_len - 1) // adapt_token_num
+            cur_bz = int(max(min_batch_size, max_batch_size // (1 + factor)))
             batches.append([subset[i] for i in sort_idx[beg:beg + cur_bz]])
             beg += cur_bz
         return batches
 
     def __iter__(self) -> Iterator[List[int]]:
-        if self.distributed:
-            # deterministically shuffle based on epoch
-            g = th.Generator()
-            g.manual_seed(self.epoch)
-            N = self.num_batches * self.world_size
-            indices = th.randperm(N, generator=g).tolist()
-            indices = indices[self.rank:N:self.world_size]
-        else:
-            indices = self.genfunc(self.num_batches).tolist()
+        indices = derive_indices(self.num_batches,
+                                 epoch=self.epoch,
+                                 shuffle=self.shuffle,
+                                 distributed=self.distributed)
         indices = [self.batches[i] for i in indices]
         return iter(indices)
 

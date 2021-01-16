@@ -15,7 +15,7 @@ from aps.libs import ApsRegisters
 from aps.const import IGNORE_ID
 
 
-@ApsRegisters.loader.register("am_kaldi")
+@ApsRegisters.loader.register("am@kaldi")
 def DataLoader(train: bool = True,
                distributed: bool = False,
                feats_scp: str = "",

@@ -135,7 +135,7 @@ class LSTMWrapper(nn.Module):
         return th.einsum("ntcf->ncft", out)
 
 
-@ApsRegisters.sse.register("dccrn")
+@ApsRegisters.sse.register("sse@dccrn")
 class DCCRN(nn.Module):
     """
     Deep Complex Convolutional-RNN networks

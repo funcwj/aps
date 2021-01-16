@@ -3,7 +3,12 @@
 # WER (%) Report:
 # Total (333 utterances): 751/5700 = 13.18%, SUB/INS/DEL = 559/94/98
 
-nnet: "att"
+# WER (%) Report:
+# Total (503 utterances): 1357/8334 = 16.28%, SUB/INS/DEL = 1003/160/194
+# WER (%) Report:
+# Total (333 utterances): 750/5700 = 13.16%, SUB/INS/DEL = 558/94/98
+
+nnet: "asr@att"
 
 nnet_conf:
   input_size: 80
@@ -30,13 +35,12 @@ nnet_conf:
     rnn_hidden: 512
     rnn_dropout: 0.2
     emb_dropout: 0.2
-    dropout: 0.2
     input_feeding: true
   att_type: "ctx"
   att_kwargs:
     att_dim: 512
 
-task: "ctc_xent"
+task: "asr@ctc_xent"
 
 task_conf:
   ctc_weight: 0.2
@@ -83,7 +87,7 @@ trainer_conf:
 
 
 data_conf:
-  fmt: "am_raw"
+  fmt: "am@raw"
   loader:
     max_dur: 30
     min_dur: 0.4

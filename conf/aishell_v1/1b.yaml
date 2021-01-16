@@ -1,7 +1,7 @@
 # WER (%) Report:
 # Total (7176 utterances): 6706/104765 = 6.40%, SUB/INS/DEL = 6312/209/185
 
-nnet: "xfmr"
+nnet: "asr@xfmr"
 
 nnet_conf:
   input_size: 80
@@ -38,7 +38,7 @@ asr_transform:
   aug_freq_args: [30, 1]
   aug_time_args: [80, 1]
 
-task: "ctc_xent"
+task: "asr@ctc_xent"
 
 task_conf:
   lsm_factor: 0.1
@@ -62,7 +62,7 @@ trainer_conf:
   stop_criterion: "accu"
 
 data_conf:
-  fmt: "am_raw"
+  fmt: "am@raw"
   loader:
     max_token_num: 400
     adapt_token_num: 150

@@ -11,11 +11,10 @@ from typing import Optional, Dict, Iterable
 from aps.loader.am.utils import AsrDataset, AsrDataLoader
 from aps.loader.se.online import SimuOptionsDataset
 from aps.loader.am.raw import egs_collate
-from aps.const import MAX_INT16
 from aps.libs import ApsRegisters
 
 
-@ApsRegisters.loader.register("am_online")
+@ApsRegisters.loader.register("am@online")
 def DataLoader(train: bool = True,
                distributed: bool = False,
                simu_cfg: str = "",
@@ -78,9 +77,8 @@ class AsrSimuReader(SimuOptionsDataset):
         simu_cfg: path of the audio simulation configuraton file
     """
 
-    def __init__(self, simu_cfg: str, audio_norm: bool = True) -> None:
+    def __init__(self, simu_cfg: str) -> None:
         super(AsrSimuReader, self).__init__(simu_cfg, return_in_egs=["mix"])
-        self.audio_norm = audio_norm
 
     def __getitem__(self, index: int) -> np.ndarray:
         """
@@ -90,10 +88,7 @@ class AsrSimuReader(SimuOptionsDataset):
             egs: simulated audio
         """
         opts_str = self.simu_cfg[index]
-        simu = self._simu(opts_str)["mix"]
-        if self.audio_norm:
-            simu = np.around(simu * MAX_INT16)
-        return simu
+        return self._simu(opts_str)["mix"]
 
 
 class Dataset(AsrDataset):
@@ -117,14 +112,13 @@ class Dataset(AsrDataset):
                  utt2dur: str,
                  vocab_dict: Optional[Dict],
                  skip_utts: str = "",
-                 audio_norm: bool = True,
                  min_token_num: int = 1,
                  max_token_num: int = 400,
                  max_wav_dur: float = 30,
                  min_wav_dur: float = 0.4,
                  adapt_wav_dur: float = 8,
                  adapt_token_num: int = 150) -> None:
-        audio_reader = AsrSimuReader(simu_cfg, audio_norm=audio_norm)
+        audio_reader = AsrSimuReader(simu_cfg)
         super(Dataset, self).__init__(audio_reader,
                                       text,
                                       utt2dur,

@@ -11,7 +11,10 @@ import torch.nn.functional as tf
 
 from typing import Optional, List, Dict
 from aps.asr.beam_search.utils import BeamSearchParam, BeamTracker, BatchBeamTracker
-from aps.asr.beam_search.lm import rnnlm_score, ngram_score, LmType
+from aps.asr.beam_search.lm import rnnlm_score, ngram_score, adjust_hidden, LmType
+from aps.utils import get_logger
+
+logger = get_logger(__name__)
 
 
 def greedy_search(decoder: nn.Module,
@@ -44,15 +47,15 @@ def greedy_search(decoder: nn.Module,
     while True:
         pre_tok = th.tensor([dec_tok[-1]], device=device)
         # make one step
-        pred, att_ctx, dec_hid, att_ali, proj = decoder.step(att_net,
-                                                             pre_tok,
-                                                             enc_out,
-                                                             att_ctx,
-                                                             dec_hid=dec_hid,
-                                                             att_ali=att_ali,
-                                                             enc_len=None,
-                                                             proj=proj)
-        prob = tf.log_softmax(pred, dim=-1)
+        dec_out, att_ctx, dec_hid, att_ali, proj = decoder.step(att_net,
+                                                                pre_tok,
+                                                                enc_out,
+                                                                att_ctx,
+                                                                dec_hid=dec_hid,
+                                                                att_ali=att_ali,
+                                                                enc_len=None,
+                                                                proj=proj)
+        prob = tf.log_softmax(dec_out, dim=-1)
         pred_score, pred_token = th.topk(prob, 1, dim=-1)
         dec_tok.append(pred_token.item())
         score += pred_score.item()
@@ -69,17 +72,20 @@ def beam_search(decoder: nn.Module,
                 enc_out: th.Tensor,
                 lm: Optional[LmType] = None,
                 lm_weight: float = 0,
-                beam: int = 8,
+                beam_size: int = 8,
                 nbest: int = 1,
                 max_len: int = -1,
+                max_len_ratio: float = 1,
+                min_len: int = 0,
+                min_len_ratio: float = 0,
                 sos: int = -1,
                 eos: int = -1,
-                penalty: float = 0,
                 len_norm: bool = True,
-                cov_weight: float = 0,
+                len_penalty: float = 0,
+                cov_penalty: float = 0,
                 temperature: float = 1,
                 cov_threshold: float = 0.5,
-                eos_threshold: float = 0) -> List[Dict]:
+                eos_threshold: float = 1) -> List[Dict]:
     """
     Vectorized beam search algothrim (see batch version beam_search_batch)
     Args
@@ -88,16 +94,14 @@ def beam_search(decoder: nn.Module,
     """
     if sos < 0 or eos < 0:
         raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
-    if max_len <= 0:
-        raise RuntimeError(f"Invalid max_len: {max_len:d}")
-    N, _, D_enc = enc_out.shape
+    N, T, D_enc = enc_out.shape
     if N != 1:
         raise RuntimeError(
             f"Got batch size {N:d}, now only support one utterance")
     if not hasattr(decoder, "step"):
         raise RuntimeError("Function step should defined in decoder network")
-    if beam > decoder.vocab_size:
-        raise RuntimeError(f"Beam size({beam}) > vocabulary size")
+    if beam_size > decoder.vocab_size:
+        raise RuntimeError(f"Beam size({beam_size}) > vocabulary size")
 
     if lm:
         if isinstance(lm, nn.Module):
@@ -105,73 +109,65 @@ def beam_search(decoder: nn.Module,
         else:
             lm_score_impl = ngram_score
 
-    nbest = min(beam, nbest)
+    min_len = max(min_len, int(min_len_ratio * T))
+    max_len = min(max_len, int(max_len_ratio * T))
+    logger.info(f"--- shape of the encoder output: {T} x {D_enc}")
+    logger.info("--- length constraint of the decoding " +
+                f"sequence: ({min_len}, {max_len})")
+    nbest = min(beam_size, nbest)
     device = enc_out.device
     att_ali = None
     dec_hid = None
     # N x T x F => N*beam x T x F
-    enc_out = th.repeat_interleave(enc_out, beam, 0)
-    att_ctx = th.zeros([N * beam, D_enc], device=device)
-    proj = th.zeros([N * beam, D_enc], device=device)
+    enc_out = th.repeat_interleave(enc_out, beam_size, 0)
+    att_ctx = th.zeros([N * beam_size, D_enc], device=device)
+    proj = th.zeros([N * beam_size, D_enc], device=device)
 
-    beam_param = BeamSearchParam(beam_size=beam,
+    beam_param = BeamSearchParam(beam_size=beam_size,
                                  sos=sos,
                                  eos=eos,
                                  device=device,
-                                 penalty=penalty,
+                                 min_len=min_len,
+                                 max_len=max_len,
                                  len_norm=len_norm,
                                  lm_weight=lm_weight,
-                                 cov_weight=cov_weight,
+                                 len_penalty=len_penalty,
+                                 cov_penalty=cov_penalty,
                                  cov_threshold=cov_threshold,
                                  eos_threshold=eos_threshold)
     beam_tracker = BeamTracker(beam_param)
 
     lm_state = None
-    hypos = []
     # clear states
     att_net.clear()
     # step by step
-    for t in range(max_len):
+    stop = False
+    while not stop:
         # beam
-        pre_out, point = beam_tracker[-1] if t else beam_tracker[0]
-        # step forward
-        pred, att_ctx, dec_hid, att_ali, proj = decoder.step(att_net,
-                                                             pre_out,
-                                                             enc_out,
-                                                             att_ctx,
-                                                             dec_hid=dec_hid,
-                                                             att_ali=att_ali,
-                                                             proj=proj,
-                                                             point=point)
-        # compute prob: beam x V, nagetive
-        am_prob = tf.log_softmax(pred / temperature, dim=-1)
+        pre_tok, point = beam_tracker[-1]
 
+        # step forward
+        dec_hid = adjust_hidden(point, dec_hid)
+        att_ali = None if att_ali is None else att_ali[point]
+        dec_out, att_ctx, dec_hid, att_ali, proj = decoder.step(
+            att_net,
+            pre_tok,
+            enc_out,
+            att_ctx[point],
+            dec_hid=dec_hid,
+            att_ali=att_ali,
+            proj=proj[point])
+        # compute prob: beam x V, nagetive
+        am_prob = tf.log_softmax(dec_out / temperature, dim=-1)
         if lm and beam_param.lm_weight > 0:
             # beam x V
-            lm_prob, lm_state = lm_score_impl(lm, point, pre_out, lm_state)
+            lm_prob, lm_state = lm_score_impl(lm, point, pre_tok, lm_state)
         else:
             lm_prob = 0
-
-        # local pruning
-        beam_tracker.prune_beam(am_prob, lm_prob, att_ali=att_ali)
-        # continue flags
-        hyp_ended = beam_tracker.trace_back(final=False)
-
-        # process eos nodes
-        if hyp_ended:
-            hypos += hyp_ended
-
-        if len(hypos) >= beam:
-            break
-
-        # process non-eos nodes at the final step
-        if t == max_len - 1:
-            hyp_final = beam_tracker.trace_back(final=True)
-            if hyp_final:
-                hypos += hyp_final
-
-    nbest_hypos = sorted(hypos, key=lambda n: n["score"], reverse=True)
-    return nbest_hypos[:nbest]
+        # one beam search step
+        stop = beam_tracker.step(am_prob, lm_prob, att_ali=att_ali)
+    # return nbest
+    return beam_tracker.nbest_hypos(nbest)
 
 
 def beam_search_batch(decoder: nn.Module,
@@ -180,17 +176,20 @@ def beam_search_batch(decoder: nn.Module,
                       enc_len: th.Tensor,
                       lm: Optional[LmType] = None,
                       lm_weight: float = 0,
-                      beam: int = 8,
+                      beam_size: int = 8,
                       nbest: int = 1,
                       max_len: int = -1,
+                      max_len_ratio: float = 1,
+                      min_len: int = 0,
+                      min_len_ratio: float = 0,
                       sos: int = -1,
                       eos: int = -1,
-                      penalty: float = 0,
                       len_norm: bool = True,
-                      cov_weight: float = 0,
+                      len_penalty: float = 0,
+                      cov_penalty: float = 0,
                       temperature: float = 1,
                       cov_threshold: float = 0.5,
-                      eos_threshold: float = 0) -> List[Dict]:
+                      eos_threshold: float = 1) -> List[List[Dict]]:
     """
     Batch level vectorized beam search algothrim
     Args
@@ -200,12 +199,10 @@ def beam_search_batch(decoder: nn.Module,
     """
     if sos < 0 or eos < 0:
         raise RuntimeError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
-    if max_len <= 0:
-        raise RuntimeError(f"Invalid max_len: {max_len:d}")
     if not hasattr(decoder, "step"):
         raise RuntimeError("Function step should defined in decoder network")
-    if beam > decoder.vocab_size:
-        raise RuntimeError(f"Beam size({beam}) > vocabulary size")
+    if beam_size > decoder.vocab_size:
+        raise RuntimeError(f"Beam size({beam_size}) > vocabulary size")
 
     if lm:
         if isinstance(lm, nn.Module):
@@ -213,87 +210,70 @@ def beam_search_batch(decoder: nn.Module,
         else:
             lm_score_impl = ngram_score
 
-    N, _, D_enc = enc_out.shape
-    nbest = min(beam, nbest)
+    N, T, D_enc = enc_out.shape
+    min_len = [
+        max(min_len, int(min_len_ratio * elen.item())) for elen in enc_len
+    ]
+    max_len = [
+        min(max_len, int(max_len_ratio * elen.item())) for elen in enc_len
+    ]
+    logger.info(f"--- shape of the encoder output: {T} x {D_enc}")
+    logger.info("--- length constraint of the decoding " +
+                f"sequence: {[(i, j) for i, j in zip(min_len, max_len)]}")
+
+    nbest = min(beam_size, nbest)
     device = enc_out.device
     att_ali = None
     dec_hid = None
     # N x T x F => N*beam x T x F
-    enc_out = th.repeat_interleave(enc_out, beam, 0)
-    enc_len = th.repeat_interleave(enc_len, beam, 0)
-    att_ctx = th.zeros([N * beam, D_enc], device=device)
-    proj = th.zeros([N * beam, D_enc], device=device)
+    enc_out = th.repeat_interleave(enc_out, beam_size, 0)
+    enc_len = th.repeat_interleave(enc_len, beam_size, 0)
+    att_ctx = th.zeros([N * beam_size, D_enc], device=device)
+    proj = th.zeros([N * beam_size, D_enc], device=device)
 
     lm_state = None
-    beam_param = BeamSearchParam(beam_size=beam,
+    beam_param = BeamSearchParam(beam_size=beam_size,
                                  sos=sos,
                                  eos=eos,
                                  device=device,
-                                 penalty=penalty,
+                                 min_len=min_len,
+                                 max_len=max_len,
                                  len_norm=len_norm,
                                  lm_weight=lm_weight,
-                                 cov_weight=cov_weight,
+                                 len_penalty=len_penalty,
+                                 cov_penalty=cov_penalty,
                                  cov_threshold=cov_threshold,
                                  eos_threshold=eos_threshold)
     beam_tracker = BatchBeamTracker(N, beam_param)
 
-    # for each utterance
-    hypos = [[] for _ in range(N)]
-    stop_batch = [False] * N
     # clear states
     att_net.clear()
     # step by step
-    for t in range(max_len):
+    stop = False
+    while not stop:
         # N*beam
-        pre_out, point = beam_tracker[-1] if t else beam_tracker[0]
+        pre_tok, point = beam_tracker[-1]
         # step forward
-        pred, att_ctx, dec_hid, att_ali, proj = decoder.step(att_net,
-                                                             pre_out,
-                                                             enc_out,
-                                                             att_ctx,
-                                                             enc_len=enc_len,
-                                                             dec_hid=dec_hid,
-                                                             att_ali=att_ali,
-                                                             proj=proj,
-                                                             point=point)
+        dec_hid = adjust_hidden(point, dec_hid)
+        att_ali = None if att_ali is None else att_ali[point]
+        dec_out, att_ctx, dec_hid, att_ali, proj = decoder.step(
+            att_net,
+            pre_tok,
+            enc_out,
+            att_ctx[point],
+            dec_hid=dec_hid,
+            att_ali=att_ali,
+            proj=proj[point])
         # compute prob: N*beam x V, nagetive
-        am_prob = tf.log_softmax(pred / temperature, dim=-1)
+        am_prob = tf.log_softmax(dec_out / temperature, dim=-1)
 
         if lm and beam_param.lm_weight > 0:
             # beam x V
-            lm_prob, lm_state = lm_score_impl(lm, point, pre_out, lm_state)
+            lm_prob, lm_state = lm_score_impl(lm, point, pre_tok, lm_state)
         else:
             lm_prob = 0
 
-        # local pruning: N*beam x beam
-        beam_tracker.prune_beam(am_prob, lm_prob, att_ali=att_ali)
-
-        # process eos nodes
-        for u in range(N):
-            hyp_ended = beam_tracker.trace_back(u, final=False)
-            if hyp_ended:
-                hypos[u] += hyp_ended
-
-            if len(hypos[u]) >= beam:
-                stop_batch[u] = True
-
-        # all True, break search
-        if sum(stop_batch) == N:
-            break
-
-        # process non-eos nodes at the final step
-        if t == max_len - 1:
-            for u in range(N):
-                # skip utterance u
-                if stop_batch[u]:
-                    continue
-                # process end
-                hyp_final = beam_tracker.trace_back(u, final=True)
-                if hyp_final:
-                    hypos[u] += hyp_final
-
-    nbest_hypos = []
-    for utt_bypos in hypos:
-        hypos = sorted(utt_bypos, key=lambda n: n["score"], reverse=True)
-        nbest_hypos.append(hypos[:nbest])
-    return nbest_hypos
+        # one beam search step
+        stop = beam_tracker.step(am_prob, lm_prob, att_ali=att_ali)
+    # return nbest
+    return beam_tracker.nbest_hypos(nbest, auto_stop=stop)

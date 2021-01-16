@@ -1,4 +1,4 @@
-nnet: "transducer"
+nnet: "asr@transducer"
 
 nnet_conf:
   input_size: 240
@@ -20,7 +20,7 @@ nnet_conf:
     dec_hidden: 512
     dec_dropout: 0.2
 
-task: "transducer"
+task: "asr@transducer"
 
 asr_transform:
   feats: "perturb-fbank-log-cmvn-delta"
@@ -49,7 +49,7 @@ trainer_conf:
   stop_criterion: "loss"
 
 data_conf:
-  fmt: "am_raw"
+  fmt: "am@raw"
   loader:
     max_dur: 30 # (s)
     min_dur: 0.4 # (s)

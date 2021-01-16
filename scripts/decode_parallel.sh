@@ -11,18 +11,26 @@ dict=""
 space=""
 nbest=1
 channel=-1
-max_len=100
+max_len=500
 min_len=1
-penalty=0
+max_len_ratio=1
+min_len_ratio=0
+len_norm=true
+len_penalty=0
+cov_penalty=0
+cov_threshold=0
+eos_threshold=0
 beam_size=16
 function="beam_search"
 temperature=1
-len_norm=true
 am_tag="best"
 lm_tag="best"
 lm=""
 lm_weight=0
 spm=""
+dump_align=""
+text=""
+score=false
 
 echo "$0 $*"
 
@@ -61,19 +69,30 @@ $cmd JOB=1:$nj $log_dir/decode.JOB.log \
   --lm "$lm" \
   --spm "$spm" \
   --lm-weight $lm_weight \
-  --penalty $penalty \
   --temperature $temperature \
   --space "$space" \
   --nbest $nbest \
   --dump-nbest $log_dir/beam${beam_size}.JOB.${nbest}best \
+  --dump-align "$dump_align" \
   --max-len $max_len \
   --min-len $min_len \
+  --max-len-ratio $max_len_ratio \
+  --min-len-ratio $min_len_ratio \
   --function $function \
-  --len-norm $len_norm
+  --len-norm $len_norm \
+  --len-penalty $len_penalty \
+  --cov-penalty $cov_penalty \
+  --cov-threshold $cov_threshold \
+  --eos-threshold $eos_threshold
 
 cat $log_dir/beam${beam_size}.*.decode | \
   sort -k1 > $dec_dir/beam${beam_size}.decode
 cat $log_dir/beam${beam_size}.*.${nbest}best | \
   sort -k1 > $dec_dir/beam${beam_size}.${nbest}best
+
+if $score ; then
+  [ -z $text ] && echo "for --score true, you must given --text <reference-transcription>" && exit -1
+  ./cmd/compute_wer.py $dec_dir/beam${beam_size}.decode $text
+fi
 
 echo "$0 $*: Done"
