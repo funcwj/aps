@@ -108,7 +108,7 @@ class TorchTransformerEncoder(TransformerEncoderBase):
         """
         enc_inp, inp_len, src_pad_mask = self.proj(inp_pad, inp_len)
         # enc_inp: N x Ti x D => Ti x N x D
-        enc_inp = self.abs_pos_enc(self.src_proj(inp_pad))
+        enc_inp = self.abs_pos_enc(enc_inp)
         # Ti x N x D
         enc_out = self.encoder(enc_inp,
                                src_mask=None,

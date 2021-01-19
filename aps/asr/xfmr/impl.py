@@ -443,8 +443,8 @@ class TransformerEncoderLayer(ApsTransformerEncoderLayer):
                              self_attn,
                              dim_feedforward=dim_feedforward,
                              dropout=ffn_dropout,
-                             activation=activation)
-        self.pre_norm = pre_norm
+                             activation=activation,
+                             pre_norm=pre_norm)
 
     def forward(self,
                 src: th.Tensor,

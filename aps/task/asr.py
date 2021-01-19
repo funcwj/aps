@@ -111,6 +111,7 @@ class CtcXentHybridTask(Task):
     Args:
         nnet: AM network
         blank: blank id for CTC
+        reduction: reduction option applied to the sum of the loss
         lsm_factor: label smoothing factor
         lsm_method: label smoothing method (uniform|unigram)
         ctc_weight: CTC weight
@@ -120,6 +121,7 @@ class CtcXentHybridTask(Task):
     def __init__(self,
                  nnet: nn.Module,
                  blank: int = 0,
+                 reduction: str = "batchmean",
                  lsm_factor: float = 0,
                  lsm_method: str = "uniform",
                  ctc_weight: float = 0,
@@ -129,7 +131,10 @@ class CtcXentHybridTask(Task):
         if lsm_method == "unigram" and not label_count:
             raise RuntimeError(
                 "Missing label_count to use unigram label smoothing")
+        if reduction not in ["mean", "batchmean"]:
+            raise ValueError(f"Unsupported reduction option: {reduction}")
         self.eos = nnet.eos
+        self.reduction = reduction
         self.ctc_blank = blank
         self.ctc_weight = ctc_weight
         self.lsm_factor = lsm_factor
@@ -153,24 +158,21 @@ class CtcXentHybridTask(Task):
                                        eos_value=self.eos)
         # outs: N x (To+1) x V
         # alis: N x (To+1) x Ti
-        if "ssr" in egs:
-            # with schedule sampling
-            outs, _, ctc_enc, enc_len = self.nnet(egs["src_pad"],
-                                                  egs["src_len"],
-                                                  tgt_pad,
-                                                  ssr=egs["ssr"])
-        else:
-            outs, _, ctc_enc, enc_len = self.nnet(egs["src_pad"],
-                                                  egs["src_len"], tgt_pad)
+        ssr = egs["ssr"] if "ssr" in egs else 0
+        outs, _, ctc_enc, enc_len = self.nnet(egs["src_pad"],
+                                              egs["src_len"],
+                                              tgt_pad,
+                                              ssr=ssr)
         # compute loss
         if self.lsm_factor > 0:
             xent_loss = ls_objf(outs,
                                 tgts,
                                 method=self.lsm_method,
+                                reduction=self.reduction,
                                 lsm_factor=self.lsm_factor,
                                 label_count=self.label_count)
         else:
-            xent_loss = ce_objf(outs, tgts)
+            xent_loss = ce_objf(outs, tgts, reduction=self.reduction)
 
         stats = {}
         if self.ctc_weight > 0:
@@ -179,6 +181,7 @@ class CtcXentHybridTask(Task):
                                 enc_len,
                                 egs["tgt_len"],
                                 blank=self.ctc_blank,
+                                reduction=self.reduction,
                                 add_softmax=True)
             stats["@ctc"] = ctc_loss.item()
             stats["xent"] = xent_loss.item()
@@ -202,17 +205,22 @@ class TransducerTask(Task):
     Args:
         nnet: AM network
         interface: which RNNT loss api to use (warp_rnnt|warprnnt_pytorch)
+        reduction: reduction option applied to the sum of the loss
         blank: blank ID for RNNT loss computation
     """
 
     def __init__(self,
                  nnet: nn.Module,
                  interface: str = "warp_rnnt",
+                 reduction: str = "batchmean",
                  blank: int = 0) -> None:
         super(TransducerTask,
               self).__init__(nnet,
                              description="RNNT objective function for ASR")
+        if reduction not in ["mean", "batchmean"]:
+            raise ValueError(f"Unsupported reduction option: {reduction}")
         self.blank = blank
+        self.reduction = reduction
         self._setup_rnnt_backend(interface)
 
     def _setup_rnnt_backend(self, interface: str) -> NoReturn:
@@ -254,8 +262,8 @@ class TransducerTask(Task):
         # compute loss
         loss = self.rnnt_objf(outs, tgt_pad.to(th.int32), enc_len.to(th.int32),
                               tgt_len.to(th.int32), **rnnt_kwargs)
-        loss = loss / th.sum(tgt_len)
-        return {"loss": loss}
+        K = th.sum(tgt_len) if self.reduction == "mean" else outs.shape[0]
+        return {"loss": loss / K}
 
 
 @ApsRegisters.task.register("asr@lm")
@@ -265,13 +273,20 @@ class LmXentTask(Task):
     Args:
         nnet: language model
         bptt_mode: reuse hidden state in previous batch (for BPTT)
+        reduction: reduction option applied to the sum of the loss
     """
 
-    def __init__(self, nnet: nn.Module, bptt_mode: bool = False) -> None:
+    def __init__(self,
+                 nnet: nn.Module,
+                 bptt_mode: bool = False,
+                 reduction: str = "batchmean") -> None:
         super(LmXentTask, self).__init__(nnet,
                                          description="Xent for LM training")
+        if reduction not in ["mean", "batchmean"]:
+            raise ValueError(f"Unsupported reduction option: {reduction}")
         self.hidden = None
         self.bptt_mode = bptt_mode
+        self.reduction = reduction
 
     def forward(self, egs: Dict) -> Dict:
         """
@@ -287,7 +302,7 @@ class LmXentTask(Task):
             pred, self.hidden = self.nnet(egs["src"], self.hidden)
         else:
             pred, _ = self.nnet(egs["src"], None, egs["len"])
-        loss = ce_objf(pred, egs["tgt"])
+        loss = ce_objf(pred, egs["tgt"], reduction=self.reduction)
         accu, den = compute_accu(pred, egs["tgt"])
         # check coding error
         assert den == egs["#tok"]

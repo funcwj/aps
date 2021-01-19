@@ -292,13 +292,17 @@ class XfmrASR(EncDecASRBase):
         self.decoder = TorchTransformerDecoder(
             vocab_size - 1 if ctc else vocab_size, **dec_kwargs)
 
-    def forward(self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
-                y_pad: th.Tensor) -> XfmrASROutputType:
+    def forward(self,
+                x_pad: th.Tensor,
+                x_len: Optional[th.Tensor],
+                y_pad: th.Tensor,
+                ssr: float = 0) -> XfmrASROutputType:
         """
         Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
             y_pad: N x To
+            ssr: not used here, left for future
         Return:
             outs: N x (To+1) x V
         """

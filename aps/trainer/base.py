@@ -900,6 +900,7 @@ class Trainer(object):
         dev_batches = len(dev_loader) if len(dev_loader) else "unknown"
         self.reporter.log(
             f"Number of batches (train/valid): {trn_batches}/{dev_batches}")
+        self.reporter.log(f"Training epochs: {num_epochs}")
         self.prep_run(dev_loader)
         if eval_interval > 0:
             done_epoch = self.run_in_batch(trn_loader,

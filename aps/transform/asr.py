@@ -464,8 +464,8 @@ class CmvnTransform(nn.Module):
 
     def extra_repr(self) -> str:
         return (
-            f"norm_mean={self.norm_mean}, norm_var={self.norm_var}, per_band={self.per_band}"
-            + f", gcmvn_stats={self.gcmvn}, eps={self.eps:.3e}")
+            f"norm_mean={self.norm_mean}, norm_var={self.norm_var}, per_band={self.per_band}, "
+            + f"gcmvn_stats={self.gcmvn}, eps={self.eps:.3e}")
 
     def dim_scale(self) -> int:
         return 1

@@ -118,6 +118,10 @@ class DfTransform(nn.Module):
         1) num_doas == 1: we known the DoA of the target speaker
         2) num_doas != 1: we do not have that prior, so we sampled #num_doas DoAs
                           and compute on each directions
+    Note that the angle feature is geometry dependent. To to support your own microphone arrays, the user
+    should re-implement the function _oracle_phase_delay(...), which returns the oracle phase difference
+    based on the given microphone topology
+
     Args:
         geometric: name of the array geometry
         sr: sample rate of the audio
