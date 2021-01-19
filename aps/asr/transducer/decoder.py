@@ -133,11 +133,11 @@ class TorchTransformerDecoder(DecoderBase):
                              dec_dim=att_dim,
                              jot_dim=jot_dim,
                              vocab_embeded=vocab_embeded)
-        self.abs_pos_enc = get_xfmr_pose("inp_sin",
+        self.abs_pos_enc = get_xfmr_pose("xfmr_abs",
                                          att_dim,
                                          dropout=pos_dropout,
                                          scale_embed=scale_embed)
-        self.decoder = get_xfmr_encoder("xfmr",
+        self.decoder = get_xfmr_encoder("xfmr_abs",
                                         num_layers,
                                         att_dim,
                                         nhead,

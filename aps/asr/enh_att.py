@@ -200,8 +200,8 @@ class EnhXfmrASR(EnhASRBase):
             enh_kwargs: Optional[Dict] = None,
             asr_cpt: str = "",
             # encoder & decoder
-            enc_type: str = "xfmr",
-            dec_type: str = "xfmr",
+            enc_type: str = "xfmr_abs",
+            dec_type: str = "xfmr_abs",
             enc_proj: Optional[int] = None,
             enc_kwargs: Optional[Dict] = None,
             dec_kwargs: Optional[Dict] = None) -> None:

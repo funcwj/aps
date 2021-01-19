@@ -13,13 +13,28 @@ from aps.libs import Register
 PosEncodings = Register("pos_encodings")
 
 
-def get_xfmr_pose(pose_name: str, embed_dim: int, **kwargs) -> nn.Module:
+def get_xfmr_pose(enc_type: str,
+                  dim: int,
+                  nhead: int = 4,
+                  dropout: float = 0.1,
+                  scale_embed: bool = False,
+                  radius: int = 16) -> nn.Module:
     """
     Return position encodings layer
+    Args:
+        enc_type (str): transformer encoder type, {xfmr|cfmr}_{abs|rel|xl}
     """
-    if pose_name not in PosEncodings:
-        raise ValueError(f"Unsupported position encoding layer: {pose_name}")
-    return PosEncodings[pose_name](embed_dim, **kwargs)
+    suffix = enc_type.split("_")[-1]
+    if suffix == "abs":
+        return InputSinPosEncoding(dim,
+                                   dropout=dropout,
+                                   scale_embed=scale_embed)
+    elif suffix == "rel":
+        return RelPosEncoding(dim // nhead, dropout=dropout, radius=radius)
+    elif suffix == "xl":
+        return SinPosEncoding(dim, dropout=dropout)
+    else:
+        raise ValueError(f"Unsupported enc_type: {enc_type}")
 
 
 def digit_shift(term: th.Tensor) -> th.Tensor:

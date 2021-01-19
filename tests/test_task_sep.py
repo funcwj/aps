@@ -178,7 +178,7 @@ def test_enh_ml(num_channels):
     rnn_ml = nnet_cls(enh_transform=transform,
                       num_bins=257,
                       input_size=257 * 3,
-                      input_project=512,
+                      input_proj=512,
                       num_layers=2,
                       hidden=512)
     task = aps_task("sse@enh_ml", rnn_ml)

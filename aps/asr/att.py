@@ -16,8 +16,9 @@ import aps.asr.beam_search.xfmr as xfmr_api
 from typing import Optional, Dict, Tuple, List
 from aps.asr.base.decoder import PyTorchRNNDecoder
 from aps.asr.base.encoder import encoder_instance
-from aps.asr.xfmr.encoder import support_xfmr_encoder
+from aps.asr.xfmr.encoder import TransformerEncoder
 from aps.asr.xfmr.decoder import TorchTransformerDecoder
+from aps.asr.xfmr.impl import TransformerEncoderLayers
 from aps.asr.base.attention import att_instance
 from aps.libs import ApsRegisters
 
@@ -48,9 +49,9 @@ class EncDecASRBase(nn.Module):
         self.sos = sos
         self.eos = eos
         self.asr_transform = asr_transform
-        xfmr_encoder_cls = support_xfmr_encoder(enc_type)
-        if xfmr_encoder_cls:
-            self.encoder = xfmr_encoder_cls(input_size, **enc_kwargs)
+        if enc_type in TransformerEncoderLayers:
+            self.encoder = TransformerEncoder(enc_type, input_size,
+                                              **enc_kwargs)
             self.is_xfmr_encoder = True
             enc_proj = enc_kwargs["att_dim"]
         else:
@@ -271,8 +272,8 @@ class XfmrASR(EncDecASRBase):
                  eos: int = -1,
                  ctc: bool = False,
                  asr_transform: Optional[nn.Module] = None,
-                 enc_type: str = "xfmr",
-                 dec_type: str = "xfmr",
+                 enc_type: str = "xfmr_abs",
+                 dec_type: str = "xfmr_abs",
                  enc_proj: Optional[int] = None,
                  enc_kwargs: Optional[Dict] = None,
                  dec_kwargs: Optional[Dict] = None) -> None:
@@ -285,8 +286,8 @@ class XfmrASR(EncDecASRBase):
                                       enc_type=enc_type,
                                       enc_proj=enc_proj,
                                       enc_kwargs=enc_kwargs)
-        if dec_type != "xfmr":
-            raise ValueError("XfmrASR: currently decoder must be xfmr")
+        if dec_type != "xfmr_abs":
+            raise ValueError("XfmrASR: currently decoder must be xfmr_abs")
         if not self.is_xfmr_encoder and enc_proj != dec_kwargs["att_dim"]:
             raise ValueError("enc_proj should be equal to att_dim")
         self.decoder = TorchTransformerDecoder(

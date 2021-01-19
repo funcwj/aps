@@ -69,7 +69,8 @@ class ApsMultiheadAttention(nn.Module):
                  embed_dim: int,
                  num_heads: int,
                  dropout: float = 0,
-                 bias: bool = True) -> None:
+                 bias: bool = True,
+                 use_torch: bool = True) -> None:
         super(ApsMultiheadAttention, self).__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
@@ -85,6 +86,7 @@ class ApsMultiheadAttention(nn.Module):
             self.register_parameter("in_proj_bias", None)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=True)
         self.dropout = nn.Dropout(p=dropout)
+        self.use_torch = use_torch
 
     def inp_proj(self, query: th.Tensor, key: th.Tensor,
                  value: th.Tensor) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
@@ -222,6 +224,7 @@ class ApsMultiheadAttention(nn.Module):
                 query: th.Tensor,
                 key: th.Tensor,
                 value: th.Tensor,
+                placehold: Optional[th.Tensor],
                 key_padding_mask: Optional[th.Tensor] = None,
                 attn_mask: Optional[th.Tensor] = None) -> MHSAReturnType:
         """
@@ -229,12 +232,19 @@ class ApsMultiheadAttention(nn.Module):
             query (Tensor): L x N x E
             key (Tensor): S x N x E
             value (Tensor): S x N x E
+            placehold (None): keep compatiable with rel/xl-attention layer
             key_padding_mask (Tensor): N x S
             attn_mask (Tensor): L x S, additional mask
         Return:
             context (Tensor): L x N x E
             weight (Tensor): N x L x S
         """
+        if self.use_torch:
+            return self.torch_forward(query,
+                                      key,
+                                      value,
+                                      key_padding_mask=key_padding_mask,
+                                      attn_mask=attn_mask)
         # query: L x N x H x D
         # key, value: S x N x H x D
         query, key, value = self.inp_proj(query, key, value)
@@ -422,8 +432,130 @@ class ApsTransformerEncoderLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.pre_norm = pre_norm
 
+    def forward(self,
+                src: th.Tensor,
+                inj_pose: Optional[th.Tensor] = None,
+                src_mask: Optional[th.Tensor] = None,
+                src_key_padding_mask: Optional[th.Tensor] = None) -> th.Tensor:
+        """
+        Args:
+            src (Tensor): T x N x D
+            src_mask (None or Tensor): T x T
+            inj_pose (None or Tensor): injected positional encodings
+            src_key_padding_mask (None or Tensor): N x T
+        Return:
+            out (Tensor): T x N x D
+        """
+        inp = src
+        if self.pre_norm:
+            src = self.norm1(src)
+        att = self.self_attn(src,
+                             src,
+                             src,
+                             inj_pose,
+                             attn_mask=src_mask,
+                             key_padding_mask=src_key_padding_mask)[0]
+        src = inp + self.dropout(att)
+        if self.pre_norm:
+            src = src + self.feedforward(self.norm2(src))
+        else:
+            src = self.norm1(src)
+            src = self.norm2(src + self.feedforward(src))
+        return src
 
-@TransformerEncoderLayers.register("xfmr")
+
+class ApsConformerEncoderLayer(nn.Module):
+    """
+    The base class for Conformer encoder layer proposed by Google in
+    Conformer: Convolution-augmented Transformer for Speech Recognition
+    """
+
+    def __init__(self,
+                 d_model: int,
+                 self_attn: nn.Module,
+                 dim_feedforward: int = 2048,
+                 dropout: float = 0.1,
+                 kernel_size: int = 16,
+                 activation: str = "swish"):
+        super(ApsConformerEncoderLayer, self).__init__()
+        self.self_attn = self_attn
+        self.feedforward1 = nn.Sequential(nn.LayerNorm(d_model),
+                                          nn.Linear(d_model, dim_feedforward),
+                                          _get_activation_fn(activation),
+                                          nn.Dropout(dropout),
+                                          nn.Linear(dim_feedforward, d_model),
+                                          nn.Dropout(dropout))
+        self.convolution = nn.Sequential(
+            nn.Conv1d(d_model, d_model * 2, 1), nn.GLU(dim=-2),
+            nn.Conv1d(d_model,
+                      d_model,
+                      kernel_size * 2 + 1,
+                      groups=d_model,
+                      stride=1,
+                      padding=kernel_size), nn.BatchNorm1d(d_model),
+            _get_activation_fn(activation), nn.Conv1d(d_model, d_model, 1),
+            nn.Dropout(p=dropout))
+        self.feedforward2 = nn.Sequential(nn.LayerNorm(d_model),
+                                          nn.Linear(d_model, dim_feedforward),
+                                          _get_activation_fn(activation),
+                                          nn.Dropout(dropout),
+                                          nn.Linear(dim_feedforward, d_model),
+                                          nn.Dropout(dropout))
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.norm3 = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def conv(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp (Tensor): T x N x D
+        Return
+            out (Tensor): T x N x D
+        """
+        # T x N x F
+        src = self.norm2(inp)
+        # T x N x F => N x F x T
+        src = th.einsum("tnf->nft", src)
+        out = self.convolution(src)
+        # N x F x T => T x N x F
+        out = th.einsum("nft->tnf", out)
+        return out
+
+    def forward(self,
+                src: th.Tensor,
+                inj_pose: Optional[th.Tensor] = None,
+                src_mask: Optional[th.Tensor] = None,
+                src_key_padding_mask: Optional[th.Tensor] = None) -> th.Tensor:
+        """
+        Args:
+            src (Tensor): T x N x D
+            inj_pose (None or Tensor): injected positional encodings
+            src_mask (None or Tensor): T x T
+            src_key_padding_mask (None or Tensor): N x T
+        Return:
+            out (Tensor): T x N x D
+        """
+        # 1) FFN
+        src1 = self.feedforward1(src) * 0.5 + src
+        # self-attention block
+        src2 = self.norm1(src1)
+        att = self.self_attn(src2,
+                             src2,
+                             src2,
+                             inj_pose,
+                             attn_mask=src_mask,
+                             key_padding_mask=src_key_padding_mask)[0]
+        src = src1 + self.dropout(att)
+        # conv
+        src = self.conv(src) + src
+        # 2) FFN
+        src = self.feedforward2(src) * 0.5 + src
+        # layernorm
+        return self.norm3(src)
+
+
+@TransformerEncoderLayers.register("xfmr_abs")
 class TransformerEncoderLayer(ApsTransformerEncoderLayer):
     """
     Standard Transformer encoder layer using absolute position encodings
@@ -437,7 +569,10 @@ class TransformerEncoderLayer(ApsTransformerEncoderLayer):
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
                  activation: str = "relu") -> None:
-        self_attn = MultiheadAttention(d_model, nhead, dropout=att_dropout)
+        self_attn = ApsMultiheadAttention(d_model,
+                                          nhead,
+                                          dropout=att_dropout,
+                                          use_torch=True)
         super(TransformerEncoderLayer,
               self).__init__(d_model,
                              self_attn,
@@ -445,34 +580,6 @@ class TransformerEncoderLayer(ApsTransformerEncoderLayer):
                              dropout=ffn_dropout,
                              activation=activation,
                              pre_norm=pre_norm)
-
-    def forward(self,
-                src: th.Tensor,
-                src_mask: Optional[th.Tensor] = None,
-                src_key_padding_mask: Optional[th.Tensor] = None) -> th.Tensor:
-        """
-        Args:
-            src (Tensor): T x N x D
-            src_mask (None or Tensor): T x T
-            src_key_padding_mask (None or Tensor): N x T
-        Return:
-            out (Tensor): T x N x D
-        """
-        inp = src
-        if self.pre_norm:
-            src = self.norm1(src)
-        att = self.self_attn(src,
-                             src,
-                             src,
-                             attn_mask=src_mask,
-                             key_padding_mask=src_key_padding_mask)[0]
-        src = inp + self.dropout(att)
-        if self.pre_norm:
-            src = src + self.feedforward(self.norm2(src))
-        else:
-            src = self.norm1(src)
-            src = self.norm2(src + self.feedforward(src))
-        return src
 
 
 @TransformerEncoderLayers.register("xfmr_rel")
@@ -497,37 +604,6 @@ class TransformerRelEncoderLayer(ApsTransformerEncoderLayer):
                              dropout=ffn_dropout,
                              activation=activation,
                              pre_norm=pre_norm)
-
-    def forward(self,
-                src: th.Tensor,
-                key_rel_pose: Optional[th.Tensor] = None,
-                src_mask: Optional[th.Tensor] = None,
-                src_key_padding_mask: Optional[th.Tensor] = None) -> th.Tensor:
-        """
-        Args:
-            src (Tensor): T x N x D
-            key_rel_pose (Tensor): 2T-1 x E
-            src_mask (None or Tensor): T x T
-            src_key_padding_mask (None or Tensor): N x T
-        Return:
-            out (Tensor): T x N x D
-        """
-        inp = src
-        if self.pre_norm:
-            src = self.norm1(src)
-        att = self.self_attn(src,
-                             src,
-                             src,
-                             key_rel_pose,
-                             attn_mask=src_mask,
-                             key_padding_mask=src_key_padding_mask)[0]
-        src = inp + self.dropout(att)
-        if self.pre_norm:
-            src = src + self.feedforward(self.norm2(src))
-        else:
-            src = self.norm1(src)
-            src = self.norm2(src + self.feedforward(src))
-        return src
 
 
 @TransformerEncoderLayers.register("xfmr_xl")
@@ -559,43 +635,11 @@ class TransformerXLEncoderLayer(ApsTransformerEncoderLayer):
                              activation=activation,
                              pre_norm=pre_norm)
 
-    def forward(self,
-                src: th.Tensor,
-                sin_pose: Optional[th.Tensor] = None,
-                src_mask: Optional[th.Tensor] = None,
-                src_key_padding_mask: Optional[th.Tensor] = None) -> th.Tensor:
-        """
-        Args:
-            src (Tensor): T x N x D
-            sin_pose (Tensor): 2T-1 x E
-            src_mask (None or Tensor): T x T
-            src_key_padding_mask (None or Tensor): N x T
-        Return:
-            out (Tensor): T x N x D
-        """
-        inp = src
-        if self.pre_norm:
-            src = self.norm1(src)
-        att = self.self_attn(src,
-                             src,
-                             src,
-                             sin_pose,
-                             attn_mask=src_mask,
-                             key_padding_mask=src_key_padding_mask)[0]
-        src = inp + self.dropout(att)
-        if self.pre_norm:
-            src = src + self.feedforward(self.norm2(src))
-        else:
-            src = self.norm1(src)
-            src = self.norm2(src + self.feedforward(src))
-        return src
 
-
-@TransformerEncoderLayers.register("conformer")
-class ConformerEncoderLayer(nn.Module):
+@TransformerEncoderLayers.register("cfmr_abs")
+class ConformerEncoderLayer(ApsConformerEncoderLayer):
     """
-    Conformer encoder layer proposed by Google in
-        Conformer: Convolution-augmented Transformer for Speech Recognition
+    Conformer encoder layer using absolute position encodings
     """
 
     def __init__(self,
@@ -604,90 +648,78 @@ class ConformerEncoderLayer(nn.Module):
                  dim_feedforward: int = 2048,
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
+                 pre_norm: bool = True,
+                 kernel_size: int = 16,
+                 activation: str = "swish") -> None:
+        self_attn = ApsMultiheadAttention(d_model,
+                                          nhead,
+                                          dropout=att_dropout,
+                                          use_torch=True)
+        super(ConformerEncoderLayer,
+              self).__init__(d_model,
+                             self_attn,
+                             dim_feedforward=dim_feedforward,
+                             dropout=ffn_dropout,
+                             activation=activation,
+                             kernel_size=kernel_size)
+
+
+@TransformerEncoderLayers.register("cfmr_rel")
+class ConformerRelEncoderLayer(ApsConformerEncoderLayer):
+    """
+    Conformer encoder layer using relative position encodings
+    """
+
+    def __init__(self,
+                 d_model: int,
+                 nhead: int,
+                 dim_feedforward: int = 2048,
+                 att_dropout: float = 0.1,
+                 ffn_dropout: float = 0.1,
+                 pre_norm: bool = True,
                  kernel_size: int = 16,
                  activation: str = "swish",
                  rel_u: Optional[nn.Parameter] = None,
-                 rel_v: Optional[nn.Parameter] = None):
-        super(ConformerEncoderLayer, self).__init__()
-        self.self_attn = XlMultiheadAttention(d_model,
-                                              nhead,
-                                              dropout=att_dropout,
-                                              rel_u=rel_u,
-                                              rel_v=rel_v)
-        self.feedforward1 = nn.Sequential(nn.LayerNorm(d_model),
-                                          nn.Linear(d_model, dim_feedforward),
-                                          _get_activation_fn(activation),
-                                          nn.Dropout(ffn_dropout),
-                                          nn.Linear(dim_feedforward, d_model),
-                                          nn.Dropout(ffn_dropout))
-        self.convolution = nn.Sequential(
-            nn.Conv1d(d_model, d_model * 2, 1), nn.GLU(dim=-2),
-            nn.Conv1d(d_model,
-                      d_model,
-                      kernel_size * 2 + 1,
-                      groups=d_model,
-                      stride=1,
-                      padding=kernel_size), nn.BatchNorm1d(d_model),
-            _get_activation_fn(activation), nn.Conv1d(d_model, d_model, 1),
-            nn.Dropout(p=ffn_dropout))
-        self.feedforward2 = nn.Sequential(nn.LayerNorm(d_model),
-                                          nn.Linear(d_model, dim_feedforward),
-                                          _get_activation_fn(activation),
-                                          nn.Dropout(ffn_dropout),
-                                          nn.Linear(dim_feedforward, d_model),
-                                          nn.Dropout(ffn_dropout))
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.norm3 = nn.LayerNorm(d_model)
-        self.dropout = nn.Dropout(ffn_dropout)
+                 rel_v: Optional[nn.Parameter] = None) -> None:
+        self_attn = RelMultiheadAttention(d_model, nhead, dropout=att_dropout)
+        super(ConformerRelEncoderLayer,
+              self).__init__(d_model,
+                             self_attn,
+                             dim_feedforward=dim_feedforward,
+                             dropout=ffn_dropout,
+                             activation=activation,
+                             kernel_size=kernel_size)
 
-    def conv(self, inp: th.Tensor) -> th.Tensor:
-        """
-        Args:
-            inp (Tensor): T x N x D
-        Return
-            out (Tensor): T x N x D
-        """
-        # T x N x F
-        src = self.norm2(inp)
-        # T x N x F => N x F x T
-        src = th.einsum("tnf->nft", src)
-        out = self.convolution(src)
-        # N x F x T => T x N x F
-        out = th.einsum("nft->tnf", out)
-        return out
 
-    def forward(self,
-                src: th.Tensor,
-                sin_pose: Optional[th.Tensor] = None,
-                src_mask: Optional[th.Tensor] = None,
-                src_key_padding_mask: Optional[th.Tensor] = None) -> th.Tensor:
-        """
-        Args:
-            src (Tensor): T x N x D
-            sin_pose (Tensor): 2T-1 x E
-            src_mask (None or Tensor): T x T
-            src_key_padding_mask (None or Tensor): N x T
-        Return:
-            out (Tensor): T x N x D
-        """
-        # 1) FFN
-        src1 = self.feedforward1(src) * 0.5 + src
-        # self-attention block
-        src2 = self.norm1(src1)
-        att = self.self_attn(src2,
-                             src2,
-                             src2,
-                             sin_pose,
-                             attn_mask=src_mask,
-                             key_padding_mask=src_key_padding_mask)[0]
-        src = src1 + self.dropout(att)
-        # conv
-        src = self.conv(src) + src
-        # 2) FFN
-        src = self.feedforward2(src) * 0.5 + src
-        # layernorm
-        return self.norm3(src)
+@TransformerEncoderLayers.register("cfmr_xl")
+class ConformerXLEncoderLayer(ApsConformerEncoderLayer):
+    """
+    Conformer encoder layer that uses relative position encoding proposed in Transformer-XL
+    """
+
+    def __init__(self,
+                 d_model: int,
+                 nhead: int,
+                 dim_feedforward: int = 2048,
+                 att_dropout: float = 0.1,
+                 ffn_dropout: float = 0.1,
+                 pre_norm: bool = True,
+                 kernel_size: int = 16,
+                 activation: str = "swish",
+                 rel_u: Optional[nn.Parameter] = None,
+                 rel_v: Optional[nn.Parameter] = None) -> None:
+        self_attn = XlMultiheadAttention(d_model,
+                                         nhead,
+                                         dropout=att_dropout,
+                                         rel_u=rel_u,
+                                         rel_v=rel_v)
+        super(ConformerXLEncoderLayer,
+              self).__init__(d_model,
+                             self_attn,
+                             dim_feedforward=dim_feedforward,
+                             dropout=ffn_dropout,
+                             activation=activation,
+                             kernel_size=kernel_size)
 
 
 class ApsTransformerEncoder(nn.Module):
@@ -741,38 +773,24 @@ def get_xfmr_encoder(name: str,
         raise ValueError(f"Unknown type of the encoders: {name}")
     final_norm = nn.LayerNorm(att_dim) if pre_norm else None
     enc_layer_cls = TransformerEncoderLayers[name]
-    if name in ["xfmr", "xfmr_rel"]:
-        encoder_layer = enc_layer_cls(att_dim,
-                                      nhead,
-                                      dim_feedforward=dim_feedforward,
-                                      att_dropout=att_dropout,
-                                      ffn_dropout=ffn_dropout,
-                                      pre_norm=pre_norm)
-    else:
-        # init for xfmr_xl
+    enc_kwargs = {
+        "pre_norm": pre_norm,
+        "att_dropout": att_dropout,
+        "ffn_dropout": ffn_dropout,
+        "dim_feedforward": dim_feedforward
+    }
+    # for conformer
+    if name[:4] == "cfmr":
+        enc_kwargs["kernel_size"] = kernel_size
+    # for xl-attention
+    if name in ["xfmr_xl", "cfmr_xl"]:
         if not untie_rel:
             rel_u = _get_relative_uv((nhead, att_dim // nhead))
             rel_v = _get_relative_uv((nhead, att_dim // nhead))
         else:
             rel_u, rel_v = None, None
-        if name == "xfmr_xl":
-            encoder_layer = enc_layer_cls(att_dim,
-                                          nhead,
-                                          dim_feedforward=dim_feedforward,
-                                          att_dropout=att_dropout,
-                                          ffn_dropout=ffn_dropout,
-                                          pre_norm=pre_norm,
-                                          rel_u=rel_u,
-                                          rel_v=rel_v)
-        else:
-            if pre_norm:
-                raise RuntimeError("for Conformer we disable pre_norm")
-            encoder_layer = enc_layer_cls(att_dim,
-                                          nhead,
-                                          dim_feedforward=dim_feedforward,
-                                          kernel_size=kernel_size,
-                                          att_dropout=att_dropout,
-                                          ffn_dropout=ffn_dropout,
-                                          rel_u=rel_u,
-                                          rel_v=rel_v)
-    return ApsTransformerEncoder(encoder_layer, num_layers, norm=final_norm)
+        enc_kwargs["rel_u"] = rel_u
+        enc_kwargs["rel_v"] = rel_v
+    return ApsTransformerEncoder(enc_layer_cls(att_dim, nhead, **enc_kwargs),
+                                 num_layers,
+                                 norm=final_norm)

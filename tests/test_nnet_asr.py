@@ -383,10 +383,10 @@ def test_beam_att(enh_type, enh_kwargs):
     pytest.param("concat", conv1d_rnn_enc_kwargs),
     pytest.param("concat", conv1d_fsmn_enc_kwargs),
     pytest.param("concat", conv2d_rnn_enc_kwargs),
-    pytest.param("xfmr", xfmr_enc_kwargs),
+    pytest.param("xfmr_abs", xfmr_enc_kwargs),
     pytest.param("xfmr_rel", xfmr_rel_enc_kwargs),
     pytest.param("xfmr_xl", xfmr_xl_enc_kwargs),
-    pytest.param("conformer", conformer_enc_kwargs)
+    pytest.param("cfmr_xl", conformer_enc_kwargs)
 ])
 def test_att_encoder(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("asr@att")
@@ -422,10 +422,10 @@ def test_att_encoder(enc_type, enc_kwargs):
     pytest.param("concat", conv1d_rnn_enc_kwargs),
     pytest.param("concat", conv1d_fsmn_enc_kwargs),
     pytest.param("concat", conv2d_rnn_enc_kwargs),
-    pytest.param("xfmr", xfmr_enc_kwargs),
+    pytest.param("xfmr_abs", xfmr_enc_kwargs),
     pytest.param("xfmr_rel", xfmr_rel_enc_kwargs),
     pytest.param("xfmr_xl", xfmr_xl_enc_kwargs),
-    pytest.param("conformer", conformer_enc_kwargs)
+    pytest.param("cfmr_xl", conformer_enc_kwargs)
 ])
 def test_xfmr_encoder(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("asr@xfmr")
@@ -435,7 +435,7 @@ def test_xfmr_encoder(enc_type, enc_kwargs):
                                  frame_len=400,
                                  frame_hop=160,
                                  window="hamm")
-    xfmr_encoders = ["xfmr", "xfmr_rel", "xfmr_xl", "conformer"]
+    xfmr_encoders = ["xfmr_abs", "xfmr_rel", "xfmr_xl", "cfmr_xl"]
     xfmr_asr = nnet_cls(input_size=80,
                         vocab_size=vocab_size,
                         sos=0,
@@ -445,7 +445,7 @@ def test_xfmr_encoder(enc_type, enc_kwargs):
                         enc_type=enc_type,
                         enc_proj=512 if enc_type not in xfmr_encoders else None,
                         enc_kwargs=enc_kwargs,
-                        dec_type="xfmr",
+                        dec_type="xfmr_abs",
                         dec_kwargs=default_xfmr_dec_kwargs)
     x, x_len, y, u = gen_egs(vocab_size, batch_size)
     z, _, _, _ = xfmr_asr(x, x_len, y)
@@ -458,10 +458,10 @@ def test_xfmr_encoder(enc_type, enc_kwargs):
     pytest.param("fsmn", fsmn_enc_kwargs),
     pytest.param("concat", conv1d_rnn_enc_kwargs),
     pytest.param("concat", conv1d_fsmn_enc_kwargs),
-    pytest.param("xfmr", xfmr_enc_kwargs),
+    pytest.param("xfmr_abs", xfmr_enc_kwargs),
     pytest.param("xfmr_rel", xfmr_rel_enc_kwargs),
     pytest.param("xfmr_xl", xfmr_xl_enc_kwargs),
-    pytest.param("conformer", conformer_enc_kwargs)
+    pytest.param("cfmr_xl", conformer_enc_kwargs)
 ])
 def test_common_transducer(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("asr@transducer")
@@ -480,7 +480,7 @@ def test_common_transducer(enc_type, enc_kwargs):
                                  frame_len=400,
                                  frame_hop=160,
                                  window="hamm")
-    xfmr_encoders = ["xfmr", "xfmr_rel", "xfmr_xl", "conformer"]
+    xfmr_encoders = ["xfmr_abs", "xfmr_rel", "xfmr_xl", "cfmr_xl"]
     rnnt = nnet_cls(input_size=80,
                     vocab_size=vocab_size,
                     blank=vocab_size - 1,
@@ -501,10 +501,10 @@ def test_common_transducer(enc_type, enc_kwargs):
     pytest.param("fsmn", fsmn_enc_kwargs),
     pytest.param("concat", conv1d_rnn_enc_kwargs),
     pytest.param("concat", conv1d_fsmn_enc_kwargs),
-    pytest.param("xfmr", xfmr_enc_kwargs),
+    pytest.param("xfmr_abs", xfmr_enc_kwargs),
     pytest.param("xfmr_rel", xfmr_rel_enc_kwargs),
     pytest.param("xfmr_xl", xfmr_xl_enc_kwargs),
-    pytest.param("conformer", conformer_enc_kwargs)
+    pytest.param("cfmr_xl", conformer_enc_kwargs)
 ])
 def test_xfmr_transducer(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("asr@xfmr_transducer")

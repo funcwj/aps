@@ -134,7 +134,7 @@ class TorchTransformerDecoder(nn.Module):
         # default normal init (std=1), do not need to scale
         self.vocab_embed = nn.Embedding(vocab_size, att_dim)
         # use absolute positional embedding here
-        self.abs_pos_enc = get_xfmr_pose("inp_sin",
+        self.abs_pos_enc = get_xfmr_pose("xfmr_abs",
                                          att_dim,
                                          dropout=pos_dropout,
                                          scale_embed=scale_embed)
@@ -183,8 +183,6 @@ class TorchTransformerDecoder(nn.Module):
         dec_out = self.decoder(tgt_emb,
                                enc_out,
                                tgt_mask=tgt_mask,
-                               memory_mask=None,
-                               tgt_key_padding_mask=None,
                                memory_key_padding_mask=memory_mask)
         if out_idx is not None:
             dec_out = dec_out[out_idx]

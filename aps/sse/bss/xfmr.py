@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 
 from typing import Optional, List, Union
-from aps.asr.xfmr.encoder import RelTransformerEncoder
+from aps.asr.xfmr.encoder import TransformerEncoder
 from aps.sse.base import SseBase, MaskNonLinear
 from aps.libs import ApsRegisters
 
@@ -37,17 +37,18 @@ class FreqRelXfmr(SseBase):
         super(FreqRelXfmr, self).__init__(enh_transform,
                                           training_mode=training_mode)
         assert enh_transform is not None
-        self.rel_xfmr = RelTransformerEncoder(input_size,
-                                              proj_layer="linear",
-                                              att_dim=att_dim,
-                                              radius=radius,
-                                              nhead=nhead,
-                                              feedforward_dim=feedforward_dim,
-                                              scale_embed=False,
-                                              ffn_dropout=ffn_dropout,
-                                              att_dropout=att_dropout,
-                                              post_norm=post_norm,
-                                              num_layers=num_layers)
+        self.rel_xfmr = TransformerEncoder("xfmr_rel",
+                                           input_size,
+                                           proj_layer="linear",
+                                           att_dim=att_dim,
+                                           radius=radius,
+                                           nhead=nhead,
+                                           feedforward_dim=feedforward_dim,
+                                           scale_embed=False,
+                                           ffn_dropout=ffn_dropout,
+                                           att_dropout=att_dropout,
+                                           post_norm=post_norm,
+                                           num_layers=num_layers)
         self.proj = nn.Sequential(nn.Linear(input_size, att_dim),
                                   nn.LayerNorm(att_dim),
                                   nn.Dropout(proj_dropout))
