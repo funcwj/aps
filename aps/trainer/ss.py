@@ -5,6 +5,7 @@ Schedule sampling
 """
 
 from aps.libs import Register
+from typing import List
 
 SsScheduler = Register("ss_scheduler")
 
@@ -48,11 +49,10 @@ class EpochScheduler(BaseScheduler):
 
     def __init__(self,
                  ssr: float = 0,
-                 epoch_beg: int = 10,
+                 epochs: List[int] = [10, 20],
                  epoch_end: int = 20) -> None:
         super(EpochScheduler, self).__init__(ssr)
-        self.beg = epoch_beg
-        self.end = epoch_end
+        self.beg, self.end = epochs
 
     def step(self, epoch: int, accu: float) -> float:
         if self.beg <= epoch and epoch <= self.end:
@@ -90,13 +90,11 @@ class LinearScheduler(BaseScheduler):
 
     def __init__(self,
                  ssr: float = 0,
-                 epoch_beg: int = 10,
-                 epoch_end: int = 20,
+                 epochs: List[int] = [10, 20],
                  update_interval: int = 1) -> None:
         super(LinearScheduler, self).__init__(ssr)
-        self.beg = epoch_beg
-        self.end = epoch_end
-        self.inc = ssr * update_interval / (epoch_end - epoch_beg)
+        self.beg, self.end = epochs
+        self.inc = ssr * update_interval / (self.end - self.beg)
         self.interval = update_interval
 
     def step(self, epoch: int, accu: float) -> float:

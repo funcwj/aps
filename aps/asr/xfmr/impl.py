@@ -10,7 +10,6 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from torch.nn import MultiheadAttention
 from typing import Optional, Tuple
 from aps.libs import Register
 from aps.asr.xfmr.pose import digit_shift
@@ -779,11 +778,12 @@ def get_xfmr_encoder(name: str,
         "ffn_dropout": ffn_dropout,
         "dim_feedforward": dim_feedforward
     }
+    arch, att = name.split("_")
     # for conformer
-    if name[:4] == "cfmr":
+    if arch == "cfmr":
         enc_kwargs["kernel_size"] = kernel_size
     # for xl-attention
-    if name in ["xfmr_xl", "cfmr_xl"]:
+    if att == "xl":
         if not untie_rel:
             rel_u = _get_relative_uv((nhead, att_dim // nhead))
             rel_v = _get_relative_uv((nhead, att_dim // nhead))

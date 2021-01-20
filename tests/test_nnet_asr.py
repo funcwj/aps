@@ -16,7 +16,7 @@ default_rnn_dec_kwargs = {
     "rnn_hidden": 512,
     "rnn_dropout": 0.1,
     "input_feeding": True,
-    "vocab_embeded": True
+    "onehot_embed": False
 }
 
 default_xfmr_dec_kwargs = {
@@ -172,13 +172,15 @@ def gen_egs(vocab_size, batch_size, num_channels=1):
     u = th.randint(10, 20, (1,)).item()
     x_len = th.randint(16000, 16000 * 5, (batch_size,))
     x_len = x_len.sort(-1, descending=True)[0]
+    y_len = th.randint(u // 2, u, (batch_size,))
+    y_len[0] = u
     S = x_len.max().item()
     if num_channels == 1:
         x = th.rand(batch_size, S)
     else:
         x = th.rand(batch_size, num_channels, S)
     y = th.randint(0, vocab_size - 1, (batch_size, u))
-    return x, x_len, y, u
+    return x, x_len, y, y_len, u
 
 
 @pytest.mark.parametrize("num_layers", [2, 3])
@@ -257,8 +259,8 @@ def test_att(att_type, att_kwargs):
                        enc_kwargs=default_rnn_enc_kwargs,
                        dec_dim=512,
                        dec_kwargs=default_rnn_dec_kwargs)
-    x, x_len, y, u = gen_egs(vocab_size, batch_size)
-    z, _, _, _ = att_asr(x, x_len, y)
+    x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
+    z, _, _, _ = att_asr(x, x_len, y, y_len)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -311,8 +313,10 @@ def test_mvdr_att(att_type, att_kwargs):
                             enc_kwargs=default_rnn_enc_kwargs,
                             dec_dim=512,
                             dec_kwargs=default_rnn_dec_kwargs)
-    x, x_len, y, u = gen_egs(vocab_size, batch_size, num_channels=num_channels)
-    z, _, _, _ = mvdr_att_asr(x, x_len, y)
+    x, x_len, y, y_len, u = gen_egs(vocab_size,
+                                    batch_size,
+                                    num_channels=num_channels)
+    z, _, _, _ = mvdr_att_asr(x, x_len, y, y_len)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -371,8 +375,10 @@ def test_beam_att(enh_type, enh_kwargs):
         enc_kwargs=default_rnn_enc_kwargs,
         dec_dim=512,
         dec_kwargs=default_rnn_dec_kwargs)
-    x, x_len, y, u = gen_egs(vocab_size, batch_size, num_channels=num_channels)
-    z, _, _, _ = beam_att_asr(x, x_len, y)
+    x, x_len, y, y_len, u = gen_egs(vocab_size,
+                                    batch_size,
+                                    num_channels=num_channels)
+    z, _, _, _ = beam_att_asr(x, x_len, y, y_len)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -410,8 +416,8 @@ def test_att_encoder(enc_type, enc_kwargs):
                        dec_type="rnn",
                        dec_dim=512,
                        dec_kwargs=default_rnn_dec_kwargs)
-    x, x_len, y, u = gen_egs(vocab_size, batch_size)
-    z, _, _, _ = att_asr(x, x_len, y)
+    x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
+    z, _, _, _ = att_asr(x, x_len, y, y_len)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -447,8 +453,8 @@ def test_xfmr_encoder(enc_type, enc_kwargs):
                         enc_kwargs=enc_kwargs,
                         dec_type="xfmr_abs",
                         dec_kwargs=default_xfmr_dec_kwargs)
-    x, x_len, y, u = gen_egs(vocab_size, batch_size)
-    z, _, _, _ = xfmr_asr(x, x_len, y)
+    x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
+    z, _, _, _ = xfmr_asr(x, x_len, y, y_len)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -489,8 +495,7 @@ def test_common_transducer(enc_type, enc_kwargs):
                     enc_proj=None if enc_type in xfmr_encoders else 512,
                     enc_kwargs=enc_kwargs,
                     dec_kwargs=dec_kwargs)
-    x, x_len, y, u = gen_egs(vocab_size, batch_size)
-    y_len = th.randint(u // 2, u, (batch_size,))
+    x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
     z, _ = rnnt(x, x_len, y, y_len)
     assert z.shape[2:] == th.Size([u + 1, vocab_size])
 
@@ -531,8 +536,6 @@ def test_xfmr_transducer(enc_type, enc_kwargs):
                          enc_proj=512,
                          enc_kwargs=enc_kwargs,
                          dec_kwargs=dec_kwargs)
-    x, x_len, y, u = gen_egs(vocab_size, batch_size)
-    y_len = th.randint(u // 2, u, (batch_size,))
-    y_len[0] = u
+    x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
     z, _ = xfmr_rnnt(x, x_len, y, y_len)
     assert z.shape[2:] == th.Size([u + 1, vocab_size])

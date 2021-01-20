@@ -16,25 +16,24 @@ PosEncodings = Register("pos_encodings")
 def get_xfmr_pose(enc_type: str,
                   dim: int,
                   nhead: int = 4,
+                  radius: int = 16,
                   dropout: float = 0.1,
-                  scale_embed: bool = False,
-                  radius: int = 16) -> nn.Module:
+                  scale_embed: bool = False) -> nn.Module:
     """
     Return position encodings layer
     Args:
         enc_type (str): transformer encoder type, {xfmr|cfmr}_{abs|rel|xl}
     """
-    suffix = enc_type.split("_")[-1]
-    if suffix == "abs":
-        return InputSinPosEncoding(dim,
-                                   dropout=dropout,
-                                   scale_embed=scale_embed)
-    elif suffix == "rel":
-        return RelPosEncoding(dim // nhead, dropout=dropout, radius=radius)
-    elif suffix == "xl":
-        return SinPosEncoding(dim, dropout=dropout)
-    else:
+    pose = enc_type.split("_")[-1]
+    if pose not in PosEncodings:
         raise ValueError(f"Unsupported enc_type: {enc_type}")
+    pose_cls = PosEncodings[pose]
+    if pose == "abs":
+        return pose_cls(dim, dropout=dropout, scale_embed=scale_embed)
+    elif pose == "rel":
+        return pose_cls(dim // nhead, dropout=dropout, radius=radius)
+    else:
+        return pose_cls(dim, dropout=dropout)
 
 
 def digit_shift(term: th.Tensor) -> th.Tensor:
@@ -65,7 +64,7 @@ def digit_shift(term: th.Tensor) -> th.Tensor:
     return term.transpose(1, -1)
 
 
-@PosEncodings.register("sin")
+@PosEncodings.register("xl")
 class SinPosEncoding(nn.Module):
     """
     Sinusoidals positional encoding
@@ -142,7 +141,7 @@ class RelPosEncoding(nn.Module):
         return self.dropout(self.embed(position + self.radius))
 
 
-@PosEncodings.register("inp_sin")
+@PosEncodings.register("abs")
 class InputSinPosEncoding(SinPosEncoding):
     """
     Add sinusoidals positional encodings to input features

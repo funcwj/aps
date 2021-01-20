@@ -212,5 +212,5 @@ class XfmrTransducerASR(TransducerASRBase):
         # go through feature extractor & encoder
         enc_out, enc_len, tgt_pad = self._training_prep(x_pad, x_len, y_pad)
         # N x Ti x To+1 x V
-        dec_out = self.decoder(enc_out, tgt_pad, y_len)
+        dec_out = self.decoder(enc_out, tgt_pad, y_len + 1)
         return dec_out, enc_len

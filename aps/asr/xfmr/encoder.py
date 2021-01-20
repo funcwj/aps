@@ -6,13 +6,12 @@
 import torch as th
 import torch.nn as nn
 
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict
 from aps.asr.base.attention import padding_mask
 from aps.asr.base.encoder import EncRetType
 from aps.asr.xfmr.impl import get_xfmr_encoder
 from aps.asr.xfmr.pose import get_xfmr_pose
-from aps.asr.xfmr.utils import get_xfmr_proj
-from aps.libs import Register
+from aps.asr.xfmr.proj import get_xfmr_proj
 
 
 class TransformerEncoder(nn.Module):
@@ -38,11 +37,11 @@ class TransformerEncoder(nn.Module):
                  pos_dropout: float = 0.1,
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
-                 post_norm: bool = True,
                  kernel_size: int = 16,
+                 post_norm: bool = True,
                  untie_rel: bool = True):
         super(TransformerEncoder, self).__init__()
-        self.type = enc_type
+        self.type = enc_type.split("_")[-1]
         self.proj = get_xfmr_proj(proj_layer, input_size, att_dim, proj_kwargs)
         self.pose = get_xfmr_pose(enc_type,
                                   att_dim,
@@ -77,7 +76,7 @@ class TransformerEncoder(nn.Module):
         enc_inp = self.proj(inp_pad)
         src_pad_mask = None if inp_len is None else (padding_mask(inp_len) == 1)
 
-        if self.type[-3:] == "abs":
+        if self.type == "abs":
             # enc_inp: N x Ti x D => Ti x N x D
             enc_inp = self.pose(enc_inp)
             inj_pose = None
@@ -86,7 +85,7 @@ class TransformerEncoder(nn.Module):
             enc_inp = enc_inp.transpose(0, 1)
             nframes = enc_inp.shape[0]
             # 2Ti-1 x D
-            if self.type[-3:] == "rel":
+            if self.type == "rel":
                 inj_pose = self.pose(
                     th.arange(-nframes + 1, nframes, device=enc_inp.device))
             else:

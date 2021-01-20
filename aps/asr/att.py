@@ -22,10 +22,8 @@ from aps.asr.xfmr.impl import TransformerEncoderLayers
 from aps.asr.base.attention import att_instance
 from aps.libs import ApsRegisters
 
-AttASROutputType = Tuple[th.Tensor, th.Tensor, Optional[th.Tensor],
-                         Optional[th.Tensor]]
-XfmrASROutputType = Tuple[th.Tensor, None, Optional[th.Tensor],
-                          Optional[th.Tensor]]
+ASROutputType = Tuple[th.Tensor, Optional[th.Tensor], Optional[th.Tensor],
+                      Optional[th.Tensor]]
 
 
 class EncDecASRBase(nn.Module):
@@ -114,9 +112,8 @@ class EncDecASRBase(nn.Module):
         # N x Ti x D or Ti x N x D (for xfmr)
         return enc_out if batch_first else enc_out.transpose(0, 1)
 
-    def _training_prep(
-        self, x_pad: th.Tensor, x_len: Optional[th.Tensor], y_pad: th.Tensor
-    ) -> Tuple[th.Tensor, Optional[th.Tensor], th.Tensor, th.Tensor]:
+    def _training_prep(self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
+                       y_pad: th.Tensor) -> ASROutputType:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -185,12 +182,14 @@ class AttASR(EncDecASRBase):
                 x_pad: th.Tensor,
                 x_len: Optional[th.Tensor],
                 y_pad: th.Tensor,
-                ssr: float = 0) -> AttASROutputType:
+                y_len: Optional[th.Tensor],
+                ssr: float = 0) -> ASROutputType:
         """
         Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
             y_pad: N x To
+            y_len: N or None, not used here
             ssr: schedule sampling rate
         Return:
             outs: N x (To+1) x V
@@ -297,12 +296,14 @@ class XfmrASR(EncDecASRBase):
                 x_pad: th.Tensor,
                 x_len: Optional[th.Tensor],
                 y_pad: th.Tensor,
-                ssr: float = 0) -> XfmrASROutputType:
+                y_len: Optional[th.Tensor],
+                ssr: float = 0) -> ASROutputType:
         """
         Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
             y_pad: N x To
+            y_len: N or None
             ssr: not used here, left for future
         Return:
             outs: N x (To+1) x V
@@ -311,7 +312,7 @@ class XfmrASR(EncDecASRBase):
         enc_out, enc_len, enc_ctc, tgt_pad = self._training_prep(
             x_pad, x_len, y_pad)
         # N x To+1 x D
-        dec_out = self.decoder(enc_out, enc_len, tgt_pad)
+        dec_out = self.decoder(enc_out, enc_len, tgt_pad, y_len + 1)
         return dec_out, None, enc_ctc, enc_len
 
     def greedy_search(self,

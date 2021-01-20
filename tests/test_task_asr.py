@@ -31,7 +31,7 @@ att_dec_kwargs = {
     "rnn_hidden": 512,
     "rnn_dropout": 0.1,
     "input_feeding": True,
-    "vocab_embeded": True
+    "onehot_embed": False
 }
 
 rnnt_dec_kwargs = {

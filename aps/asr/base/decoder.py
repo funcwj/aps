@@ -29,9 +29,9 @@ class PyTorchRNNDecoder(nn.Module):
                  rnn_dropout: float = 0.0,
                  emb_dropout: float = 0.0,
                  input_feeding: bool = False,
-                 vocab_embeded: bool = True) -> None:
+                 onehot_embed: bool = False) -> None:
         super(PyTorchRNNDecoder, self).__init__()
-        if vocab_embeded:
+        if not onehot_embed:
             self.vocab_embed = nn.Sequential(
                 nn.Embedding(vocab_size, rnn_hidden), nn.Dropout(p=emb_dropout))
             input_size = enc_proj + rnn_hidden

@@ -155,6 +155,7 @@ class TorchTransformerDecoder(nn.Module):
              enc_out: th.Tensor,
              tgt_pad: th.Tensor,
              enc_len: Optional[th.Tensor] = None,
+             tgt_len: Optional[th.Tensor] = None,
              pre_emb: Optional[th.Tensor] = None,
              out_idx: Optional[int] = None) -> Tuple[th.Tensor]:
         """
@@ -169,7 +170,8 @@ class TorchTransformerDecoder(nn.Module):
         """
         # N x Ti
         offset = 0 if pre_emb is None else pre_emb.shape[0]
-        memory_mask = None if enc_len is None else (padding_mask(enc_len) == 1)
+        mem_pad_mask = None if enc_len is None else (padding_mask(enc_len) == 1)
+        tgt_pad_mask = None if tgt_len is None else (padding_mask(tgt_len) == 1)
         tgt_mask = prep_sub_mask(tgt_pad.shape[-1] + offset,
                                  device=tgt_pad.device)
         # N x T x E
@@ -183,7 +185,9 @@ class TorchTransformerDecoder(nn.Module):
         dec_out = self.decoder(tgt_emb,
                                enc_out,
                                tgt_mask=tgt_mask,
-                               memory_key_padding_mask=memory_mask)
+                               memory_mask=None,
+                               tgt_key_padding_mask=tgt_pad_mask,
+                               memory_key_padding_mask=mem_pad_mask)
         if out_idx is not None:
             dec_out = dec_out[out_idx]
         # To+1 x N x V
@@ -191,17 +195,19 @@ class TorchTransformerDecoder(nn.Module):
         return dec_out, tgt_emb
 
     def forward(self, enc_out: th.Tensor, enc_len: Optional[th.Tensor],
-                tgt_pad: th.Tensor) -> th.Tensor:
+                tgt_pad: th.Tensor, tgt_len: Optional[th.Tensor]) -> th.Tensor:
         """
         Args:
             enc_out (Tensor): N x T x D
             enc_len (Tensor): N or None
             tgt_pad (Tensor): N x To
+            tgt_len (Tensor): N or None
         Return:
             dec_out (Tensor): N x T x D
         """
         # T x N x V
         dec_out, _ = self.step(enc_out.transpose(0, 1),
                                tgt_pad,
-                               enc_len=enc_len)
+                               enc_len=enc_len,
+                               tgt_len=tgt_len)
         return dec_out.transpose(0, 1)

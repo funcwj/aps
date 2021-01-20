@@ -162,6 +162,7 @@ class CtcXentHybridTask(Task):
         outs, _, ctc_enc, enc_len = self.nnet(egs["src_pad"],
                                               egs["src_len"],
                                               tgt_pad,
+                                              egs["tgt_len"],
                                               ssr=ssr)
         # compute loss
         if self.lsm_factor > 0:
