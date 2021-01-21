@@ -110,7 +110,7 @@ class PyTorchRNNDecoder(DecoderBase):
 
 class TorchTransformerDecoder(DecoderBase):
     """
-    Vanilla transformer encoder as transducer decoder
+    Vanilla Transformer encoder as transducer decoder
     """
 
     def __init__(self,

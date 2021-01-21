@@ -49,11 +49,11 @@ def _get_relative_uv(shape: Tuple[int],
     """
     Return rel_{u,v} used in transformer-XL's MHSA
     """
-    if init not in ["xavier", "uniform"]:
+    if init not in ["xavier", "normal"]:
         raise ValueError(f"Unknown init method: {init}")
     rel_mat = nn.Parameter(th.Tensor(*shape))
     if init == "xavier":
-        nn.init.xavier_normal_(rel_mat)
+        nn.init.xavier_uniform_(rel_mat)
     if init == "uniform":
         nn.init.normal_(rel_mat, std=std)
     return rel_mat
@@ -490,7 +490,6 @@ class ApsConformerEncoderLayer(nn.Module):
                       d_model,
                       kernel_size * 2 + 1,
                       groups=d_model,
-                      stride=1,
                       padding=kernel_size), nn.BatchNorm1d(d_model),
             _get_activation_fn(activation), nn.Conv1d(d_model, d_model, 1),
             nn.Dropout(p=dropout))

@@ -73,3 +73,16 @@ def rnnlm_score(rnnlm: nn.Module, back_point: th.Tensor, prev_token: th.Tensor,
     score = tf.log_softmax(lmout[:, 0], dim=-1)
     # return state & score
     return (score, state)
+
+
+def lm_score_impl(lm: LmType, back_point: th.Tensor, prev_token: th.Tensor,
+                  state):
+    """
+    Get ngram/rnnlm score (wraps {rnnlm|ngram}_score functions)
+    """
+    if isinstance(lm, nn.Module):
+        return rnnlm_score(lm, back_point, prev_token, state)
+    elif isinstance(lm, NgramLM):
+        return ngram_score(lm, back_point, prev_token, state)
+    else:
+        raise TypeError(f"Unsupported LM type: {type(lm)}")

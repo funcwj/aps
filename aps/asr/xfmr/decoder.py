@@ -116,7 +116,7 @@ class TransformerDncoderLayer(nn.Module):
 
 class TorchTransformerDecoder(nn.Module):
     """
-    Wrapper for pytorch's Transformer Decoder
+    Vanilla Transformer decoder (now using absolute position encodings)
     """
 
     def __init__(self,
@@ -185,7 +185,6 @@ class TorchTransformerDecoder(nn.Module):
         dec_out = self.decoder(tgt_emb,
                                enc_out,
                                tgt_mask=tgt_mask,
-                               memory_mask=None,
                                tgt_key_padding_mask=tgt_pad_mask,
                                memory_key_padding_mask=mem_pad_mask)
         if out_idx is not None:

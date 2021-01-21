@@ -11,19 +11,17 @@ import torch.nn as nn
 
 import torch.nn.functional as tf
 
-# for RNNT loss, two options:
+# for RNNT loss, we have two options:
 # https://github.com/HawkAaron/warp-transducer
 # https://github.com/1ytic/warp-rnnt
 try:
     from warp_rnnt import rnnt_loss as warp_rnnt_objf
-    warp_rnnt_available = True
 except ImportError:
-    warp_rnnt_available = False
+    warp_rnnt_objf = None
 try:
     from warprnnt_pytorch import rnnt_loss as warprnnt_pt_objf
-    warprnnt_pt_available = True
 except ImportError:
-    warprnnt_pt_available = False
+    warprnnt_pt_objf = None
 
 from typing import Tuple, Dict, NoReturn, Optional
 from aps.task.base import Task
@@ -60,7 +58,7 @@ def prep_asr_label(
         pad_value: int,
         eos_value: int = -1) -> Tuple[th.Tensor, Optional[th.Tensor]]:
     """
-    Process asr targets for forward and loss computation
+    Process asr label for loss and accu computation
     Args:
         tgt_pad: padding target labels
         tgt_len: target length
@@ -228,16 +226,17 @@ class TransducerTask(Task):
         """
         Setup RNNT loss impl in the backend
         """
-        if interface not in ["warp_rnnt", "warprnnt_pytorch"]:
+        api = {
+            "warp_rnnt": warp_rnnt_objf,
+            "warprnnt_pytorch": warprnnt_pt_objf
+        }
+        if interface not in api:
             raise ValueError(f"Unsupported RNNT interface: {interface}")
-        if interface == "warp_rnnt" and not warp_rnnt_available:
-            raise ImportError("\"from warp_rnnt import rnnt_loss\" failed")
-        if interface == "warprnnt_pytorch" and not warprnnt_pt_available:
-            raise ImportError(
-                "\"from warprnnt_pytorch import rnnt_loss\" failed")
         self.interface = interface
-        self.rnnt_objf = (warp_rnnt_objf
-                          if interface == "warp_rnnt" else warprnnt_pt_objf)
+        self.rnnt_objf = api[interface]
+        if self.rnnt_objf is None:
+            raise RuntimeError(f"import {interface} failed ..., " +
+                               "please check python envrionments")
 
     def forward(self, egs: Dict) -> Dict:
         """

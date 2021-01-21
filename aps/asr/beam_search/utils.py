@@ -215,9 +215,13 @@ class BeamTracker(BaseBeamTracker):
     def __init__(self, param: BeamSearchParam) -> None:
         super(BeamTracker, self).__init__(param)
         init_sos = th.tensor([param.sos] * param.beam_size, device=param.device)
+        # decoded sequence upto current step
         self.trans = init_sos[:, None]
+        # decoded token at each time step (unordered)
         self.token = [init_sos]
+        # traceback point at each time step
         self.point = [th.tensor(range(param.beam_size), device=param.device)]
+        # decoding score (upto current step)
         self.score = th.zeros(param.beam_size, device=param.device)
         self.hypos = []
         self.auto_stop = False

@@ -514,8 +514,10 @@ class Trainer(object):
         else:
             self.ss_scheduler = None
 
-        self.num_params = sum(
-            [param.nelement() for param in task.nnet.parameters()]) / 10.0**6
+        # only trainable parameters
+        self.num_params = sum([
+            p.nelement() for p in task.nnet.parameters() if p.requires_grad
+        ]) / 10.0**6
         # logging
         if rank is None:
             self.reporter.log(f"Load model to GPU:{device_ids[0]}, " +
@@ -528,7 +530,8 @@ class Trainer(object):
         self.reporter.log(
             f"Track the metrics during training: {report_metrics}, " +
             f"reduction = {reduction_tag}")
-        self.reporter.log(f"Early stop detected on metric: {self.stop_on}")
+        self.reporter.log(f"Early stop detected on metric: {self.stop_on}, " +
+                          f"#epochs = {no_impr}")
         if clip_gradient:
             self.reporter.log(f"Clip gradient if over {clip_gradient} L2 norm")
         if acmu_gradient > 1:

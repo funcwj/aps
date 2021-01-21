@@ -19,7 +19,6 @@ class TorchXfmrLM(nn.Module):
     """
 
     def __init__(self,
-                 embed_size: int = 256,
                  vocab_size: int = 40,
                  att_dim: int = 512,
                  nhead: int = 8,
@@ -30,8 +29,6 @@ class TorchXfmrLM(nn.Module):
                  ffn_dropout: float = 0.1,
                  num_layers: int = 6) -> None:
         super(TorchXfmrLM, self).__init__()
-        if embed_size != att_dim:
-            raise ValueError("Need embed_size == att_dim")
         self.vocab_embed = nn.Embedding(vocab_size, att_dim)
         self.abs_pos_enc = get_xfmr_pose("xfmr_abs",
                                          att_dim,

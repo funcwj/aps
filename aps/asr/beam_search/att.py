@@ -11,7 +11,7 @@ import torch.nn.functional as tf
 
 from typing import Optional, List, Dict
 from aps.asr.beam_search.utils import BeamSearchParam, BeamTracker, BatchBeamTracker
-from aps.asr.beam_search.lm import rnnlm_score, ngram_score, adjust_hidden, LmType
+from aps.asr.beam_search.lm import lm_score_impl, adjust_hidden, LmType
 from aps.utils import get_logger
 
 logger = get_logger(__name__)
@@ -102,12 +102,6 @@ def beam_search(decoder: nn.Module,
         raise RuntimeError("Function step should defined in decoder network")
     if beam_size > decoder.vocab_size:
         raise RuntimeError(f"Beam size({beam_size}) > vocabulary size")
-
-    if lm:
-        if isinstance(lm, nn.Module):
-            lm_score_impl = rnnlm_score
-        else:
-            lm_score_impl = ngram_score
 
     min_len = max(min_len, int(min_len_ratio * T))
     max_len = min(max_len, int(max_len_ratio * T))
@@ -203,12 +197,6 @@ def beam_search_batch(decoder: nn.Module,
         raise RuntimeError("Function step should defined in decoder network")
     if beam_size > decoder.vocab_size:
         raise RuntimeError(f"Beam size({beam_size}) > vocabulary size")
-
-    if lm:
-        if isinstance(lm, nn.Module):
-            lm_score_impl = rnnlm_score
-        else:
-            lm_score_impl = ngram_score
 
     N, T, D_enc = enc_out.shape
     min_len = [

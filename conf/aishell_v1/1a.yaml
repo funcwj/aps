@@ -6,12 +6,13 @@ nnet_conf:
   enc_type: "concat"
   enc_proj: 512
   enc_kwargs:
-    conv1d:
-      out_features: 512
-      dim: 512
+    conv2d:
+      channel: 48
+      kernel_size: 3
       num_layers: 3
-      stride: [2, 2, 2]
-      dilation: [1, 1, 2]
+      out_features: -1
+      padding: 1
+      stride: 2
     pytorch_rnn:
       rnn: "lstm"
       num_layers: 3
@@ -66,11 +67,10 @@ trainer_conf:
   ss_scheduler: "linear"
   ss_scheduler_kwargs:
     ssr: 0.2
-    epoch_beg: 10
-    epoch_end: 26
+    epochs: [10, 26]
     update_interval: 4
-  no_impr: 6
-  no_impr_thres: 0.2
+  no_impr: 10
+  no_impr_thres: 0.01
   clip_gradient: 5
   report_metrics: ["loss", "accu", "@ctc"]
   stop_criterion: "accu"
