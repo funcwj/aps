@@ -73,9 +73,9 @@ class SinPosEncoding(nn.Module):
     def __init__(self, embed_dim: int, dropout: float = 0.1) -> None:
         super(SinPosEncoding, self).__init__()
         # D//2: 1 / (10000 ** (torch.arange(0.0, embed_dim, 2.0) / embed_dim))
-        self.div_term = nn.Parameter(th.exp(
-            th.arange(0, embed_dim, 2.0) * (-math.log(10000.0) / embed_dim)),
-                                     requires_grad=False)
+        div_term = th.exp(-math.log(10000.0) * th.arange(0, embed_dim, 2.0) /
+                          embed_dim)
+        self.div_term = nn.Parameter(div_term, requires_grad=False)
         self.dropout = nn.Dropout(p=dropout)
 
     def _get_sin_pos_enc(self, position: th.Tensor) -> th.Tensor:

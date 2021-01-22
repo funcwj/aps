@@ -307,5 +307,6 @@ class LmXentTask(Task):
         # check coding error
         assert den == egs["#tok"]
         # ppl is derived from xent, so we pass loss to it
-        stats = {"accu": accu, "loss": loss, "@ppl": loss.item()}
+        ppl = loss if self.reduction == "mean" else loss * pred.shape[0] / den
+        stats = {"accu": accu, "loss": loss, "@ppl": ppl.item()}
         return stats

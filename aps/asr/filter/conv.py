@@ -10,7 +10,7 @@ import torch.nn.functional as tf
 
 from typing import Optional, Union
 
-from aps.transform.utils import init_melfilter
+from aps.transform.utils import mel_filter
 from aps.asr.base.encoder import PyTorchRNNEncoder
 from aps.libs import Register
 from aps.cplx import ComplexTensor
@@ -105,7 +105,7 @@ class TimeInvariantFilter(nn.Module):
             self.conv.imag.data = w[1]
         self.proj = nn.Linear(num_bins, spectra_filters, bias=False)
         if spectra_init == "mel":
-            mel_filter = init_melfilter(None, num_bins=num_bins)
+            mel_filter = mel_filter(None, num_bins=num_bins)
             self.proj.weight.data = mel_filter
         self.norm = nn.BatchNorm2d(spatial_filters) if batchnorm else None
         self.B = spatial_filters
@@ -211,8 +211,8 @@ class TimeInvariantAttFilter(nn.Module):
 
         self.proj = nn.Linear(num_bins, spectra_filters, bias=False)
         if spectra_init == "mel":
-            mel_filter = init_melfilter(num_bins)
-            self.proj.weight.data = mel_filter
+            mel_matrix = mel_filter(None, num_bins=num_bins)
+            self.proj.weight.data = mel_matrix
         self.norm = nn.BatchNorm1d(spectra_filters) if batchnorm else None
         self.B = spatial_filters
         self.C = num_channels

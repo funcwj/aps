@@ -18,13 +18,13 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Optional, Union, Tuple
-from aps.transform.utils import STFT, init_melfilter, splice_feature, speed_perturb_filter
+from aps.transform.utils import STFT, mel_filter, splice_feature, speed_perturb_filter
 from aps.transform.augment import tf_mask, perturb_speed
 from aps.const import EPSILON, MAX_INT16
 from aps.libs import ApsRegisters
 from aps.cplx import ComplexTensor
 
-from scipy.fftpack import dct
+from scipy.fftpack import dct as scipy_dct
 from kaldi_python_io.functional import read_kaldi_mat
 
 AsrReturnType = Union[th.Tensor, Optional[th.Tensor]]
@@ -295,6 +295,7 @@ class MelTransform(nn.Module):
         num_mels: number of the mel bands
         fmin: lowest frequency (in Hz)
         fmax: highest frequency (in Hz)
+        mel_filter: if not "", load mel filter from this
         requires_grad: make it trainable or not
     """
 
@@ -305,26 +306,37 @@ class MelTransform(nn.Module):
                  num_mels: int = 80,
                  fmin: float = 0.0,
                  fmax: Optional[float] = None,
+                 mel_matrix: str = "",
+                 coeff_norm: bool = False,
                  requires_grad: bool = False) -> None:
         super(MelTransform, self).__init__()
-        # num_mels x (N // 2 + 1)
-        filters = init_melfilter(frame_len,
+        if mel_matrix:
+            # pass existed tensor for initialization
+            filters = th.load(mel_matrix)
+        else:
+            # NOTE: the following mel matrix is similiar (not equal to) with
+            #       the kaldi results
+            filters = mel_filter(frame_len,
                                  round_pow_of_two=round_pow_of_two,
                                  sr=sr,
                                  num_mels=num_mels,
                                  fmax=fmax,
-                                 fmin=fmin)
+                                 fmin=fmin,
+                                 norm=coeff_norm)
         self.num_mels, self.num_bins = filters.shape
+        # num_mels x (N // 2 + 1)
         self.filters = nn.Parameter(filters, requires_grad=requires_grad)
         self.fmin = fmin
         self.fmax = sr // 2 if fmax is None else fmax
+        self.init = mel_filter if mel_filter else "librosa"
 
     def dim(self) -> int:
         return self.num_mels
 
     def extra_repr(self) -> str:
-        return ("fmin={0}, fmax={1}, mel_filter={2[0]}x{2[1]}".format(
-            self.fmin, self.fmax, self.filters.shape))
+        shape = self.filters.shape
+        return (f"fmin={self.fmin}, fmax={self.fmax}, " +
+                f"mel_filter={shape[0]}x{shape[1]}, init={self.init}")
 
     def forward(self, linear: th.Tensor) -> th.Tensor:
         """
@@ -390,12 +402,12 @@ class DiscreteCosineTransform(nn.Module):
         super(DiscreteCosineTransform, self).__init__()
         self.lifter = lifter
         self.num_ceps = num_ceps
-
+        # num_mels x num_ceps
+        dct_mat = scipy_dct(th.eye(num_mels).numpy(),
+                            norm="ortho")[:, :num_ceps]
         # num_ceps x num_mels
-        self.dct = nn.Parameter(th.tensor(dct(th.eye(num_mels).numpy(),
-                                              norm="ortho")[:num_ceps],
-                                          dtype=th.float32),
-                                requires_grad=False)
+        # NOTE: DCT matrix is compatiable with kaldi
+        self.dct = nn.Parameter(th.from_numpy(dct_mat.T), requires_grad=False)
         if lifter > 0:
             cepstral_lifter = 1 + lifter * 0.5 * th.sin(
                 math.pi * th.arange(1, 1 + num_ceps) / lifter)
@@ -721,9 +733,11 @@ class FeatureTransform(nn.Module):
                  speed_perturb: str = "0.9,1.0,1.1",
                  log_lower_bound: float = 0,
                  num_mels: int = 80,
-                 num_ceps: int = 13,
+                 mel_matrix: str = "",
+                 mel_coeff_norm: bool = False,
                  min_freq: int = 0,
                  max_freq: Optional[int] = None,
+                 num_ceps: int = 13,
                  lifter: float = 0,
                  aug_prob: float = 0,
                  aug_maxp_time: float = 0.5,
@@ -763,6 +777,8 @@ class FeatureTransform(nn.Module):
             "fmin": min_freq,
             "fmax": max_freq,
             "num_mels": num_mels,
+            "coeff_norm": mel_coeff_norm,
+            "mel_matrix": mel_matrix,
             "requires_grad": requires_grad
         }
         self.spectra_index = -1

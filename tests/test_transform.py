@@ -153,6 +153,7 @@ def debug_visualize_feature():
                              aug_time_args=(100, 1),
                              aug_mask_zero=False)
     feats, _ = transform(th.from_numpy(egs1_wav[None, ...]), None)
+    print(transform)
     from aps.plot import plot_feature
     plot_feature(feats[0].numpy(), "egs")
 

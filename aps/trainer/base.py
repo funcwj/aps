@@ -888,7 +888,8 @@ class Trainer(object):
                         break
             if stop:
                 break
-            self.reporter.log("Finished one epoch on training set")
+            self.reporter.log(
+                f"Finished one epoch on training set (step = {self.cur_step})")
         return self.cur_epoch
 
     def run(self,
@@ -904,6 +905,7 @@ class Trainer(object):
         self.reporter.log(
             f"Number of batches (train/valid): {trn_batches}/{dev_batches}")
         self.reporter.log(f"Training epochs: {num_epochs}")
+        timer = SimpleTimer()
         self.prep_run(dev_loader)
         if eval_interval > 0:
             done_epoch = self.run_in_batch(trn_loader,
@@ -916,5 +918,7 @@ class Trainer(object):
                                            dev_loader,
                                            num_epochs=num_epochs)
         self.average_checkpoints()
+        hours = timer.elapsed() / 60
         self.reporter.log(
-            f"Training for {done_epoch:d}/{num_epochs:d} epochs done!")
+            f"Training for {done_epoch:d}/{num_epochs:d} epochs " +
+            f"done (cost {hours} hours)")
