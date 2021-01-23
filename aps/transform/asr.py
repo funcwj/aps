@@ -328,7 +328,7 @@ class MelTransform(nn.Module):
         self.filters = nn.Parameter(filters, requires_grad=requires_grad)
         self.fmin = fmin
         self.fmax = sr // 2 if fmax is None else fmax
-        self.init = mel_filter if mel_filter else "librosa"
+        self.init = mel_matrix if mel_matrix else "librosa"
 
     def dim(self) -> int:
         return self.num_mels

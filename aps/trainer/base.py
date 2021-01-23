@@ -921,4 +921,4 @@ class Trainer(object):
         hours = timer.elapsed() / 60
         self.reporter.log(
             f"Training for {done_epoch:d}/{num_epochs:d} epochs " +
-            f"done (cost {hours} hours)")
+            f"done (cost {hours:.2f} hours)")

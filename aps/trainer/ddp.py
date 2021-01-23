@@ -92,8 +92,10 @@ class DdpTrainer(Trainer):
             self.reporter.log(
                 f"DDP: using distributed data parallel (DDP), rank={self.rank}, "
                 + f"world_size={dist.world_size()}")
+            # find_unused_parameters=True helps us report potential code errors
             self.task = DistributedDataParallel(self.task,
-                                                device_ids=[self.rank])
+                                                device_ids=[self.rank],
+                                                find_unused_parameters=False)
         else:
             self.distributed = False
 

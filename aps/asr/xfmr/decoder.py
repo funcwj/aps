@@ -81,34 +81,34 @@ class TransformerDncoderLayer(nn.Module):
         Return
             out (Tensor): T x N x D
         """
-        inp = tgt
+        skip_add = tgt
         if self.pre_norm:
             tgt = self.norm1(tgt)
-        tgt2 = self.self_attn(tgt,
-                              tgt,
-                              tgt,
-                              attn_mask=tgt_mask,
-                              key_padding_mask=tgt_key_padding_mask)[0]
-        tgt = inp + self.dropout1(tgt2)
+        tgt = self.self_attn(tgt,
+                             tgt,
+                             tgt,
+                             attn_mask=tgt_mask,
+                             key_padding_mask=tgt_key_padding_mask)[0]
+        tgt = skip_add + self.dropout1(tgt)
         if not self.pre_norm:
             tgt = self.norm1(tgt)
 
-        inp = tgt
+        skip_add = tgt
         if self.pre_norm:
             tgt = self.norm2(tgt)
-        tgt2 = self.multihead_attn(tgt,
-                                   memory,
-                                   memory,
-                                   attn_mask=memory_mask,
-                                   key_padding_mask=memory_key_padding_mask)[0]
-        tgt = inp + self.dropout2(tgt2)
+        tgt = self.multihead_attn(tgt,
+                                  memory,
+                                  memory,
+                                  attn_mask=memory_mask,
+                                  key_padding_mask=memory_key_padding_mask)[0]
+        tgt = skip_add + self.dropout2(tgt)
         if not self.pre_norm:
             tgt = self.norm2(tgt)
 
-        inp = tgt
+        skip_add = tgt
         if self.pre_norm:
             tgt = self.norm3(tgt)
-        tgt = inp + self.feedforward(tgt2)
+        tgt = skip_add + self.feedforward(tgt)
         if not self.pre_norm:
             tgt = self.norm3(tgt)
         return tgt

@@ -148,22 +148,27 @@ def debug_visualize_feature():
                              frame_hop=160,
                              use_power=True,
                              pre_emphasis=0.97,
+                             num_mels=80,
+                             min_freq=20,
                              aug_prob=1,
+                             norm_per_band=True,
                              aug_freq_args=(40, 1),
                              aug_time_args=(100, 1),
-                             aug_mask_zero=False)
+                             aug_mask_zero=False,
+                             delta_as_channel=True)
     feats, _ = transform(th.from_numpy(egs1_wav[None, ...]), None)
     print(transform)
     from aps.plot import plot_feature
-    plot_feature(feats[0].numpy(), "egs")
+    plot_feature(feats[0, 1].numpy(), "egs")
 
 
 def debug_speed_perturb():
     from aps.loader import write_audio
     speed_perturb = SpeedPerturbTransform(sr=16000)
+    egs = read_audio("data/transform/egs1.wav", sr=16000, norm=False)
     for i in range(12):
-        egs2 = speed_perturb(th.from_numpy(egs1_wav[None, :]))
-        write_audio(f"egs1-{i + 1}.wav", egs2[0].numpy())
+        egs2 = speed_perturb(th.from_numpy(egs[None, :]))
+        write_audio(f"egs1-{i + 1}.wav", egs2[0].numpy(), norm=False)
 
 
 if __name__ == "__main__":

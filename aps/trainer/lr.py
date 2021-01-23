@@ -44,28 +44,32 @@ class MultiStepLR(lr.MultiStepLR):
 @LrScheduler.register("warmup_noam_lr")
 class NoamLR(lr._LRScheduler):
     """
-    Lr schuduler for Transformer:
+    Lr schuduler for Transformer
 
-    const = factor * transformer_dim^{-0.5}
-    1) cur_step > warmup:   const * cur_step**(-0.5)
-    2) cur_step < warmup:   const * cur_step/warmup * warmup**(-0.5)
-    3) cur_step = warmup:   const * warmup**(-0.5)
+    const = factor * transformer_dim^(-0.5)
+    1) cur_step > warmup:   const * cur_step^(-0.5)
+    2) cur_step < warmup:   const * cur_step/warmup * warmup^(-0.5)
+    3) cur_step = warmup:   const * warmup^(-0.5)
+
+    The peak value of the learning rate is
+        peak_lr = factor * (transformer_dim * warmup)^(-0.5)
 
     Args:
         optimizer: optimizer object in torch.optim.Optimizer
-        transformer_dim: transformer's embedding dim
+        transformer_dim: transformer's model dimension
         warmup: warmup steps
-        factor: scale factor on learning rate
+        peak_lr: user defined peak learning rate if > 0
     """
 
     def __init__(self,
                  optimizer: Optimizer,
                  transformer_dim: int = 512,
-                 factor: float = 1,
+                 peak_lr: float = -1,
                  warmup: int = 8000,
                  last_epoch: int = -1) -> None:
         self.warmup = warmup
-        self.const = factor * transformer_dim**(-0.5)
+        self.const = transformer_dim**(
+            -0.5) if peak_lr <= 0 else peak_lr * warmup**0.5
         super(NoamLR, self).__init__(optimizer, last_epoch=last_epoch)
 
     def get_lr(self, step: Optional[int] = None) -> List[float]:

@@ -786,6 +786,7 @@ def get_xfmr_encoder(name: str,
         if not untie_rel:
             rel_u = _get_relative_uv((nhead, att_dim // nhead))
             rel_v = _get_relative_uv((nhead, att_dim // nhead))
+            print("Tie relative trainable parameters", flush=True)
         else:
             rel_u, rel_v = None, None
         enc_kwargs["rel_u"] = rel_u

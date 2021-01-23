@@ -95,7 +95,7 @@ class Conv1dProj(nn.Module):
             return None
         else:
             out_len = self.conv1.compute_outp_dim(inp_len)
-            out_len = self.conv1.compute_outp_dim(out_len)
+            out_len = self.conv2.compute_outp_dim(out_len)
             return out_len
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
@@ -131,7 +131,7 @@ class Conv2dProj(nn.Module):
         self.conv1 = Conv2d(in_channels, conv_channels)
         input_size = self.conv1.compute_outp_dim(input_size, 1)
         self.conv2 = Conv2d(conv_channels, conv_channels)
-        input_size = self.conv1.compute_outp_dim(input_size, 1)
+        input_size = self.conv2.compute_outp_dim(input_size, 1)
         self.proj = nn.Linear(input_size * conv_channels, embed_dim)
 
     def check_args(self, inp: th.Tensor) -> NoReturn:
@@ -149,7 +149,7 @@ class Conv2dProj(nn.Module):
         if inp_len is None:
             return None
         else:
-            out_len = self.conv2.compute_outp_dim(inp_len, 0)
+            out_len = self.conv1.compute_outp_dim(inp_len, 0)
             out_len = self.conv2.compute_outp_dim(out_len, 0)
             return out_len
 
