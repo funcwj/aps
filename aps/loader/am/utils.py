@@ -15,7 +15,7 @@ from aps.const import UNK_TOKEN
 
 
 def derive_indices(num_batches: int,
-                   epoch: int = 0,
+                   seed: int = 0,
                    shuffle: bool = True,
                    distributed: bool = False) -> List[int]:
     """
@@ -27,7 +27,7 @@ def derive_indices(num_batches: int,
         num_batches = num_batches * world_size
     if shuffle:
         g = th.Generator()
-        g.manual_seed(epoch)
+        g.manual_seed(seed)
         indices = th.randperm(num_batches, generator=g).tolist()
     else:
         indices = th.arange(num_batches).tolist()

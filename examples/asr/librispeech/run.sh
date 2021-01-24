@@ -79,7 +79,7 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
     --epochs $am_epochs \
     --num-workers $am_num_workers \
     --batch-size $am_batch_size \
-    --prog-interval $lm_prog_interval \
+    --prog-interval $am_prog_interval \
     --eval-interval $am_eval_interval \
     am librispeech $am_exp
 fi
@@ -115,7 +115,7 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
   ./utils/subword.sh --op "encode" --encode "piece" \
     $lm_data_dir/train.text exp/librispeech/$wp_name \
     > $lm_data_dir/external.train.token
-  awk '{$1=""; print}' data/librispeech/train/token | sed 's:^[ \t]*::g' |
+  awk '{$1=""; print}' data/librispeech/train/token | sed 's:^[ \t]*::g' \
     > $lm_data_dir/am.train.token
   cat $lm_data_dir/{external,am}.train.token > $lm_data_dir/train.token
 fi
