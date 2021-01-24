@@ -105,8 +105,8 @@ class TimeInvariantFilter(nn.Module):
             self.conv.imag.data = w[1]
         self.proj = nn.Linear(num_bins, spectra_filters, bias=False)
         if spectra_init == "mel":
-            mel_filter = mel_filter(None, num_bins=num_bins)
-            self.proj.weight.data = mel_filter
+            mel_weight = mel_filter(None, num_bins=num_bins)
+            self.proj.weight.data = mel_weight
         self.norm = nn.BatchNorm2d(spatial_filters) if batchnorm else None
         self.B = spatial_filters
         self.C = num_channels
@@ -211,8 +211,8 @@ class TimeInvariantAttFilter(nn.Module):
 
         self.proj = nn.Linear(num_bins, spectra_filters, bias=False)
         if spectra_init == "mel":
-            mel_matrix = mel_filter(None, num_bins=num_bins)
-            self.proj.weight.data = mel_matrix
+            mel_weight = mel_filter(None, num_bins=num_bins)
+            self.proj.weight.data = mel_weight
         self.norm = nn.BatchNorm1d(spectra_filters) if batchnorm else None
         self.B = spatial_filters
         self.C = num_channels
