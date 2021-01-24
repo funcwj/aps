@@ -198,7 +198,7 @@ class BatchSampler(dat.Sampler):
 
     def __iter__(self) -> Iterator[List[int]]:
         indices = derive_indices(self.num_batches,
-                                 epoch=self.epoch,
+                                 seed=self.epoch,
                                  shuffle=self.shuffle,
                                  distributed=self.distributed)
         indices = [self.batches[i] for i in indices]
