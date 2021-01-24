@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from aps.transform.utils import init_melfilter
+from aps.transform.utils import mel_filter
 from aps.transform.enh import FixedBeamformer
 from aps.asr.filter.conv import EnhFrontEnds
 from aps.cplx import ComplexTensor
@@ -207,8 +207,8 @@ class CLPFsBeamformer(nn.Module):
         else:
             self.proj = nn.Linear(num_bins, spectra_filters, bias=False)
             if spectra_init == "mel":
-                mel_filter = init_melfilter(None, num_bins=num_bins)
-                self.proj.weight.data = mel_filter
+                mel_matrix = mel_filter(None, num_bins=num_bins)
+                self.proj.weight.data = mel_matrix
         self.norm = nn.BatchNorm2d(spatial_filters) if batchnorm else None
         self.spectra_complex = spectra_complex
         # self.spatial_maxpool = spatial_maxpool

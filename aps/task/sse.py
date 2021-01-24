@@ -14,7 +14,7 @@ from typing import List, Dict, Any, Tuple, Callable, Optional
 from aps.task.base import Task
 from aps.task.objf import permu_invarint_objf, multiple_objf
 from aps.libs import ApsRegisters
-from aps.transform.utils import STFT, init_melfilter
+from aps.transform.utils import STFT, mel_filter
 
 __all__ = [
     "SisnrTask", "SnrTask", "WaTask", "LinearFreqSaTask", "LinearTimeSaTask",
@@ -480,7 +480,7 @@ class MelFreqSaTask(FreqSaTask):
                  num_mels: int = 80,
                  mel_log: int = False,
                  mel_scale: int = 1,
-                 mel_norm: bool = True,
+                 mel_norm: bool = False,
                  sr: int = 16000,
                  fmax: int = 8000) -> None:
         super(MelFreqSaTask,
@@ -492,12 +492,12 @@ class MelFreqSaTask(FreqSaTask):
                              weight=weight,
                              num_spks=num_spks,
                              description="Using L2 loss of the mel features")
-        mel = init_melfilter(None,
-                             num_bins=num_bins,
-                             sr=sr,
-                             num_mels=num_mels,
-                             fmax=fmax,
-                             norm=mel_norm)
+        mel = mel_filter(None,
+                         num_bins=num_bins,
+                         sr=sr,
+                         num_mels=num_mels,
+                         fmax=fmax,
+                         norm=mel_norm)
         self.mel = nn.Parameter(mel[..., None] * mel_scale, requires_grad=False)
         self.log = mel_log
         self.power_mag = power_mag
@@ -709,7 +709,7 @@ class MelTimeSaTask(TimeSaTask):
                  power_mag: bool = False,
                  mel_log: bool = False,
                  mel_scale: int = 1,
-                 mel_norm: bool = True,
+                 mel_norm: bool = False,
                  sr: int = 16000,
                  fmax: int = 7690) -> None:
         super(MelTimeSaTask,
@@ -725,12 +725,12 @@ class MelTimeSaTask(TimeSaTask):
                              weight=weight,
                              description="Using L2 loss on the mel "
                              "features of the waveform")
-        mel = init_melfilter(None,
-                             num_bins=num_bins,
-                             sr=sr,
-                             num_mels=num_mels,
-                             fmax=fmax,
-                             norm=mel_norm)
+        mel = mel_filter(None,
+                         num_bins=num_bins,
+                         sr=sr,
+                         num_mels=num_mels,
+                         fmax=fmax,
+                         norm=mel_norm)
         self.mel = nn.Parameter(mel[..., None] * mel_scale, requires_grad=False)
         self.log = mel_log
         self.power_mag = power_mag

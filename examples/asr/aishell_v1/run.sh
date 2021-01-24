@@ -34,6 +34,7 @@ lm_num_workers=4
 ngram=5
 
 # decoding
+eos_threshold=1
 beam_size=24
 nbest=8
 ngram=5
@@ -109,7 +110,9 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
       --nbest $nbest \
       --lm exp/aishell_v1/ngram/${ngram}gram.arpa.bin \
       --lm-weight $lm_weight \
+      --eos-threshold $eos_threshold \
       --max-len 50 \
+      --len-norm true \
       --beam-size $beam_size \
       --lm-weight $lm_weight \
       --log-suffix $name \

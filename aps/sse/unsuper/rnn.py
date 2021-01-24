@@ -7,8 +7,9 @@ import numpy as np
 import torch as th
 import torch.nn as nn
 
-from typing import Union, NoReturn, Optional
+from typing import Union, Optional
 from aps.asr.base.encoder import PyTorchRNNEncoder
+from aps.sse.base import SseBase
 from aps.const import EPSILON
 from aps.libs import ApsRegisters
 from aps.cplx import ComplexTensor
@@ -84,45 +85,32 @@ def permu_aligner(masks: np.ndarray, transpose: bool = False) -> np.ndarray:
 
 
 @ApsRegisters.sse.register("sse@rnn_enh_ml")
-class UnsupervisedRNNEnh(PyTorchRNNEncoder):
+class RNNEnhML(SseBase):
     """
     A recurrent network example for unsupervised training
     """
 
     def __init__(self,
-                 input_size=257,
-                 num_bins=257,
-                 input_project=None,
+                 input_size: int = 257,
+                 num_bins: int = 257,
+                 input_proj: Optional[int] = None,
                  enh_transform: Optional[nn.Module] = None,
                  rnn: str = "lstm",
                  num_layers: int = 3,
                  hidden: int = 512,
                  dropout: float = 0.2,
                  bidirectional: bool = False) -> None:
-        super(UnsupervisedRNNEnh, self).__init__(input_size,
-                                                 num_bins,
-                                                 rnn=rnn,
-                                                 input_project=input_project,
-                                                 num_layers=num_layers,
-                                                 hidden=hidden,
-                                                 dropout=dropout,
-                                                 bidirectional=bidirectional,
-                                                 non_linear="sigmoid")
+        super(RNNEnhML, self).__init__(enh_transform, training_mode="freq")
         assert enh_transform is not None
-        self.enh_transform = enh_transform
-
-    def check_args(self, noisy: th.Tensor, training: bool = True) -> NoReturn:
-        """
-        Check input arguments
-        """
-        if training and noisy.dim() != 3:
-            raise RuntimeError(
-                "UnsupervisedEnh expects 3D tensor (training), " +
-                f"got {noisy.dim()} instead")
-        if not training and noisy.dim() != 2:
-            raise RuntimeError(
-                "UnsupervisedEnh expects 2D tensor (training), " +
-                f"got {noisy.dim()} instead")
+        self.base_rnn = PyTorchRNNEncoder(input_size,
+                                          num_bins,
+                                          rnn=rnn,
+                                          input_project=input_proj,
+                                          num_layers=num_layers,
+                                          hidden=hidden,
+                                          dropout=dropout,
+                                          bidirectional=bidirectional,
+                                          non_linear="sigmoid")
 
     def infer(self, noisy: th.Tensor) -> th.Tensor:
         """
@@ -131,7 +119,7 @@ class UnsupervisedRNNEnh(PyTorchRNNEncoder):
         Return
             masks (Tensor): T x F
         """
-        self.check_args(noisy, training=False)
+        self.check_args(noisy, training=False, valid_dim=[2])
         with th.no_grad():
             noisy = noisy[None, ...]
             _, masks = self.forward(noisy)
@@ -155,10 +143,10 @@ class UnsupervisedRNNEnh(PyTorchRNNEncoder):
             cstft (ComplexTensor): N x C x F x T
             masks (Tensor): N x T x F
         """
-        self.check_args(noisy, training=True)
+        self.check_args(noisy, training=True, valid_dim=[3])
         # feats: N x T x F
         # cspec: N x C x F x T
         feats, cstft, _ = self.enh_transform(noisy, None)
         cstft = self._norm_abs(cstft)
-        masks, _ = super().forward(feats, None)
+        masks, _ = self.base_rnn(feats, None)
         return cstft, masks

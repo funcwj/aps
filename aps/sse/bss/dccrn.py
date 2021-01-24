@@ -6,9 +6,9 @@
 import torch as th
 import torch.nn as nn
 
-from typing import Optional, Tuple, NoReturn, List
+from typing import Optional, Tuple, List
 from aps.sse.enh.dcunet import Encoder, Decoder, parse_1dstr, parse_2dstr
-from aps.sse.utils import MaskNonLinear
+from aps.sse.base import SseBase, MaskNonLinear
 from aps.libs import ApsRegisters
 
 
@@ -136,9 +136,15 @@ class LSTMWrapper(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@dccrn")
-class DCCRN(nn.Module):
+class DCCRN(SseBase):
     """
     Deep Complex Convolutional-RNN networks
+
+    Args:
+        K, S, C: kernel, stride, padding, channel size for convolution in encoder/decoder
+        P: padding on frequency axis for convolution in encoder/decoder
+        O: output_padding on frequency axis for transposed_conv2d in decoder
+    NOTE: make sure that stride size on time axis is 1 (we do not do subsampling on time axis)
     """
 
     def __init__(self,
@@ -160,16 +166,8 @@ class DCCRN(nn.Module):
                  enh_transform: Optional[nn.Module] = None,
                  non_linear: str = "tanh",
                  training_mode: str = "time") -> None:
-        """
-        Args:
-            K, S, C: kernel, stride, padding, channel size for convolution in encoder/decoder
-            P: padding on frequency axis for convolution in encoder/decoder
-            O: output_padding on frequency axis for transposed_conv2d in decoder
-        NOTE: make sure that stride size on time axis is 1 (we do not do subsampling on time axis)
-        """
-        super(DCCRN, self).__init__()
-        if enh_transform is None:
-            raise RuntimeError("Missing configuration for enh_transform")
+        super(DCCRN, self).__init__(enh_transform, training_mode=training_mode)
+        assert enh_transform is not None
         self.cplx = cplx
         self.non_linear = MaskNonLinear(non_linear, enable="all_wo_softmax")
         self.enh_transform = enh_transform
@@ -209,7 +207,6 @@ class DCCRN(nn.Module):
                                cplx=cplx)
         self.num_spks = num_spks
         self.connection = connection
-        self.mode = training_mode
         self.share_decoder = share_decoder
 
     def sep(self,
@@ -240,14 +237,6 @@ class DCCRN(nn.Module):
                 s = decoder((sr * m, si * m), input="complex")
         return s
 
-    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
-        if not training and mix.dim() != 1:
-            raise RuntimeError("DCCRN expects 1D tensor (inference), " +
-                               f"got {mix.dim()} instead")
-        if training and mix.dim() != 2:
-            raise RuntimeError("DCCRN expects 2D tensor (training), " +
-                               f"got {mix.dim()} instead")
-
     def infer(self,
               mix: th.Tensor,
               mode: str = "time") -> Tuple[th.Tensor, List[th.Tensor]]:
@@ -257,7 +246,7 @@ class DCCRN(nn.Module):
         Return:
             Tensor: S or F x T
         """
-        self.check_args(mix, training=False)
+        self.check_args(mix, training=False, valid_dim=[1])
         with th.no_grad():
             mix = mix[None, :]
             sep = self._forward(mix, mode=mode)
@@ -312,5 +301,5 @@ class DCCRN(nn.Module):
         Return:
             Tensor: N x S or N x F x T
         """
-        self.check_args(s, training=True)
-        return self._forward(s, mode=self.mode)
+        self.check_args(s, training=True, valid_dim=[2])
+        return self._forward(s, mode=self.training_mode)

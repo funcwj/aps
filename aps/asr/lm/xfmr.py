@@ -19,7 +19,6 @@ class TorchXfmrLM(nn.Module):
     """
 
     def __init__(self,
-                 embed_size: int = 256,
                  vocab_size: int = 40,
                  att_dim: int = 512,
                  nhead: int = 8,
@@ -27,21 +26,21 @@ class TorchXfmrLM(nn.Module):
                  scale_embed: bool = False,
                  pos_dropout: float = 0.1,
                  att_dropout: float = 0.1,
+                 ffn_dropout: float = 0.1,
                  num_layers: int = 6) -> None:
         super(TorchXfmrLM, self).__init__()
-        if embed_size != att_dim:
-            raise ValueError("Need embed_size == att_dim")
         self.vocab_embed = nn.Embedding(vocab_size, att_dim)
-        self.abs_pos_enc = get_xfmr_pose("inp_sin",
+        self.abs_pos_enc = get_xfmr_pose("xfmr_abs",
                                          att_dim,
                                          dropout=pos_dropout,
                                          scale_embed=scale_embed)
-        self.encoder = get_xfmr_encoder("xfmr",
+        self.encoder = get_xfmr_encoder("xfmr_abs",
                                         num_layers,
                                         att_dim,
                                         nhead,
                                         dim_feedforward=feedforward_dim,
-                                        dropout=att_dropout)
+                                        att_dropout=att_dropout,
+                                        ffn_dropout=ffn_dropout)
         # output distribution
         self.dist = nn.Linear(att_dim, vocab_size)
         self.vocab_size = vocab_size

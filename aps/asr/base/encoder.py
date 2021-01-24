@@ -82,7 +82,7 @@ class ConcatEncoder(nn.Module):
 
 class EncoderBase(nn.Module):
     """
-    Base class for encoders
+    Base class for the common encoders
     """
 
     def __init__(self, inp_features, out_features):

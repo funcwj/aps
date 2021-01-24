@@ -7,9 +7,8 @@ nnet_conf:
   conv_kernels: 8
   conv_filters: 64
   chunk_len: 150
-  dprnn_layers: 6
-  dprnn_bi_inter: True
-  dprnn_hidden: 128
+  num_layers: 6
+  rnn_hidden: 128
 
 task: "sse@sisnr"
 

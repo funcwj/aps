@@ -57,17 +57,17 @@ The default trainer is `DdpTrainer` which could be used for both single/multi-GP
 Supported task in APS. The `Task` class is responsible for the computation of an user-specific objective function, which is defined in the `forward()` function. Actually it's still a PyTorch's `Module` class and each one should inherit from `th.nn.Module`. Currently the supported task are shown below:
 
 * `LmXentTask`: for LM training
-* `CtcXentHybridTask`: CTC & Xent multi-task training for E2E ASR
-* `TransducerTask`: for RNNT training
-* `UnsuperEnhTask`: for unsupervised multi-channel speech enhancement
-* `SisnrTask`: SiSNR loss for time domain enhancement/separation model
+* `CtcXentHybridTask`: CTC & Xent multi-task training for E2E ASR ([paper](https://arxiv.org/abs/1211.3711))
+* `TransducerTask`: for RNNT training ([paper](https://ieeexplore.ieee.org/document/8068205))
+* `UnsuperEnhTask`: for unsupervised multi-channel speech enhancement ([paper](https://arxiv.org/abs/1904.01578))
+* `SisnrTask`: SiSNR loss for time domain enhancement/separation model ([paper](https://arxiv.org/abs/1711.00541))
 * `SnrTask`: SNR loss for time domain enhancement/separation model
-* `WaTask`: waveform L1/L2 loss for time domain enhancement/separation model
-* `LinearFreqSaTask`:  spectral approximation loss for frequency domain enhancement/separation model
+* `WaTask`: waveform L1/L2 loss for time domain enhancement/separation model ([paper](https://arxiv.org/abs/1804.10204))
+* `LinearFreqSaTask`:  spectral approximation loss for frequency domain enhancement/separation model ([paper](https://ieeexplore.ieee.org/document/8540037))
 * `MelFreqSaTask`: mel domain spectral approximation loss for frequency domain enhancement/separation model
-* `LinearFreqSaTask`: spectral approximation loss for time domain enhancement/separation model
+* `LinearTimeSaTask`: spectral approximation loss for time domain enhancement/separation model
 * `MelTimeSaTask`: mel domain spectral approximation loss for time domain enhancement/separation model
-* `ComplexMappingTask`: frequency domain complex mapping objective function
+* `ComplexMappingTask`: frequency domain complex mapping objective function ([paper](https://ieeexplore.ieee.org/document/9103053))
 
 ## `aps.loader`
 
@@ -102,12 +102,11 @@ The submodule for language model & acoustic model. Currently the implemented AM 
 * `TransducerASR`: RNNT AM with RNN decoders
 * `XfmrTransducerASR`: RNNT AM with Transformer decoders
 
-The transformer implementation is kept similar style with `torch.nn` package and I put them under `aps.asr.xfmr` package. Now we have four encoders:
+The transformer implementation is kept similar style with `torch.nn` package and I put them under `aps.asr.xfmr` package. Now the `TransformerEncoder` supports the vanilla Transformer and [Conformer](https://arxiv.org/abs/2005.08100) with the following multi-head self-attention (MHSA):
 
-* `TorchTransformerEncoder`: encoder that uses transformer encoder provided in `torch.nn`
-* `RelTransformerEncoder`: transformer encoder with relative position encodings
-* `RelXLTransformerEncoder`: transformer-xl encoder
-* `ConformerEncoder`: convolution augmented transformer encoder
+* `ApsMultiheadAttention`: original MHSA proposed in "Attention is All You Need" ([paper](https://arxiv.org/abs/1706.03762))
+* `RelMultiheadAttention`: MHSA using relative position representations proposed in "Self-Attention with Relative Position Representations" ([paper](https://arxiv.org/abs/1803.02155))
+* `XlMultiheadAttention`: MHSA using relative position proposed in Transformer-XL ([paper](https://arxiv.org/abs/1901.02860))
 
 Other variants of non-transformer encoder are provided in `aps.asr.base.encoder`:
 
@@ -121,9 +120,9 @@ Other variants of non-transformer encoder are provided in `aps.asr.base.encoder`
 `ConcatEncoder` is used for concatenation of different encoders, e.g., `conv1d + pytorch-rnn`, `conv2d + variant-rnn`.
 
 and attention type:
-* `DotAttention`: dot attention and its multi-head version `MHDotAttention`
-* `LocAttention`: location aware attention and its multi-head version `MHLocAttention`
-* `CtxAttention`: context attention and its multi-head version `MHCtxAttention`
+* `DotAttention`: dot attention and its multi-head version `MHDotAttention` ([paper](https://arxiv.org/abs/1508.01211))
+* `LocAttention`: location aware attention and its multi-head version `MHLocAttention` ([paper](https://arxiv.org/abs/1506.07503))
+* `CtxAttention`: context attention and its multi-head version `MHCtxAttention` ([paper](https://arxiv.org/abs/1409.0473))
 
 The decoders are much simple than encoders, now APS provides RNN and Transformer decoders for attention and transducer based AM, respectively:
 * `aps.asr.base.decoder.PyTorchRNNDecoder`
@@ -137,14 +136,14 @@ The beam search algothrim is provided in `aps.asr.beam_search`.
 
 The submodule for speech enhancement/separation model. The provided model are shown below:
 
-* `TimeConvTasNet`: Time domain [Conv-TasNet](https://arxiv.org/pdf/1809.07454.pdf)
+* `TimeConvTasNet`: Time domain Conv-TasNet ([paper](https://arxiv.org/pdf/1809.07454.pdf))
 * `FreqConvTasNet`: Frequency domain TCN (Temporal Convolutional Network)
 * `DCUNet`: Deep Complexed Unet
-* `DCCRN`: [Deep Complexed Convolutional Recurrent Network](https://arxiv.org/pdf/2008.00264.pdf)
-* `DenseUnet`: [Unet boosted using DenseBlocks](https://arxiv.org/abs/2010.01703)
-* `Phasen`: [Phasen network](https://arxiv.org/abs/1911.04697)
-* `CRNet`: Convolutional Recurrent Network for speech enhancement
-* `TimeDPRNN`: Time domain [DPRNN](https://arxiv.org/abs/1910.06379)
+* `DCCRN`: Deep Complexed Convolutional Recurrent Network ([paper](https://arxiv.org/pdf/2008.00264.pdf))
+* `DenseUnet`: A Unet structure network boosted with DenseBlock ([paper](https://arxiv.org/abs/2010.01703))
+* `Phasen`: Phase and Harmonics Aware Speech Enhancement Network ([paper](https://arxiv.org/abs/1911.04697))
+* `CRNet`: Convolutional Recurrent Neural Network for Real-Time Speech Enhancement
+* `TimeDPRNN`: Time domain Dual-path RNN ([paper](https://arxiv.org/abs/1910.06379))
 * `FreqDPRNN`: Frequency domain DPRNN
 * `ToyRNN`: Basic RNN model
 * `FreqRelXfmr`: A simple transformer model for enhancement/separation

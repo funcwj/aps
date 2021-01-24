@@ -86,6 +86,7 @@ def test_aps_selfattn(index):
     my1, my2 = self_attn(query,
                          key,
                          value,
+                         None,
                          key_padding_mask=key_padding_mask,
                          attn_mask=attn_mask)
     th1, th2 = self_attn.torch_forward(query,

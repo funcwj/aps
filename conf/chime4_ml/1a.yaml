@@ -2,7 +2,7 @@ nnet: "sse@rnn_enh_ml"
 
 nnet_conf:
   input_size: 1285
-  input_project: 512
+  input_proj: 512
   num_bins: 257
   rnn: "lstm"
   dropout: 0.2

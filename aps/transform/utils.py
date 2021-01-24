@@ -89,16 +89,16 @@ def init_kernel(frame_len: int,
     return K, window
 
 
-def init_melfilter(frame_len: int,
-                   round_pow_of_two: bool = True,
-                   num_bins: Optional[int] = None,
-                   sr: int = 16000,
-                   num_mels: int = 80,
-                   fmin: float = 0.0,
-                   fmax: Optional[float] = None,
-                   norm: bool = False) -> th.Tensor:
+def mel_filter(frame_len: int,
+               round_pow_of_two: bool = True,
+               num_bins: Optional[int] = None,
+               sr: int = 16000,
+               num_mels: int = 80,
+               fmin: float = 0.0,
+               fmax: Optional[float] = None,
+               norm: bool = False) -> th.Tensor:
     """
-    Return mel-filters
+    Return mel filter coefficients
     Args:
         frame_len: length of the frame
         round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
@@ -106,7 +106,7 @@ def init_melfilter(frame_len: int,
         num_mels: number of the mel bands
         fmin: lowest frequency (in Hz)
         fmax: highest frequency (in Hz)
-        norm: normalize the mel feature
+        norm: normalize the mel filter coefficients
     """
     # FFT points
     if num_bins is None:
@@ -115,16 +115,20 @@ def init_melfilter(frame_len: int,
     else:
         N = (num_bins - 1) * 2
     # fmin & fmax
-    fmax = sr // 2 if fmax is None else min(fmax, sr // 2)
-    # mel-matrix
-    mel = filters.mel(sr, N, n_mels=num_mels, fmax=fmax, fmin=fmin, htk=True)
-    # normalize filters
-    if norm:
-        # num_bins
-        csum = np.sum(mel, 0)
-        csum[csum == 0] = -1
-        # num_mels x num_bins
-        mel = mel @ np.diag(1 / csum)
+    freq_upper = sr // 2
+    if fmax is None:
+        fmax = freq_upper
+    else:
+        fmax = min(fmax + freq_upper if fmax < 0 else fmax, freq_upper)
+    fmin = max(0, fmin)
+    # mel filter coefficients
+    mel = filters.mel(sr,
+                      N,
+                      n_mels=num_mels,
+                      fmax=fmax,
+                      fmin=fmin,
+                      htk=True,
+                      norm="slaney" if norm else None)
     # num_mels x (N // 2 + 1)
     return th.tensor(mel, dtype=th.float32)
 

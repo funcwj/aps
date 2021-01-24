@@ -16,7 +16,7 @@ default_rnn_dec_kwargs = {
     "rnn_hidden": 512,
     "rnn_dropout": 0.1,
     "input_feeding": True,
-    "vocab_embeded": True
+    "onehot_embed": False
 }
 
 default_xfmr_dec_kwargs = {
@@ -124,7 +124,8 @@ xfmr_enc_kwargs = {
     "nhead": 8,
     "feedforward_dim": 2048,
     "pos_dropout": 0.1,
-    "att_dropout": 0.1,
+    "att_dropout": 0.2,
+    "ffn_dropout": 0.3,
     "post_norm": True,
     "num_layers": 2
 }
@@ -136,7 +137,8 @@ xfmr_rel_enc_kwargs = {
     "radius": 128,
     "feedforward_dim": 2048,
     "pos_dropout": 0.1,
-    "att_dropout": 0.1,
+    "att_dropout": 0.2,
+    "ffn_dropout": 0.3,
     "post_norm": True,
     "num_layers": 2
 }
@@ -147,7 +149,8 @@ xfmr_xl_enc_kwargs = {
     "nhead": 8,
     "feedforward_dim": 2048,
     "pos_dropout": 0.1,
-    "att_dropout": 0.1,
+    "att_dropout": 0.2,
+    "ffn_dropout": 0.3,
     "post_norm": True,
     "num_layers": 2
 }
@@ -158,7 +161,8 @@ conformer_enc_kwargs = {
     "nhead": 8,
     "feedforward_dim": 2048,
     "pos_dropout": 0.1,
-    "att_dropout": 0.1,
+    "att_dropout": 0.2,
+    "ffn_dropout": 0.3,
     "num_layers": 2,
     "untie_rel": False
 }
@@ -168,13 +172,15 @@ def gen_egs(vocab_size, batch_size, num_channels=1):
     u = th.randint(10, 20, (1,)).item()
     x_len = th.randint(16000, 16000 * 5, (batch_size,))
     x_len = x_len.sort(-1, descending=True)[0]
+    y_len = th.randint(u // 2, u, (batch_size,))
+    y_len[0] = u
     S = x_len.max().item()
     if num_channels == 1:
         x = th.rand(batch_size, S)
     else:
         x = th.rand(batch_size, num_channels, S)
     y = th.randint(0, vocab_size - 1, (batch_size, u))
-    return x, x_len, y, u
+    return x, x_len, y, y_len, u
 
 
 @pytest.mark.parametrize("num_layers", [2, 3])
@@ -253,8 +259,8 @@ def test_att(att_type, att_kwargs):
                        enc_kwargs=default_rnn_enc_kwargs,
                        dec_dim=512,
                        dec_kwargs=default_rnn_dec_kwargs)
-    x, x_len, y, u = gen_egs(vocab_size, batch_size)
-    z, _, _, _ = att_asr(x, x_len, y)
+    x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
+    z, _, _, _ = att_asr(x, x_len, y, y_len)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -307,8 +313,10 @@ def test_mvdr_att(att_type, att_kwargs):
                             enc_kwargs=default_rnn_enc_kwargs,
                             dec_dim=512,
                             dec_kwargs=default_rnn_dec_kwargs)
-    x, x_len, y, u = gen_egs(vocab_size, batch_size, num_channels=num_channels)
-    z, _, _, _ = mvdr_att_asr(x, x_len, y)
+    x, x_len, y, y_len, u = gen_egs(vocab_size,
+                                    batch_size,
+                                    num_channels=num_channels)
+    z, _, _, _ = mvdr_att_asr(x, x_len, y, y_len)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -367,8 +375,10 @@ def test_beam_att(enh_type, enh_kwargs):
         enc_kwargs=default_rnn_enc_kwargs,
         dec_dim=512,
         dec_kwargs=default_rnn_dec_kwargs)
-    x, x_len, y, u = gen_egs(vocab_size, batch_size, num_channels=num_channels)
-    z, _, _, _ = beam_att_asr(x, x_len, y)
+    x, x_len, y, y_len, u = gen_egs(vocab_size,
+                                    batch_size,
+                                    num_channels=num_channels)
+    z, _, _, _ = beam_att_asr(x, x_len, y, y_len)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -379,10 +389,10 @@ def test_beam_att(enh_type, enh_kwargs):
     pytest.param("concat", conv1d_rnn_enc_kwargs),
     pytest.param("concat", conv1d_fsmn_enc_kwargs),
     pytest.param("concat", conv2d_rnn_enc_kwargs),
-    pytest.param("xfmr", xfmr_enc_kwargs),
+    pytest.param("xfmr_abs", xfmr_enc_kwargs),
     pytest.param("xfmr_rel", xfmr_rel_enc_kwargs),
     pytest.param("xfmr_xl", xfmr_xl_enc_kwargs),
-    pytest.param("conformer", conformer_enc_kwargs)
+    pytest.param("cfmr_xl", conformer_enc_kwargs)
 ])
 def test_att_encoder(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("asr@att")
@@ -406,8 +416,8 @@ def test_att_encoder(enc_type, enc_kwargs):
                        dec_type="rnn",
                        dec_dim=512,
                        dec_kwargs=default_rnn_dec_kwargs)
-    x, x_len, y, u = gen_egs(vocab_size, batch_size)
-    z, _, _, _ = att_asr(x, x_len, y)
+    x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
+    z, _, _, _ = att_asr(x, x_len, y, y_len)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -418,10 +428,10 @@ def test_att_encoder(enc_type, enc_kwargs):
     pytest.param("concat", conv1d_rnn_enc_kwargs),
     pytest.param("concat", conv1d_fsmn_enc_kwargs),
     pytest.param("concat", conv2d_rnn_enc_kwargs),
-    pytest.param("xfmr", xfmr_enc_kwargs),
+    pytest.param("xfmr_abs", xfmr_enc_kwargs),
     pytest.param("xfmr_rel", xfmr_rel_enc_kwargs),
     pytest.param("xfmr_xl", xfmr_xl_enc_kwargs),
-    pytest.param("conformer", conformer_enc_kwargs)
+    pytest.param("cfmr_xl", conformer_enc_kwargs)
 ])
 def test_xfmr_encoder(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("asr@xfmr")
@@ -431,7 +441,7 @@ def test_xfmr_encoder(enc_type, enc_kwargs):
                                  frame_len=400,
                                  frame_hop=160,
                                  window="hamm")
-    xfmr_encoders = ["xfmr", "xfmr_rel", "xfmr_xl", "conformer"]
+    xfmr_encoders = ["xfmr_abs", "xfmr_rel", "xfmr_xl", "cfmr_xl"]
     xfmr_asr = nnet_cls(input_size=80,
                         vocab_size=vocab_size,
                         sos=0,
@@ -441,10 +451,10 @@ def test_xfmr_encoder(enc_type, enc_kwargs):
                         enc_type=enc_type,
                         enc_proj=512 if enc_type not in xfmr_encoders else None,
                         enc_kwargs=enc_kwargs,
-                        dec_type="xfmr",
+                        dec_type="xfmr_abs",
                         dec_kwargs=default_xfmr_dec_kwargs)
-    x, x_len, y, u = gen_egs(vocab_size, batch_size)
-    z, _, _, _ = xfmr_asr(x, x_len, y)
+    x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
+    z, _, _, _ = xfmr_asr(x, x_len, y, y_len)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -454,10 +464,10 @@ def test_xfmr_encoder(enc_type, enc_kwargs):
     pytest.param("fsmn", fsmn_enc_kwargs),
     pytest.param("concat", conv1d_rnn_enc_kwargs),
     pytest.param("concat", conv1d_fsmn_enc_kwargs),
-    pytest.param("xfmr", xfmr_enc_kwargs),
+    pytest.param("xfmr_abs", xfmr_enc_kwargs),
     pytest.param("xfmr_rel", xfmr_rel_enc_kwargs),
     pytest.param("xfmr_xl", xfmr_xl_enc_kwargs),
-    pytest.param("conformer", conformer_enc_kwargs)
+    pytest.param("cfmr_xl", conformer_enc_kwargs)
 ])
 def test_common_transducer(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("asr@transducer")
@@ -476,7 +486,7 @@ def test_common_transducer(enc_type, enc_kwargs):
                                  frame_len=400,
                                  frame_hop=160,
                                  window="hamm")
-    xfmr_encoders = ["xfmr", "xfmr_rel", "xfmr_xl", "conformer"]
+    xfmr_encoders = ["xfmr_abs", "xfmr_rel", "xfmr_xl", "cfmr_xl"]
     rnnt = nnet_cls(input_size=80,
                     vocab_size=vocab_size,
                     blank=vocab_size - 1,
@@ -485,8 +495,7 @@ def test_common_transducer(enc_type, enc_kwargs):
                     enc_proj=None if enc_type in xfmr_encoders else 512,
                     enc_kwargs=enc_kwargs,
                     dec_kwargs=dec_kwargs)
-    x, x_len, y, u = gen_egs(vocab_size, batch_size)
-    y_len = th.randint(u // 2, u, (batch_size,))
+    x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
     z, _ = rnnt(x, x_len, y, y_len)
     assert z.shape[2:] == th.Size([u + 1, vocab_size])
 
@@ -497,10 +506,10 @@ def test_common_transducer(enc_type, enc_kwargs):
     pytest.param("fsmn", fsmn_enc_kwargs),
     pytest.param("concat", conv1d_rnn_enc_kwargs),
     pytest.param("concat", conv1d_fsmn_enc_kwargs),
-    pytest.param("xfmr", xfmr_enc_kwargs),
+    pytest.param("xfmr_abs", xfmr_enc_kwargs),
     pytest.param("xfmr_rel", xfmr_rel_enc_kwargs),
     pytest.param("xfmr_xl", xfmr_xl_enc_kwargs),
-    pytest.param("conformer", conformer_enc_kwargs)
+    pytest.param("cfmr_xl", conformer_enc_kwargs)
 ])
 def test_xfmr_transducer(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("asr@xfmr_transducer")
@@ -527,8 +536,6 @@ def test_xfmr_transducer(enc_type, enc_kwargs):
                          enc_proj=512,
                          enc_kwargs=enc_kwargs,
                          dec_kwargs=dec_kwargs)
-    x, x_len, y, u = gen_egs(vocab_size, batch_size)
-    y_len = th.randint(u // 2, u, (batch_size,))
-    y_len[0] = u
+    x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
     z, _ = xfmr_rnnt(x, x_len, y, y_len)
     assert z.shape[2:] == th.Size([u + 1, vocab_size])

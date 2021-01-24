@@ -63,11 +63,11 @@ trainer_conf:
 data_conf:
   fmt: "am@raw"
   loader:
-    max_token_num: 400
-    adapt_token_num: 150
     max_dur: 30 # (s)
     min_dur: 0.4 # (s)
     adapt_dur: 10 # (s)
+    max_token_num: 400
+    adapt_token_num: 150
   train:
     wav_scp: "data/aishell_v1/train/wav.scp"
     utt2dur: "data/aishell_v1/train/utt2dur"

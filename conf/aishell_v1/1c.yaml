@@ -2,7 +2,7 @@ nnet: "asr@xfmr_transducer"
 
 nnet_conf:
   input_size: 80
-  enc_type: "xfmr"
+  enc_type: "xfmr_abs"
   enc_kwargs:
     proj_layer: "conv2d"
     att_dim: 256

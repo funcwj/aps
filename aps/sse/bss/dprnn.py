@@ -7,10 +7,10 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Optional, List, Union, NoReturn
+from typing import Optional, List, Union
 
 from aps.sse.bss.tasnet import build_norm
-from aps.sse.utils import MaskNonLinear
+from aps.sse.base import SseBase, MaskNonLinear
 from aps.libs import ApsRegisters
 
 
@@ -200,44 +200,33 @@ class DPRNN(nn.Module):
     """
 
     def __init__(self,
-                 num_spks: int = 2,
-                 chunk_len: int = 100,
+                 num_branch: int,
+                 chunk_len: int,
                  input_norm: str = "cLN",
+                 block_type: str = "dp",
                  conv_filters: int = 64,
                  proj_filters: int = 128,
-                 dprnn_layers: int = 6,
-                 dprnn_hidden: int = 128,
-                 dprnn_bi_inter: bool = True,
-                 dprnn_block: str = "dp",
+                 num_layers: int = 6,
+                 rnn_hidden: int = 128,
+                 rnn_bi_inter: bool = True,
                  output_non_linear: str = "sigmoid") -> None:
         super(DPRNN, self).__init__()
-        if dprnn_block not in ["dp", "mc"]:
-            raise RuntimeError(f"Unsupported DPRNN block: {dprnn_block}")
-        BLOCK = {"dp": DpB, "mc": McB}[dprnn_block]
+        if block_type not in ["dp", "mc"]:
+            raise RuntimeError(f"Unsupported DPRNN block: {block_type}")
+        BLOCK = {"dp": DpB, "mc": McB}[block_type]
         self.non_linear = MaskNonLinear(
             output_non_linear, enable="common") if output_non_linear else None
         self.dprnn = nn.Sequential(*[
-            BLOCK(proj_filters, dprnn_hidden, bi_inter=dprnn_bi_inter)
-            for _ in range(dprnn_layers)
+            BLOCK(proj_filters, rnn_hidden, bi_inter=rnn_bi_inter)
+            for _ in range(num_layers)
         ])
         self.norm = build_norm(input_norm, conv_filters) if input_norm else None
         self.proj = nn.Conv1d(conv_filters, proj_filters, 1)
         # NOTE: add prelu here
         self.mask = nn.Sequential(
-            nn.PReLU(), nn.Conv2d(proj_filters, num_spks * conv_filters, 1))
+            nn.PReLU(), nn.Conv2d(proj_filters, num_branch * conv_filters, 1))
         self.chunk_hop, self.chunk_len = chunk_len // 2, chunk_len
-        self.num_spks = num_spks
-
-    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
-        """
-        Check input arguments
-        """
-        if not training and mix.dim() != 1:
-            raise RuntimeError(
-                f"DPRNN expects 1D tensor (inference), but got {mix.dim()}")
-        if training and mix.dim() != 2:
-            raise RuntimeError(
-                f"DPRNN expects 2D tensor (training), but got {mix.dim()}")
+        self.num_branch = num_branch
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
@@ -262,12 +251,12 @@ class DPRNN(nn.Module):
         # N x SF x K x L
         rnn_out = self.mask(rnn_out).contiguous()
         # NS x FK x L
-        rnn_out = rnn_out.view(N * self.num_spks, -1, L)
+        rnn_out = rnn_out.view(N * self.num_branch, -1, L)
         # NS x F x T x 1
         masks = tf.fold(rnn_out, (T, 1), (self.chunk_len, 1),
                         stride=self.chunk_hop)
         # N x S x F x T
-        masks = masks.view(N, self.num_spks, F, -1)
+        masks = masks.view(N, self.num_branch, F, -1)
         if self.non_linear:
             return self.non_linear(masks)
         else:
@@ -275,7 +264,7 @@ class DPRNN(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@time_dprnn")
-class TimeDPRNN(DPRNN):
+class TimeDPRNN(SseBase):
     """
     Time domain DP (dual-path) RNN
     """
@@ -283,26 +272,17 @@ class TimeDPRNN(DPRNN):
     def __init__(self,
                  num_spks: int = 2,
                  input_norm: str = "cLN",
+                 block_type: str = "dp",
                  conv_kernels: int = 16,
                  conv_filters: int = 64,
                  proj_filters: int = 128,
                  chunk_len: int = 100,
-                 dprnn_layers: int = 6,
-                 dprnn_bi_inter: bool = True,
-                 dprnn_hidden: int = 128,
-                 dprnn_block: str = "dp",
+                 num_layers: int = 6,
+                 rnn_bi_inter: bool = True,
+                 rnn_hidden: int = 128,
                  non_linear: str = "relu",
                  masking: bool = True) -> None:
-        super(TimeDPRNN, self).__init__(num_spks=num_spks,
-                                        chunk_len=chunk_len,
-                                        input_norm=input_norm,
-                                        conv_filters=conv_filters,
-                                        proj_filters=proj_filters,
-                                        dprnn_layers=dprnn_layers,
-                                        dprnn_hidden=dprnn_hidden,
-                                        dprnn_block=dprnn_block,
-                                        dprnn_bi_inter=dprnn_bi_inter,
-                                        output_non_linear=non_linear)
+        super(TimeDPRNN, self).__init__(None, training_mode="time")
         # conv1d encoder
         self.encoder = nn.Conv1d(1,
                                  conv_filters,
@@ -317,7 +297,18 @@ class TimeDPRNN(DPRNN):
                                           stride=conv_kernels // 2,
                                           bias=False,
                                           padding=0)
+        self.dprnn = DPRNN(num_spks,
+                           chunk_len,
+                           input_norm=input_norm,
+                           block_type=block_type,
+                           conv_filters=conv_filters,
+                           proj_filters=proj_filters,
+                           num_layers=num_layers,
+                           rnn_hidden=rnn_hidden,
+                           rnn_bi_inter=rnn_bi_inter,
+                           output_non_linear=non_linear)
         self.masking = masking
+        self.num_spks = num_spks
 
     def infer(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
@@ -326,7 +317,7 @@ class TimeDPRNN(DPRNN):
         Return:
             [Tensor, ...]: S
         """
-        self.check_args(mix, training=False)
+        self.check_args(mix, training=False, valid_dim=[1])
         with th.no_grad():
             mix = mix[None, ...]
             sep = self.forward(mix)
@@ -339,11 +330,11 @@ class TimeDPRNN(DPRNN):
         Return:
             [Tensor, ...]: N x S
         """
-        self.check_args(mix, training=True)
+        self.check_args(mix, training=True, valid_dim=[2])
         # N x 1 x S => N x F x T
         w = tf.relu(self.encoder(mix[:, None, :]))
         # N x S x F x T
-        masks = super().forward(w)
+        masks = self.dprnn(w)
         # masking or not
         if not self.masking:
             w = 1
@@ -357,7 +348,7 @@ class TimeDPRNN(DPRNN):
 
 
 @ApsRegisters.sse.register("sse@freq_dprnn")
-class FreqDPRNN(DPRNN):
+class FreqDPRNN(SseBase):
     """
     Frequency domain DP (dual-path) RNN
     """
@@ -368,27 +359,27 @@ class FreqDPRNN(DPRNN):
                  num_bins: int = 257,
                  non_linear: str = "relu",
                  input_norm: str = "",
+                 block_type: str = "dp",
                  proj_filters: int = 256,
                  chunk_len: int = 64,
-                 dprnn_layers: int = 6,
-                 dprnn_bi_inter: bool = True,
-                 dprnn_hidden: int = 128,
-                 dprnn_block: str = "dp",
+                 num_layers: int = 6,
+                 rnn_hidden: int = 256,
+                 rnn_bi_inter: bool = True,
                  training_mode: str = "freq") -> None:
-        super(FreqDPRNN, self).__init__(num_spks=num_spks,
-                                        chunk_len=chunk_len,
-                                        input_norm=input_norm,
-                                        conv_filters=num_bins,
-                                        proj_filters=proj_filters,
-                                        dprnn_layers=dprnn_layers,
-                                        dprnn_hidden=dprnn_hidden,
-                                        dprnn_block=dprnn_block,
-                                        dprnn_bi_inter=dprnn_bi_inter,
-                                        output_non_linear=non_linear)
-        if enh_transform is None:
-            raise RuntimeError("FreqDPRNN: enh_transform can not be None")
-        self.enh_transform = enh_transform
-        self.mode = training_mode
+        super(FreqDPRNN, self).__init__(enh_transform,
+                                        training_mode=training_mode)
+        self.dprnn = DPRNN(num_spks,
+                           chunk_len,
+                           input_norm=input_norm,
+                           block_type=block_type,
+                           conv_filters=num_bins,
+                           proj_filters=proj_filters,
+                           num_layers=num_layers,
+                           rnn_hidden=rnn_hidden,
+                           rnn_bi_inter=rnn_bi_inter,
+                           output_non_linear=non_linear)
+        assert enh_transform is not None
+        self.num_spks = num_spks
 
     def _forward(self, mix: th.Tensor,
                  mode: str) -> Union[th.Tensor, List[th.Tensor]]:
@@ -404,7 +395,7 @@ class FreqDPRNN(DPRNN):
         # N x F x T
         w = th.transpose(mix_feat, 1, 2)
         # N x 2 x F x T
-        masks = super().forward(w)
+        masks = self.dprnn(w)
         if self.num_spks == 1:
             masks = masks[:, 0]
         else:
@@ -431,7 +422,7 @@ class FreqDPRNN(DPRNN):
         Args:
             mix (Tensor): N x S
         """
-        self.check_args(mix, training=False)
+        self.check_args(mix, training=False, valid_dim=[1])
         with th.no_grad():
             mix = mix[None, :]
             ret = self._forward(mix, mode=mode)
@@ -444,5 +435,5 @@ class FreqDPRNN(DPRNN):
         Return:
             [Tensor, ...]: N x S
         """
-        self.check_args(mix, training=True)
-        return self._forward(mix, self.mode)
+        self.check_args(mix, training=True, valid_dim=[2])
+        return self._forward(mix, self.training_mode)

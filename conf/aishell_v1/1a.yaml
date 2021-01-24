@@ -1,4 +1,3 @@
-
 nnet: "asr@att"
 
 nnet_conf:
@@ -6,12 +5,13 @@ nnet_conf:
   enc_type: "concat"
   enc_proj: 512
   enc_kwargs:
-    conv1d:
-      out_features: 512
-      dim: 512
+    conv2d:
+      out_features: -1
+      channel: 48
       num_layers: 3
-      stride: [2, 2, 2]
-      dilation: [1, 1, 2]
+      stride: 2
+      padding: 1
+      kernel_size: 3
     pytorch_rnn:
       rnn: "lstm"
       num_layers: 3
@@ -33,11 +33,12 @@ nnet_conf:
 task: "asr@ctc_xent"
 
 task_conf:
+  reduction: batchmean
   lsm_factor: 0.1
-  ctc_weight: 0.2
+  ctc_weight: 0.3
 
 asr_transform:
-  feats: "fbank-log-cmvn-aug"
+  feats: "perturb-fbank-log-cmvn-aug"
   frame_len: 400
   frame_hop: 160
   window: "hamm"
@@ -62,15 +63,14 @@ trainer_conf:
   lr_scheduler_kwargs:
     time_stamps: [800, 40000, 100000]
     peak_lr: 1.0e-3
-    stop_lr: 1.0e-6
+    stop_lr: 1.0e-7
   ss_scheduler: "linear"
   ss_scheduler_kwargs:
     ssr: 0.2
-    epoch_beg: 10
-    epoch_end: 26
+    epochs: [10, 26]
     update_interval: 4
-  no_impr: 6
-  no_impr_thres: 0.2
+  no_impr: 10
+  no_impr_thres: 0.01
   clip_gradient: 5
   report_metrics: ["loss", "accu", "@ctc"]
   stop_criterion: "accu"

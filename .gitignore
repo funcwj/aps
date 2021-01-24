@@ -15,6 +15,7 @@ __pycache__/
 /checkpoint/
 /cache/
 /build/
+/tests/*.jpg
 
 # examples
 /examples/*/*/data

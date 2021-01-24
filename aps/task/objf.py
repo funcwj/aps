@@ -10,30 +10,34 @@ from typing import List, Any, Callable, Optional
 from aps.const import IGNORE_ID
 
 
-def ce_objf(outs: th.Tensor, tgts: th.Tensor) -> th.Tensor:
+def ce_objf(outs: th.Tensor,
+            tgts: th.Tensor,
+            reduction: str = "mean") -> th.Tensor:
     """
     Cross entropy loss function
     Args:
         outs (Tensor): N x T x V
         tgts (Tensor): N x T
+        reduction (str): "mean" or "batchmean"
+            mean: average on each label
+            batchmean: average on each utterance
     Return
         loss (Tensor): (1)
     """
-    _, _, V = outs.shape
+    N, _, V = outs.shape
     # N(To+1) x V
     outs = outs.contiguous().view(-1, V)
     # N(To+1)
     tgts = tgts.view(-1)
-    ce_loss = tf.cross_entropy(outs,
-                               tgts,
-                               ignore_index=IGNORE_ID,
-                               reduction="mean")
-    return ce_loss
+    loss = tf.cross_entropy(outs, tgts, ignore_index=IGNORE_ID, reduction="sum")
+    K = th.sum(tgts != IGNORE_ID) if reduction == "mean" else N
+    return loss / K
 
 
 def ls_objf(outs: th.Tensor,
             tgts: th.Tensor,
             method: str = "uniform",
+            reduction: str = "mean",
             lsm_factor: float = 0.1,
             label_count: Optional[th.Tensor] = None) -> th.Tensor:
     """
@@ -41,13 +45,17 @@ def ls_objf(outs: th.Tensor,
     Args:
         outs (Tensor): N x T x V
         tgts (Tensor): N x T
+        method (str): label smoothing method
+        reduction (str): "mean" or "batchmean"
+            mean: average on each label
+            batchmean: average on each utterance
         lsm_factor (float): label smooth factor
     Return
         loss (Tensor): (1)
     """
     if method not in ["uniform", "unigram", "temporal"]:
         raise ValueError(f"Unknown label smoothing method: {method}")
-    _, _, V = outs.shape
+    N, _, V = outs.shape
     # NT x V
     outs = outs.contiguous().view(-1, V)
     # NT
@@ -73,8 +81,9 @@ def ls_objf(outs: th.Tensor,
         raise NotImplementedError
     dist = dist.scatter_(1, tgts[:, None], 1 - lsm_factor)
     # KL distance
-    loss = tf.kl_div(tf.log_softmax(outs, -1), dist, reduction="batchmean")
-    return loss
+    loss = tf.kl_div(tf.log_softmax(outs, -1), dist, reduction="sum")
+    K = th.sum(mask) if reduction == "mean" else N
+    return loss / K
 
 
 def ctc_objf(outs: th.Tensor,
@@ -82,6 +91,7 @@ def ctc_objf(outs: th.Tensor,
              out_len: th.Tensor,
              tgt_len: th.Tensor,
              blank: int = 0,
+             reduction: str = "mean",
              add_softmax: bool = True) -> th.Tensor:
     """
     PyTorch CTC loss function
@@ -90,9 +100,15 @@ def ctc_objf(outs: th.Tensor,
         tgts (Tensor): N x T
         out_len (Tensor): N
         tgt_len (Tensor): N
+        blank (int): blank id for CTC
+        reduction (str): "mean" or "batchmean"
+            mean: average on each label
+            batchmean: average on each utterance
+        add_softmax (bool): add softmax before CTC loss or not
     Return
         loss (Tensor): (1)
     """
+    N, _ = tgts.shape
     # add log-softmax, N x T x V => T x N x V
     if add_softmax:
         outs = tf.log_softmax(outs, dim=-1).transpose(0, 1)
@@ -104,8 +120,7 @@ def ctc_objf(outs: th.Tensor,
                        blank=blank,
                        reduction="sum",
                        zero_infinity=True)
-    # average on each label
-    loss = loss / th.sum(tgt_len)
+    loss = loss / (th.sum(tgt_len) if reduction == "mean" else N)
     return loss
 
 

@@ -215,9 +215,13 @@ class BeamTracker(BaseBeamTracker):
     def __init__(self, param: BeamSearchParam) -> None:
         super(BeamTracker, self).__init__(param)
         init_sos = th.tensor([param.sos] * param.beam_size, device=param.device)
+        # decoded sequence upto current step
         self.trans = init_sos[:, None]
+        # decoded token at each time step (unordered)
         self.token = [init_sos]
+        # traceback point at each time step
         self.point = [th.tensor(range(param.beam_size), device=param.device)]
+        # decoding score (upto current step)
         self.score = th.zeros(param.beam_size, device=param.device)
         self.hypos = []
         self.auto_stop = False
@@ -379,7 +383,7 @@ class BeamTracker(BaseBeamTracker):
             if hyp_final:
                 self.hypos += hyp_final
         # sort and get nbest
-        logger.info(f"--- beam search gets {nbest}best " +
+        logger.info(f"--- beam search gets top-{nbest} list " +
                     f"from {len(self.hypos)} hypos ...")
         sort_hypos = sorted(self.hypos, key=lambda n: n["score"], reverse=True)
         return sort_hypos[:nbest]
@@ -610,7 +614,7 @@ class BatchBeamTracker(BaseBeamTracker):
         # sort and get nbest
         nbest_batch = []
         for u, utt_bypos in enumerate(self.hypos):
-            logger.info(f"--- beam search gets {nbest}best (batch[{u}]) " +
+            logger.info(f"--- beam search gets top-{nbest} list (batch[{u}]) " +
                         f"from {len(utt_bypos)} hypos ...")
             sort_hypos = sorted(utt_bypos,
                                 key=lambda n: n["score"],

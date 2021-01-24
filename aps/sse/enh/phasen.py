@@ -7,8 +7,9 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Optional, Union, Tuple, NoReturn
+from typing import Optional, Union, Tuple
 from aps.const import EPSILON
+from aps.sse.base import SseBase
 from aps.libs import ApsRegisters
 
 batchnorm_non_linear = {
@@ -216,7 +217,7 @@ class TSBlock(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@phasen")
-class Phasen(nn.Module):
+class Phasen(SseBase):
     """
     PHASEN: A Phase-and-Harmonics-Aware Speech Enhancement Network
     """
@@ -232,9 +233,8 @@ class Phasen(nn.Module):
                  lstm_hidden: int = 256,
                  linear_size: int = 512,
                  training_mode: int = "freq") -> None:
-        super(Phasen, self).__init__()
-        if enh_transform is None:
-            raise RuntimeError("Missing configuration for enh_transform")
+        super(Phasen, self).__init__(enh_transform, training_mode=training_mode)
+        assert enh_transform is not None
         self.forward_stft = enh_transform.ctx(name="forward_stft")
         self.inverse_stft = enh_transform.ctx(name="inverse_stft")
         self.tsb = nn.Sequential(*[
@@ -269,14 +269,6 @@ class Phasen(nn.Module):
         )
         self.conv1x1_p = nn.Conv2d(channel_pha, 2, (1, 1))
         self.training_mode = training_mode
-
-    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
-        if not training and mix.dim() != 1:
-            raise RuntimeError("Phasen expects 1D tensor (inference), " +
-                               f"got {mix.dim()} instead")
-        if training and mix.dim() != 2:
-            raise RuntimeError("Phasen expects 2D tensor (training), " +
-                               f"got {mix.dim()} instead")
 
     def _forward(
             self,
@@ -324,23 +316,23 @@ class Phasen(nn.Module):
         else:
             return self.inverse_stft(pack_cplx, input="complex")
 
-    def infer(self, mix: th.Tensor) -> th.Tensor:
+    def infer(self, mix: th.Tensor, mode="time") -> th.Tensor:
         """
         Args:
             mix (Tensor): S
         Return:
             sep (Tensor): S
         """
-        self.check_args(mix, training=False)
+        self.check_args(mix, training=False, valid_dim=[1])
         with th.no_grad():
             mix = mix[None, ...]
-            enh = self._forward(mix, mode="time")
-            return enh[0]
+            enh = self._forward(mix, mode=mode)
+            return enh[0] if mode == "time" else (enh[0][0], enh[1][0])
 
     def forward(self, mix: th.Tensor):
         """
         Args:
             mix (Tensor): N x S
         """
-        self.check_args(mix, training=True)
+        self.check_args(mix, training=True, valid_dim=[2])
         return self._forward(mix, mode=self.training_mode)

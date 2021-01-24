@@ -23,7 +23,7 @@ def test_base_rnn(num_spks, nonlinear):
     base_rnn = nnet_cls(enh_transform=transform,
                         num_bins=257,
                         input_size=257,
-                        input_project=512,
+                        input_proj=512,
                         num_layers=2,
                         hidden=512,
                         num_spks=num_spks,
@@ -208,14 +208,14 @@ def test_dprnn():
     nnet_cls = aps_sse_nnet("sse@time_dprnn")
     dprnn = nnet_cls(num_spks=1,
                      input_norm="cLN",
+                     block_type="dp",
                      conv_kernels=16,
                      conv_filters=64,
                      proj_filters=64,
                      chunk_len=100,
-                     dprnn_layers=2,
-                     dprnn_bi_inter=True,
-                     dprnn_hidden=64,
-                     dprnn_block="dp",
+                     num_layers=2,
+                     rnn_hidden=64,
+                     rnn_bi_inter=True,
                      non_linear="relu")
     inp = th.rand(4, 64000)
     x = dprnn(inp)
@@ -251,22 +251,23 @@ def test_dccrn(num_spks, cplx):
     assert y.shape == th.Size([64000])
 
 
-def test_unsuper_enh():
+@pytest.mark.parametrize("num_bins", [257])
+def test_rnn_enh_ml(num_bins):
     nnet_cls = aps_sse_nnet("sse@rnn_enh_ml")
     transform = EnhTransform(feats="spectrogram-log-cmvn-ipd",
                              frame_len=512,
                              frame_hop=256,
                              ipd_index="0,1;0,2;0,3")
-    unsuper_enh = nnet_cls(enh_transform=transform,
-                           num_bins=257,
-                           input_size=257 * 4,
-                           input_project=512,
-                           num_layers=2,
-                           hidden=512)
+    rnn_enh_ml = nnet_cls(enh_transform=transform,
+                          num_bins=num_bins,
+                          input_size=num_bins * 4,
+                          input_proj=512,
+                          num_layers=2,
+                          hidden=512)
     inp = th.rand(2, 5, 64000)
-    x, y = unsuper_enh(inp)
-    assert x.shape == th.Size([2, 5, 257, 249])
+    x, y = rnn_enh_ml(inp)
+    assert x.shape == th.Size([2, 5, num_bins, 249])
     assert th.isnan(x.real).sum() + th.isnan(x.imag).sum() == 0
-    assert y.shape == th.Size([2, 249, 257])
-    z = unsuper_enh.infer(inp[0])
-    assert z.shape == th.Size([249, 257])
+    assert y.shape == th.Size([2, 249, num_bins])
+    z = rnn_enh_ml.infer(inp[0])
+    assert z.shape == th.Size([249, num_bins])

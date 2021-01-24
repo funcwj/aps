@@ -1,4 +1,4 @@
-nnet: "rnn_lm"
+nnet: "asr@rnn_lm"
 
 nnet_conf:
   embed_size: 1024
@@ -8,7 +8,10 @@ nnet_conf:
   num_layers: 3
   hidden_size: 1024
 
-task: "lm"
+task: "asr@lm"
+
+task_conf:
+  bptt_mode: true
 
 trainer_conf:
   optimizer: "adam"
@@ -26,13 +29,11 @@ trainer_conf:
   stop_criterion: "loss"
 
 data_conf:
-  fmt: "lm@utt"
+  fmt: "lm@bptt"
   loader:
+    bptt_size: 128
     min_token_num: 20
     max_token_num: 300
-    min_batch_size: 8
-    adapt_token_num: 100
-    chunk_size_for_sort: 48000
   train:
     text: "data/librispeech/lm/train.token"
   valid:

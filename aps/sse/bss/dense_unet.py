@@ -6,13 +6,15 @@
 import torch as th
 import torch.nn as nn
 
-from typing import Optional, List, Union, NoReturn, Tuple
+from typing import Optional, List, Union, Tuple
 from aps.sse.bss.dccrn import LSTMWrapper, parse_1dstr, parse_2dstr
-from aps.sse.utils import MaskNonLinear
+from aps.sse.base import SseBase, MaskNonLinear
 from aps.libs import ApsRegisters
 """
 UNet used in Wang's paper
 """
+ComplexPair = Tuple[th.Tensor, th.Tensor]
+DenseUnetRetType = Union[th.Tensor, List[th.Tensor], List[ComplexPair]]
 
 
 class EncoderBlock(nn.Module):
@@ -317,7 +319,7 @@ class Decoder(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@dense_unet")
-class DenseUnet(nn.Module):
+class DenseUnet(SseBase):
     """
     Boosted Unet proposed by Wang
     """
@@ -345,9 +347,9 @@ class DenseUnet(nn.Module):
                  non_linear_scale: int = 1,
                  non_linear_clip: Optional[float] = None,
                  training_mode: str = "freq") -> None:
-        super(DenseUnet, self).__init__()
-        if enh_transform is None:
-            raise RuntimeError("Missing configuration for enh_transform")
+        super(DenseUnet, self).__init__(enh_transform,
+                                        training_mode=training_mode)
+        assert enh_transform is not None
         if non_linear:
             self.non_linear = MaskNonLinear(non_linear,
                                             enable="all_wo_softmax",
@@ -356,7 +358,6 @@ class DenseUnet(nn.Module):
         else:
             # complex mapping
             self.non_linear = None
-        self.enh_transform = enh_transform
         K = parse_2dstr(K)
         # make sure stride size on time axis is 1
         S = parse_2dstr(S)
@@ -385,7 +386,6 @@ class DenseUnet(nn.Module):
                                num_layers=rnn_layers,
                                bidirectional=rnn_bidir)
         self.num_spks = num_spks
-        self.mode = training_mode
         self.inp_cplx = inp_cplx
         self.out_cplx = out_cplx
 
@@ -393,8 +393,7 @@ class DenseUnet(nn.Module):
             m: th.Tensor,
             sr: th.Tensor,
             si: th.Tensor,
-            mode: str = "freq") -> Union[th.Tensor, Tuple[th.Tensor,
-                                                          th.Tensor]]:
+            mode: str = "freq") -> Union[th.Tensor, ComplexPair]:
         decoder = self.enh_transform.inverse_stft
         # m: N x 2 x F x T
         if self.out_cplx:
@@ -434,43 +433,27 @@ class DenseUnet(nn.Module):
                                 input="complex")
         return s
 
-    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
-        if not training and mix.dim() != 1:
-            raise RuntimeError("DenseUnet expects 1D tensor (inference), " +
-                               f"got {mix.dim()} instead")
-        if training and mix.dim() != 2:
-            raise RuntimeError("DenseUnet expects 2D tensor (training), " +
-                               f"got {mix.dim()} instead")
-
-    def infer(
-        self,
-        mix: th.Tensor,
-        mode: str = "time"
-    ) -> Union[th.Tensor, List[th.Tensor], List[Tuple[th.Tensor, th.Tensor]]]:
+    def infer(self, mix: th.Tensor, mode: str = "time") -> DenseUnetRetType:
         """
         Args:
             mix (Tensor): S
         Return:
             Tensor: S or F x T
         """
-        self.check_args(mix, training=False)
+        self.check_args(mix, training=False, valid_dim=[1])
         with th.no_grad():
             mix = mix[None, :]
             sep = self._forward(mix, mode=mode)
             if self.num_spks == 1:
                 return sep[0]
             else:
-                bss = []
-                for s in sep:
-                    bss.append(s[0] if isinstance(s, th.Tensor) else (s[0][0],
-                                                                      s[1][0]))
+                if isinstance(sep[0], th.Tensor):
+                    bss = [s[0] for s in sep]
+                else:
+                    bss = [(s[0][0], s[1][0]) for s in sep]
                 return bss
 
-    def _forward(
-        self,
-        mix: th.Tensor,
-        mode: str = "freq"
-    ) -> Union[th.Tensor, List[th.Tensor], List[Tuple[th.Tensor, th.Tensor]]]:
+    def _forward(self, mix: th.Tensor, mode: str = "freq") -> DenseUnetRetType:
         # NOTE: update real input!
         if self.inp_cplx:
             # N x F x T
@@ -506,14 +489,12 @@ class DenseUnet(nn.Module):
             chunk_m = th.chunk(spk_m, self.num_spks, 1)
             return [self.sep(m, sr, si, mode=mode) for m in chunk_m]
 
-    def forward(
-        self, s: th.Tensor
-    ) -> Union[th.Tensor, List[th.Tensor], List[Tuple[th.Tensor, th.Tensor]]]:
+    def forward(self, s: th.Tensor) -> DenseUnetRetType:
         """
         Args:
             s (Tensor): N x S
         Return:
             Tensor: N x S or N x F x T
         """
-        self.check_args(s, training=True)
-        return self._forward(s, mode=self.mode)
+        self.check_args(s, training=True, valid_dim=[2])
+        return self._forward(s, mode=self.training_mode)

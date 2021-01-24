@@ -25,9 +25,9 @@ class DecoderBase(nn.Module):
                  enc_dim: int = 512,
                  dec_dim: int = 512,
                  jot_dim: int = 512,
-                 vocab_embeded: bool = True) -> None:
+                 onehot_embed: bool = False) -> None:
         super(DecoderBase, self).__init__()
-        if vocab_embeded:
+        if not onehot_embed:
             self.vocab_embed = nn.Embedding(vocab_size, embed_size)
         else:
             self.vocab_embed = OneHotEmbedding(vocab_size)
@@ -69,13 +69,13 @@ class PyTorchRNNDecoder(DecoderBase):
                  dec_layers: int = 3,
                  dec_hidden: int = 512,
                  dec_dropout: float = 0.0,
-                 vocab_embeded: bool = True) -> None:
+                 onehot_embed: bool = False) -> None:
         super(PyTorchRNNDecoder, self).__init__(vocab_size,
                                                 embed_size=embed_size,
                                                 enc_dim=enc_dim,
                                                 dec_dim=dec_hidden,
                                                 jot_dim=jot_dim,
-                                                vocab_embeded=vocab_embeded)
+                                                onehot_embed=onehot_embed)
         # uni-dir RNNs
         self.decoder = PyTorchRNN(dec_rnn,
                                   embed_size,
@@ -110,7 +110,7 @@ class PyTorchRNNDecoder(DecoderBase):
 
 class TorchTransformerDecoder(DecoderBase):
     """
-    Wrapper for pytorch's Transformer Decoder
+    Vanilla Transformer encoder as transducer decoder
     """
 
     def __init__(self,
@@ -123,25 +123,27 @@ class TorchTransformerDecoder(DecoderBase):
                  scale_embed: bool = False,
                  pos_dropout: float = 0.1,
                  att_dropout: float = 0.1,
+                 ffn_dropout: float = 0.1,
                  num_layers: int = 6,
                  post_norm: bool = True,
-                 vocab_embeded: bool = True) -> None:
+                 onehot_embed: bool = False) -> None:
         super(TorchTransformerDecoder,
               self).__init__(vocab_size,
                              enc_dim=enc_dim if enc_dim else att_dim,
                              dec_dim=att_dim,
                              jot_dim=jot_dim,
-                             vocab_embeded=vocab_embeded)
-        self.abs_pos_enc = get_xfmr_pose("inp_sin",
+                             onehot_embed=onehot_embed)
+        self.abs_pos_enc = get_xfmr_pose("xfmr_abs",
                                          att_dim,
                                          dropout=pos_dropout,
                                          scale_embed=scale_embed)
-        self.decoder = get_xfmr_encoder("xfmr",
+        self.decoder = get_xfmr_encoder("xfmr_abs",
                                         num_layers,
                                         att_dim,
                                         nhead,
                                         dim_feedforward=feedforward_dim,
-                                        dropout=att_dropout,
+                                        att_dropout=att_dropout,
+                                        ffn_dropout=ffn_dropout,
                                         pre_norm=not post_norm)
 
     def forward(self, enc_out: th.Tensor, tgt_pad: th.Tensor,
@@ -155,7 +157,7 @@ class TorchTransformerDecoder(DecoderBase):
             output: N x Ti x To+1 x V
         """
         # N x Ti
-        pad_mask = None if tgt_len is None else (padding_mask(tgt_len + 1) == 1)
+        pad_mask = None if tgt_len is None else (padding_mask(tgt_len) == 1)
         # genrarte target masks (-inf/0)
         tgt_mask = prep_sub_mask(tgt_pad.shape[-1], device=tgt_pad.device)
         # To+1 x N x E

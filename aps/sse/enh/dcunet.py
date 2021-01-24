@@ -8,7 +8,8 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
-from typing import Tuple, List, Union, Optional, NoReturn
+from typing import Tuple, List, Union, Optional
+from aps.sse.base import SseBase
 from aps.libs import ApsRegisters
 
 
@@ -268,9 +269,15 @@ class Decoder(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@dcunet")
-class DCUNet(nn.Module):
+class DCUNet(SseBase):
     """
     Real or Complex UNet for Speech Enhancement
+
+    Args:
+        K, S, C: kernel, stride, padding, channel size for convolution in encoder/decoder
+        P: padding on frequency axis for convolution in encoder/decoder
+        O: output_padding on frequency axis for transposed_conv2d in decoder
+    NOTE: make sure that stride size on time axis is 1 (we do not do subsampling on time axis)
     """
 
     def __init__(self,
@@ -285,16 +292,8 @@ class DCUNet(nn.Module):
                  enh_transform: Optional[nn.Module] = None,
                  freq_padding: bool = True,
                  connection: str = "sum") -> None:
-        super(DCUNet, self).__init__()
-        """
-        Args:
-            K, S, C: kernel, stride, padding, channel size for convolution in encoder/decoder
-            P: padding on frequency axis for convolution in encoder/decoder
-            O: output_padding on frequency axis for transposed_conv2d in decoder
-        NOTE: make sure that stride size on time axis is 1 (we do not do subsampling on time axis)
-        """
-        if enh_transform is None:
-            raise RuntimeError("Missing configuration for enh_transform")
+        super(DCUNet, self).__init__(enh_transform, training_mode="freq")
+        assert enh_transform is not None
         self.cplx = cplx
         self.forward_stft = enh_transform.ctx(name="forward_stft")
         self.inverse_stft = enh_transform.ctx(name="inverse_stft")
@@ -328,22 +327,16 @@ class DCUNet(nn.Module):
             s = self.inverse_stft((sr * m, si * m), input="complex")
         return s
 
-    def check_args(self, mix: th.Tensor, training: bool = True) -> NoReturn:
-        if not training and mix.dim() != 1:
-            raise RuntimeError("DCUNet expects 1D tensor (inference), " +
-                               f"got {mix.dim()} instead")
-        if training and mix.dim() != 2:
-            raise RuntimeError("DCUNet expects 2D tensor (training), " +
-                               f"got {mix.dim()} instead")
-
-    def infer(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
+    def infer(self,
+              mix: th.Tensor,
+              mode="time") -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): S
         Return:
             Tensor: S
         """
-        self.check_args(mix, training=False)
+        self.check_args(mix, training=False, valid_dim=[1])
         with th.no_grad():
             mix = mix[None, :]
             sep = self.forward(mix)
@@ -359,7 +352,7 @@ class DCUNet(nn.Module):
         Return:
             Tensor: N x S
         """
-        self.check_args(s, training=True)
+        self.check_args(s, training=True, valid_dim=[2])
         # N x F x T
         sr, si = self.forward_stft(s, output="complex")
         if self.cplx:

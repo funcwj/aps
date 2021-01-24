@@ -16,15 +16,14 @@ import aps.asr.beam_search.xfmr as xfmr_api
 from typing import Optional, Dict, Tuple, List
 from aps.asr.base.decoder import PyTorchRNNDecoder
 from aps.asr.base.encoder import encoder_instance
-from aps.asr.xfmr.encoder import support_xfmr_encoder
+from aps.asr.xfmr.encoder import TransformerEncoder
 from aps.asr.xfmr.decoder import TorchTransformerDecoder
+from aps.asr.xfmr.impl import TransformerEncoderLayers
 from aps.asr.base.attention import att_instance
 from aps.libs import ApsRegisters
 
-AttASROutputType = Tuple[th.Tensor, th.Tensor, Optional[th.Tensor],
-                         Optional[th.Tensor]]
-XfmrASROutputType = Tuple[th.Tensor, None, Optional[th.Tensor],
-                          Optional[th.Tensor]]
+ASROutputType = Tuple[th.Tensor, Optional[th.Tensor], Optional[th.Tensor],
+                      Optional[th.Tensor]]
 
 
 class EncDecASRBase(nn.Module):
@@ -48,9 +47,9 @@ class EncDecASRBase(nn.Module):
         self.sos = sos
         self.eos = eos
         self.asr_transform = asr_transform
-        xfmr_encoder_cls = support_xfmr_encoder(enc_type)
-        if xfmr_encoder_cls:
-            self.encoder = xfmr_encoder_cls(input_size, **enc_kwargs)
+        if enc_type in TransformerEncoderLayers:
+            self.encoder = TransformerEncoder(enc_type, input_size,
+                                              **enc_kwargs)
             self.is_xfmr_encoder = True
             enc_proj = enc_kwargs["att_dim"]
         else:
@@ -113,9 +112,8 @@ class EncDecASRBase(nn.Module):
         # N x Ti x D or Ti x N x D (for xfmr)
         return enc_out if batch_first else enc_out.transpose(0, 1)
 
-    def _training_prep(
-        self, x_pad: th.Tensor, x_len: Optional[th.Tensor], y_pad: th.Tensor
-    ) -> Tuple[th.Tensor, Optional[th.Tensor], th.Tensor, th.Tensor]:
+    def _training_prep(self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
+                       y_pad: th.Tensor) -> ASROutputType:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -184,12 +182,14 @@ class AttASR(EncDecASRBase):
                 x_pad: th.Tensor,
                 x_len: Optional[th.Tensor],
                 y_pad: th.Tensor,
-                ssr: float = 0) -> AttASROutputType:
+                y_len: Optional[th.Tensor],
+                ssr: float = 0) -> ASROutputType:
         """
         Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
             y_pad: N x To
+            y_len: N or None, not used here
             ssr: schedule sampling rate
         Return:
             outs: N x (To+1) x V
@@ -271,8 +271,8 @@ class XfmrASR(EncDecASRBase):
                  eos: int = -1,
                  ctc: bool = False,
                  asr_transform: Optional[nn.Module] = None,
-                 enc_type: str = "xfmr",
-                 dec_type: str = "xfmr",
+                 enc_type: str = "xfmr_abs",
+                 dec_type: str = "xfmr_abs",
                  enc_proj: Optional[int] = None,
                  enc_kwargs: Optional[Dict] = None,
                  dec_kwargs: Optional[Dict] = None) -> None:
@@ -285,20 +285,26 @@ class XfmrASR(EncDecASRBase):
                                       enc_type=enc_type,
                                       enc_proj=enc_proj,
                                       enc_kwargs=enc_kwargs)
-        if dec_type != "xfmr":
-            raise ValueError("XfmrASR: currently decoder must be xfmr")
+        if dec_type != "xfmr_abs":
+            raise ValueError("XfmrASR: currently decoder must be xfmr_abs")
         if not self.is_xfmr_encoder and enc_proj != dec_kwargs["att_dim"]:
             raise ValueError("enc_proj should be equal to att_dim")
         self.decoder = TorchTransformerDecoder(
             vocab_size - 1 if ctc else vocab_size, **dec_kwargs)
 
-    def forward(self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
-                y_pad: th.Tensor) -> XfmrASROutputType:
+    def forward(self,
+                x_pad: th.Tensor,
+                x_len: Optional[th.Tensor],
+                y_pad: th.Tensor,
+                y_len: Optional[th.Tensor],
+                ssr: float = 0) -> ASROutputType:
         """
         Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
             y_pad: N x To
+            y_len: N or None
+            ssr: not used here, left for future
         Return:
             outs: N x (To+1) x V
         """
@@ -306,7 +312,7 @@ class XfmrASR(EncDecASRBase):
         enc_out, enc_len, enc_ctc, tgt_pad = self._training_prep(
             x_pad, x_len, y_pad)
         # N x To+1 x D
-        dec_out = self.decoder(enc_out, enc_len, tgt_pad)
+        dec_out = self.decoder(enc_out, enc_len, tgt_pad, y_len + 1)
         return dec_out, None, enc_ctc, enc_len
 
     def greedy_search(self,

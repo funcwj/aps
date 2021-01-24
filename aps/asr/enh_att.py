@@ -6,12 +6,10 @@
 import torch as th
 import torch.nn as nn
 
-from typing import Optional, Dict, Tuple, List
-from aps.asr.att import AttASR, XfmrASR, AttASROutputType, XfmrASROutputType
+from typing import Optional, Dict, List
+from aps.asr.att import AttASR, XfmrASR, ASROutputType
 from aps.asr.filter.conv import EnhFrontEnds
 from aps.libs import ApsRegisters
-
-EnhOutputType = Tuple[th.Tensor, Optional[th.Tensor]]
 
 
 def get_enh_net(enh_type: str,
@@ -63,21 +61,35 @@ class EnhASRBase(nn.Module):
                                    enh_input_size=enh_input_size)
         self.enh_type = enh_type
 
-    def _enhance(self, x_pad: th.Tensor,
-                 x_len: Optional[th.Tensor]) -> EnhOutputType:
+    def forward(self,
+                x_pad: th.Tensor,
+                x_len: Optional[th.Tensor],
+                y_pad: th.Tensor,
+                y_len: Optional[th.Tensor],
+                ssr: float = 0) -> ASROutputType:
         """
-        Perform enhancement and asr feature transform
+        Args:
+            x_pad: N x Ti x D or N x S
+            x_len: N or None
+            y_pad: N x To
+            y_len: N or None, not used here
+            ssr: schedule sampling rate
+        Return:
+            outs: N x (To+1) x V
+            alis: N x (To+1) x T
+            ...
         """
         # feature for enhancement
-        feats, cstft, seq_len = self.enh_transform(x_pad, x_len)
+        feats, cstft, x_len = self.enh_transform(x_pad, x_len)
         if self.enh_type[-4:] == "mvdr":
-            enh = self.enh_net(feats, cstft, inp_len=seq_len)
+            x_enh = self.enh_net(feats, cstft, inp_len=x_len)
         else:
-            enh = self.enh_net(cstft)
+            x_enh = self.enh_net(cstft)
         # N x T x D, feature for ASR if needed
         if self.asr_transform:
-            enh, _ = self.asr_transform(enh, None)
-        return enh, seq_len
+            x_enh, _ = self.asr_transform(x_enh, None)
+        # outs, alis, ctc_branch, ...
+        return self.asr(x_enh, x_len, y_pad, y_len, ssr=ssr)
 
     def beam_search(self, x: th.Tensor, **kwargs) -> List[Dict]:
         """
@@ -156,27 +168,6 @@ class EnhAttASR(EnhASRBase):
                                         enh_type=enh_type,
                                         enh_kwargs=enh_kwargs)
 
-    def forward(self,
-                x_pad: th.Tensor,
-                x_len: Optional[th.Tensor],
-                y_pad: th.Tensor,
-                ssr: float = 0) -> AttASROutputType:
-        """
-        Args:
-            x_pad: N x Ti x D or N x S
-            x_len: N or None
-            y_pad: N x To
-            ssr: schedule sampling rate
-        Return:
-            outs: N x (To+1) x V
-            alis: N x (To+1) x T
-            ...
-        """
-        # mvdr beamforming: N x Ti x F
-        x_enh, x_len = self._enhance(x_pad, x_len)
-        # outs, alis, ctc_branch, ...
-        return self.asr(x_enh, x_len, y_pad, ssr=ssr)
-
 
 @ApsRegisters.asr.register("asr@enh_xfmr")
 class EnhXfmrASR(EnhASRBase):
@@ -200,8 +191,8 @@ class EnhXfmrASR(EnhASRBase):
             enh_kwargs: Optional[Dict] = None,
             asr_cpt: str = "",
             # encoder & decoder
-            enc_type: str = "xfmr",
-            dec_type: str = "xfmr",
+            enc_type: str = "xfmr_abs",
+            dec_type: str = "xfmr_abs",
             enc_proj: Optional[int] = None,
             enc_kwargs: Optional[Dict] = None,
             dec_kwargs: Optional[Dict] = None) -> None:
@@ -224,19 +215,3 @@ class EnhXfmrASR(EnhASRBase):
                                          asr_transform=asr_transform,
                                          enh_type=enh_type,
                                          enh_kwargs=enh_kwargs)
-
-    def forward(self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
-                y_pad: th.Tensor) -> XfmrASROutputType:
-        """
-        Args:
-            x_pad: N x Ti x D or N x S
-            x_len: N or None
-            y_pad: N x To
-        Return:
-            outs: N x (To+1) x V
-            ...
-        """
-        # mvdr beamforming: N x Ti x F
-        x_enh, x_len = self._enhance(x_pad, x_len)
-        # outs, alis, ctc_branch, ...
-        return self.asr(x_enh, x_len, y_pad)

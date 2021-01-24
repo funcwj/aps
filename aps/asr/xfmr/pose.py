@@ -13,13 +13,27 @@ from aps.libs import Register
 PosEncodings = Register("pos_encodings")
 
 
-def get_xfmr_pose(pose_name: str, embed_dim: int, **kwargs) -> nn.Module:
+def get_xfmr_pose(enc_type: str,
+                  dim: int,
+                  nhead: int = 4,
+                  radius: int = 16,
+                  dropout: float = 0.1,
+                  scale_embed: bool = False) -> nn.Module:
     """
     Return position encodings layer
+    Args:
+        enc_type (str): transformer encoder type, {xfmr|cfmr}_{abs|rel|xl}
     """
-    if pose_name not in PosEncodings:
-        raise ValueError(f"Unsupported position encoding layer: {pose_name}")
-    return PosEncodings[pose_name](embed_dim, **kwargs)
+    pose = enc_type.split("_")[-1]
+    if pose not in PosEncodings:
+        raise ValueError(f"Unsupported enc_type: {enc_type}")
+    pose_cls = PosEncodings[pose]
+    if pose == "abs":
+        return pose_cls(dim, dropout=dropout, scale_embed=scale_embed)
+    elif pose == "rel":
+        return pose_cls(dim // nhead, dropout=dropout, radius=radius)
+    else:
+        return pose_cls(dim, dropout=dropout)
 
 
 def digit_shift(term: th.Tensor) -> th.Tensor:
@@ -50,7 +64,7 @@ def digit_shift(term: th.Tensor) -> th.Tensor:
     return term.transpose(1, -1)
 
 
-@PosEncodings.register("sin")
+@PosEncodings.register("xl")
 class SinPosEncoding(nn.Module):
     """
     Sinusoidals positional encoding
@@ -59,9 +73,9 @@ class SinPosEncoding(nn.Module):
     def __init__(self, embed_dim: int, dropout: float = 0.1) -> None:
         super(SinPosEncoding, self).__init__()
         # D//2: 1 / (10000 ** (torch.arange(0.0, embed_dim, 2.0) / embed_dim))
-        self.div_term = nn.Parameter(th.exp(
-            th.arange(0, embed_dim, 2.0) * (-math.log(10000.0) / embed_dim)),
-                                     requires_grad=False)
+        div_term = th.exp(-math.log(10000.0) * th.arange(0, embed_dim, 2.0) /
+                          embed_dim)
+        self.div_term = nn.Parameter(div_term, requires_grad=False)
         self.dropout = nn.Dropout(p=dropout)
 
     def _get_sin_pos_enc(self, position: th.Tensor) -> th.Tensor:
@@ -127,7 +141,7 @@ class RelPosEncoding(nn.Module):
         return self.dropout(self.embed(position + self.radius))
 
 
-@PosEncodings.register("inp_sin")
+@PosEncodings.register("abs")
 class InputSinPosEncoding(SinPosEncoding):
     """
     Add sinusoidals positional encodings to input features
