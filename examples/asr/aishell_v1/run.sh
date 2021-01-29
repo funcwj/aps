@@ -80,6 +80,7 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
       --beam-size $beam_size \
       --nbest $nbest \
       --max-len 50 \
+      --len-norm true \
       --dict data/$dataset/dict \
       --log-suffix $name \
       $dataset $am_exp \

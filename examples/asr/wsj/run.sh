@@ -96,18 +96,18 @@ fi
 
 if [ $end -ge 5 ] && [ $beg -le 5 ]; then
   echo "Stage 5: preparing data (LM) ..."
-  mkdir -p data/wsj/lm
+  lm_data_dir=data/wsj/lm && mkdir -p $lm_data_dir
   zcat $wsj1/13-32.1/wsj1/doc/lng_modl/lm_train/np_data/{87,88,89}/*.z \
     | grep -v "<" | tr "[:lower:]" "[:upper:]" \
-    | awk '{printf("utt-%08d %s\n", NR, $0)}' > data/wsj/lm/external.train.text
+    | awk '{printf("utt-%08d %s\n", NR, $0)}' > $lm_data_dir/external.train.text
   ./utils/tokenizer.py \
     --filter-units "<*IN*>,<*MR.*>,<NOISE>" \
     --space $space \
     --unit char \
-    data/wsj/lm/external.train.text \
-    data/wsj/lm/external.train.token
-  cat data/wsj/lm/external.train.token data/wsj/train_si284/token \
-    > data/wsj/lm/train.token
+    $lm_data_dir/external.train.text \
+    $lm_data_dir/external.train.token
+  cat $lm_data_dir/external.train.token data/wsj/train_si284/token \
+    > $lm_data_dir/train.token
 fi
 
 if [ $end -ge 6 ] && [ $beg -le 6 ]; then
@@ -136,56 +136,6 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
       --lm-weight $lm_weight \
       --len-norm $len_norm \
       --eos-threshold $eos_threshold \
-      --dict data/wsj/dict \
-      --nbest 8 \
-      --space "<space>" \
-      wsj $am_exp \
-      data/wsj/$name/wav.scp \
-      exp/wsj/$am_exp/${name}_lm${lm_exp}_$lm_weight &
-  done
-  wait
-fi
-
-if [ $end -ge 5 ] && [ $beg -le 5 ]; then
-  echo "Stage 5: preparing data (LM) ..."
-  mkdir -p data/wsj/lm
-  zcat $wsj1/13-32.1/wsj1/doc/lng_modl/lm_train/np_data/{87,88,89}/*.z \
-    | grep -v "<" | tr "[:lower:]" "[:upper:]" \
-    | awk '{printf("utt-%08d %s\n", NR, $0)}' > data/wsj/lm/external.train.text
-  ./utils/tokenizer.py \
-    --filter-units "<*IN*>,<*MR.*>,<NOISE>" \
-    --space $space \
-    --unit char \
-    data/wsj/lm/external.train.text \
-    data/wsj/lm/external.train.token
-  cat data/wsj/lm/external.train.token data/wsj/train_si284/token \
-    > data/wsj/lm/train.token
-fi
-
-if [ $end -ge 6 ] && [ $beg -le 6 ]; then
-  echo "Stage 6: training LM ..."
-  ./scripts/train.sh \
-    --gpu $gpu \
-    --seed $lm_seed \
-    --epochs $lm_epochs \
-    --batch-size $lm_batch_size \
-    --num-workers $lm_num_workers \
-    --prog-interval 100 \
-    --eval-interval -1 \
-    lm wsj $lm_exp
-fi
-
-if [ $end -ge 7 ] && [ $beg -le 7 ]; then
-  echo "Stage 7: decoding ..."
-  for name in $test_sets; do
-    ./scripts/decode.sh \
-      --score true \
-      --text data/wsj/$name/text \
-      --log-suffix $name \
-      --beam-size $beam_size \
-      --max-len 220 \
-      --lm exp/wsj/nnlm/$lm_exp \
-      --lm-weight $lm_weight \
       --dict data/wsj/dict \
       --nbest 8 \
       --space "<space>" \

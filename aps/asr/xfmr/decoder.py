@@ -84,11 +84,12 @@ class TransformerDncoderLayer(nn.Module):
         skip_add = tgt
         if self.pre_norm:
             tgt = self.norm1(tgt)
-        tgt = self.self_attn(tgt,
-                             tgt,
-                             tgt,
-                             attn_mask=tgt_mask,
-                             key_padding_mask=tgt_key_padding_mask)[0]
+        tgt, _ = self.self_attn(tgt,
+                                tgt,
+                                tgt,
+                                attn_mask=tgt_mask,
+                                key_padding_mask=tgt_key_padding_mask)
+
         tgt = skip_add + self.dropout1(tgt)
         if not self.pre_norm:
             tgt = self.norm1(tgt)
@@ -96,11 +97,12 @@ class TransformerDncoderLayer(nn.Module):
         skip_add = tgt
         if self.pre_norm:
             tgt = self.norm2(tgt)
-        tgt = self.multihead_attn(tgt,
-                                  memory,
-                                  memory,
-                                  attn_mask=memory_mask,
-                                  key_padding_mask=memory_key_padding_mask)[0]
+        tgt, _ = self.multihead_attn(tgt,
+                                     memory,
+                                     memory,
+                                     attn_mask=memory_mask,
+                                     key_padding_mask=memory_key_padding_mask)
+
         tgt = skip_add + self.dropout2(tgt)
         if not self.pre_norm:
             tgt = self.norm2(tgt)

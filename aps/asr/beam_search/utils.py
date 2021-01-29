@@ -179,14 +179,14 @@ class BaseBeamTracker(object):
             check_trans = check_trans[::-1]
         hypos = []
         for i, s in enumerate(score):
-            token = final_trans[i]
+            seq = final_trans[i]
             # NOTE: double check implementation of the beam search
-            assert not double_check or token == [t[i] for t in check_trans]
-            token_len = len(token) if final else len(token) - 1
-            score = s + token_len * self.param.len_penalty
+            assert not double_check or seq == [t[i] for t in check_trans]
+            seq_len = len(seq) if final else len(seq) - 1
+            score = s + seq_len * self.param.len_penalty
             hypos.append({
-                "score": score / (token_len if self.param.len_norm else 1),
-                "trans": token + [self.param.eos] if final else token,
+                "score": score / (seq_len if self.param.len_norm else 1),
+                "trans": seq + [self.param.eos] if final else seq,
                 "align": None if align is None else align[i]
             })
         return hypos

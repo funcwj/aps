@@ -2,6 +2,7 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import math
+import time
 import warnings
 
 from pathlib import Path
@@ -462,9 +463,9 @@ class Trainer(object):
         self.stop_on_errors = stop_on_errors
         self.detector = ErrorDetector(stop_on_errors)
         self.task = task
+        self.task.to(self.default_device)
         if self.rank in [0, None]:
             self.reporter.log(f"Model summary:\n{task.nnet}")
-        self.task.to(self.default_device)
 
         _lr_scheduler_kwargs = lr_scheduler_kwargs.copy()
         # init state as None
