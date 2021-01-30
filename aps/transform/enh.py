@@ -14,7 +14,7 @@ from typing import Union, List, Optional, Tuple
 from aps.transform.utils import STFT, iSTFT
 from aps.transform.asr import (TFTransposeTransform, LogTransform,
                                CmvnTransform, SpecAugTransform)
-from aps.transform.asr import detect_nan
+from aps.transform.asr import check_valid
 from aps.const import MATH_PI, EPSILON
 from aps.libs import ApsRegisters
 from aps.cplx import ComplexTensor
@@ -518,8 +518,9 @@ class FeatureTransform(nn.Module):
             # N x C x F x T => N x ... x T
             feats.append(self.ipd_transform(pha))
         # concatenate: N x T x ...
+        num_frames = self.num_frames(wav_len)
         if len(feats):
-            feats = detect_nan(th.cat(feats, -1))
+            feats = check_valid(th.cat(feats, -1), num_frames)[0]
         else:
             feats = None
-        return feats, cplx, self.num_frames(wav_len)
+        return feats, cplx, num_frames

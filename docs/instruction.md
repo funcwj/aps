@@ -208,7 +208,6 @@ Almost all the hyper-parameters are configured in the yaml files. You can check 
         adapt_dur: 10 # (s)
         # for constraint one, batch number is the
         # maximum number that satisfies #utt_dur <= batch_size
-        audio_norm: false
       train:
         wav_scp: "data/aishell_v1/train/wav.scp"
         utt2dur: "data/aishell_v1/train/utt2dur"
@@ -218,7 +217,29 @@ Almost all the hyper-parameters are configured in the yaml files. You can check 
         utt2dur: "data/aishell_v1/dev/utt2dur"
         text: "data/aishell_v1/dev/text"
     ```
-    and [chunk](../aps/loader/ss/chunk.py) dataloader for separation model training:
+    To use the [kaldi](../aps/loader/am/raw.py) feature, we have
+    ```yaml
+    data_conf:
+      fmt: "am@kaldi"
+      loader:
+        # adaptive or constraint
+        batch_mode: adaptive
+        max_token_num: 400
+        max_dur: 3000 #num_frames
+        min_dur: 100 #num_frames
+        adapt_token_num: 150
+        adapt_dur: 1000 #num_frames
+      train:
+        feats_scp: "data/aishell_v1/train/feats.scp"
+        utt2num_frames: "data/aishell_v1/train/utt2num_frames"
+        text: "data/aishell_v1/train/text"
+      valid:
+        feats_scp: "data/aishell_v1/dev/feats.scp"
+        utt2num_frames: "data/aishell_v1/dev/utt2num_frames"
+        text: "data/aishell_v1/dev/text"
+    ```
+
+    And the [chunk](../aps/loader/ss/chunk.py) dataloader for separation model training:
     ```yaml
     data_conf:
       fmt: "ss@chunk"
@@ -265,6 +286,7 @@ Almost all the hyper-parameters are configured in the yaml files. You can check 
       # report metrics on validation epoch
       report_metrics: ["loss", "accu", "@ctc"]
       stop_criterion: "accu"
+      average_checkpoint: false
     ```
 
 * `enh_transform`: Feature configurations for enhancement/separation tasks. Refer `aps/transform/enh.py` for all the supported parameters. An example that uses log spectrogram feature concatenated with cos-IPDs:
@@ -281,7 +303,7 @@ Almost all the hyper-parameters are configured in the yaml files. You can check 
       cos_ipd: true
     ```
 
-* `asr_transform`:  Feature configurations for ASR tasks. Refer `aps/transform/asr.py` for all the supported parameters. For examples, using log-fbank feature with spectral augumentation and utterance-level mean variance normalization:
+* `asr_transform`:  Feature configurations for ASR tasks. Refer `aps/transform/asr.py` for all the supported parameters. For examples, if we want to adopt log-fbank feature with spectral augumentation (SpecAugment) and utterance-level mean variance normalization, we have:
     ```yaml
     asr_transform:
       feats: perturb-fbank-log-cmvn-aug
@@ -294,9 +316,22 @@ Almost all the hyper-parameters are configured in the yaml files. You can check 
       round_pow_of_two: true
       sr: 16000
       num_mels: 80
-      norm_mean: True
-      norm_var: True
+      norm_mean: true
+      norm_var: true
       speed_perturb: 0.9,1.0,1.1
+      aug_prob: 1
+      aug_time_args: [100, 1]
+      aug_freq_args: [27, 1]
+      aug_mask_zero: true
+    ```
+    Note that the above configuration is used with [raw waveform](../aps/loader/am/raw.py) dataloader. For kaldi format features, the configuration is more simple (only needs to apply cmvn and SpecAugment):
+    ```yaml
+    asr_transform:
+      feats: cmvn-aug
+      sr: 16000
+      norm_mean: true
+      norm_var: true
+      gcmvn: data/aishell_v1/train/cmvn.ark
       aug_prob: 1
       aug_time_args: [100, 1]
       aug_freq_args: [27, 1]

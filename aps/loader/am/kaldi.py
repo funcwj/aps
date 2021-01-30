@@ -20,7 +20,7 @@ def DataLoader(train: bool = True,
                distributed: bool = False,
                feats_scp: str = "",
                text: str = "",
-               utt2dur: str = "",
+               utt2num_frames: str = "",
                vocab_dict: Optional[Dict] = None,
                max_dur: float = 3000,
                min_dur: float = 40,
@@ -39,7 +39,7 @@ def DataLoader(train: bool = True,
         distributed: in distributed mode or not
         feats_scp: path of the feature script
         text: path of the text/token file
-        utt2dur: path of the duration file (should be utt2num_frames here)
+        utt2num_frames: path of the utt2num_frames file
         skip_utts: skips utterances if the key is in this file
         vocab_dict: vocabulary dictionary object
         {min|max}_dur: discard utterance when #num_frames not in [min_dur, max_dur]
@@ -52,7 +52,7 @@ def DataLoader(train: bool = True,
     """
     dataset = Dataset(feats_scp,
                       text,
-                      utt2dur,
+                      utt2num_frames,
                       vocab_dict,
                       skip_utts=skip_utts,
                       min_token_num=min_token_num,

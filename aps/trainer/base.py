@@ -2,7 +2,6 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import math
-import time
 import warnings
 
 from pathlib import Path
@@ -905,7 +904,7 @@ class Trainer(object):
         dev_batches = len(dev_loader) if len(dev_loader) else "unknown"
         self.reporter.log(
             f"Number of batches (train/valid): {trn_batches}/{dev_batches}")
-        self.reporter.log(f"Training epochs: {num_epochs}")
+        self.reporter.log(f"Training for {num_epochs} epochs ...")
         timer = SimpleTimer()
         self.prep_run(dev_loader)
         if eval_interval > 0:

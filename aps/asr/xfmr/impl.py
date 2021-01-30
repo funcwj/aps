@@ -448,12 +448,12 @@ class ApsTransformerEncoderLayer(nn.Module):
         inp = src
         if self.pre_norm:
             src = self.norm1(src)
-        att = self.self_attn(src,
-                             src,
-                             src,
-                             inj_pose,
-                             attn_mask=src_mask,
-                             key_padding_mask=src_key_padding_mask)[0]
+        att, _ = self.self_attn(src,
+                                src,
+                                src,
+                                inj_pose,
+                                attn_mask=src_mask,
+                                key_padding_mask=src_key_padding_mask)
         src = inp + self.dropout(att)
         if self.pre_norm:
             src = src + self.feedforward(self.norm2(src))
@@ -538,12 +538,12 @@ class ApsConformerEncoderLayer(nn.Module):
         src1 = self.feedforward1(src) * 0.5 + src
         # self-attention block
         src2 = self.norm1(src1)
-        att = self.self_attn(src2,
-                             src2,
-                             src2,
-                             inj_pose,
-                             attn_mask=src_mask,
-                             key_padding_mask=src_key_padding_mask)[0]
+        att, _ = self.self_attn(src2,
+                                src2,
+                                src2,
+                                inj_pose,
+                                attn_mask=src_mask,
+                                key_padding_mask=src_key_padding_mask)
         src = src1 + self.dropout(att)
         # conv
         src = self.conv(src) + src

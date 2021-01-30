@@ -22,8 +22,8 @@ from aps.asr.xfmr.impl import TransformerEncoderLayers
 from aps.asr.base.attention import att_instance
 from aps.libs import ApsRegisters
 
-ASROutputType = Tuple[th.Tensor, Optional[th.Tensor], Optional[th.Tensor],
-                      Optional[th.Tensor]]
+NoneOrTensor = Optional[th.Tensor]
+ASROutputType = Tuple[th.Tensor, NoneOrTensor, NoneOrTensor, NoneOrTensor]
 
 
 class EncDecASRBase(nn.Module):
