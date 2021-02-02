@@ -62,12 +62,12 @@ def test_am_kaldi_loader(batch_size, num_workers):
                             feats_scp=f"{egs_dir}/egs.fbank.scp",
                             text=f"{egs_dir}/egs.fake.text",
                             vocab_dict=load_dict(f"{egs_dir}/dict"),
-                            utt2dur=f"{egs_dir}/egs.fbank.num_frames",
+                            utt2num_frames=f"{egs_dir}/egs.fbank.num_frames",
                             train=False,
                             adapt_dur=900,
                             num_workers=num_workers,
-                            max_batch_size=batch_size,
-                            min_batch_size=1)
+                            min_batch_size=1,
+                            max_batch_size=batch_size)
     for egs in loader:
         for key in ["src_pad", "tgt_pad", "tgt_len", "src_len"]:
             assert key in egs
