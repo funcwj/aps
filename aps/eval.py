@@ -56,7 +56,8 @@ class NnetEvaluator(object):
         self.accept_raw = False
         if "asr_transform" in conf:
             asr_transform = aps_transform("asr")(**conf["asr_transform"])
-            self.accept_raw = True
+            # if no STFT layer
+            self.accept_raw = asr_transform.spectra_index != -1
         if "enh_transform" in conf:
             enh_transform = aps_transform("enh")(**conf["enh_transform"])
             self.accept_raw = True

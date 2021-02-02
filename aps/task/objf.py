@@ -97,7 +97,7 @@ def ctc_objf(outs: th.Tensor,
     PyTorch CTC loss function
     Args:
         outs (Tensor): N x T x V
-        tgts (Tensor): N x T
+        tgts (Tensor): N x L
         out_len (Tensor): N
         tgt_len (Tensor): N
         blank (int): blank id for CTC

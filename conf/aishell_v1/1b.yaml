@@ -52,8 +52,8 @@ trainer_conf:
   lr_scheduler: "warmup_noam_lr"
   lr_scheduler_period: "step"
   lr_scheduler_kwargs:
-    factor: 1
     warmup: 25000
+    peak_lr: -1
     transformer_dim: 512
   no_impr: 8
   no_impr_thres: 0

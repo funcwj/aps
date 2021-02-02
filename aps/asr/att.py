@@ -95,24 +95,28 @@ class EncDecASRBase(nn.Module):
         """
         Prepare data for decoding
         """
-        # raw waveform
+        x_dim = x.dim()
+        # raw waveform or feature
         if self.asr_transform:
-            if x.dim() != 1:
-                raise RuntimeError("Now only support for one utterance")
+            if x_dim not in [1, 2]:
+                raise RuntimeError(
+                    "Expect 1/2D (single/multi-channel waveform or single " +
+                    f"channel feature) tensor, but get {x_dim}")
             # 1 x C x T x ... or 1 x T x F
             x, _ = self.asr_transform(x[None, ...], None)
         # already feature
         else:
-            if x.dim() not in [2, 3]:
+            if x_dim not in [2, 3]:
                 raise RuntimeError(
-                    f"Expect 2/3D(multi-channel) tensor, but got {x.dim()}")
+                    "Expect 2/3D (single or multi-channel waveform) " +
+                    f"tensor, but got {x_dim}")
             x = x[None, ...]
         # N x Ti x D
         enc_out, _ = self.encoder(x, None)
         # N x Ti x D or Ti x N x D (for xfmr)
         return enc_out if batch_first else enc_out.transpose(0, 1)
 
-    def _training_prep(self, x_pad: th.Tensor, x_len: Optional[th.Tensor],
+    def _training_prep(self, x_pad: th.Tensor, x_len: NoneOrTensor,
                        y_pad: th.Tensor) -> ASROutputType:
         """
         Args:
@@ -180,9 +184,9 @@ class AttASR(EncDecASRBase):
 
     def forward(self,
                 x_pad: th.Tensor,
-                x_len: Optional[th.Tensor],
+                x_len: NoneOrTensor,
                 y_pad: th.Tensor,
-                y_len: Optional[th.Tensor],
+                y_len: NoneOrTensor,
                 ssr: float = 0) -> ASROutputType:
         """
         Args:
@@ -294,9 +298,9 @@ class XfmrASR(EncDecASRBase):
 
     def forward(self,
                 x_pad: th.Tensor,
-                x_len: Optional[th.Tensor],
+                x_len: NoneOrTensor,
                 y_pad: th.Tensor,
-                y_len: Optional[th.Tensor],
+                y_len: NoneOrTensor,
                 ssr: float = 0) -> ASROutputType:
         """
         Args:

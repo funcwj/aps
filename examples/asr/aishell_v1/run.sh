@@ -35,7 +35,7 @@ ngram=5
 
 # decoding
 eos_threshold=1
-beam_size=24
+beam_size=16
 nbest=8
 ngram=5
 lm_weight=0.2

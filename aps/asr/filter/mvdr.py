@@ -21,7 +21,8 @@ def trace(cplx_mat: ComplexTensor) -> ComplexTensor:
     Return trace of a complex matrices
     """
     mat_size = cplx_mat.size()
-    diag_index = th.eye(mat_size[-1], dtype=th.bool).expand(*mat_size)
+    diag_index = th.eye(mat_size[-1], dtype=th.bool,
+                        device=cplx_mat.device).expand(*mat_size)
     return cplx_mat.masked_select(diag_index).view(*mat_size[:-1]).sum(-1)
 
 

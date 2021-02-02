@@ -70,7 +70,7 @@ class SinPosEncoding(nn.Module):
     Sinusoidals positional encoding
     """
 
-    def __init__(self, embed_dim: int, dropout: float = 0.1) -> None:
+    def __init__(self, embed_dim: int, dropout: float = 0.0) -> None:
         super(SinPosEncoding, self).__init__()
         # D//2: 1 / (10000 ** (torch.arange(0.0, embed_dim, 2.0) / embed_dim))
         div_term = th.exp(-math.log(10000.0) * th.arange(0, embed_dim, 2.0) /
@@ -152,7 +152,7 @@ class InputSinPosEncoding(SinPosEncoding):
                  dropout: float = 0.1,
                  scale_embed: bool = False) -> None:
         super(InputSinPosEncoding, self).__init__(embed_dim, dropout=dropout)
-        self.embed_scale = embed_dim**0.5 if scale_embed else 1
+        self.factor = embed_dim**0.5 if scale_embed else 1
 
     def forward(self, inp: th.Tensor, t: int = 0) -> th.Tensor:
         """
@@ -166,7 +166,7 @@ class InputSinPosEncoding(SinPosEncoding):
         # T x D
         sin_enc = self._get_sin_pos_enc(pos)
         # add dropout
-        out = self.dropout(inp * self.embed_scale + sin_enc)
+        out = self.dropout(inp * self.factor + sin_enc)
         # T x N x D
         out = out.transpose(0, 1)
         return out
