@@ -88,7 +88,7 @@ def test_ctc_xent():
     task = aps_task("asr@ctc_xent",
                     att_asr,
                     lsm_factor=0.1,
-                    ctc_weight=1,
+                    ctc_weight=0.1,
                     blank=vocab_size - 1)
     egs = gen_asr_egs(batch_size, vocab_size)
     egs["ssr"] = 0.1

@@ -84,11 +84,12 @@ class TransformerDncoderLayer(nn.Module):
         skip_add = tgt
         if self.pre_norm:
             tgt = self.norm1(tgt)
-        tgt = self.self_attn(tgt,
-                             tgt,
-                             tgt,
-                             attn_mask=tgt_mask,
-                             key_padding_mask=tgt_key_padding_mask)[0]
+        tgt, _ = self.self_attn(tgt,
+                                tgt,
+                                tgt,
+                                attn_mask=tgt_mask,
+                                key_padding_mask=tgt_key_padding_mask)
+
         tgt = skip_add + self.dropout1(tgt)
         if not self.pre_norm:
             tgt = self.norm1(tgt)
@@ -96,11 +97,12 @@ class TransformerDncoderLayer(nn.Module):
         skip_add = tgt
         if self.pre_norm:
             tgt = self.norm2(tgt)
-        tgt = self.multihead_attn(tgt,
-                                  memory,
-                                  memory,
-                                  attn_mask=memory_mask,
-                                  key_padding_mask=memory_key_padding_mask)[0]
+        tgt, _ = self.multihead_attn(tgt,
+                                     memory,
+                                     memory,
+                                     attn_mask=memory_mask,
+                                     key_padding_mask=memory_key_padding_mask)
+
         tgt = skip_add + self.dropout2(tgt)
         if not self.pre_norm:
             tgt = self.norm2(tgt)
@@ -172,8 +174,6 @@ class TorchTransformerDecoder(nn.Module):
         offset = 0 if pre_emb is None else pre_emb.shape[0]
         mem_pad_mask = None if enc_len is None else (padding_mask(enc_len) == 1)
         tgt_pad_mask = None if tgt_len is None else (padding_mask(tgt_len) == 1)
-        tgt_mask = prep_sub_mask(tgt_pad.shape[-1] + offset,
-                                 device=tgt_pad.device)
         # N x T x E
         tgt_emb = self.vocab_embed(tgt_pad)
         # T x N x E
@@ -181,6 +181,8 @@ class TorchTransformerDecoder(nn.Module):
         # T+T' x N x E
         if pre_emb is not None:
             tgt_emb = th.cat([pre_emb, tgt_emb], dim=0)
+        # T+T' x T+T'
+        tgt_mask = prep_sub_mask(tgt_emb.shape[0], device=tgt_pad.device)
         # To+1 x N x D
         dec_out = self.decoder(tgt_emb,
                                enc_out,

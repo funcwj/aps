@@ -148,8 +148,8 @@ class TokenReader(object):
         token_set = []
         drop_utts = 0
         for key, tokens in text_reader:
-            L = len(tokens)
-            if L > max_token_num or L <= min_token_num:
+            num_toks = len(tokens)
+            if num_toks > max_token_num or num_toks < min_token_num:
                 drop_utts += 1
                 continue
             if key not in utt2dur:
@@ -164,7 +164,7 @@ class TokenReader(object):
             token_set.append({
                 "key": key,
                 "dur": num_frames,
-                "len": L,
+                "len": num_toks,
                 "tok": tokens
             })
         # long -> short
@@ -211,12 +211,10 @@ class BatchSampler(dat.Sampler):
         if batch_mode not in ["adaptive", "constraint"]:
             raise ValueError(f"Unsupported batch mode: {batch_mode}")
         if batch_mode == "adaptive":
-            batches = self._work_adapt_batch_index(
-                dataset,
-                adapt_dur,
-                adapt_token_num,
-                max_batch_size,
-                min_batch_size=min_batch_size)
+            batches = self._work_adapt_batch_index(dataset, adapt_dur,
+                                                   adapt_token_num,
+                                                   max_batch_size,
+                                                   min_batch_size)
         else:
             batches = self._work_const_batch_index(dataset, max_batch_size)
         self.epoch = 0
@@ -254,13 +252,9 @@ class BatchSampler(dat.Sampler):
             idx_bz.append((beg, tot))
         return idx_bz
 
-    def _work_adapt_batch_index(
-            self,
-            dataset: dat.Dataset,
-            adapt_dur: float,
-            adapt_num: int,
-            max_batch_size: int,
-            min_batch_size: int = 4) -> List[Tuple[int, int]]:
+    def _work_adapt_batch_index(self, dataset: dat.Dataset, adapt_dur: float,
+                                adapt_num: int, max_batch_size: int,
+                                min_batch_size: int) -> List[Tuple[int, int]]:
         """
         In adaptive mode, we compute #batch_size using
             cur_bz = int(max(#min_batch_size, #max_batch_size // (1 + factor)))
@@ -270,16 +264,16 @@ class BatchSampler(dat.Sampler):
         beg = 0
         tot = len(dataset)
         cur_bz = max_batch_size
-        idx_bz = []
-        while beg + cur_bz <= tot:
+        idx_boundary = []
+        while beg < tot:
             cur = dataset.token_reader[beg]
             cur_ilen = cur["dur"]
             cur_olen = cur["len"]
             factor = max(cur_ilen // adapt_dur, (cur_olen - 1) // adapt_num)
             cur_bz = int(max(min_batch_size, max_batch_size // (1 + factor)))
-            idx_bz.append((beg, beg + cur_bz))
+            idx_boundary.append((beg, min(beg + cur_bz, tot)))
             beg += cur_bz
-        return idx_bz
+        return idx_boundary
 
     def __iter__(self):
         indices = derive_indices(self.num_batches,

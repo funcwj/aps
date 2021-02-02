@@ -166,11 +166,18 @@ def debug_speed_perturb():
     from aps.loader import write_audio
     speed_perturb = SpeedPerturbTransform(sr=16000)
     egs = read_audio("data/transform/egs1.wav", sr=16000, norm=False)
-    for i in range(12):
-        egs2 = speed_perturb(th.from_numpy(egs[None, :]))
-        write_audio(f"egs1-{i + 1}.wav", egs2[0].numpy(), norm=False)
+    # 12 x S
+    batch = 12
+    egs = th.repeat_interleave(th.from_numpy(egs[None, :]), batch, 0)
+    egs_len = th.tensor([egs.shape[-1]] * batch, dtype=th.int64)
+    egs_sp = speed_perturb(egs)
+    for i in range(batch):
+        write_audio(f"egs1-{i + 1}.wav", egs_sp[i].numpy(), norm=False)
+    egs_len_sp = speed_perturb.output_length(egs_len)
+    print(egs_len)
+    print(egs_len_sp)
 
 
 if __name__ == "__main__":
-    # debug_speed_perturb()
-    debug_visualize_feature()
+    debug_speed_perturb()
+    # debug_visualize_feature()

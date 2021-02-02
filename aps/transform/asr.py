@@ -12,6 +12,7 @@ Notations:
     S: number of samples in utts
 """
 import math
+import warnings
 
 import torch as th
 import torch.nn as nn
@@ -30,15 +31,27 @@ from kaldi_python_io.functional import read_kaldi_mat
 AsrReturnType = Union[th.Tensor, Optional[th.Tensor]]
 
 
-def detect_nan(feature: th.Tensor) -> th.Tensor:
+def check_valid(feature: th.Tensor,
+                num_frames: Optional[th.Tensor]) -> Tuple[th.Tensor]:
     """
-    Check if nan exists
+    Check NAN and valid of the tensor
+    Args:
+        feature: N x (C) x T x F
+        num_frames: N or None
     """
     num_nans = th.sum(th.isnan(feature))
+    shape = feature.shape
     if num_nans:
         raise ValueError(f"Detect {num_nans} NANs in feature matrices, " +
-                         f"shape = {feature.shape}...")
-    return feature
+                         f"shape = {shape}...")
+    if num_frames is not None:
+        max_frames = num_frames.max().item()
+        if feature.shape[-2] < max_frames:
+            raise RuntimeError(f"feats shape: {shape[-2]} x {shape[-1]}, " +
+                               f"num_frames = {num_frames.tolist()}")
+        if feature.shape[-2] > max_frames:
+            feature = feature[..., :max_frames, :]
+    return feature, num_frames
 
 
 class RescaleTransform(nn.Module):
@@ -110,13 +123,21 @@ class SpeedPerturbTransform(nn.Module):
         dst_sr = [int(factor * sr) for factor in map(float, perturb.split(","))]
         if not len(dst_sr):
             raise ValueError("No perturb options for doing speed perturb")
+        if sr not in dst_sr:
+            raise ValueError(
+                f"We should keep 1.0 in perturb options: {perturb}")
         # N x dst_sr x src_sr x K
         self.weights = nn.ParameterList([
             nn.Parameter(speed_perturb_filter(sr, fs), requires_grad=False)
             for fs in dst_sr
             if fs != sr
         ])
-        self.last_weight = None
+        shapes = [w.shape for w in self.weights]
+        self.register_buffer(
+            "src_sr", th.tensor([s[1] for s in shapes] + [1], dtype=th.int64))
+        self.register_buffer(
+            "dst_sr", th.tensor([s[0] for s in shapes] + [1], dtype=th.int64))
+        self.last_choice = None
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(sr={self.sr}, factor={self.factor_str})"
@@ -126,12 +147,12 @@ class SpeedPerturbTransform(nn.Module):
         """
         Compute output length after speed perturb
         """
-        if self.last_weight is None:
+        if self.last_choice is None:
             return inp_len
         if inp_len is None:
             return None
-        dst_sr, src_sr, _ = self.last_weight.shape
-        return (inp_len // src_sr) * dst_sr
+        return inp_len // self.src_sr[self.last_choice] * self.dst_sr[
+            self.last_choice]
 
     def forward(self, wav: th.Tensor) -> th.Tensor:
         """
@@ -140,18 +161,29 @@ class SpeedPerturbTransform(nn.Module):
         Return:
             wav (Tensor): output signal, N x ... x S
         """
-        self.last_weight = None
+        self.last_choice = None
         if not self.training:
             return wav
         if wav.dim() != 2:
             raise RuntimeError(f"Now only supports 2D tensor, got {wav.dim()}")
-        # 1.0, do not apply speed perturb
-        choice = th.randint(0, len(self.weights) + 1, (1,)).item()
-        if choice == len(self.weights):
-            return wav
-        else:
-            self.last_weight = self.weights[choice]
-            return perturb_speed(wav, self.last_weight)
+        choice = th.randint(0, len(self.weights) + 1, (wav.shape[0],))
+        self.last_choice = choice
+        wav_sp = []
+        # each utterance is different
+        # NOTE: make it same in previous commits
+        for i, c in enumerate(self.last_choice.tolist()):
+            # 1.0, do not apply speed perturb
+            if c == len(self.weights):
+                wav_sp.append(wav[i])
+            else:
+                wav_sp.append(perturb_speed(wav[i:i + 1], self.weights[c])[0])
+        # may produce longer utterance
+        wav_sp_pad = th.zeros(
+            [wav.shape[0], max([w.shape[-1] for w in wav_sp])],
+            device=wav.device)
+        for i, w in enumerate(wav_sp):
+            wav_sp_pad[i, :w.shape[-1]] = w
+        return wav_sp_pad
 
 
 class TFTransposeTransform(nn.Module):
@@ -456,13 +488,13 @@ class CmvnTransform(nn.Module):
         super(CmvnTransform, self).__init__()
         self.gmean, self.gstd = None, None
         if gcmvn:
+            gcmvn_toks = gcmvn.split(".")
             # in Kaldi format
-            if gcmvn[-4:] == ".ark":
-                cmvn = read_kaldi_mat(gcmvn)
+            if gcmvn_toks[-1] == "ark":
+                cmvn = th.tensor(read_kaldi_mat(gcmvn), dtype=th.float32)
                 N = cmvn[0, -1]
-                mean = th.tensor(cmvn[0, :-1] / N, dtype=th.float32)
-                std = th.tensor(cmvn[1, :-1] / N - mean**2,
-                                dtype=th.float32)**0.5
+                mean = cmvn[0, :-1] / N
+                std = (cmvn[1, :-1] / N - mean**2)**0.5
             else:
                 stats = th.load(gcmvn)
                 mean, std = stats[0], stats[1]
@@ -871,29 +903,31 @@ class FeatureTransform(nn.Module):
         self.feats_dim = feats_dim
         self.subsampling_factor = subsampling_factor
 
-    def num_frames(self, wav_len: th.Tensor) -> th.Tensor:
+    def num_frames(self, inp_len: th.Tensor) -> th.Tensor:
         """
         Work out number of frames
         """
-        if wav_len is None:
+        if inp_len is None:
             return None
         if self.spectra_index == -1:
-            raise RuntimeError("No SpectrogramTransform layer is found, "
-                               "can not work out number of the frames")
+            warnings.warn("SpectrogramTransform layer is not found, " +
+                          "return input as the #num_frames")
+            return inp_len
         if self.perturb_index != -1:
-            wav_len = self.transform[self.perturb_index].output_length(wav_len)
-        num_frames = self.transform[self.spectra_index].len(wav_len)
+            inp_len = self.transform[self.perturb_index].output_length(inp_len)
+        num_frames = self.transform[self.spectra_index].len(inp_len)
         return num_frames // self.subsampling_factor
 
-    def forward(self, wav_pad: th.Tensor,
-                wav_len: Optional[th.Tensor]) -> AsrReturnType:
+    def forward(self, inp_pad: th.Tensor,
+                inp_len: Optional[th.Tensor]) -> AsrReturnType:
         """
         Args:
-            wav_pad (Tensor): raw waveform: N x C x S or N x S
-            wav_len (Tensor or None): N or None
+            inp_pad (Tensor): raw waveform or feature: N x C x S or N x S
+            inp_len (Tensor or None): N or None
         Return:
             feats (Tensor): acoustic features: N x C x T x ...
             num_frames (Tensor or None): number of frames
         """
-        feats = self.transform(wav_pad)
-        return detect_nan(feats), self.num_frames(wav_len)
+        feats = self.transform(inp_pad)
+        num_frames = self.num_frames(inp_len)
+        return check_valid(feats, num_frames)

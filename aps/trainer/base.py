@@ -462,9 +462,9 @@ class Trainer(object):
         self.stop_on_errors = stop_on_errors
         self.detector = ErrorDetector(stop_on_errors)
         self.task = task
+        self.task.to(self.default_device)
         if self.rank in [0, None]:
             self.reporter.log(f"Model summary:\n{task.nnet}")
-        self.task.to(self.default_device)
 
         _lr_scheduler_kwargs = lr_scheduler_kwargs.copy()
         # init state as None
@@ -904,7 +904,7 @@ class Trainer(object):
         dev_batches = len(dev_loader) if len(dev_loader) else "unknown"
         self.reporter.log(
             f"Number of batches (train/valid): {trn_batches}/{dev_batches}")
-        self.reporter.log(f"Training epochs: {num_epochs}")
+        self.reporter.log(f"Training for {num_epochs} epochs ...")
         timer = SimpleTimer()
         self.prep_run(dev_loader)
         if eval_interval > 0:

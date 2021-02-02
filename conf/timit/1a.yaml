@@ -1,8 +1,3 @@
-# WER (%) Report:
-# Total (400 utterances): 3218/15057 = 21.37%, SUB/INS/DEL = 2161/568/489
-# WER (%) Report:
-# Total (192 utterances): 1636/7215 = 22.67%, SUB/INS/DEL = 1150/252/234
-
 nnet: "asr@att"
 
 nnet_conf:

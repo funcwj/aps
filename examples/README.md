@@ -1,1 +1,1 @@
-I provide some examples using APS package here. Some recipes may out-of-date as the APS is still in faster iteration. Tuning models really cost much time, more recipes may come in the future.
+I provide some examples using APS package here (to show the usage of the APS). Some recipes may out-of-date as the toolkit is still in faster iteration.

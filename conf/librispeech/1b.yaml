@@ -1,9 +1,3 @@
-# 8 GPU, DDP, 256 batch size
-# WER (%) Report:
-# Total (2620 utterances): 2356/52576 = 4.48%, SUB/INS/DEL = 1899/158/299
-# WER (%) Report:
-# Total (2939 utterances): 6035/52343 = 11.53%, SUB/INS/DEL = 4834/432/769
-
 nnet: "asr@att"
 
 nnet_conf:

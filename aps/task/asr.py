@@ -148,8 +148,8 @@ class CtcXentHybridTask(Task):
             tgt_len: N
             ssr (float): const if needed
         """
-        # tgt_pad: N x To (replace ignore_id with eos)
-        # tgts: N x To+1 (add eos)
+        # tgt_pad: N x To (replace ignore_id with eos, used in decoder)
+        # tgts: N x To+1 (pad eos, used in loss)
         tgt_pad, tgts = prep_asr_label(egs["tgt_pad"],
                                        egs["tgt_len"],
                                        pad_value=self.eos,
@@ -164,29 +164,29 @@ class CtcXentHybridTask(Task):
                                               ssr=ssr)
         # compute loss
         if self.lsm_factor > 0:
-            xent_loss = ls_objf(outs,
-                                tgts,
-                                method=self.lsm_method,
-                                reduction=self.reduction,
-                                lsm_factor=self.lsm_factor,
-                                label_count=self.label_count)
+            att_loss = ls_objf(outs,
+                               tgts,
+                               method=self.lsm_method,
+                               reduction=self.reduction,
+                               lsm_factor=self.lsm_factor,
+                               label_count=self.label_count)
         else:
-            xent_loss = ce_objf(outs, tgts, reduction=self.reduction)
+            att_loss = ce_objf(outs, tgts, reduction=self.reduction)
 
         stats = {}
         if self.ctc_weight > 0:
             ctc_loss = ctc_objf(ctc_enc,
-                                tgt_pad,
+                                egs["tgt_pad"],
                                 enc_len,
                                 egs["tgt_len"],
                                 blank=self.ctc_blank,
                                 reduction=self.reduction,
                                 add_softmax=True)
             stats["@ctc"] = ctc_loss.item()
-            stats["xent"] = xent_loss.item()
+            stats["xent"] = att_loss.item()
         else:
             ctc_loss = 0
-        loss = self.ctc_weight * ctc_loss + (1 - self.ctc_weight) * xent_loss
+        loss = self.ctc_weight * ctc_loss + (1 - self.ctc_weight) * att_loss
         # compute accu
         accu, den = compute_accu(outs, tgts)
         # check coding error

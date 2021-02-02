@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 
 from typing import Optional, Dict, List
-from aps.asr.att import AttASR, XfmrASR, ASROutputType
+from aps.asr.att import AttASR, XfmrASR, NoneOrTensor, ASROutputType
 from aps.asr.filter.conv import EnhFrontEnds
 from aps.libs import ApsRegisters
 
@@ -63,9 +63,9 @@ class EnhASRBase(nn.Module):
 
     def forward(self,
                 x_pad: th.Tensor,
-                x_len: Optional[th.Tensor],
+                x_len: NoneOrTensor,
                 y_pad: th.Tensor,
-                y_len: Optional[th.Tensor],
+                y_len: NoneOrTensor,
                 ssr: float = 0) -> ASROutputType:
         """
         Args:

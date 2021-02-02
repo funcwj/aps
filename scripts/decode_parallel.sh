@@ -92,7 +92,8 @@ cat $log_dir/beam${beam_size}.*.${nbest}best | \
 
 if $score ; then
   [ -z $text ] && echo "for --score true, you must given --text <reference-transcription>" && exit -1
-  ./cmd/compute_wer.py $dec_dir/beam${beam_size}.decode $text
+  ./cmd/compute_wer.py $dec_dir/beam${beam_size}.decode $text | \
+    tee $dec_dir/beam${beam_size}.wer
 fi
 
 echo "$0 $*: Done"

@@ -485,17 +485,17 @@ class STFTBase(nn.Module):
             f"center={self.center}, mode={self.mode}, " +
             f"kernel_size={self.num_bins}x{self.K.shape[2]}")
 
-    def num_frames(self, num_samples: th.Tensor) -> th.Tensor:
+    def num_frames(self, wav_len: th.Tensor) -> th.Tensor:
         """
         Compute number of the frames
         """
-        if th.sum(num_samples <= self.frame_len):
+        if th.sum(wav_len <= self.frame_len):
             raise RuntimeError(
                 f"Audio samples less than frame_len ({self.frame_len})")
-        num_ffts = self.K.shape[-1]
+        kernel_size = self.K.shape[-1]
         if self.center:
-            num_samples += num_ffts
-        return (num_samples - num_ffts) // self.frame_hop + 1
+            wav_len += kernel_size
+        return (wav_len - kernel_size) // self.frame_hop + 1
 
     def extra_repr(self) -> str:
         return self.expr
