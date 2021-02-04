@@ -19,8 +19,8 @@ all_lm_conf_keys = required_keys + ["cmd_args"]
 
 
 def load_dict(dict_path: str,
-              required: List[str] = ["<sos>", "<eos>"],
-              reverse: bool = False) -> Dict:
+              reverse: bool = False,
+              required: List[str] = ["<sos>", "<eos>"]) -> Dict:
     """
     Load the dictionary object
     Args:
@@ -28,9 +28,9 @@ def load_dict(dict_path: str,
         required: required units in the dict
         reverse: return int:str if true, else str:int
     """
-    with codecs.open(dict_path, encoding="utf-8") as f:
+    with codecs.open(dict_path, mode="r", encoding="utf-8") as fd:
         vocab = {}
-        for line in f:
+        for line in fd:
             tok, idx = line.split()
             if reverse:
                 vocab[int(idx)] = tok
@@ -46,8 +46,22 @@ def load_dict(dict_path: str,
     return vocab
 
 
+def dump_dict(dict_path: str, vocab_dict: Dict, reverse: bool = False) -> None:
+    """
+    Dump the dictionary out
+    """
+    dict_str = []
+    # <int, str> if reverse else <str, int>
+    for key, val in vocab_dict.items():
+        if reverse:
+            val, key = key, val
+        dict_str.append(f"{key} {val:d}")
+    with codecs.open(dict_path, mode="w", encoding="utf-8") as fd:
+        fd.write("\n".join(dict_str))
+
+
 def check_conf(conf: Dict, required_keys: List[str],
-               all_keys: [List[str]]) -> Dict:
+               all_keys: List[str]) -> Dict:
     """
     Check the format of the configurations
     """

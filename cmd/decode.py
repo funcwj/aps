@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 beam_search_params = [
     "beam_size", "nbest", "max_len", "min_len", "max_len_ratio",
     "min_len_ratio", "len_norm", "lm_weight", "temperature", "len_penalty",
-    "cov_penalty", "eos_threshold", "cov_threshold"
+    "cov_penalty", "eos_threshold", "cov_threshold", "allow_partial"
 ]
 
 
@@ -109,9 +109,9 @@ def run(args):
     if args.dump_nbest:
         stdout_topn, topn = io_wrapper(args.dump_nbest, "w")
         if args.function == "greedy_search":
-            nbest = min(args.beam_size, args.nbest)
-        else:
             nbest = 1
+        else:
+            nbest = min(args.beam_size, args.nbest)
         topn.write(f"{nbest}\n")
     ali_dir = args.dump_align
     if ali_dir:

@@ -50,7 +50,7 @@ exp_dir=exp/$mdl_id/$exp_id
 [ ! -f $tst_scp ] && echo "$0: missing test wave script: $tst_scp" && exit 0
 [ ! -d $exp_dir ] && echo "$0: missing experiment directory: $exp_dir" && exit 0
 
-mkdir -p $dec_dir
+mkdir -p $dec_dir $dec_dir/log
 [ ! -z $log_suffix ] && log_suffix=${log_suffix}.
 
 if [ -z $batch_size ]; then
@@ -82,7 +82,7 @@ if [ -z $batch_size ]; then
     --cov-penalty $cov_penalty \
     --cov-threshold $cov_threshold \
     --eos-threshold $eos_threshold \
-    > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
+    > $dec_dir/log/$mdl_id.decode.$exp_id.${log_suffix}log 2>&1
 else
   cmd/decode_batch.py \
     $tst_scp \
@@ -112,10 +112,8 @@ else
     --cov-penalty $cov_penalty \
     --cov-threshold $cov_threshold \
     --eos-threshold $eos_threshold \
-    > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
+    > $dec_dir/log/$mdl_id.decode.$exp_id.${log_suffix}log 2>&1
 fi
-
-cp $mdl_id.decode.$exp_id.${log_suffix}log $dec_dir
 
 if $score ; then
   [ -z $text ] && echo "for --score true, you must given --text <reference-transcription>" && exit -1

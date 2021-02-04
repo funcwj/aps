@@ -81,7 +81,7 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
       --nbest $nbest \
       --max-len 50 \
       --len-norm true \
-      --dict data/$dataset/dict \
+      --dict exp/$dataset/$am_exp/dict \
       --log-suffix $name \
       $dataset $am_exp \
       data/$dataset/$name/wav.scp \
@@ -107,7 +107,7 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
       --text data/$dataset/$name/text \
       --lm exp/aishell_v1/nnlm/$lm_exp \
       --gpu $gpu \
-      --dict data/$dataset/dict \
+      --dict exp/$dataset/$am_exp/dict \
       --nbest $nbest \
       --lm exp/aishell_v1/ngram/${ngram}gram.arpa.bin \
       --lm-weight $lm_weight \
@@ -146,7 +146,7 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
       --text data/$dataset/$name/text \
       --lm exp/aishell_v1/nnlm/$lm_exp \
       --gpu $gpu \
-      --dict data/$dataset/dict \
+      --dict exp/$dataset/$am_exp/dict \
       --nbest $nbest \
       --max-len 50 \
       --beam-size $beam_size \

@@ -132,6 +132,10 @@ def get_aps_decode_parser():
                         default=1,
                         help="Temperature value used to smooth "
                         "the acoustic scores")
+    parser.add_argument("--allow-partial",
+                        action=StrToBoolAction,
+                        default="false",
+                        help="If ture, add partial hypos in the final step")
     parser.add_argument("--len-norm",
                         action=StrToBoolAction,
                         default="true",

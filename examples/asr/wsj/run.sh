@@ -82,7 +82,7 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
       --log-suffix $name \
       --beam-size $beam_size \
       --max-len 220 \
-      --dict data/wsj/dict \
+      --dict exp/wsj/$am_exp/dict \
       --nbest 8 \
       --space "<space>" \
       --len-norm $len_norm \
@@ -136,7 +136,7 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
       --lm-weight $lm_weight \
       --len-norm $len_norm \
       --eos-threshold $eos_threshold \
-      --dict data/wsj/dict \
+      --dict exp/wsj/$am_exp/dict \
       --nbest 8 \
       --space "<space>" \
       wsj $am_exp \

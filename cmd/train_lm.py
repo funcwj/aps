@@ -8,7 +8,7 @@ import argparse
 
 from aps.utils import set_seed
 from aps.opts import BaseTrainParser
-from aps.conf import load_lm_conf
+from aps.conf import load_lm_conf, dump_dict
 from aps.libs import aps_task, aps_dataloader, aps_asr_nnet, aps_trainer
 
 
@@ -52,6 +52,7 @@ def run(args):
     conf["cmd_args"] = vars(args)
     with open(f"{args.checkpoint}/train.yaml", "w") as f:
         yaml.dump(conf, f)
+    dump_dict(f"{args.checkpoint}/dict", vocab, reverse=False)
 
     trainer.run(trn_loader,
                 dev_loader,

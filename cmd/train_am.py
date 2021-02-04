@@ -9,7 +9,7 @@ import argparse
 
 from aps.utils import set_seed
 from aps.opts import BaseTrainParser
-from aps.conf import load_am_conf
+from aps.conf import load_am_conf, dump_dict
 from aps.libs import aps_transform, aps_task, aps_dataloader, aps_asr_nnet, aps_trainer
 
 
@@ -62,10 +62,12 @@ def run(args):
                       tensorboard=args.tensorboard,
                       reduction_tag="#tok",
                       **conf["trainer_conf"])
-    # dump configurations
+    # dump yaml configurations
     conf["cmd_args"] = vars(args)
     with open(f"{args.checkpoint}/train.yaml", "w") as f:
         yaml.dump(conf, f)
+    # dump dict
+    dump_dict(f"{args.checkpoint}/dict", vocab_dict, reverse=False)
 
     trainer.run(trn_loader,
                 dev_loader,
