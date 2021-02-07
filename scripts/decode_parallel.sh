@@ -50,15 +50,24 @@ log_dir=$dec_dir/log && mkdir -p $log_dir
 [ ! -f $tst_scp ] && echo "$0: missing test wave script: $tst_scp" && exit 0
 [ ! -d $exp_dir ] && echo "$0: missing experiment directory: $exp_dir" && exit 0
 
+dec_prefix=beam${beam_size}_eos${eos_threshold}_lp${len_penalty}
+[ $len_norm ] && dec_prefix=${dec_prefix}_norm
+
+if [ -z $log_suffix ]; then
+  log_suffix=$dec_prefix
+elif
+  log_suffix=${dec_prefix}_${log_suffix}
+fi
+
 wav_sp_scp=""
 for n in $(seq $nj); do wav_sp_scp="$wav_sp_scp $log_dir/wav.$n.scp"; done
 
 ./utils/split_scp.pl $tst_scp $wav_sp_scp || exit 1
 
-$cmd JOB=1:$nj $log_dir/decode.JOB.log \
+$cmd JOB=1:$nj $log_dir/decode.$log_suffix.JOB.log \
   cmd/decode.py \
   $log_dir/wav.JOB.scp \
-  $log_dir/beam${beam_size}.JOB.decode \
+  $log_dir/${dec_prefix}.JOB.decode \
   --beam-size $beam_size \
   --am $exp_dir \
   --device-id -1 \
@@ -72,7 +81,7 @@ $cmd JOB=1:$nj $log_dir/decode.JOB.log \
   --temperature $temperature \
   --space "$space" \
   --nbest $nbest \
-  --dump-nbest $log_dir/beam${beam_size}.JOB.${nbest}best \
+  --dump-nbest $log_dir/${dec_prefix}.JOB.${nbest}best \
   --dump-align "$dump_align" \
   --max-len $max_len \
   --min-len $min_len \
@@ -85,15 +94,13 @@ $cmd JOB=1:$nj $log_dir/decode.JOB.log \
   --cov-threshold $cov_threshold \
   --eos-threshold $eos_threshold
 
-cat $log_dir/beam${beam_size}.*.decode | \
-  sort -k1 > $dec_dir/beam${beam_size}.decode
-cat $log_dir/beam${beam_size}.*.${nbest}best | \
-  sort -k1 > $dec_dir/beam${beam_size}.${nbest}best
+cat $log_dir/${dec_prefix}.*.decode | sort -k1 > $dec_dir/${dec_prefix}.decode
+cat $log_dir/${dec_prefix}.*.${nbest}best | sort -k1 > $dec_dir/${dec_prefix}.${nbest}best
 
 if $score ; then
   [ -z $text ] && echo "for --score true, you must given --text <reference-transcription>" && exit -1
-  ./cmd/compute_wer.py $dec_dir/beam${beam_size}.decode $text | \
-    tee $dec_dir/beam${beam_size}.wer
+  ./cmd/compute_wer.py $dec_dir/${dec_prefix}.decode $text | \
+    tee $dec_dir/${dec_prefix}.wer
 fi
 
 echo "$0 $*: Done"

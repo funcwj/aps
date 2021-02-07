@@ -95,7 +95,7 @@ class MvdrBeamformer(nn.Module):
         # N x F
         tr_Rn_inv_Rs = trace(Rn_inv_Rs) + eps
         # N x F x C: einsum("...fnc,...c->...fn", Rn_inv_Rs, u)
-        Rn_inv_Rs_u = (Rn_inv_Rs * u).sum(-1)
+        Rn_inv_Rs_u = (Rn_inv_Rs * u[:, None, None, :]).sum(-1)
         # N x F x C
         weight = Rn_inv_Rs_u / tr_Rn_inv_Rs[..., None]
         return weight
