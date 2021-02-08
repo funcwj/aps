@@ -8,7 +8,7 @@ import pprint
 import argparse
 
 from aps.utils import set_seed
-from aps.conf import load_am_conf
+from aps.conf import load_am_conf, dump_dict
 from aps.opts import DistributedTrainParser
 from aps.libs import aps_transform, aps_task, aps_dataloader, aps_asr_nnet, aps_trainer
 from aps import distributed
@@ -43,6 +43,7 @@ def train_worker(task, conf, vocab_dict, args):
         conf["cmd_args"] = vars(args)
         with open(f"{args.checkpoint}/train.yaml", "w") as f:
             yaml.dump(conf, f)
+        dump_dict(f"{args.checkpoint}/dict", vocab_dict, reverse=False)
 
     num_process = len(args.device_ids.split(","))
     if num_process != distributed.world_size():

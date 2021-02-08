@@ -33,8 +33,9 @@ lm_epochs=30
 lm_num_workers=4
 
 # decoding
-nbest=8
-beam_size=16
+nbest=16
+beam_size=8
+len_norm=true
 lm_weight=0.2
 eos_threshold=1
 test_sets="test_clean test_other"
@@ -93,7 +94,8 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
       --log-suffix $name \
       --beam-size $beam_size \
       --max-len 150 \
-      --dict data/librispeech/dict \
+      --len-norm $len_norm \
+      --dict exp/librispeech/$am_exp/dict \
       --nbest $nbest \
       --spm exp/librispeech/$wp_name/$wp_mode.model \
       librispeech $am_exp \
@@ -147,8 +149,9 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
       --lm-weight $lm_weight \
       --beam-size $beam_size \
       --max-len 150 \
+      --len-norm $len_norm \
       --eos-threshold $eos_threshold \
-      --dict data/librispeech/dict \
+      --dict exp/librispeech/$am_exp/dict \
       --nbest $nbest \
       librispeech $am_exp \
       data/librispeech/$name/wav.scp \

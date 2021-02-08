@@ -4,9 +4,10 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import math
-import edit_distance as ed
 from itertools import permutations
 from typing import List, Tuple
+
+import edit_distance as ed
 
 
 def wer(hyp: List[str], ref: List[str]) -> Tuple[float]:
@@ -58,7 +59,7 @@ def permute_wer(hlist: List[List[str]], rlist: List[List[str]]) -> Tuple[float]:
         raise RuntimeError("size do not match between hlist " +
                            f"and rlist: {N} vs {len(rlist)}")
     errs = []
-    best = -math.inf
+    best = math.inf
     pair = -1
     for index, order in enumerate(permutations(range(N))):
         err, permu_errs = distance(hlist, [rlist[n] for n in order])

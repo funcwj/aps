@@ -54,7 +54,7 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
   for name in $test_sets; do
     ./scripts/decode.sh \
       --gpu $gpu \
-      --dict data/timit/dict \
+      --dict exp/timit/$exp/dict \
       --nbest $nbest \
       --max-len 75 \
       --function "beam_search" \

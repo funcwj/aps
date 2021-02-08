@@ -3,6 +3,7 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
+import math
 import argparse
 
 from aps.opts import StrToBoolAction
@@ -68,8 +69,17 @@ def run(args):
                            unit="%")
     for key, hyp in hyp_reader:
         ref = ref_reader[key]
-        err = permute_wer(hyp, ref)
-        ref_len = sum([len(r) for r in ref])
+        if args.reduce == "sum" or len(hyp_reader) == 1:
+            err = permute_wer(hyp, ref)
+            ref_len = sum([len(r) for r in ref])
+        else:
+            err = [math.inf, 0, 0]
+            ref_len = None, None
+            for h, r in zip(hyp, ref):
+                cur_err = permute_wer([h], [r])
+                if sum(cur_err) < sum(err):
+                    err = cur_err
+                    ref_len = len(r)
         if each_utt:
             if ref_len != 0:
                 each_utt.write(f"{key}\t{sum(err) / ref_len:.3f}\n")
@@ -105,5 +115,10 @@ if __name__ == "__main__":
                         action=StrToBoolAction,
                         default=False,
                         help="Compute CER instead of WER")
+    parser.add_argument("--reduce",
+                        type=str,
+                        choices=["sum", "min"],
+                        default="sum",
+                        help="Reduction options for multi-speaker cases")
     args = parser.parse_args()
     run(args)

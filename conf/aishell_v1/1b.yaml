@@ -1,79 +1,85 @@
-# WER (%) Report:
-# Total (7176 utterances): 6706/104765 = 6.40%, SUB/INS/DEL = 6312/209/185
-
 nnet: "asr@xfmr"
 
 nnet_conf:
   input_size: 80
-  enc_type: xfmr_rel
+  enc_type: "xfmr_rel"
   enc_kwargs:
+    proj_layer: "conv2d"
+    proj_kwargs:
+      conv_channels: 256
     att_dim: 512
-    att_dropout: 0.2
-    feedforward_dim: 1024
-    nhead: 8
-    num_layers: 8
-    pos_dropout: 0.2
-    proj_layer: conv2d
     radius: 256
+    nhead: 8
+    feedforward_dim: 1024
+    pos_dropout: 0.1
+    att_dropout: 0.2
+    ffn_dropout: 0.2
+    num_layers: 12
+    post_norm: false
+  dec_type: "xfmr_abs"
   dec_kwargs:
     att_dim: 512
-    att_dropout: 0.2
-    feedforward_dim: 1024
     nhead: 8
+    feedforward_dim: 1024
+    pos_dropout: 0.1
+    att_dropout: 0.2
+    ffn_dropout: 0.2
     num_layers: 6
-    pos_dropout: 0.2
-
-asr_transform:
-  feats: perturb-fbank-log-cmvn-aug
-  frame_len: 400
-  frame_hop: 160
-  window: "hamm"
-  round_pow_of_two: true
-  sr: 16000
-  num_mels: 80
-  norm_mean: true
-  norm_var: true
-  aug_prob: 0.5
-  aug_mask_zero: false
-  aug_freq_args: [30, 1]
-  aug_time_args: [80, 1]
+    scale_embed: false
+    post_norm: false
 
 task: "asr@ctc_xent"
 
 task_conf:
+  reduction: batchmean
   lsm_factor: 0.1
-  ctc_weight: 0.2
+  lsm_method: uniform
+  ctc_weight: 0.3
+
+asr_transform:
+  feats: "cmvn-aug"
+  sr: 16000
+  norm_mean: true
+  norm_var: true
+  gcmvn: "data/aishell_v1/train_sp/cmvn.ark"
+  aug_prob: 1
+  aug_maxp_time: 0.6
+  aug_mask_zero: false
+  aug_freq_args: [27, 1]
+  aug_time_args: [80, 1]
 
 trainer_conf:
   optimizer: "adam"
   optimizer_kwargs:
-    lr: 1.0e-4
-    weight_decay: 1.0e-5
+    lr: 0.0
+    weight_decay: 1.0e-6
+    betas: [0.9, 0.98]
+    eps: 1.0e-9
   lr_scheduler: "warmup_noam_lr"
   lr_scheduler_period: "step"
   lr_scheduler_kwargs:
-    warmup: 25000
+    transformer_dim: 256
+    warmup: 20000
     peak_lr: -1
-    transformer_dim: 512
-  no_impr: 8
+  no_impr: -1
   no_impr_thres: 0
   clip_gradient: 5
-  report_metrics: ["loss", "accu", "@ctc"]
+  report_metrics: ["loss", "accu"]
   stop_criterion: "accu"
 
 data_conf:
-  fmt: "am@raw"
+  fmt: "am@kaldi"
   loader:
-    max_dur: 30 # (s)
-    min_dur: 0.4 # (s)
-    adapt_dur: 10 # (s)
+    max_dur: 3000
+    min_dur: 10
+    adapt_dur: 1000
     max_token_num: 400
-    adapt_token_num: 150
+    adapt_token_num: 200
   train:
-    wav_scp: "data/aishell_v1/train/wav.scp"
-    utt2dur: "data/aishell_v1/train/utt2dur"
-    text: "data/aishell_v1/train/text"
+    feats_scp: "data/aishell_v1/train_sp/feats.scp"
+    utt2num_frames: "data/aishell_v1/train_sp/utt2num_frames"
+    text: "aishell_v1/train_sp/text"
   valid:
-    wav_scp: "data/aishell_v1/dev/wav.scp"
-    utt2dur: "data/aishell_v1/dev/utt2dur"
+    feats_scp: "data/aishell_v1/dev/feats.scp"
+    utt2num_frames: "data/aishell_v1/dev/utt2num_frames"
     text: "data/aishell_v1/dev/text"

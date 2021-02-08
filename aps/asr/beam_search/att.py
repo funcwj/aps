@@ -84,6 +84,7 @@ def beam_search(decoder: nn.Module,
                 len_penalty: float = 0,
                 cov_penalty: float = 0,
                 temperature: float = 1,
+                allow_partial: bool = False,
                 cov_threshold: float = 0.5,
                 eos_threshold: float = 1) -> List[Dict]:
     """
@@ -127,6 +128,7 @@ def beam_search(decoder: nn.Module,
                                  lm_weight=lm_weight,
                                  len_penalty=len_penalty,
                                  cov_penalty=cov_penalty,
+                                 allow_partial=allow_partial,
                                  cov_threshold=cov_threshold,
                                  eos_threshold=eos_threshold)
     beam_tracker = BeamTracker(beam_param)
@@ -182,6 +184,7 @@ def beam_search_batch(decoder: nn.Module,
                       len_penalty: float = 0,
                       cov_penalty: float = 0,
                       temperature: float = 1,
+                      allow_partial: bool = False,
                       cov_threshold: float = 0.5,
                       eos_threshold: float = 1) -> List[List[Dict]]:
     """
@@ -230,6 +233,7 @@ def beam_search_batch(decoder: nn.Module,
                                  lm_weight=lm_weight,
                                  len_penalty=len_penalty,
                                  cov_penalty=cov_penalty,
+                                 allow_partial=allow_partial,
                                  cov_threshold=cov_threshold,
                                  eos_threshold=eos_threshold)
     beam_tracker = BatchBeamTracker(N, beam_param)

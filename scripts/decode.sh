@@ -50,13 +50,21 @@ exp_dir=exp/$mdl_id/$exp_id
 [ ! -f $tst_scp ] && echo "$0: missing test wave script: $tst_scp" && exit 0
 [ ! -d $exp_dir ] && echo "$0: missing experiment directory: $exp_dir" && exit 0
 
-mkdir -p $dec_dir
-[ ! -z $log_suffix ] && log_suffix=${log_suffix}.
+mkdir -p $dec_dir $dec_dir/log
+
+dec_prefix=beam${beam_size}_eos${eos_threshold}_lp${len_penalty}
+$len_norm && dec_prefix=${dec_prefix}_norm
+
+if [ -z $log_suffix ]; then
+  log_suffix=$dec_prefix
+else
+  log_suffix=${dec_prefix}_${log_suffix}
+fi
 
 if [ -z $batch_size ]; then
   cmd/decode.py \
     $tst_scp \
-    $dec_dir/beam${beam_size}.decode \
+    $dec_dir/${dec_prefix}.decode \
     --beam-size $beam_size \
     --device-id $gpu \
     --channel $channel \
@@ -70,7 +78,7 @@ if [ -z $batch_size ]; then
     --lm-weight $lm_weight \
     --space "$space" \
     --nbest $nbest \
-    --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
+    --dump-nbest $dec_dir/${dec_prefix}.${nbest}best \
     --dump-align "$dump_align" \
     --max-len $max_len \
     --min-len $min_len \
@@ -82,11 +90,11 @@ if [ -z $batch_size ]; then
     --cov-penalty $cov_penalty \
     --cov-threshold $cov_threshold \
     --eos-threshold $eos_threshold \
-    > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
+    > $dec_dir/log/$mdl_id.decode.$exp_id.$log_suffix.log 2>&1
 else
   cmd/decode_batch.py \
     $tst_scp \
-    $dec_dir/beam${beam_size}.decode \
+    $dec_dir/${dec_prefix}.decode \
     --beam-size $beam_size \
     --batch-size $batch_size \
     --device-id $gpu \
@@ -101,7 +109,7 @@ else
     --temperature $temperature \
     --lm-weight $lm_weight \
     --nbest $nbest \
-    --dump-nbest $dec_dir/beam${beam_size}.${nbest}best \
+    --dump-nbest $dec_dir/${dec_prefix}.${nbest}best \
     --dump-align "$dump_align" \
     --max-len $max_len \
     --min-len $min_len \
@@ -112,15 +120,13 @@ else
     --cov-penalty $cov_penalty \
     --cov-threshold $cov_threshold \
     --eos-threshold $eos_threshold \
-    > $mdl_id.decode.$exp_id.${log_suffix}log 2>&1
+    > $dec_dir/log/$mdl_id.decode.$exp_id.$log_suffix.log 2>&1
 fi
-
-cp $mdl_id.decode.$exp_id.${log_suffix}log $dec_dir
 
 if $score ; then
   [ -z $text ] && echo "for --score true, you must given --text <reference-transcription>" && exit -1
-  ./cmd/compute_wer.py $dec_dir/beam${beam_size}.decode $text \
-    | tee $dec_dir/beam${beam_size}.wer
+  ./cmd/compute_wer.py $dec_dir/${dec_prefix}.decode $text \
+    | tee $dec_dir/${dec_prefix}.wer
 fi
 
 echo "$0 $*: Done"

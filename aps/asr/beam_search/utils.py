@@ -34,6 +34,7 @@ class BeamSearchParam(object):
     cov_penalty: float = 0
     cov_threshold: float = 0.5
     len_norm: bool = True
+    allow_partial: bool = False
     end_detect: bool = False
 
 
@@ -379,9 +380,11 @@ class BeamTracker(BaseBeamTracker):
         # not auto stop, add unfinished hypos
         if not self.auto_stop:
             logger.info("--- beam search reaches the final step ...")
-            hyp_final = self._trace_back(final=True)
-            if hyp_final:
-                self.hypos += hyp_final
+            # add non-eos hypos
+            if self.param.allow_partial:
+                hyp_final = self._trace_back(final=True)
+                if hyp_final:
+                    self.hypos += hyp_final
         # sort and get nbest
         logger.info(f"--- beam search gets top-{nbest} list " +
                     f"from {len(self.hypos)} hypos ...")
@@ -608,9 +611,11 @@ class BatchBeamTracker(BaseBeamTracker):
                 # process end
                 logger.info("--- beam search reaches the final step " +
                             f"for batch[{u}] ...")
-                hyp_final = self._trace_back(u, final=True)
-                if hyp_final:
-                    self.hypos[u] += hyp_final
+                # add non-eos hypos
+                if self.param.allow_partial:
+                    hyp_final = self._trace_back(u, final=True)
+                    if hyp_final:
+                        self.hypos[u] += hyp_final
         # sort and get nbest
         nbest_batch = []
         for u, utt_bypos in enumerate(self.hypos):
