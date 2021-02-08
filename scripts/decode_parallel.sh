@@ -55,7 +55,7 @@ dec_prefix=beam${beam_size}_eos${eos_threshold}_lp${len_penalty}
 
 if [ -z $log_suffix ]; then
   log_suffix=$dec_prefix
-elif
+else
   log_suffix=${dec_prefix}_${log_suffix}
 fi
 

@@ -57,7 +57,7 @@ $len_norm && dec_prefix=${dec_prefix}_norm
 
 if [ -z $log_suffix ]; then
   log_suffix=$dec_prefix
-elif
+else
   log_suffix=${dec_prefix}_${log_suffix}
 fi
 
