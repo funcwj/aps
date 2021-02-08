@@ -53,7 +53,7 @@ exp_dir=exp/$mdl_id/$exp_id
 mkdir -p $dec_dir $dec_dir/log
 
 dec_prefix=beam${beam_size}_eos${eos_threshold}_lp${len_penalty}
-[ $len_norm ] && dec_prefix=${dec_prefix}_norm
+$len_norm && dec_prefix=${dec_prefix}_norm
 
 if [ -z $log_suffix ]; then
   log_suffix=$dec_prefix
