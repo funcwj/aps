@@ -27,6 +27,7 @@ am_tag="best"
 lm_tag="best"
 lm=""
 lm_weight=0
+ctc_weight=0
 spm=""
 dump_align=""
 text=""
@@ -78,6 +79,7 @@ $cmd JOB=1:$nj $log_dir/decode.$log_suffix.JOB.log \
   --lm "$lm" \
   --spm "$spm" \
   --lm-weight $lm_weight \
+  --ctc-weight $ctc_weight \
   --temperature $temperature \
   --space "$space" \
   --nbest $nbest \

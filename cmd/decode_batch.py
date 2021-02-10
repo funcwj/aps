@@ -22,8 +22,9 @@ logger = get_logger(__name__)
 
 beam_search_params = [
     "beam_size", "nbest", "max_len", "min_len", "max_len_ratio",
-    "min_len_ratio", "len_norm", "lm_weight", "temperature", "len_penalty",
-    "cov_penalty", "eos_threshold", "cov_threshold", "allow_partial"
+    "min_len_ratio", "len_norm", "lm_weight", "ctc_weight", "temperature",
+    "len_penalty", "cov_penalty", "eos_threshold", "cov_threshold",
+    "allow_partial"
 ]
 
 

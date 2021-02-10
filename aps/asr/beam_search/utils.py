@@ -7,6 +7,7 @@ import torch as th
 
 from dataclasses import dataclass
 from typing import List, Dict, Union, Tuple, Optional, NoReturn
+from aps.asr.beam_search.ctc import CtcScore
 from aps.const import NEG_INF
 from aps.utils import get_logger
 
@@ -36,6 +37,8 @@ class BeamSearchParam(object):
     len_norm: bool = True
     allow_partial: bool = False
     end_detect: bool = False
+    ctc_weight: float = 0
+    ctc_beam_size: int = int(beam_size * 1.5)
 
 
 class BaseBeamTracker(object):
@@ -123,28 +126,29 @@ class BaseBeamTracker(object):
             topk_token (Tensor): N x K, topk token ID
         """
         # N x V, AM + LM
-        fusion_prob = am_prob + self.param.lm_weight * lm_prob
+        fusion_score = am_prob + self.param.lm_weight * lm_prob
         # process eos
         if self.param.eos_threshold > 0:
             if self.none_eos_idx is None:
                 none_eos_idx = [
-                    i for i in range(fusion_prob.shape[-1])
+                    i for i in range(fusion_score.shape[-1])
                     if i != self.param.eos
                 ]
                 self.none_eos_idx = th.tensor(none_eos_idx,
                                               device=am_prob.device)
             # current eos score
-            eos_prob = fusion_prob[:, self.param.eos]
+            eos_prob = fusion_score[:, self.param.eos]
             # none_eos best score
-            none_eos_best, _ = th.max(fusion_prob[:, self.none_eos_idx], dim=-1)
+            none_eos_best, _ = th.max(fusion_score[:, self.none_eos_idx],
+                                      dim=-1)
             # set inf to disable the eos
             disable_eos = eos_prob < none_eos_best * self.param.eos_threshold
-            fusion_prob[disable_eos, self.param.eos] = NEG_INF
+            fusion_score[disable_eos, self.param.eos] = NEG_INF
             if verbose and th.sum(disable_eos):
                 disable_index = [i for i, s in enumerate(disable_eos) if s]
                 logger.info(f"--- disable <eos> in beam index: {disable_index}")
         # local pruning: N*beam x beam
-        topk_score, topk_token = th.topk(fusion_prob,
+        topk_score, topk_token = th.topk(fusion_score,
                                          self.param.beam_size,
                                          dim=-1)
         return (topk_score, topk_token)
@@ -213,7 +217,9 @@ class BeamTracker(BaseBeamTracker):
     A data structure used in beam search algothrim
     """
 
-    def __init__(self, param: BeamSearchParam) -> None:
+    def __init__(self,
+                 param: BeamSearchParam,
+                 ctc_prob: Optional[th.Tensor] = None) -> None:
         super(BeamTracker, self).__init__(param)
         init_sos = th.tensor([param.sos] * param.beam_size, device=param.device)
         # decoded sequence upto current step
@@ -227,6 +233,13 @@ class BeamTracker(BaseBeamTracker):
         self.hypos = []
         self.auto_stop = False
         self.acmu_score = th.zeros_like(self.score)
+        if ctc_prob is None:
+            self.ctc_score_impl = None
+        else:
+            self.ctc_score_impl = CtcScore(ctc_prob,
+                                           eos=param.eos,
+                                           batch_size=param.beam_size,
+                                           beam_size=param.ctc_beam_size)
 
     def __getitem__(self, t: int) -> Tuple[th.Tensor, th.Tensor]:
         """
@@ -259,6 +272,35 @@ class BeamTracker(BaseBeamTracker):
                     logger.info("--- beam search gets decoding sequence " +
                                 f"{h['trans']}, score = {h['score']:.2f}")
         return hyp
+
+    def beam_select_ctc(self, am_prob: th.Tensor, lm_prob: Union[th.Tensor,
+                                                                 float]):
+        """
+        Perform beam selection considering CTC score
+        """
+        # beam x ctc_beam
+        att_score, att_topk_token = th.topk(am_prob,
+                                            self.param.ctc_beam_size,
+                                            dim=-1)
+        att_topk_token = att_topk_token.view(-1)
+        # beam x ctc_beam
+        ctc_score = self.ctc_score_impl(self.trans,
+                                        att_topk_token,
+                                        point=self.point[-1])
+        # weight sum
+        att_ctc_score = att_score * (
+            1 - self.param.ctc_weight) + ctc_score * self.param.ctc_weight
+        # beam x ctc_beam
+        lm_score = lm_prob[:, att_topk_token]
+        # beam x ctc_beam
+        fusion_score = att_ctc_score + self.param.lm_weight * lm_score
+        # beam x beam
+        topk_score, topk_index = th.topk(fusion_score,
+                                         self.param.beam_size,
+                                         dim=-1)
+        # beam x beam
+        topk_token = th.gather(att_topk_token, -1, topk_index)
+        return (topk_score, topk_token)
 
     def _init_search(self,
                      am_prob: th.Tensor,
@@ -293,7 +335,10 @@ class BeamTracker(BaseBeamTracker):
             att_ali (Tensor): N x T, alignment score (weight)
         """
         # local pruning: beam x V => beam x beam
-        topk_score, topk_token = self.beam_select(am_prob, lm_prob)
+        if self.param.ctc_weight > 0 and self.ctc_score_impl:
+            topk_score, topk_token = self.beam_select_ctc(am_prob, lm_prob)
+        else:
+            topk_score, topk_token = self.beam_select(am_prob, lm_prob)
         # beam x beam
         acmu_score = self.acmu_score[..., None] + topk_score
         score = acmu_score + self.coverage(att_ali)
