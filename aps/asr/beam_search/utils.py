@@ -284,21 +284,23 @@ class BeamTracker(BaseBeamTracker):
                                             dim=-1)
         att_topk_token = att_topk_token.view(-1)
         # beam x ctc_beam
-        ctc_score = self.ctc_score_impl(self.trans,
-                                        att_topk_token,
-                                        point=self.point[-1])
+        ctc_score = self.ctc_score_impl.score(self.trans,
+                                              att_topk_token,
+                                              point=self.point[-1])
         # weight sum
         att_ctc_score = att_score * (
             1 - self.param.ctc_weight) + ctc_score * self.param.ctc_weight
         # beam x ctc_beam
-        lm_score = lm_prob[:, att_topk_token]
+        if isinstance(lm_prob, th.Tensor):
+            lm_prob = lm_prob[:, att_topk_token]
         # beam x ctc_beam
-        fusion_score = att_ctc_score + self.param.lm_weight * lm_score
+        fusion_score = att_ctc_score + self.param.lm_weight * lm_prob
         # beam x beam
         topk_score, topk_index = th.topk(fusion_score,
                                          self.param.beam_size,
                                          dim=-1)
         # beam x beam
+        att_topk_token = att_topk_token.view(self.param.beam_size, -1)
         topk_token = th.gather(att_topk_token, -1, topk_index)
         return (topk_score, topk_token)
 
@@ -315,7 +317,10 @@ class BeamTracker(BaseBeamTracker):
         """
         assert len(self.point) == 1 and self.step_num == 0
         # local pruning: beam x V => beam x beam
-        topk_score, topk_token = self.beam_select(am_prob, lm_prob)
+        if self.param.ctc_weight > 0 and self.ctc_score_impl:
+            topk_score, topk_token = self.beam_select_ctc(am_prob, lm_prob)
+        else:
+            topk_score, topk_token = self.beam_select(am_prob, lm_prob)
         self.score += topk_score[0]
         self.acmu_score += topk_score[0]
         self.token.append(topk_token[0])

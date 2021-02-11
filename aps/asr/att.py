@@ -239,11 +239,11 @@ class AttASR(EncDecASRBase):
         with th.no_grad():
             enc_out = self._decoding_prep(x)
             if self.ctc:
-                ctc_prob = th.log_softmax(self.ctc(enc_out), -1)
+                ctc_prob = self.ctc(enc_out)
             return att_api.beam_search(self.decoder,
                                        self.att_net,
                                        enc_out,
-                                       ctc_prob=ctc_prob,
+                                       ctc_prob=ctc_prob[0],
                                        sos=self.sos,
                                        eos=self.eos,
                                        **kwargs)
@@ -346,11 +346,11 @@ class XfmrASR(EncDecASRBase):
         with th.no_grad():
             enc_out = self._decoding_prep(x, batch_first=False)
             if self.ctc:
-                ctc_prob = th.log_softmax(self.ctc(enc_out), -1)
+                ctc_prob = self.ctc(enc_out)
             # beam search
             return xfmr_api.beam_search(self.decoder,
                                         enc_out,
-                                        ctc_prob=ctc_prob,
+                                        ctc_prob=ctc_prob[:, 0],
                                         sos=self.sos,
                                         eos=self.eos,
                                         **kwargs)

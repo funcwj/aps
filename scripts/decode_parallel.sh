@@ -51,7 +51,7 @@ log_dir=$dec_dir/log && mkdir -p $log_dir
 [ ! -f $tst_scp ] && echo "$0: missing test wave script: $tst_scp" && exit 0
 [ ! -d $exp_dir ] && echo "$0: missing experiment directory: $exp_dir" && exit 0
 
-dec_prefix=beam${beam_size}_eos${eos_threshold}_lp${len_penalty}
+dec_prefix=beam${beam_size}_eos${eos_threshold}_lp${len_penalty}_ctc${ctc_weight}
 [ $len_norm ] && dec_prefix=${dec_prefix}_norm
 
 if [ -z $log_suffix ]; then
