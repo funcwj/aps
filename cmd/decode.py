@@ -39,6 +39,8 @@ beam_search_params = [
     "allow_partial"
 ]
 
+function_choices = ["beam_search", "greedy_search"]
+
 
 class FasterDecoder(NnetEvaluator):
     """
@@ -165,7 +167,7 @@ if __name__ == "__main__":
         parents=[DecodingParser.parser])
     parser.add_argument("--function",
                         type=str,
-                        choices=["beam_search", "greedy_search"],
+                        choices=function_choices,
                         default="beam_search",
                         help="Name of the decoding function")
     args = parser.parse_args()
