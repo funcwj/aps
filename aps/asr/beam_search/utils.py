@@ -7,7 +7,7 @@ import torch as th
 
 from dataclasses import dataclass
 from typing import List, Dict, Union, Tuple, Optional, NoReturn
-from aps.asr.beam_search.ctc import CtcScore
+from aps.asr.beam_search.ctc import CtcScorer
 from aps.const import NEG_INF
 from aps.utils import get_logger
 
@@ -234,12 +234,11 @@ class BeamTracker(BaseBeamTracker):
         self.auto_stop = False
         self.acmu_score = th.zeros_like(self.score)
         if ctc_prob is None:
-            self.ctc_score_impl = None
+            self.ctc_scorer = None
         else:
-            self.ctc_score_impl = CtcScore(ctc_prob,
-                                           eos=param.eos,
-                                           batch_size=param.beam_size,
-                                           beam_size=param.ctc_beam_size)
+            self.ctc_scorer = CtcScorer(ctc_prob,
+                                        eos=param.eos,
+                                        batch_size=param.beam_size)
 
     def __getitem__(self, t: int) -> Tuple[th.Tensor, th.Tensor]:
         """
@@ -284,9 +283,7 @@ class BeamTracker(BaseBeamTracker):
                                             dim=-1)
         att_topk_token = att_topk_token.view(-1)
         # beam x ctc_beam
-        ctc_score = self.ctc_score_impl.score(self.trans,
-                                              att_topk_token,
-                                              point=self.point[-1])
+        ctc_score = self.ctc_scorer(self.trans, att_topk_token)
         # weight sum
         att_ctc_score = att_score * (
             1 - self.param.ctc_weight) + ctc_score * self.param.ctc_weight
@@ -302,6 +299,7 @@ class BeamTracker(BaseBeamTracker):
         # beam x beam
         att_topk_token = att_topk_token.view(self.param.beam_size, -1)
         topk_token = th.gather(att_topk_token, -1, topk_index)
+        self.ctc_scorer.fix_local_var(topk_index)
         return (topk_score, topk_token)
 
     def _init_search(self,
@@ -317,11 +315,14 @@ class BeamTracker(BaseBeamTracker):
         """
         assert len(self.point) == 1 and self.step_num == 0
         # local pruning: beam x V => beam x beam
-        if self.param.ctc_weight > 0 and self.ctc_score_impl:
+        if self.param.ctc_weight > 0 and self.ctc_scorer:
             topk_score, topk_token = self.beam_select_ctc(am_prob, lm_prob)
         else:
             topk_score, topk_token = self.beam_select(am_prob, lm_prob)
         self.score += topk_score[0]
+        if self.ctc_scorer:
+            idx = th.arange(self.param.beam_size, device=am_prob.device)
+            self.ctc_scorer.fix_local_var(idx * self.param.beam_size)
         self.acmu_score += topk_score[0]
         self.token.append(topk_token[0])
         self.point.append(self.point[-1])
@@ -340,7 +341,7 @@ class BeamTracker(BaseBeamTracker):
             att_ali (Tensor): N x T, alignment score (weight)
         """
         # local pruning: beam x V => beam x beam
-        if self.param.ctc_weight > 0 and self.ctc_score_impl:
+        if self.param.ctc_weight > 0 and self.ctc_scorer:
             topk_score, topk_token = self.beam_select_ctc(am_prob, lm_prob)
         else:
             topk_score, topk_token = self.beam_select(am_prob, lm_prob)
@@ -351,6 +352,8 @@ class BeamTracker(BaseBeamTracker):
         self.score, topk_index = th.topk(score.view(-1),
                                          self.param.beam_size,
                                          dim=-1)
+        if self.ctc_scorer:
+            self.ctc_scorer.fix_local_var(topk_index)
         # update accumulated score (AM + LM)
         self.acmu_score = acmu_score.view(-1)[topk_index]
         # point to father's node

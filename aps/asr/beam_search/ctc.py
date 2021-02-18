@@ -4,6 +4,7 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import torch as th
+import torch.nn as nn
 
 from collections import defaultdict
 from aps.const import NEG_INF
@@ -110,7 +111,7 @@ def ctc_beam_search(ctc_prob: th.Tensor,
     } for prefix, score in prev_beam[:nbest]]
 
 
-class CtcScore(object):
+class CtcScorer(nn.Module):
     """
     To compute the CTC score given decoding sequence and
     helps the beam search in attention based AM
@@ -122,8 +123,8 @@ class CtcScore(object):
     def __init__(self,
                  ctc_prob: th.Tensor,
                  eos: int = 1,
-                 batch_size: int = 8,
-                 beam_size: int = 16) -> None:
+                 batch_size: int = 16) -> None:
+        super(CtcScorer, self).__init__()
         # apply softmax
         self.ctc_prob = th.log_softmax(ctc_prob, dim=-1)
         T, V = self.ctc_prob.shape
@@ -133,43 +134,53 @@ class CtcScore(object):
         self.eos = eos
         # blank is last symbol: see aps.conf:load_am_conf(...)
         self.blank = -1
-        # eq (51) NEG_INF ~ log(0), T x N*beam
-        self.gamma_n_g = th.full((self.T, batch_size * beam_size),
+        # eq (51) NEG_INF ~ log(0), T x N
+        self.gamma_n_g = th.full((self.T, batch_size),
                                  NEG_INF,
                                  device=self.device)
-        self.gamma_b_g = th.zeros(self.T,
-                                  batch_size * beam_size,
-                                  device=self.device)
+        self.gamma_b_g = th.zeros(self.T, batch_size, device=self.device)
         # eq (52)
         self.gamma_b_g[0] = self.ctc_prob[0, self.blank]
         for t in range(1, self.T):
             self.gamma_b_g[t] = (self.gamma_b_g[t - 1] +
                                  self.ctc_prob[t, self.blank])
         # ctc score in previous steps
-        self.ctc_score = th.zeros(1, batch_size * beam_size, device=self.device)
+        self.ctc_score = th.zeros(1, batch_size, device=self.device)
         self.neg_inf = th.tensor(NEG_INF).to(self.device)
 
-    def score(self,
-              g: th.Tensor,
-              c: th.Tensor,
-              point: Optional[th.Tensor] = None) -> th.Tensor:
+    def fix_local_var(self, point: th.Tensor) -> None:
+        """
+        Args:
+            point (Tensor): N x att_beam or att_beam
+        """
+        assert point.dim() in [1, 2]
+        if point.dim() == 2:
+            offset = th.arange(point.shape[0], device=point.device)
+            point = (point + offset[:, None]).view(-1)
+
+        self.ctc_score = self.ctc_score[:, point]
+        self.gamma_b_g = self.gamma_b_g[:, point]
+        self.gamma_n_g = self.gamma_n_g[:, point]
+
+    def forward(self, g: th.Tensor, c: th.Tensor) -> th.Tensor:
         """
         Args:
             g (Tensor): N x U
-            c (Tensor): N*beam
-            point (Tensor or None): N
+            c (Tensor): N*ctc_beam
         Return:
-            score (Tensor): N x beam
+            score (Tensor): N x ctc_beam
         """
-        beam = c.shape[0] // g.shape[0]
-        # N*beam x U
-        repeat_g = th.repeat_interleave(g, beam, 0)
+        # CTC beam
+        ctc_beam = c.shape[0] // g.shape[0]
+        # N*ctc_beam x U
+        repeat_g = th.repeat_interleave(g, ctc_beam, 0)
 
-        if point is not None:
-            self.gamma_b_g = fix_gamma(beam, self.gamma_b_g, point)
-            self.gamma_n_g = fix_gamma(beam, self.gamma_n_g, point)
-            self.ctc_score = fix_gamma(beam, self.ctc_score, point)
-        # T x N*beam
+        # 1 x N*ctc_beam
+        self.ctc_score = th.repeat_interleave(self.ctc_score, ctc_beam, -1)
+        # T x N*ctc_beam
+        self.gamma_n_g = th.repeat_interleave(self.gamma_n_g, ctc_beam, -1)
+        self.gamma_b_g = th.repeat_interleave(self.gamma_b_g, ctc_beam, -1)
+        # T x N*ctc_beam
         gamma_n_h = th.zeros_like(self.gamma_n_g)
         gamma_b_h = th.zeros_like(self.gamma_n_g)
         # zero based
@@ -178,11 +189,11 @@ class CtcScore(object):
         gamma_n_h[start - 1] = self.ctc_prob[0, c] if glen == 0 else NEG_INF
         gamma_b_h[start - 1] = NEG_INF
 
-        # N*beam
+        # N*ctc_beam
         score = gamma_n_h[start - 1]
         repeat = repeat_g[:, -1] != c
         for t in range(start, self.T):
-            # N*beam
+            # N*ctc_beam
             term = th.where(repeat, self.gamma_n_g[t - 1], self.neg_inf)
             phi = th.logaddexp(self.gamma_b_g[t - 1], term)
             gamma_n_h[t] = th.logaddexp(gamma_n_h[t - 1],
@@ -193,12 +204,12 @@ class CtcScore(object):
             score = th.logaddexp(score, phi + self.ctc_prob[t, c])
         # fix eos
         is_eos = c == self.eos
-        gamma_nb_g = th.logaddexp(self.gamma_b_g, self.gamma_n_g)
-        score[is_eos] = gamma_nb_g[-1, is_eos]
-        delta_score = (score - self.ctc_score).view(-1, beam)
+        gamma_nb_g = th.logaddexp(self.gamma_b_g[-1], self.gamma_n_g[-1])
+        score[is_eos] = gamma_nb_g[is_eos]
+        delta_score = (score - self.ctc_score).view(-1, ctc_beam)
 
         self.gamma_n_g = gamma_n_h
         self.gamma_b_g = gamma_b_h
         self.ctc_score = score[None, ...]
-        # N x beam
+        # N x ctc_beam
         return delta_score
