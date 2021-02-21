@@ -64,7 +64,7 @@ class BaseBeamTracker(object):
             return False
         global_best = max([h["score"] for h in hyp_ended])
         count = 0
-        for l in range(self.step_num - look_back, self.step_num):
+        for l in range(self.step_num - look_back + 1, self.step_num + 1):
             hset = [h for h in hyp_ended if len(h["trans"]) - 1 == l]
             if len(hset):
                 cur_best = max([h["score"] for h in hset])

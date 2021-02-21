@@ -215,6 +215,10 @@ def get_aps_decode_parser():
                         default="",
                         help="If assigned, dump alignment "
                         "weight to the directory")
+    parser.add_argument("--end-detect",
+                        action=StrToBoolAction,
+                        default="true",
+                        help="If true, detect end of beam search automatically")
     return parser
 
 
