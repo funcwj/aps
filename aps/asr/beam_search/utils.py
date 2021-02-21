@@ -114,6 +114,31 @@ class BaseBeamTracker(object):
             cov_score = th.sum(cov, -1, keepdim=True)
         return cov_score * self.param.cov_penalty
 
+    def disable_eos(self, score: th.Tensor) -> th.Tensor:
+        """
+        EOS processing
+        Args:
+            score: N x V
+        Return:
+            score: N x V
+        """
+        if self.none_eos_idx is None:
+            none_eos_idx = [
+                i for i in range(score.shape[-1]) if i != self.param.eos
+            ]
+            self.none_eos_idx = th.tensor(none_eos_idx, device=am_prob.device)
+        # current eos score
+        eos_prob = score[:, self.param.eos]
+        # none_eos best score
+        none_eos_best, _ = th.max(score[:, self.none_eos_idx], dim=-1)
+        # set inf to disable the eos
+        disable_eos = eos_prob < none_eos_best * self.param.eos_threshold
+        score[disable_eos, self.param.eos] = NEG_INF
+        if verbose and th.sum(disable_eos):
+            disable_index = [i for i, s in enumerate(disable_eos) if s]
+            logger.info(f"--- disable <eos> in beam index: {disable_index}")
+        return score
+
     def beam_select(self, am_prob: th.Tensor,
                     lm_prob: Union[th.Tensor, float]) -> Tuple[th.Tensor]:
         """
@@ -129,24 +154,7 @@ class BaseBeamTracker(object):
         fusion_score = am_prob + self.param.lm_weight * lm_prob
         # process eos
         if self.param.eos_threshold > 0:
-            if self.none_eos_idx is None:
-                none_eos_idx = [
-                    i for i in range(fusion_score.shape[-1])
-                    if i != self.param.eos
-                ]
-                self.none_eos_idx = th.tensor(none_eos_idx,
-                                              device=am_prob.device)
-            # current eos score
-            eos_prob = fusion_score[:, self.param.eos]
-            # none_eos best score
-            none_eos_best, _ = th.max(fusion_score[:, self.none_eos_idx],
-                                      dim=-1)
-            # set inf to disable the eos
-            disable_eos = eos_prob < none_eos_best * self.param.eos_threshold
-            fusion_score[disable_eos, self.param.eos] = NEG_INF
-            if verbose and th.sum(disable_eos):
-                disable_index = [i for i, s in enumerate(disable_eos) if s]
-                logger.info(f"--- disable <eos> in beam index: {disable_index}")
+            fusion_score = self.disable_eos(fusion_score)
         # local pruning: N*beam x beam
         topk_score, topk_token = th.topk(fusion_score,
                                          self.param.beam_size,
@@ -292,6 +300,8 @@ class BeamTracker(BaseBeamTracker):
             lm_prob = lm_prob[:, att_topk_token]
         # beam x ctc_beam
         fusion_score = att_ctc_score + self.param.lm_weight * lm_prob
+        if self.param.eos_threshold > 0:
+            fusion_score = self.disable_eos(fusion_score)
         # beam x beam
         topk_score, topk_index = th.topk(fusion_score,
                                          self.param.beam_size,
