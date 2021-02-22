@@ -241,12 +241,13 @@ class BeamTracker(BaseBeamTracker):
         self.hypos = []
         self.auto_stop = False
         self.acmu_score = th.zeros_like(self.score)
-        if ctc_prob is None:
-            self.ctc_scorer = None
-        else:
+        if param.ctc_weight > 0 and ctc_prob is not None:
             self.ctc_scorer = CtcScorer(ctc_prob,
                                         eos=param.eos,
                                         batch_size=param.beam_size)
+            logger.info(f"--- use CTC score, weight = {param.ctc_weight:.2f}")
+        else:
+            self.ctc_scorer = None
 
     def __getitem__(self, t: int) -> Tuple[th.Tensor, th.Tensor]:
         """
@@ -325,7 +326,7 @@ class BeamTracker(BaseBeamTracker):
         """
         assert len(self.point) == 1 and self.step_num == 0
         # local pruning: beam x V => beam x beam
-        if self.param.ctc_weight > 0 and self.ctc_scorer:
+        if self.ctc_scorer:
             topk_score, topk_token = self.beam_select_ctc(am_prob, lm_prob)
         else:
             topk_score, topk_token = self.beam_select(am_prob, lm_prob)
@@ -350,7 +351,7 @@ class BeamTracker(BaseBeamTracker):
             att_ali (Tensor): N x T, alignment score (weight)
         """
         # local pruning: beam x V => beam x beam
-        if self.param.ctc_weight > 0 and self.ctc_scorer:
+        if self.ctc_scorer:
             topk_score, topk_token = self.beam_select_ctc(am_prob, lm_prob)
         else:
             topk_score, topk_token = self.beam_select(am_prob, lm_prob)

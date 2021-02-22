@@ -9,22 +9,9 @@ import torch.nn as nn
 from collections import defaultdict
 from aps.const import NEG_INF
 from aps.utils import get_logger
-from typing import Optional, Dict, List, Union
+from typing import Dict, List, Union
 
 logger = get_logger(__name__)
-
-
-def fix_gamma(beam_size: int, gamma: th.Tensor, point: th.Tensor) -> th.Tensor:
-    """
-    Adjust gamma matrix
-    Args:
-        gamma: T x N*beam
-        point: N
-    """
-    # T x N x beam_size
-    gamma = gamma.view(gamma.shape[0], -1, beam_size)
-    gamma = gamma[:, point]
-    return gamma.view(gamma.shape[0], -1)
 
 
 class PrefixScore(object):
