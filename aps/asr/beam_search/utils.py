@@ -14,6 +14,7 @@ from aps.utils import get_logger
 logger = get_logger(__name__)
 verbose = False
 double_check = False
+FloatOrTensor = Union[th.Tensor, float]
 
 
 @dataclass
@@ -90,7 +91,7 @@ class BaseBeamTracker(object):
         else:
             return th.cat([prev_[point], next_[..., None]], -1)
 
-    def coverage(self, att_ali: Optional[th.Tensor]) -> Union[th.Tensor, float]:
+    def coverage(self, att_ali: Optional[th.Tensor]) -> FloatOrTensor:
         """
         Compute coverage score (found 2 way for computation)
         Args:
@@ -140,7 +141,7 @@ class BaseBeamTracker(object):
         return score
 
     def beam_select(self, am_prob: th.Tensor,
-                    lm_prob: Union[th.Tensor, float]) -> Tuple[th.Tensor]:
+                    lm_prob: FloatOrTensor) -> Tuple[th.Tensor]:
         """
         Perform beam selection
         Args:
@@ -206,7 +207,7 @@ class BaseBeamTracker(object):
 
     def step(self,
              am_prob: th.Tensor,
-             lm_prob: Union[th.Tensor, float],
+             lm_prob: FloatOrTensor,
              att_ali: Optional[th.Tensor] = None) -> bool:
         """
         Make one beam search step
@@ -282,8 +283,7 @@ class BeamTracker(BaseBeamTracker):
                                 f"{h['trans']}, score = {h['score']:.2f}")
         return hyp
 
-    def beam_select_ctc(self, am_prob: th.Tensor, lm_prob: Union[th.Tensor,
-                                                                 float]):
+    def beam_select_ctc(self, am_prob: th.Tensor, lm_prob: FloatOrTensor):
         """
         Perform beam selection considering CTC score
         """
@@ -291,15 +291,14 @@ class BeamTracker(BaseBeamTracker):
         att_score, att_topk_token = th.topk(am_prob,
                                             self.param.ctc_beam_size,
                                             dim=-1)
-        att_topk_token = att_topk_token.view(-1)
         # beam x ctc_beam
-        ctc_score = self.ctc_scorer(self.trans, att_topk_token)
+        ctc_score = self.ctc_scorer(self.trans, att_topk_token.view(-1))
         # weight sum
         att_ctc_score = att_score * (
             1 - self.param.ctc_weight) + ctc_score * self.param.ctc_weight
         # beam x ctc_beam
         if isinstance(lm_prob, th.Tensor):
-            lm_prob = lm_prob[:, att_topk_token]
+            lm_prob = th.gather(lm_prob, -1, att_topk_token)
         # beam x ctc_beam
         fusion_score = att_ctc_score + self.param.lm_weight * lm_prob
         if self.param.eos_threshold > 0:
@@ -309,14 +308,13 @@ class BeamTracker(BaseBeamTracker):
                                          self.param.beam_size,
                                          dim=-1)
         # beam x beam
-        att_topk_token = att_topk_token.view(self.param.beam_size, -1)
         topk_token = th.gather(att_topk_token, -1, topk_index)
         self.ctc_scorer.update_var(topk_index)
         return (topk_score, topk_token)
 
     def _init_search(self,
                      am_prob: th.Tensor,
-                     lm_prob: Union[th.Tensor, float],
+                     lm_prob: FloatOrTensor,
                      att_ali: Optional[th.Tensor] = None) -> NoReturn:
         """
         Kick off the beam search (to be used at the first step)
@@ -341,7 +339,7 @@ class BeamTracker(BaseBeamTracker):
 
     def _step_search(self,
                      am_prob: th.Tensor,
-                     lm_prob: Union[th.Tensor, float],
+                     lm_prob: FloatOrTensor,
                      att_ali: Optional[th.Tensor] = None) -> NoReturn:
         """
         Prune and update score & token & backward point
@@ -397,7 +395,7 @@ class BeamTracker(BaseBeamTracker):
 
     def step(self,
              am_prob: th.Tensor,
-             lm_prob: Union[th.Tensor, float],
+             lm_prob: FloatOrTensor,
              att_ali: Optional[th.Tensor] = None) -> bool:
         """
         Run one beam search step
@@ -525,7 +523,7 @@ class BatchBeamTracker(BaseBeamTracker):
 
     def _init_search(self,
                      am_prob: th.Tensor,
-                     lm_prob: Union[th.Tensor, float],
+                     lm_prob: FloatOrTensor,
                      att_ali: Optional[th.Tensor] = None) -> NoReturn:
         """
         Kick off the beam search (to be used at the first step)
@@ -549,7 +547,7 @@ class BatchBeamTracker(BaseBeamTracker):
 
     def _step_search(self,
                      am_prob: th.Tensor,
-                     lm_prob: Union[th.Tensor, float],
+                     lm_prob: FloatOrTensor,
                      att_ali: Optional[th.Tensor] = None) -> NoReturn:
         """
         Prune and update score & token & backward point
@@ -609,7 +607,7 @@ class BatchBeamTracker(BaseBeamTracker):
 
     def step(self,
              am_prob: th.Tensor,
-             lm_prob: Union[th.Tensor, float],
+             lm_prob: FloatOrTensor,
              att_ali: Optional[th.Tensor] = None) -> bool:
         """
         Run one beam search step
