@@ -126,7 +126,7 @@ class BaseBeamTracker(object):
             none_eos_idx = [
                 i for i in range(score.shape[-1]) if i != self.param.eos
             ]
-            self.none_eos_idx = th.tensor(none_eos_idx, device=am_prob.device)
+            self.none_eos_idx = th.tensor(none_eos_idx, device=score.device)
         # current eos score
         eos_prob = score[:, self.param.eos]
         # none_eos best score
@@ -309,7 +309,7 @@ class BeamTracker(BaseBeamTracker):
         # beam x beam
         att_topk_token = att_topk_token.view(self.param.beam_size, -1)
         topk_token = th.gather(att_topk_token, -1, topk_index)
-        self.ctc_scorer.fix_local_var(topk_index)
+        self.ctc_scorer.update_var(topk_index)
         return (topk_score, topk_token)
 
     def _init_search(self,
@@ -331,8 +331,7 @@ class BeamTracker(BaseBeamTracker):
             topk_score, topk_token = self.beam_select(am_prob, lm_prob)
         self.score += topk_score[0]
         if self.ctc_scorer:
-            idx = th.arange(self.param.beam_size, device=am_prob.device)
-            self.ctc_scorer.fix_local_var(idx * self.param.beam_size)
+            self.ctc_scorer.update_var(0)
         self.acmu_score += topk_score[0]
         self.token.append(topk_token[0])
         self.point.append(self.point[-1])
@@ -363,7 +362,7 @@ class BeamTracker(BaseBeamTracker):
                                          self.param.beam_size,
                                          dim=-1)
         if self.ctc_scorer:
-            self.ctc_scorer.fix_local_var(topk_index)
+            self.ctc_scorer.update_var(topk_index)
         # update accumulated score (AM + LM)
         self.acmu_score = acmu_score.view(-1)[topk_index]
         # point to father's node

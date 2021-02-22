@@ -9,7 +9,7 @@ import torch.nn as nn
 from collections import defaultdict
 from aps.const import NEG_INF
 from aps.utils import get_logger
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Union
 
 logger = get_logger(__name__)
 
@@ -134,6 +134,7 @@ class CtcScorer(nn.Module):
         self.eos = eos
         # blank is last symbol: see aps.conf:load_am_conf(...)
         self.blank = -1
+        self.batch_size = batch_size
         # eq (51) NEG_INF ~ log(0), T x N
         self.gamma_n_g = th.full((self.T, batch_size),
                                  NEG_INF,
@@ -148,16 +149,19 @@ class CtcScorer(nn.Module):
         self.ctc_score = th.zeros(1, batch_size, device=self.device)
         self.neg_inf = th.tensor(NEG_INF).to(self.device)
 
-    def fix_local_var(self, point: th.Tensor) -> None:
+    def update_var(self, point: Union[th.Tensor, int]) -> None:
         """
         Args:
-            point (Tensor): N x att_beam or att_beam
+            point (Tensor or int): N x att_beam or att_beam
         """
-        assert point.dim() in [1, 2]
-        if point.dim() == 2:
-            offset = th.arange(point.shape[0], device=point.device)
-            point = (point + offset[:, None]).view(-1)
-
+        if isinstance(point, th.Tensor):
+            assert point.dim() in [1, 2]
+            if point.dim() == 2:
+                offset = th.arange(point.shape[0], device=point.device)
+                point = (point + offset[:, None]).view(-1)
+        else:
+            point = th.arange(self.batch_size,
+                              device=self.device) * self.batch_size + point
         self.ctc_score = self.ctc_score[:, point]
         self.gamma_b_g = self.gamma_b_g[:, point]
         self.gamma_n_g = self.gamma_n_g[:, point]
