@@ -110,7 +110,8 @@ class CtcScorer(nn.Module):
     def __init__(self,
                  ctc_prob: th.Tensor,
                  eos: int = 1,
-                 batch_size: int = 16) -> None:
+                 batch_size: int = 8,
+                 beam_size: int = 12) -> None:
         super(CtcScorer, self).__init__()
         # apply softmax
         self.ctc_prob = th.log_softmax(ctc_prob, dim=-1)
@@ -121,7 +122,8 @@ class CtcScorer(nn.Module):
         self.eos = eos
         # blank is last symbol: see aps.conf:load_am_conf(...)
         self.blank = -1
-        self.batch_size = batch_size
+        self.offset = th.arange(batch_size, device=self.device)
+        self.beam_size = beam_size
         # eq (51) NEG_INF ~ log(0), T x N
         self.gamma_n_g = th.full((self.T, batch_size),
                                  NEG_INF,
@@ -144,11 +146,9 @@ class CtcScorer(nn.Module):
         if isinstance(point, th.Tensor):
             assert point.dim() in [1, 2]
             if point.dim() == 2:
-                offset = th.arange(point.shape[0], device=point.device)
-                point = (point + offset[:, None]).view(-1)
+                point = (point + self.offset[:, None] * self.beam_size).view(-1)
         else:
-            point = th.arange(self.batch_size,
-                              device=self.device) * self.batch_size + point
+            point = self.offset + point
         self.ctc_score = self.ctc_score[:, point]
         self.gamma_b_g = self.gamma_b_g[:, point]
         self.gamma_n_g = self.gamma_n_g[:, point]

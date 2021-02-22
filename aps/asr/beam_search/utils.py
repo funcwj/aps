@@ -244,7 +244,8 @@ class BeamTracker(BaseBeamTracker):
         if param.ctc_weight > 0 and ctc_prob is not None:
             self.ctc_scorer = CtcScorer(ctc_prob,
                                         eos=param.eos,
-                                        batch_size=param.beam_size)
+                                        batch_size=param.beam_size,
+                                        beam_size=param.ctc_beam_size)
             logger.info(f"--- use CTC score, weight = {param.ctc_weight:.2f}")
         else:
             self.ctc_scorer = None
@@ -303,7 +304,7 @@ class BeamTracker(BaseBeamTracker):
         fusion_score = att_ctc_score + self.param.lm_weight * lm_prob
         if self.param.eos_threshold > 0:
             fusion_score = self.disable_eos(fusion_score)
-        # beam x beam
+        # beam x ctc_beam => beam x beam
         topk_score, topk_index = th.topk(fusion_score,
                                          self.param.beam_size,
                                          dim=-1)
@@ -328,11 +329,10 @@ class BeamTracker(BaseBeamTracker):
         # local pruning: beam x V => beam x beam
         if self.ctc_scorer:
             topk_score, topk_token = self.beam_select_ctc(am_prob, lm_prob)
+            self.ctc_scorer.update_var(0)
         else:
             topk_score, topk_token = self.beam_select(am_prob, lm_prob)
         self.score += topk_score[0]
-        if self.ctc_scorer:
-            self.ctc_scorer.update_var(0)
         self.acmu_score += topk_score[0]
         self.token.append(topk_token[0])
         self.point.append(self.point[-1])
@@ -429,6 +429,9 @@ class BeamTracker(BaseBeamTracker):
                 logger.info(
                     f"--- beam search ends (detected) at step {self.step_num}")
                 stop = True
+        if verbose:
+            logger.info(
+                f"--- get {len(self.hypos)} hypos at step {self.step_num}")
         # update auto_step flag
         self.auto_stop = stop
         # if reach max_len, also return true
