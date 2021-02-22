@@ -13,6 +13,8 @@ import torch as th
 from pathlib import Path
 from aps.opts import DecodingParser
 from aps.eval import NnetEvaluator, TextPostProcessor
+from aps.conf import load_dict
+from aps.const import UNK_TOKEN
 from aps.utils import get_logger, io_wrapper, SimpleTimer
 from aps.loader import AudioReader
 
@@ -100,6 +102,13 @@ def run(args):
         filter(lambda x: x[0] in beam_search_params,
                vars(args).items()))
     dec_args["lm"] = lm
+    unk_idx = -1
+    if args.dict and args.disable_unk:
+        vocab_dict = load_dict(args.dict)
+        if UNK_TOKEN in vocab_dict:
+            unk_idx = vocab_dict[UNK_TOKEN]
+            logger.info(f"Use unknown token {UNK_TOKEN} index: {unk_idx}")
+    dec_args["unk"] = unk_idx
     tot_utts = len(src_reader)
     for key, src in src_reader:
         done += 1

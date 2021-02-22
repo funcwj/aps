@@ -219,6 +219,11 @@ def get_aps_decode_parser():
                         action=StrToBoolAction,
                         default="true",
                         help="If true, detect end of beam search automatically")
+    parser.add_argument("--disable-unk",
+                        action=StrToBoolAction,
+                        default="false",
+                        help="If true, disable <unk> symbol "
+                        "in decoding sequence")
     return parser
 
 
