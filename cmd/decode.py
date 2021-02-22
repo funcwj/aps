@@ -34,9 +34,12 @@ logger = get_logger(__name__)
 
 beam_search_params = [
     "beam_size", "nbest", "max_len", "min_len", "max_len_ratio",
-    "min_len_ratio", "len_norm", "lm_weight", "temperature", "len_penalty",
-    "cov_penalty", "eos_threshold", "cov_threshold", "allow_partial"
+    "min_len_ratio", "len_norm", "lm_weight", "ctc_weight", "temperature",
+    "len_penalty", "cov_penalty", "eos_threshold", "cov_threshold",
+    "allow_partial", "end_detect"
 ]
+
+function_choices = ["beam_search", "greedy_search"]
 
 
 class FasterDecoder(NnetEvaluator):
@@ -123,8 +126,11 @@ def run(args):
         filter(lambda x: x[0] in beam_search_params,
                vars(args).items()))
     dec_args["lm"] = lm
+    done = 0
+    tot_utts = len(src_reader)
     for key, src in src_reader:
-        logger.info(f"Decoding utterance {key}...")
+        done += 1
+        logger.info(f"Decoding utterance {key} ({done}/{tot_utts}) ...")
         nbest_hypos = decoder.run(src, **dec_args)
         nbest = [f"{key}\n"]
         for idx, hyp in enumerate(nbest_hypos):
@@ -134,6 +140,7 @@ def run(args):
             score = hyp["score"]
             nbest.append(f"{score:.3f}\t{len(token):d}\t{trans}\n")
             if idx == 0:
+                logger.info(f"{key} ({score:.3f}, {len(token):d}) {trans}")
                 top1.write(f"{key}\t{trans}\n")
             if ali_dir:
                 if hyp["align"] is None:
@@ -152,8 +159,7 @@ def run(args):
     if topn and not stdout_topn:
         topn.close()
     cost = timer.elapsed()
-    logger.info(
-        f"Decode {len(src_reader)} utterance done, time cost = {cost:.2f}m")
+    logger.info(f"Decode {tot_utts} utterance done, time cost = {cost:.2f}m")
 
 
 if __name__ == "__main__":
@@ -164,7 +170,7 @@ if __name__ == "__main__":
         parents=[DecodingParser.parser])
     parser.add_argument("--function",
                         type=str,
-                        choices=["beam_search", "greedy_search"],
+                        choices=function_choices,
                         default="beam_search",
                         help="Name of the decoding function")
     args = parser.parse_args()

@@ -27,6 +27,7 @@ am_tag="best"
 lm_tag="best"
 lm=""
 lm_weight=0
+ctc_weight=0
 spm=""
 dump_align=""
 log_suffix=""
@@ -52,7 +53,7 @@ exp_dir=exp/$mdl_id/$exp_id
 
 mkdir -p $dec_dir $dec_dir/log
 
-dec_prefix=beam${beam_size}_eos${eos_threshold}_lp${len_penalty}
+dec_prefix=beam${beam_size}_eos${eos_threshold}_lp${len_penalty}_ctc${ctc_weight}
 $len_norm && dec_prefix=${dec_prefix}_norm
 
 if [ -z $log_suffix ]; then
@@ -76,6 +77,7 @@ if [ -z $batch_size ]; then
     --spm "$spm" \
     --temperature $temperature \
     --lm-weight $lm_weight \
+    --ctc-weight $ctc_weight \
     --space "$space" \
     --nbest $nbest \
     --dump-nbest $dec_dir/${dec_prefix}.${nbest}best \
@@ -108,6 +110,7 @@ else
     --space "$space" \
     --temperature $temperature \
     --lm-weight $lm_weight \
+    --ctc-weight $ctc_weight \
     --nbest $nbest \
     --dump-nbest $dec_dir/${dec_prefix}.${nbest}best \
     --dump-align "$dump_align" \

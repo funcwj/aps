@@ -123,6 +123,10 @@ def get_aps_decode_parser():
                         type=float,
                         default=0.1,
                         help="LM score weight used in shallow fusion")
+    parser.add_argument("--ctc-weight",
+                        type=float,
+                        default=0,
+                        help="CTC score weight used in beam search")
     parser.add_argument("--lm-tag",
                         type=str,
                         default="best",
@@ -211,6 +215,10 @@ def get_aps_decode_parser():
                         default="",
                         help="If assigned, dump alignment "
                         "weight to the directory")
+    parser.add_argument("--end-detect",
+                        action=StrToBoolAction,
+                        default="true",
+                        help="If true, detect end of beam search automatically")
     return parser
 
 

@@ -60,6 +60,7 @@ def greedy_search(decoder: nn.Module,
 def beam_search(decoder: nn.Module,
                 enc_out: th.Tensor,
                 lm: Optional[LmType] = None,
+                ctc_prob: Optional[th.Tensor] = None,
                 lm_weight: float = 0,
                 beam_size: int = 8,
                 nbest: int = 1,
@@ -70,6 +71,8 @@ def beam_search(decoder: nn.Module,
                 sos: int = -1,
                 eos: int = -1,
                 len_norm: bool = True,
+                ctc_weight: float = 0,
+                end_detect: bool = False,
                 len_penalty: float = 0,
                 cov_penalty: float = 0,
                 temperature: float = 1,
@@ -93,7 +96,7 @@ def beam_search(decoder: nn.Module,
         raise RuntimeError(f"Beam size({beam_size}) > vocabulary size")
 
     min_len = max(min_len, int(min_len_ratio * T))
-    max_len = min(max_len, int(max_len_ratio * T))
+    max_len = min(max_len, int(max_len_ratio * T)) if max_len_ratio > 0 else T
     logger.info(f"--- shape of the encoder output: {T} x {D_enc}")
     logger.info("--- length constraint of the decoding " +
                 f"sequence: ({min_len}, {max_len})")
@@ -109,10 +112,12 @@ def beam_search(decoder: nn.Module,
                                  max_len=max_len,
                                  len_norm=len_norm,
                                  lm_weight=lm_weight,
+                                 ctc_weight=ctc_weight,
+                                 end_detect=end_detect,
                                  len_penalty=len_penalty,
                                  allow_partial=allow_partial,
                                  eos_threshold=eos_threshold)
-    beam_tracker = BeamTracker(beam_param)
+    beam_tracker = BeamTracker(beam_param, ctc_prob=ctc_prob)
     pre_emb = None
     lm_state = None
     # T x 1 x D => T x beam x D
@@ -156,6 +161,8 @@ def beam_search_batch(decoder: nn.Module,
                       sos: int = -1,
                       eos: int = -1,
                       len_norm: bool = True,
+                      ctc_weight: float = 0,
+                      end_detect: bool = False,
                       len_penalty: float = 0,
                       cov_penalty: float = 0,
                       temperature: float = 1,
@@ -180,7 +187,9 @@ def beam_search_batch(decoder: nn.Module,
         max(min_len, int(min_len_ratio * elen.item())) for elen in enc_len
     ]
     max_len = [
-        min(max_len, int(max_len_ratio * elen.item())) for elen in enc_len
+        min(max_len, int(max_len_ratio *
+                         elen.item())) if max_len_ratio > 0 else elen.item()
+        for elen in enc_len
     ]
     logger.info("--- length constraint of the decoding " +
                 f"sequence: {[(i, j) for i, j in zip(min_len, max_len)]}")
@@ -202,6 +211,8 @@ def beam_search_batch(decoder: nn.Module,
                                  max_len=max_len,
                                  len_norm=len_norm,
                                  lm_weight=lm_weight,
+                                 ctc_weight=ctc_weight,
+                                 end_detect=end_detect,
                                  len_penalty=len_penalty,
                                  allow_partial=allow_partial,
                                  eos_threshold=eos_threshold)

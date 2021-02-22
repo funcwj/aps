@@ -20,6 +20,7 @@ from aps.asr.xfmr.encoder import TransformerEncoder
 from aps.asr.xfmr.decoder import TorchTransformerDecoder
 from aps.asr.xfmr.impl import TransformerEncoderLayers
 from aps.asr.base.attention import att_instance
+from aps.asr.beam_search.ctc import ctc_beam_search
 from aps.libs import ApsRegisters
 
 NoneOrTensor = Optional[th.Tensor]
@@ -46,6 +47,7 @@ class EncDecASRBase(nn.Module):
             raise RuntimeError(f"Unsupported SOS/EOS value: {sos}/{eos}")
         self.sos = sos
         self.eos = eos
+        self.vocab_size = vocab_size
         self.asr_transform = asr_transform
         if enc_type in TransformerEncoderLayers:
             self.encoder = TransformerEncoder(enc_type, input_size,
@@ -230,17 +232,34 @@ class AttASR(EncDecASRBase):
                                          eos=self.eos,
                                          len_norm=len_norm)
 
-    def beam_search(self, x: th.Tensor, **kwargs) -> List[Dict]:
+    def beam_search(self,
+                    x: th.Tensor,
+                    ctc_weight: float = 0,
+                    **kwargs) -> List[Dict]:
         """
         Vectorized beam search
         Args
             x (Tensor): audio samples or acoustic features, S or Ti x F
         """
         with th.no_grad():
+            # N x T x D
             enc_out = self._decoding_prep(x)
-            return att_api.beam_search(self.decoder,
-                                       self.att_net,
-                                       enc_out,
+            ctc_prob = self.ctc(enc_out)[0] if self.ctc else None
+            if ctc_weight < 1:
+                return att_api.beam_search(self.decoder,
+                                           self.att_net,
+                                           enc_out,
+                                           ctc_prob=ctc_prob,
+                                           ctc_weight=ctc_weight,
+                                           sos=self.sos,
+                                           eos=self.eos,
+                                           **kwargs)
+            else:
+                if ctc_prob is None:
+                    raise RuntimeError(
+                        "Can't do CTC beam search as self.ctc is None")
+                return ctc_beam_search(ctc_prob,
+                                       blank=self.vocab_size - 1,
                                        sos=self.sos,
                                        eos=self.eos,
                                        **kwargs)
@@ -336,18 +355,35 @@ class XfmrASR(EncDecASRBase):
                                           eos=self.eos,
                                           len_norm=len_norm)
 
-    def beam_search(self, x: th.Tensor, **kwargs) -> List[Dict]:
+    def beam_search(self,
+                    x: th.Tensor,
+                    ctc_weight: float = 0,
+                    **kwargs) -> List[Dict]:
         """
         Beam search for Transformer
         """
         with th.no_grad():
+            # T x N x D
             enc_out = self._decoding_prep(x, batch_first=False)
+            ctc_prob = self.ctc(enc_out)[:, 0] if self.ctc else None
             # beam search
-            return xfmr_api.beam_search(self.decoder,
-                                        enc_out,
-                                        sos=self.sos,
-                                        eos=self.eos,
-                                        **kwargs)
+            if ctc_weight < 1:
+                return xfmr_api.beam_search(self.decoder,
+                                            enc_out,
+                                            ctc_prob=ctc_prob,
+                                            ctc_weight=ctc_weight,
+                                            sos=self.sos,
+                                            eos=self.eos,
+                                            **kwargs)
+            else:
+                if ctc_prob is None:
+                    raise RuntimeError(
+                        "Can't do CTC beam search as self.ctc is None")
+                return ctc_beam_search(ctc_prob,
+                                       blank=self.vocab_size - 1,
+                                       sos=self.sos,
+                                       eos=self.eos,
+                                       **kwargs)
 
     def beam_search_batch(self, batch: List[th.Tensor], **kwargs) -> List[Dict]:
         """
