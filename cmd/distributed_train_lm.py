@@ -54,12 +54,12 @@ def train_worker(task, conf, vocab_dict, args):
     load_conf.update(data_conf["loader"])
     trn_loader = aps_dataloader(train=True,
                                 distributed=True,
-                                batch_size=args.batch_size // num_process,
+                                max_batch_size=args.batch_size // num_process,
                                 **data_conf["train"],
                                 **load_conf)
     dev_loader = aps_dataloader(train=False,
                                 distributed=False,
-                                batch_size=args.batch_size //
+                                max_batch_size=args.batch_size //
                                 args.dev_batch_factor,
                                 **data_conf["valid"],
                                 **load_conf)

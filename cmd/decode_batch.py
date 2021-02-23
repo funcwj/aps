@@ -75,7 +75,7 @@ def run(args):
             lm = NnetEvaluator(args.lm,
                                device_id=args.device_id,
                                cpt_tag=args.lm_tag)
-            logger.info(f"Load RNN LM from {args.lm}: epoch {lm.epoch}, " +
+            logger.info(f"Load NN LM from {args.lm}: epoch {lm.epoch}, " +
                         f"weight = {args.lm_weight}")
             lm = lm.nnet
     else:

@@ -63,9 +63,9 @@ class FasterDecoder(NnetEvaluator):
                 f"AM doesn't have the decoding function: {function}")
         self.decode = getattr(self.nnet, function)
         self.function = function
+        logger.info(f"Use decoding function: {function}")
         logger.info(f"Load checkpoint from {cpt_dir}, epoch: " +
                     f"{self.epoch}, tag: {cpt_tag}")
-        logger.info(f"Using decoding function: {function}")
 
     def run(self, src, **kwargs):
         src = th.from_numpy(src).to(self.device)
@@ -99,7 +99,7 @@ def run(args):
             lm = NnetEvaluator(args.lm,
                                device_id=args.device_id,
                                cpt_tag=args.lm_tag)
-            logger.info(f"Load RNN LM from {args.lm}: epoch {lm.epoch}, " +
+            logger.info(f"Load NN LM from {args.lm}: epoch {lm.epoch}, " +
                         f"weight = {args.lm_weight}")
             lm = lm.nnet
     else:
