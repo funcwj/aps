@@ -67,25 +67,27 @@ class TorchRNNLM(nn.Module):
         init.uniform_(self.dist.weight, -initrange, initrange)
         init.uniform_(self.embed.weight, -initrange, initrange)
 
-    def forward(self,
-                token: th.Tensor,
-                h: Optional[HiddenType] = None,
-                token_len=Optional[th.Tensor]) -> Tuple[th.Tensor, HiddenType]:
+    def forward(
+            self,
+            token: th.Tensor,
+            hidden: Optional[HiddenType] = None,
+            token_len: Optional[th.Tensor] = None
+    ) -> Tuple[th.Tensor, HiddenType]:
         """
         Args:
             token: input token sequence, N x T
-            h: hidden state from previous time step
+            hidden: hidden state from previous time step
             token_len: length of x, N or None
         Return:
             output: N x T x V
-            h: hidden state from current time step
+            hidden: hidden state from current time step
         """
-        if h is not None:
-            h = repackage_hidden(h)
+        if hidden is not None:
+            hidden = repackage_hidden(hidden)
         # N x T => N x T x V
         inp_emb = self.embed_drop(self.embed(token))
         # N x T x H
-        out, h = self.pred(inp_emb, h)
+        out, hidden = self.pred(inp_emb, hidden)
         # N x T x V
         out = self.dist(self.pred_drop(out))
-        return out, h
+        return out, hidden

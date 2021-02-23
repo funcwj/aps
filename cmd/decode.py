@@ -12,6 +12,8 @@ import torch as th
 from pathlib import Path
 from aps.eval import NnetEvaluator, TextPostProcessor
 from aps.opts import DecodingParser
+from aps.conf import load_dict
+from aps.const import UNK_TOKEN
 from aps.utils import get_logger, io_wrapper, SimpleTimer
 from aps.loader import AudioReader
 
@@ -61,9 +63,9 @@ class FasterDecoder(NnetEvaluator):
                 f"AM doesn't have the decoding function: {function}")
         self.decode = getattr(self.nnet, function)
         self.function = function
+        logger.info(f"Use decoding function: {function}")
         logger.info(f"Load checkpoint from {cpt_dir}, epoch: " +
                     f"{self.epoch}, tag: {cpt_tag}")
-        logger.info(f"Using decoding function: {function}")
 
     def run(self, src, **kwargs):
         src = th.from_numpy(src).to(self.device)
@@ -97,7 +99,7 @@ def run(args):
             lm = NnetEvaluator(args.lm,
                                device_id=args.device_id,
                                cpt_tag=args.lm_tag)
-            logger.info(f"Load RNN LM from {args.lm}: epoch {lm.epoch}, " +
+            logger.info(f"Load NN LM from {args.lm}: epoch {lm.epoch}, " +
                         f"weight = {args.lm_weight}")
             lm = lm.nnet
     else:
@@ -126,6 +128,13 @@ def run(args):
         filter(lambda x: x[0] in beam_search_params,
                vars(args).items()))
     dec_args["lm"] = lm
+    unk_idx = -1
+    if args.dict and args.disable_unk:
+        vocab_dict = load_dict(args.dict)
+        if UNK_TOKEN in vocab_dict:
+            unk_idx = vocab_dict[UNK_TOKEN]
+            logger.info(f"Use unknown token {UNK_TOKEN} index: {unk_idx}")
+    dec_args["unk"] = unk_idx
     done = 0
     tot_utts = len(src_reader)
     for key, src in src_reader:

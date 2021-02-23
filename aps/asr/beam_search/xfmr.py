@@ -70,6 +70,7 @@ def beam_search(decoder: nn.Module,
                 min_len_ratio: float = 0,
                 sos: int = -1,
                 eos: int = -1,
+                unk: int = -1,
                 len_norm: bool = True,
                 ctc_weight: float = 0,
                 end_detect: bool = False,
@@ -107,6 +108,7 @@ def beam_search(decoder: nn.Module,
     beam_param = BeamSearchParam(beam_size=beam_size,
                                  sos=sos,
                                  eos=eos,
+                                 unk=unk,
                                  device=device,
                                  min_len=min_len,
                                  max_len=max_len,
@@ -116,7 +118,8 @@ def beam_search(decoder: nn.Module,
                                  end_detect=end_detect,
                                  len_penalty=len_penalty,
                                  allow_partial=allow_partial,
-                                 eos_threshold=eos_threshold)
+                                 eos_threshold=eos_threshold,
+                                 ctc_beam_size=int(beam_size * 1.5))
     beam_tracker = BeamTracker(beam_param, ctc_prob=ctc_prob)
     pre_emb = None
     lm_state = None
@@ -160,6 +163,7 @@ def beam_search_batch(decoder: nn.Module,
                       min_len_ratio: float = 0,
                       sos: int = -1,
                       eos: int = -1,
+                      unk: int = -1,
                       len_norm: bool = True,
                       ctc_weight: float = 0,
                       end_detect: bool = False,
@@ -206,6 +210,7 @@ def beam_search_batch(decoder: nn.Module,
     beam_param = BeamSearchParam(beam_size=beam_size,
                                  sos=sos,
                                  eos=eos,
+                                 unk=unk,
                                  device=device,
                                  min_len=min_len,
                                  max_len=max_len,
@@ -215,7 +220,8 @@ def beam_search_batch(decoder: nn.Module,
                                  end_detect=end_detect,
                                  len_penalty=len_penalty,
                                  allow_partial=allow_partial,
-                                 eos_threshold=eos_threshold)
+                                 eos_threshold=eos_threshold,
+                                 ctc_beam_size=int(beam_size * 1.5))
     beam_tracker = BatchBeamTracker(N, beam_param)
     # step by step
     stop = False

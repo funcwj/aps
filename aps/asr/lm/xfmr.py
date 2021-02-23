@@ -48,31 +48,35 @@ class TorchXfmrLM(nn.Module):
     def forward(
             self,
             token: th.Tensor,
-            h: Optional[th.Tensor] = None,
+            hidden: Optional[th.Tensor] = None,
             token_len: Optional[th.Tensor] = None
     ) -> Tuple[th.Tensor, th.Tensor]:
         """
         args:
             token: input token sequence, N x T
-            h: previous sequence embeddings, T x N x E
+            hidden: previous sequence embeddings, T x N x E
             token_len: length of x, N or None
         return:
             output: N x T x V
-            h: current sequence embeddings, T x N x E
+            hidden: current sequence embeddings, T x N x E
         """
         # N x T => T x N x V
-        t = 0 if h is None else h.shape[0]
-        x = self.abs_pos_enc(self.vocab_embed(token), t=t)
+        t = 0 if hidden is None else hidden.shape[0]
+        token_embed = self.abs_pos_enc(self.vocab_embed(token), t=t)
         # h == None: training or eval in time = 0
-        h = x if h is None else th.cat([h, x], dim=0)
+        hidden = token_embed if hidden is None else th.cat(
+            [hidden, token_embed], dim=0)
+        # tgt_mask: T x T
+        tgt_mask = prep_sub_mask(hidden.shape[0], device=hidden.device)
         # src_pad_mask: N x T
         src_pad_mask = None if token_len is None else (padding_mask(token_len)
                                                        == 1)
-        tgt_mask = prep_sub_mask(t + 1, device=x.device)
-        # N x Ti x D
-        enc_out = self.encoder(h,
-                               mask=tgt_mask,
+        # Ti x N x D
+        enc_out = self.encoder(hidden,
+                               inj_pose=None,
+                               src_mask=tgt_mask,
                                src_key_padding_mask=src_pad_mask)
-        # N x Ti x V
+        # Ti x N x V
         output = self.dist(enc_out)
-        return output, h
+        # N x Ti x V
+        return output.transpose(0, 1), hidden

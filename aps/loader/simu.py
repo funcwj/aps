@@ -333,7 +333,7 @@ def make_argparse():
                         "of the pointsource noise")
     parser.add_argument("--point-noise-repeat",
                         action=StrToBoolAction,
-                        default="false",
+                        default=False,
                         help="Repeat the pointsource noise or not")
     parser.add_argument("--isotropic-noise",
                         type=str,

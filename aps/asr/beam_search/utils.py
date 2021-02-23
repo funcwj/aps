@@ -25,6 +25,7 @@ class BeamSearchParam(object):
     beam_size: int = 8
     sos: int = 1
     eos: int = 2
+    unk: int = -1
     # for batch version, it's list
     min_len: Union[int, List[int]] = 1
     max_len: Union[int, List[int]] = 1000
@@ -39,7 +40,7 @@ class BeamSearchParam(object):
     allow_partial: bool = False
     end_detect: bool = False
     ctc_weight: float = 0
-    ctc_beam_size: int = int(beam_size * 1.5)
+    ctc_beam_size: int = 12
 
 
 class BaseBeamTracker(object):
@@ -138,6 +139,20 @@ class BaseBeamTracker(object):
         if verbose and th.sum(disable_eos):
             disable_index = [i for i, s in enumerate(disable_eos) if s]
             logger.info(f"--- disable <eos> in beam index: {disable_index}")
+        return score
+
+    def disable_unk(self, token: th.Tensor, score: th.Tensor) -> th.Tensor:
+        """
+        Disable <unk> token
+        Args:
+            token (Tensor): N
+            score (Tensor): N
+        Return:
+            score (Tensor): N
+        """
+        if self.param.unk >= 0:
+            unk_index = token == self.param.unk
+            score[unk_index] = NEG_INF
         return score
 
     def beam_select(self, am_prob: th.Tensor,
@@ -331,7 +346,8 @@ class BeamTracker(BaseBeamTracker):
         else:
             topk_score, topk_token = self.beam_select(am_prob, lm_prob)
         self.score += topk_score[0]
-        self.acmu_score += topk_score[0]
+        acmu_score = self.acmu_score + topk_score[0]
+        self.acmu_score = self.disable_unk(topk_token[0], acmu_score)
         self.token.append(topk_token[0])
         self.point.append(self.point[-1])
         self.trans = self.concat(self.trans, None, topk_token[0])
@@ -363,9 +379,10 @@ class BeamTracker(BaseBeamTracker):
         if self.ctc_scorer:
             self.ctc_scorer.update_var(topk_index)
         # update accumulated score (AM + LM)
-        self.acmu_score = acmu_score.view(-1)[topk_index]
+        acmu_score = acmu_score.view(-1)[topk_index]
         # point to father's node
         token = topk_token.view(-1)[topk_index]
+        self.acmu_score = self.disable_unk(token, acmu_score)
         point = topk_index // self.param.beam_size
         # concat stats
         self.trans = self.concat(self.trans, point, token)
