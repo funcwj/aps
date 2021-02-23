@@ -68,7 +68,7 @@ class TorchXfmrLM(nn.Module):
         # src_pad_mask: N x T
         src_pad_mask = None if token_len is None else (padding_mask(token_len)
                                                        == 1)
-        tgt_mask = prep_sub_mask(t + 1, device=x.device)
+        tgt_mask = prep_sub_mask(h.shape[0], device=x.device)
         # N x Ti x D
         enc_out = self.encoder(h,
                                mask=tgt_mask,

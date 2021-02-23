@@ -138,11 +138,11 @@ def get_aps_decode_parser():
                         "the acoustic scores")
     parser.add_argument("--allow-partial",
                         action=StrToBoolAction,
-                        default="false",
+                        default=False,
                         help="If ture, add partial hypos in the final step")
     parser.add_argument("--len-norm",
                         action=StrToBoolAction,
-                        default="true",
+                        default=False,
                         help="If ture, using length normalized "
                         "when sort nbest hypos")
     parser.add_argument("--len-penalty",
@@ -217,11 +217,11 @@ def get_aps_decode_parser():
                         "weight to the directory")
     parser.add_argument("--end-detect",
                         action=StrToBoolAction,
-                        default="true",
+                        default=True,
                         help="If true, detect end of beam search automatically")
     parser.add_argument("--disable-unk",
                         action=StrToBoolAction,
-                        default="false",
+                        default=False,
                         help="If true, disable <unk> symbol "
                         "in decoding sequence")
     return parser

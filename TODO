@@ -1,6 +1,5 @@
-1. RNN LM fusion issues (beam search)
-2. Add recipes (speaker tasks, hybrid AM training)
-4. Add SOTA models
-5. TorchScript/JIT features (export)
-6. Streaming
-7. ...
+1. Add recipes (speaker tasks, hybrid AM training)
+2. Add SOTA models
+3. TorchScript/JIT features (export)
+4. Streaming
+5. ...

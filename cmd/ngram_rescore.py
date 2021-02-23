@@ -71,7 +71,7 @@ if __name__ == "__main__":
                         help="Language model weight")
     parser.add_argument("--len-norm",
                         action=StrToBoolAction,
-                        default="true",
+                        default=True,
                         help="If ture, using length normalized "
                         "for acoustic score")
     args = parser.parse_args()
