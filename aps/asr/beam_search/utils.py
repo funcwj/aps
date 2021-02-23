@@ -40,7 +40,7 @@ class BeamSearchParam(object):
     allow_partial: bool = False
     end_detect: bool = False
     ctc_weight: float = 0
-    ctc_beam_size: int = int(beam_size * 1.5)
+    ctc_beam_size: int = 12
 
 
 class BaseBeamTracker(object):

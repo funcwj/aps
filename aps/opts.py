@@ -138,7 +138,7 @@ def get_aps_decode_parser():
                         "the acoustic scores")
     parser.add_argument("--allow-partial",
                         action=StrToBoolAction,
-                        default=False,
+                        default=True,
                         help="If ture, add partial hypos in the final step")
     parser.add_argument("--len-norm",
                         action=StrToBoolAction,

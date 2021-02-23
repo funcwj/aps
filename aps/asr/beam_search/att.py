@@ -137,7 +137,8 @@ def beam_search(decoder: nn.Module,
                                  cov_penalty=cov_penalty,
                                  allow_partial=allow_partial,
                                  cov_threshold=cov_threshold,
-                                 eos_threshold=eos_threshold)
+                                 eos_threshold=eos_threshold,
+                                 ctc_beam_size=int(beam_size * 1.5))
     beam_tracker = BeamTracker(beam_param, ctc_prob=ctc_prob)
 
     lm_state = None
@@ -250,7 +251,8 @@ def beam_search_batch(decoder: nn.Module,
                                  cov_penalty=cov_penalty,
                                  allow_partial=allow_partial,
                                  cov_threshold=cov_threshold,
-                                 eos_threshold=eos_threshold)
+                                 eos_threshold=eos_threshold,
+                                 ctc_beam_size=int(beam_size * 1.5))
     beam_tracker = BatchBeamTracker(N, beam_param)
 
     # clear states
