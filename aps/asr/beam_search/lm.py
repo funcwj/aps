@@ -70,7 +70,7 @@ def rnnlm_score(rnnlm: nn.Module, back_point: th.Tensor, prev_token: th.Tensor,
     # LM
     lmout, state = rnnlm(prev_token[..., None], state)
     # beam x V
-    score = tf.log_softmax(lmout[:, 0], dim=-1)
+    score = tf.log_softmax(lmout[:, -1], dim=-1)
     # return state & score
     return (score, state)
 
