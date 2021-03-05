@@ -43,6 +43,7 @@ def run(args):
                       device_ids=args.device_id,
                       checkpoint=args.checkpoint,
                       resume=args.resume,
+                      init=args.init,
                       save_interval=args.save_interval,
                       prog_interval=args.prog_interval,
                       tensorboard=args.tensorboard,

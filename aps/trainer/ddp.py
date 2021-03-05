@@ -113,11 +113,20 @@ class DdpTrainer(Trainer):
             self.weight_noise_adder(self.task, self.cur_step)
 
         is_backward_step = (self.cur_step + 1) % self.acmu_gradient == 0
-        if self.distributed and not is_backward_step:
-            with self.task.no_sync():
+        # handle OOM during forward
+        try:
+            if self.distributed and not is_backward_step:
+                with self.task.no_sync():
+                    stats = self.task(egs)
+            else:
                 stats = self.task(egs)
-        else:
-            stats = self.task(egs)
+        except RuntimeError as rt_err:
+            if "out of memory" in str(rt_err):
+                th.cuda.empty_cache()
+                self.reporter.log(f"Get CUDA OOM during forward, skip...")
+                return False
+            else:
+                raise rt_err
 
         # use all reduce to check loss
         if self.distributed and is_backward_step:
