@@ -1,0 +1,59 @@
+# cmd_args:
+#   batch_size: 64
+#   dev_batch_factor: 2
+#   device_ids: 0,1,2,3
+#   distributed: torch
+#   epochs: 100
+#   eval_interval: 2500
+#   init: ''
+#   num_workers: 16
+#   prog_interval: 100
+#   resume: ''
+#   save_interval: -1
+#   seed: '888'
+#   tensorboard: false
+#   trainer: ddp
+
+nnet: "asr@xfmr_lm"
+
+nnet_conf:
+  att_dim: 512
+  nhead: 8
+  feedforward_dim: 2048
+  pos_dropout: 0.1
+  att_dropout: 0.1
+  ffn_dropout: 0.1
+  num_layers: 12
+
+task: "asr@lm"
+
+trainer_conf:
+  optimizer: "adamw"
+  optimizer_kwargs:
+    lr: 0.0
+    weight_decay: 1.0e-3
+  lr_scheduler: "warmup_noam_lr"
+  lr_scheduler_period: "step"
+  lr_scheduler_kwargs:
+    transformer_dim: 512
+    peak_lr: -1
+    warmup: 20000
+  no_impr: 8
+  no_impr_thres: 0
+  acmu_gradient: 4
+  clip_gradient: 10
+  report_metrics: ["loss", "accu", "@ppl"]
+  stop_criterion: "@ppl"
+
+data_conf:
+  fmt: "lm@utt"
+  loader:
+    min_token_num: 20
+    max_token_num: 300
+    min_batch_size: 4
+    adapt_token_num: 100
+    chunk_size_for_sort: 30000
+  train:
+    text: "data/librispeech/lm/train.token"
+  valid:
+    text: "data/librispeech/lm/dev.token"

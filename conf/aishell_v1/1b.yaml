@@ -1,3 +1,17 @@
+# cmd_args:
+#   batch_size: 32
+#   device_id: '0'
+#   epochs: 100
+#   eval_interval: -1
+#   init: ''
+#   num_workers: 8
+#   prog_interval: 100
+#   resume: ''
+#   save_interval: -1
+#   seed: '888'
+#   tensorboard: false
+#   trainer: ddp
+
 nnet: "asr@xfmr"
 
 nnet_conf:

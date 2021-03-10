@@ -1,3 +1,17 @@
+# cmd_args:
+#   batch_size: 64
+#   device_id: '0'
+#   epochs: 100
+#   eval_interval: -1
+#   init: ''
+#   num_workers: 16
+#   prog_interval: 100
+#   resume: ''
+#   save_interval: -1
+#   seed: '888'
+#   tensorboard: false
+#   trainer: ddp
+
 nnet: "asr@att"
 
 nnet_conf:
@@ -48,7 +62,7 @@ asr_transform:
   num_mels: 80
   norm_mean: true
   norm_var: true
-  aug_prob: 0.5
+  aug_prob: 1
   aug_mask_zero: false
   aug_freq_args: [30, 1]
   aug_time_args: [80, 1]

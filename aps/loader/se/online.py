@@ -22,7 +22,7 @@ def DataLoader(train: bool = True,
                simu_cfg: str = "",
                noise_label: bool = False,
                chunk_size: int = 64000,
-               batch_size: int = 16,
+               max_batch_size: int = 16,
                distributed: bool = False,
                num_workers: int = 4) -> Iterable[Dict]:
     """
@@ -32,7 +32,7 @@ def DataLoader(train: bool = True,
         sr: sample rate of the audio
         simu_cfg: configuration file for online data simulation
         chunk_size: #chunk_size (s)
-        batch_size: #batch_size
+        max_batch_size: #batch_size
         distributed: in distributed mode or not
         num_workers: number of workers used in dataloader
     """
@@ -42,7 +42,7 @@ def DataLoader(train: bool = True,
     return WaveChunkDataLoader(dataset,
                                train=train,
                                chunk_size=chunk_size,
-                               batch_size=batch_size,
+                               batch_size=max_batch_size,
                                num_workers=num_workers,
                                distributed=distributed)
 

@@ -61,7 +61,7 @@ case $distributed in
       --nproc_per_node $num_process \
       --master_port $port \
       --use_env \
-      cmd/distributed_train_$task.py $opts \
+      cmd/train_$task.py $opts \
       --conf $conf \
       --seed $seed \
       --epochs $epochs \
@@ -79,7 +79,7 @@ case $distributed in
     ;;
   "horovod" )
     horovodrun -np $num_process -H localhost:$num_process \
-      python cmd/distributed_train_$task.py $opts \
+      python cmd/train_$task.py $opts \
       --conf $conf \
       --seed $seed \
       --epochs $epochs \

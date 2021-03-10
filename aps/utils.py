@@ -14,8 +14,7 @@ import numpy as np
 
 from typing import NoReturn, Tuple, Any, Union, Optional
 
-aps_logger_format = ("%(asctime)s [%(pathname)s:%(lineno)s - " +
-                     "%(levelname)s ] %(message)s")
+aps_logger_format = "{asctime} [{filename}:{lineno} - {levelname}] {message}"
 aps_time_format = "%Y-%m-%d %H:%M:%S"
 
 
@@ -32,15 +31,15 @@ def get_logger(name: str,
     """
 
     def get_handler(handler):
-        handler.setLevel(logging.INFO)
-        formatter = logging.Formatter(fmt=format_str, datefmt=date_format)
+        formatter = logging.Formatter(fmt=format_str,
+                                      datefmt=date_format,
+                                      style="{")
         handler.setFormatter(formatter)
         return handler
 
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
-    logger.addHandler(logging.StreamHandler())
-    # both stdout & file
+    logger.addHandler(get_handler(logging.StreamHandler()))
     if file:
         logger.addHandler(get_handler(logging.FileHandler(name)))
     return logger
