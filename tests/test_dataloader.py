@@ -87,7 +87,7 @@ def test_ss_chunk_loader(batch_size, chunk_size, num_workers):
                             mix_scp=f"{egs_dir}/wav.1.scp",
                             ref_scp=f"{egs_dir}/wav.1.scp",
                             sr=16000,
-                            batch_size=batch_size,
+                            max_batch_size=batch_size,
                             chunk_size=chunk_size,
                             num_workers=num_workers)
     for egs in loader:
@@ -97,7 +97,7 @@ def test_ss_chunk_loader(batch_size, chunk_size, num_workers):
                             mix_scp=f"{egs_dir}/wav.1.scp",
                             ref_scp=f"{egs_dir}/wav.1.scp,{egs_dir}/wav.1.scp",
                             sr=16000,
-                            batch_size=batch_size,
+                            max_batch_size=batch_size,
                             chunk_size=chunk_size,
                             num_workers=num_workers)
     for egs in loader:
@@ -114,7 +114,7 @@ def test_ss_online_loader(batch_size, chunk_size, num_workers):
     loader = aps_dataloader(fmt="se@online",
                             simu_cfg=f"{egs_dir}/online.opts",
                             sr=16000,
-                            batch_size=batch_size,
+                            max_batch_size=batch_size,
                             chunk_size=chunk_size,
                             num_workers=num_workers)
     for egs in loader:
