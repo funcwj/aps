@@ -8,9 +8,9 @@ import pprint
 import argparse
 
 from aps.utils import set_seed
-from aps.opts import BaseTrainParser
+from aps.opts import DistributedTrainParser
 from aps.conf import load_ss_conf
-from aps.libs import aps_transform, aps_task, aps_dataloader, aps_sse_nnet, aps_trainer
+from aps.libs import aps_sse_nnet, aps_transform, start_trainer
 
 
 def run(args):
@@ -23,55 +23,27 @@ def run(args):
     print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     print(f"Arguments in yaml:\n{pprint.pformat(conf)}", flush=True)
 
-    data_conf = conf["data_conf"]
-    load_conf = {
-        "fmt": data_conf["fmt"],
-        "batch_size": args.batch_size,
-        "num_workers": args.num_workers,
-    }
-    load_conf.update(data_conf["loader"])
-    trn_loader = aps_dataloader(train=True, **load_conf, **data_conf["train"])
-    dev_loader = aps_dataloader(train=False, **load_conf, **data_conf["valid"])
-
     sse_cls = aps_sse_nnet(conf["nnet"])
+    # with or without enh_tranform
     if "enh_transform" in conf:
         enh_transform = aps_transform("enh")(**conf["enh_transform"])
         nnet = sse_cls(enh_transform=enh_transform, **conf["nnet_conf"])
     else:
         nnet = sse_cls(**conf["nnet_conf"])
 
-    task = aps_task(conf["task"], nnet, **conf["task_conf"])
-
-    Trainer = aps_trainer(args.trainer, distributed=False)
-    trainer = Trainer(task,
-                      device_ids=args.device_id,
-                      checkpoint=args.checkpoint,
-                      resume=args.resume,
-                      init=args.init,
-                      save_interval=args.save_interval,
-                      prog_interval=args.prog_interval,
-                      tensorboard=args.tensorboard,
-                      **conf["trainer_conf"])
-
-    # dump configurations
-    conf["cmd_args"] = vars(args)
-    with open(f"{args.checkpoint}/train.yaml", "w") as f:
-        yaml.dump(conf, f)
-
-    trainer.run(trn_loader,
-                dev_loader,
-                num_epochs=args.epochs,
-                eval_interval=args.eval_interval)
+    is_distributed = args.distributed != "none"
+    if is_distributed and args.eval_interval <= 0:
+        raise RuntimeError("For distributed training of SE/SS model, "
+                           "--eval-interval must be larger than 0")
+    start_trainer(args.trainer, conf, nnet, args, reduction_tag="none")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Command for speech separation/enhancement model training",
+        description="Command for speech separation/enhancement model training. "
+        "To kick off the distributed training, using python -m torch.distributed.launch "
+        "or horovodrun to launch the command. See scripts/distributed_train.sh ",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[BaseTrainParser.parser])
-    parser.add_argument("--device-id",
-                        type=str,
-                        default="0",
-                        help="Training on which GPU device")
+        parents=[DistributedTrainParser.parser])
     args = parser.parse_args()
     run(args)

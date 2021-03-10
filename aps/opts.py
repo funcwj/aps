@@ -248,12 +248,12 @@ class DistributedTrainParser(BaseTrainParser):
     parser = get_aps_train_parser()
     parser.add_argument("--device-ids",
                         type=str,
-                        default="0,1",
+                        default="0",
                         help="Training on which GPU devices")
     parser.add_argument("--distributed",
                         type=str,
-                        default="torch",
-                        choices=["torch", "horovod"],
+                        default="none",
+                        choices=["torch", "horovod", "none"],
                         help="The distributed backend to use")
     parser.add_argument("--dev-batch-factor",
                         type=int,

@@ -476,6 +476,7 @@ class BeamTracker(BaseBeamTracker):
 class BatchBeamTracker(BaseBeamTracker):
     """
     A data structure used in batch version of the beam search
+    NOTE: not support CTC score
     """
 
     def __init__(self, batch_size: int, param: BeamSearchParam) -> None:

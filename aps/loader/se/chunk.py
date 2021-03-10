@@ -25,7 +25,7 @@ def DataLoader(train: bool = True,
                ref_scp: str = "",
                emb_scp: str = "",
                chunk_size: int = 64000,
-               batch_size: int = 16,
+               max_batch_size: int = 16,
                distributed: bool = False,
                num_workers: int = 4) -> Iterable[Dict]:
     """
@@ -38,7 +38,7 @@ def DataLoader(train: bool = True,
         doa_scp: DoA scripts, e.g., "spk1.scp" or "spk1.scp,spk2.scp" or ""
         ref_scp: reference audio scripts, e.g., "spk1.scp" or "spk1.scp,spk2.scp"
         chunk_size: #chunk_size (s)
-        batch_size: #batch_size
+        max_batch_size: #batch_size
         distributed: in distributed mode or not
         num_workers: number of workers used in dataloader
     """
@@ -63,7 +63,7 @@ def DataLoader(train: bool = True,
     return WaveChunkDataLoader(dataset,
                                train=train,
                                chunk_size=chunk_size,
-                               batch_size=batch_size,
+                               batch_size=max_batch_size,
                                num_workers=num_workers,
                                distributed=distributed)
 

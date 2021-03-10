@@ -55,7 +55,7 @@ cmd/train_$task.py $opts \
   --seed $seed \
   --epochs $epochs \
   --trainer $trainer \
-  --device-id $gpu \
+  --device-ids $gpu \
   --batch-size $batch_size \
   --checkpoint $checkpoint \
   --num-workers $num_workers \
