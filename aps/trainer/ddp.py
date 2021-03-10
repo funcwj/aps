@@ -123,7 +123,7 @@ class DdpTrainer(Trainer):
         except RuntimeError as rt_err:
             if "out of memory" in str(rt_err):
                 th.cuda.empty_cache()
-                self.reporter.log(f"Get CUDA OOM during forward, skip...")
+                self.reporter.log("Get CUDA OOM during forward, skip...")
                 return False
             else:
                 raise rt_err

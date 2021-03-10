@@ -3,7 +3,6 @@
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-import yaml
 import pprint
 import argparse
 
@@ -14,12 +13,10 @@ from aps.libs import aps_sse_nnet, aps_transform, start_trainer
 
 
 def run(args):
-    # set random seed
-    seed = set_seed(args.seed)
-    if seed is not None:
-        print(f"Set random seed as {seed}")
-
+    _ = set_seed(args.seed)
     conf = load_ss_conf(args.conf)
+
+    _ = set_seed(args.seed)
     print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     print(f"Arguments in yaml:\n{pprint.pformat(conf)}", flush=True)
 
