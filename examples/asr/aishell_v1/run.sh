@@ -36,6 +36,7 @@ ngram=5
 # decoding
 eos_threshold=1
 beam_size=16
+len_norm=false
 nbest=8
 ngram=5
 lm_weight=0.2
@@ -80,7 +81,7 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
       --beam-size $beam_size \
       --nbest $nbest \
       --max-len 50 \
-      --len-norm true \
+      --len-norm $len_norm \
       --dict exp/$dataset/$am_exp/dict \
       --log-suffix $name \
       $dataset $am_exp \
@@ -113,7 +114,7 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
       --lm-weight $lm_weight \
       --eos-threshold $eos_threshold \
       --max-len 50 \
-      --len-norm true \
+      --len-norm $len_norm \
       --beam-size $beam_size \
       --lm-weight $lm_weight \
       --log-suffix $name \

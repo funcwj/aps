@@ -9,6 +9,7 @@ __pycache__/
 *.log
 *.nbest
 *.decode
+*config
 
 /exp/
 /log/

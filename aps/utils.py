@@ -14,13 +14,14 @@ import numpy as np
 
 from typing import NoReturn, Tuple, Any, Union, Optional
 
-aps_logger_format = "{asctime} [{filename}:{lineno} - {levelname}] {message}"
-aps_time_format = "%Y-%m-%d %H:%M:%S"
+# google-style log prefix
+common_logger_format = "{levelname} {asctime} PID:{process} {filename}:{lineno}] {message}"
+stdout_logger_format = "{levelname} {asctime} PID:{process}] {message}"
+time_format = "%Y-%m-%d %H:%M:%S"
 
 
 def get_logger(name: str,
-               format_str: str = aps_logger_format,
-               date_format: str = aps_time_format,
+               date_format: str = time_format,
                file: bool = False) -> logging.Logger:
     """
     Get logger instance
@@ -30,7 +31,7 @@ def get_logger(name: str,
         file: if true, treat name as the name of the logging file
     """
 
-    def get_handler(handler):
+    def get_handler(handler, format_str):
         formatter = logging.Formatter(fmt=format_str,
                                       datefmt=date_format,
                                       style="{")
@@ -39,9 +40,13 @@ def get_logger(name: str,
 
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
-    logger.addHandler(get_handler(logging.StreamHandler()))
+    stdout_handler = get_handler(logging.StreamHandler(sys.stdout),
+                                 stdout_logger_format)
+    logger.addHandler(stdout_handler)
     if file:
-        logger.addHandler(get_handler(logging.FileHandler(name)))
+        output_handler = get_handler(logging.FileHandler(name),
+                                     common_logger_format)
+        logger.addHandler(output_handler)
     return logger
 
 
