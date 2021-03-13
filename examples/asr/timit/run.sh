@@ -22,7 +22,7 @@ prog_interval=100
 beam_size=8
 len_norm=false
 ctc_weight=0.2
-nbest=8
+nbest=$beam_size
 test_sets="dev test"
 
 . ./utils/parse_options.sh || exit 1

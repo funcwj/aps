@@ -33,8 +33,8 @@ lm_epochs=30
 lm_num_workers=4
 
 # decoding
-nbest=16
 beam_size=8
+nbest=$beam_size
 len_norm=false
 ctc_weight=0.2
 lm_weight=0.2

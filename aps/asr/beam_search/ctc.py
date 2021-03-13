@@ -54,7 +54,7 @@ def ctc_beam_search(ctc_prob: th.Tensor,
     neg_inf = th.tensor(NEG_INF).to(ctc_prob.device)
     zero = th.tensor(0.0).to(ctc_prob.device)
     # (prefix, log_pb, log_pn)
-    prev_beam = [((sos,), PrefixScore(zero, neg_inf))]
+    prev_beam = [(str(sos), PrefixScore(zero, neg_inf))]
     for t in range(T):
         next_beam = defaultdict(lambda: PrefixScore(neg_inf, neg_inf))
         for n in range(beam_size):
@@ -69,7 +69,7 @@ def ctc_beam_search(ctc_prob: th.Tensor,
                                                  other.log_pb)
                     next_beam[prefix] = PrefixScore(log_pb_update, other.log_pn)
                 else:
-                    prefix_symb = prefix + (symb,)
+                    prefix_symb = prefix + f",{symb}"
                     other = next_beam[prefix_symb]
                     # repeat
                     if prefix[-1] == symb:
@@ -93,8 +93,10 @@ def ctc_beam_search(ctc_prob: th.Tensor,
                            key=lambda n: n[1].score(),
                            reverse=True)
     return [{
-        "score": score.score() / (1 if len_norm else len(prefix) - 1),
-        "trans": prefix + (eos,)
+        "score":
+            score.score() / (1 if len_norm else len(prefix.split(",")) - 1),
+        "trans":
+            list(map(int, (prefix + f",{eos}").split(",")))
     } for prefix, score in prev_beam[:nbest]]
 
 

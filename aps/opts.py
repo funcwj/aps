@@ -257,6 +257,6 @@ class DistributedTrainParser(BaseTrainParser):
                         help="The distributed backend to use")
     parser.add_argument("--dev-batch-factor",
                         type=int,
-                        default=2,
+                        default=1,
                         help="We will use #batch_size/#dev_batch_factor "
                         "as the batch-size for validation epoch")

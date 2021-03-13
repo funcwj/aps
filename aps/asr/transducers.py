@@ -102,7 +102,7 @@ class TransducerASRBase(nn.Module):
                     x: th.Tensor,
                     lm: Optional[nn.Module] = None,
                     lm_weight: float = 0,
-                    beam: int = 16,
+                    beam_size: int = 16,
                     nbest: int = 8,
                     len_norm: bool = True,
                     max_len: int = -1,
@@ -114,7 +114,7 @@ class TransducerASRBase(nn.Module):
             enc_out = self._decoding_prep(x)
             return beam_search(self.decoder,
                                enc_out,
-                               beam=beam,
+                               beam_size=beam_size,
                                blank=self.blank,
                                nbest=nbest,
                                lm=lm,
