@@ -40,7 +40,6 @@ class BatchDecoder(NnetEvaluator):
                  device_id: int = -1,
                  cpt_tag: str = "best") -> None:
         super(BatchDecoder, self).__init__(cpt_dir,
-                                           task="asr",
                                            device_id=device_id,
                                            cpt_tag=cpt_tag)
         logger.info(f"Load checkpoint from {cpt_dir}, epoch: " +

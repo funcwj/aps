@@ -1,4 +1,4 @@
-1. `1a.yaml` (git commit `c35d2ac9243024736b827c383ff2692c732e25e3`)
+1. `1a.yaml` (git commit `ca23db4669d26c517133fdd0466fb16248a4a4a2`)
 
     | beam | CTC weight | Dev (SUB/INS/DEL) | Test (SUB/INS/DEL) |
     |:---:|:---:|:---:|:---:|
@@ -8,7 +8,7 @@
     | 8 | 0.6 | 20.42% (2073/712/290) | 23.06% (1136/379/149) |
     | 8 | 1.0 | 21.59% (2108/822/321) | 24.34% (1159/422/175) |
 
-1. `1a.yaml` (git commit `c35d2ac9243024736b827c383ff2692c732e25e3`)
+1. `1a.yaml` (git commit `ca23db4669d26c517133fdd0466fb16248a4a4a2`)
 
     | beam | Dev (SUB/INS/DEL) | Test (SUB/INS/DEL) |
     |:---:|:---:|:---:|

@@ -11,9 +11,10 @@ import numpy as np
 
 from aps.loader import AudioReader, write_audio
 from aps.utils import get_logger, SimpleTimer
-from aps.eval import NnetEvaluator
+from aps.eval import NnetEvaluator, ChunkStitcher
 
 logger = get_logger(__name__)
+logger_interval = 30
 
 
 class Separator(NnetEvaluator):
@@ -24,55 +25,69 @@ class Separator(NnetEvaluator):
     def __init__(self,
                  cpt_dir,
                  cpt_tag: str = "best",
-                 device_id: int = -1) -> None:
+                 sr: int = 16000,
+                 device_id: int = -1,
+                 chunk_cfg: str = "0,-1,0") -> None:
         super(Separator, self).__init__(cpt_dir,
                                         cpt_tag=cpt_tag,
-                                        device_id=device_id,
-                                        task="sse")
+                                        device_id=device_id)
         logger.info(f"Load checkpoint from {cpt_dir}, epoch: " +
                     f"{self.epoch}, tag: {cpt_tag}")
+        lctx, chunk_len, rctx = [
+            int(v * sr) for v in list(map(float, chunk_cfg.split(",")))
+        ]
+        if chunk_len > 0:
+            logger.info(
+                f"Perform chunk-wise evaluation: length = {chunk_len}, " +
+                f"lctx = {lctx}, rctx = {rctx}")
+            self.stitcher = ChunkStitcher(chunk_len, lctx, rctx)
+        else:
+            self.stitcher = None
+        self.chunk_hop = chunk_len
+        self.chunk_len = chunk_len + rctx
+        self.lctx = lctx
 
-    def run(self,
-            src: np.ndarray,
-            chunk_len: int = -1,
-            chunk_hop: int = -1,
-            mode: str = "time") -> th.Tensor:
+    def run(self, src: np.ndarray, mode: str = "time") -> th.Tensor:
         """
         Args:
-            src (Array): (C) x S
+            src (ndarray): (C) x S
         """
-        if chunk_hop <= 0 and chunk_len > 0:
-            chunk_hop = chunk_len
-        N = src.shape[-1]
+        expected_length = src.shape[-1]
         src = th.from_numpy(src).to(self.device)
-        if chunk_len == -1:
+        if self.stitcher is None:
             return self.nnet.infer(src, mode=mode)
         else:
             if mode != "time":
                 raise RuntimeError("Now only supports time inference mode")
             chunks = []
-            # now only for enhancement task
-            for t in range(0, N, chunk_hop):
-                pad = N - t - chunk_len
-                if pad >= 0:
-                    c = src[..., t:t + chunk_len]
-                else:
-                    # S or P x S
+            beg = self.lctx
+            # for beg in range(0, expected_length, self.chunk_hop):
+            while True:
+                if (beg - self.lctx) % (logger_interval * self.chunk_hop) == 0:
+                    progress = beg * 100 / expected_length
+                    logger.info(
+                        f"--- Processing chunks, done {progress:.2f}% ...")
+                pad = expected_length - beg - self.chunk_len
+                if pad < 0:
+                    # last chunk, need padding
                     if src.dim() == 1:
                         zero = th.zeros(-pad, device=self.device)
                     else:
                         zero = th.zeros(src.shape[0], -pad, device=self.device)
-                    c = th.cat([src[..., t:], zero], 0)
-                s = self.nnet.infer(c, mode=mode)
-                chunks.append(s)
-            sep = th.zeros(N)
-            for i, c in enumerate(chunks):
-                beg = i * chunk_hop
-                if i == len(chunks) - 1:
-                    sep[beg:] = c[:N - beg]
+                    mix_chunk = th.cat([src[..., beg - self.lctx:], zero], 0)
                 else:
-                    sep[beg:beg + chunk_len] = c
-            return sep
+                    mix_chunk = src[..., beg - self.lctx:beg + self.chunk_len]
+                sep_chunk = self.nnet.infer(mix_chunk, mode=mode)
+                if isinstance(sep_chunk, th.Tensor):
+                    sep_chunk = sep_chunk.cpu()
+                else:
+                    sep_chunk = [s.cpu() for s in sep_chunk]
+                chunks.append(sep_chunk)
+                beg += self.chunk_hop
+                if pad < 0:
+                    break
+            logger.info(f"--- Stitch & Reorder ...")
+            return self.stitcher.stitch(chunks, expected_length)
 
 
 def run(args):
@@ -80,16 +95,14 @@ def run(args):
     sep_dir.mkdir(parents=True, exist_ok=True)
     separator = Separator(args.checkpoint,
                           cpt_tag=args.tag,
-                          device_id=args.device_id)
+                          device_id=args.device_id,
+                          chunk_cfg=args.chunk_cfg)
     mix_reader = AudioReader(args.wav_scp, sr=args.sr, channel=args.channel)
 
     for key, mix in mix_reader:
-        norm = np.max(np.abs(mix))
         timer = SimpleTimer()
-        sep = separator.run(mix,
-                            chunk_hop=args.chunk_hop,
-                            chunk_len=args.chunk_len,
-                            mode=args.mode)
+        norm = np.max(np.abs(mix))
+        sep = separator.run(mix, mode=args.mode)
         if isinstance(sep, th.Tensor):
             sep = sep.cpu().numpy()
         else:
@@ -136,15 +149,12 @@ if __name__ == "__main__":
                         default=-1,
                         help="GPU-id to offload model to, "
                         "-1 means running on CPU")
-    parser.add_argument("--chunk-len",
-                        type=int,
-                        default=-1,
-                        help="Chunk length for inference, "
-                        "-1 means the whole utterance")
-    parser.add_argument("--chunk-hop",
-                        type=int,
-                        default=-1,
-                        help="Chunk hop size for inference")
+    parser.add_argument("--chunk-cfg",
+                        type=str,
+                        default="0,-1,0",
+                        help="Configurations for chunk-wise processing "
+                        "(left context & chunk size & right context in "
+                        "seconds)")
     parser.add_argument("--sr",
                         type=int,
                         default=16000,

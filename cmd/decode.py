@@ -55,7 +55,6 @@ class FasterDecoder(NnetEvaluator):
                  function: str = "beam_search",
                  device_id: int = -1) -> None:
         super(FasterDecoder, self).__init__(cpt_dir,
-                                            task="asr",
                                             cpt_tag=cpt_tag,
                                             device_id=device_id)
         if not hasattr(self.nnet, function):
