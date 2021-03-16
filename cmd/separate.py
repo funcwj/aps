@@ -86,7 +86,7 @@ class Separator(NnetEvaluator):
                 beg += self.chunk_hop
                 if pad < 0:
                     break
-            logger.info(f"--- Stitch & Reorder ...")
+            logger.info("--- Stitch & Reorder ...")
             return self.stitcher.stitch(chunks, expected_length)
 
 
