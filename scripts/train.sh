@@ -8,6 +8,8 @@ set -eu
 
 gpu=0
 seed=777
+init=""
+resume=""
 epochs=100
 trainer="ddp"
 tensorboard=false
@@ -16,6 +18,7 @@ num_workers=4
 eval_interval=-1
 save_interval=-1
 prog_interval=100
+dev_batch_factor=1
 
 echo "$0 $*"
 
@@ -53,6 +56,8 @@ fi
 cmd/train_$task.py $opts \
   --conf $conf \
   --seed $seed \
+  --init "$init" \
+  --resume "$resume" \
   --epochs $epochs \
   --trainer $trainer \
   --device-ids $gpu \
@@ -63,6 +68,7 @@ cmd/train_$task.py $opts \
   --save-interval $save_interval \
   --prog-interval $prog_interval \
   --eval-interval $eval_interval \
+  --dev-batch-factor $dev_batch_factor \
   > $data.train_$task.$exp_id.log 2>&1
 
 cp $data.train_$task.$exp_id.log exp/$data/$exp_id

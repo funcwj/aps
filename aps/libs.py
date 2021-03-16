@@ -166,6 +166,19 @@ def aps_sse_nnet(nnet: str) -> nn.Module:
     return aps_specific_nnet(nnet, ApsRegisters.sse)
 
 
+def aps_nnet(nnet: str) -> nn.Module:
+    """
+    Return network class supported by aps (wraps aps_xxx_nnet(...) functions)
+    """
+    nnet_cls, _ = nnet.split("@")
+    if nnet_cls == "sse":
+        return aps_sse_nnet(nnet)
+    elif nnet_cls == "asr":
+        return aps_asr_nnet(nnet)
+    else:
+        raise RuntimeError(f"Unknown type of the network: {nnet_cls}")
+
+
 def aps_trainer(trainer: str, distributed: bool = False) -> Any:
     """
     Return aps Trainer class

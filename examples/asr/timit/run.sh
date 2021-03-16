@@ -20,7 +20,9 @@ prog_interval=100
 
 # decoding
 beam_size=8
-nbest=8
+len_norm=false
+ctc_weight=0.2
+nbest=$beam_size
 test_sets="dev test"
 
 . ./utils/parse_options.sh || exit 1
@@ -57,6 +59,8 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
       --dict exp/timit/$exp/dict \
       --nbest $nbest \
       --max-len 75 \
+      --len-norm $len_norm \
+      --ctc-weight $ctc_weight \
       --function "beam_search" \
       --beam-size $beam_size \
       --log-suffix $name \
@@ -65,9 +69,14 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
       exp/timit/$exp/dec_$name &
   done
   wait
+fi
+
+if [ $end -ge 4 ] && [ $beg -le 4 ]; then
+  echo "Stage 4: compute wer ..."
   for name in $test_sets; do
-    # map
-    hyp=exp/timit/$exp/dec_$name/beam${beam_size}.decode
+    txt=beam${beam_size}_eos0_lp0_ctc${ctc_weight}.decode
+    hyp=exp/timit/$exp/dec_$name/$txt
+    # mapping
     local/timit_norm_trans.pl -i $hyp -m conf/timit/phones.60-48-39.map \
       -from 48 -to 39 > ${hyp}.39phn
     # wer

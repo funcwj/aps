@@ -9,9 +9,9 @@ stage="1-7"
 data=/scratch/jwu/LibriSpeech
 
 # word piece
-wp_name="wpm_16k"
+wp_name="wpm_6k"
 wp_mode="unigram"
-vocab_size=16000
+vocab_size=6000
 
 
 # am
@@ -33,8 +33,8 @@ lm_epochs=30
 lm_num_workers=4
 
 # decoding
-nbest=16
 beam_size=8
+nbest=$beam_size
 len_norm=false
 ctc_weight=0.2
 lm_weight=0.2
@@ -79,7 +79,6 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
   ./scripts/distributed_train.sh \
     --seed $am_seed \
     --gpu "0,1,2,3" \
-    --num-process 4 \
     --distributed "torch" \
     --epochs $am_epochs \
     --batch-size $am_batch_size \
