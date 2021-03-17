@@ -100,6 +100,86 @@ def ctc_beam_search(ctc_prob: th.Tensor,
     } for prefix, score in prev_beam[:nbest]]
 
 
+def ctc_viterbi_align(ctc_enc: th.Tensor,
+                      dec_seq: th.Tensor,
+                      blank: int = -1) -> Dict:
+    """
+    Get alignment on CTC prob using viterbi algothrim
+    Args:
+        ctc_enc (th.Tensor): T x V
+        dec_seq (th.Tensor): U (remove eos & sos)
+    Return:
+        align (th.Tensor): T
+    """
+    if blank < 0:
+        raise ValueError(f"Invalid blank ID: {blank}")
+    ctc_prob = th.log_softmax(ctc_enc, -1)
+    T, V = ctc_prob.shape
+    logger.info(f"--- shape of the encoder output (CTC): {T} x {V}")
+
+    U = dec_seq.shape[-1]
+    # make target like: <b> U1 <b> U2 <b> U3 ... <b>
+    if U * 2 + 1 > T:
+        raise ValueError(f"Invalid target length: {U}")
+
+    dec_seq = dec_seq.tolist()
+    # T x U*2+1
+    score = NEG_INF * th.ones(T, U * 2 + 1, device=ctc_prob.device)
+    point = -1 * th.ones(T, U * 2 + 1, device=ctc_prob.device)
+    # T
+    align = th.zeros(T, dtype=th.int64, device=ctc_prob.device)
+
+    # time step: 0
+    score[0, 0] = ctc_prob[0, blank]
+    score[0, 1] = ctc_prob[0, dec_seq[0]]
+
+    # time step: 1 -> T - 1
+    for t in range(1, T):
+        for u in range(U * 2 + 1):
+            # blank node
+            if u % 2 == 0:
+                ctc_score = ctc_prob[t, blank]
+                # [u, u - 1]
+                tok_index = range(u, u - 2, -1)
+            # non-blank node
+            else:
+                u_nb = (u - 1) // 2
+                ctc_score = ctc_prob[t, u_nb]
+                if u_nb != 0 and dec_seq[u_nb] == dec_seq[u_nb - 1]:
+                    # [u, u - 1]
+                    tok_index = range(u, u - 2, -1)
+                else:
+                    # [u, u - 1, u - 2]
+                    tok_index = range(u, u - 3, -1)
+            prev_score = th.stack([score[t - 1, u] for u in tok_index])
+            best_score, best_index = th.max(prev_score, 0)
+            score[t, u] = best_score + ctc_score
+            point[t, u] = u - best_index.item()
+
+    align_score = None
+    for t in range(T - 1, -1, -1):
+        if t == T - 1:
+            last_score = th.stack([score[-1, u] for u in [-1, -2]])
+            best_score, best_index = th.max(last_score, 0)
+            align[t] = U * 2 - best_index.item()
+            align_score = best_score.item()
+        else:
+            align[t] = point[t + 1, align[t + 1]]
+
+    for t in range(T):
+        align[t] = blank if align[t] % 2 == 0 else dec_seq[(align[t] - 1) // 2]
+    align = align.tolist()
+    align_check = [a for a in align if a != blank]
+    # check alignment
+    assert sum([a != b for a, b in zip(align_check, dec_seq)]) == 0
+    ali_map = lambda v: "*" if v == blank else str(v)
+    return {
+        "score": align_score,
+        "align_seq": align,
+        "align_str": " ".join(map(ali_map, align))
+    }
+
+
 class CtcScorer(nn.Module):
     """
     To compute the CTC score given decoding sequence and

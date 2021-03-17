@@ -164,7 +164,7 @@ def get_aps_decode_parser():
     parser.add_argument("--dict",
                         type=str,
                         default="",
-                        help="Dictionary file (not needed)")
+                        help="Dictionary file (if needed)")
     parser.add_argument("--spm",
                         type=str,
                         default="",
@@ -227,6 +227,58 @@ def get_aps_decode_parser():
     return parser
 
 
+def get_aps_align_parser():
+    """
+    Return default align parser for aps
+    """
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("feats_or_wav_scp",
+                        type=str,
+                        help="Feature/Wave scripts")
+    parser.add_argument("text",
+                        type=str,
+                        help="Text that we want to get alignment")
+    parser.add_argument("alignment",
+                        type=str,
+                        help="Wspecifier of the alignment")
+    parser.add_argument("--channel",
+                        type=int,
+                        default=-1,
+                        help="Channel index for wav.scp")
+    parser.add_argument("--sr",
+                        type=int,
+                        default=16000,
+                        help="Sample rate of the original audio")
+    parser.add_argument("--am",
+                        type=str,
+                        required=True,
+                        help="Checkpoint directory of the AM")
+    parser.add_argument("--am-tag",
+                        type=str,
+                        default="best",
+                        help="Tag name to load the checkpoint: (tag).pt.tar")
+    parser.add_argument("--space",
+                        type=str,
+                        default="",
+                        help="Space symbol to inserted between "
+                        "model units (if needed)")
+    parser.add_argument("--device-id",
+                        type=int,
+                        default=-1,
+                        help="GPU-id to offload model to, "
+                        "-1 means running on CPU")
+    parser.add_argument("--dict",
+                        type=str,
+                        default="",
+                        help="Dictionary file (if needed)")
+    parser.add_argument("--spm",
+                        type=str,
+                        default="",
+                        help="Path of the sentencepiece model "
+                        "if we use subword unit")
+    return parser
+
+
 class BaseTrainParser(object):
     """
     Parser class for training commands
@@ -239,6 +291,13 @@ class DecodingParser(object):
     Parser class for decoding commands
     """
     parser = get_aps_decode_parser()
+
+
+class AlignmentParser(object):
+    """
+    Parser class for CTC alignment
+    """
+    parser = get_aps_align_parser()
 
 
 class DistributedTrainParser(BaseTrainParser):

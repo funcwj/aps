@@ -7,6 +7,39 @@ from aps.const import UNK_TOKEN
 from typing import List
 
 
+class TextPreProcessor(object):
+    """
+    The class for pre processing of the transcriptions, i.e.,
+    mapping them to the sequence ids for CTC alignment
+    """
+
+    def __init__(self, dict_str: str, space: str = "", spm: str = "") -> None:
+        self.vocab = None
+        self.space = space
+        self.sp_mdl = None
+        if dict_str:
+            # str to int
+            self.vocab = load_dict(dict_str)
+        if spm:
+            import sentencepiece as sp
+            self.sp_mdl = sp.SentencePieceProcessor(model_file=spm)
+
+    def run(self, str_seq: List[str]) -> List[int]:
+        if self.vocab:
+            if self.sp_mdl:
+                # subword str sequence
+                str_seq = self.sp_mdl.encode(" ".join(str_seq), out_type=str)
+            if self.space:
+                # insert space
+                str_seq = f" {self.space} ".join(str_seq).split(" ")
+            int_seq = [(self.vocab[idx]
+                        if idx in self.vocab else self.vocab[UNK_TOKEN])
+                       for idx in str_seq]
+        else:
+            int_seq = [int(idx) for idx in str_seq]
+        return int_seq
+
+
 class TextPostProcessor(object):
     """
     The class for post processing of decoding sequence, i.e.,
@@ -23,6 +56,7 @@ class TextPostProcessor(object):
         self.vocab = None
         self.sp_mdl = None
         if dict_str:
+            # int to str
             self.vocab = load_dict(dict_str, reverse=True)
         if spm:
             import sentencepiece as sp

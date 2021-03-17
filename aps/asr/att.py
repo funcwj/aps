@@ -20,7 +20,7 @@ from aps.asr.xfmr.encoder import TransformerEncoder
 from aps.asr.xfmr.decoder import TorchTransformerDecoder
 from aps.asr.xfmr.impl import TransformerEncoderLayers
 from aps.asr.base.attention import att_instance
-from aps.asr.beam_search.ctc import ctc_beam_search
+from aps.asr.beam_search.ctc import ctc_beam_search, ctc_viterbi_align
 from aps.libs import ApsRegisters
 
 NoneOrTensor = Optional[th.Tensor]
@@ -232,6 +232,22 @@ class AttASR(EncDecASRBase):
                                          eos=self.eos,
                                          len_norm=len_norm)
 
+    def ctc_align(self, x: th.Tensor, y: th.Tensor) -> Dict:
+        """
+        Do CTC viterbi align
+        Args:
+            x (Tensor): audio samples or acoustic features, S or Ti x F
+            y (Tensor): reference sequence, U
+        """
+        with th.no_grad():
+            # N x T x D
+            enc_out = self._decoding_prep(x)
+            ctc_prob = self.ctc(enc_out)[0] if self.ctc else None
+            if ctc_prob is None:
+                raise RuntimeError(
+                    "Can't do CTC viterbi align as self.ctc is None")
+            return ctc_viterbi_align(ctc_prob, y, blank=self.vocab_size - 1)
+
     def beam_search(self,
                     x: th.Tensor,
                     ctc_weight: float = 0,
@@ -354,6 +370,22 @@ class XfmrASR(EncDecASRBase):
                                           sos=self.sos,
                                           eos=self.eos,
                                           len_norm=len_norm)
+
+    def ctc_align(self, x: th.Tensor, y: th.Tensor) -> Dict:
+        """
+        Do CTC viterbi align
+        Args:
+            x (Tensor): audio samples or acoustic features, S or Ti x F
+            y (Tensor): reference sequence, U
+        """
+        with th.no_grad():
+            # T x N x D
+            enc_out = self._decoding_prep(x, batch_first=False)
+            ctc_prob = self.ctc(enc_out)[:, 0] if self.ctc else None
+            if ctc_prob is None:
+                raise RuntimeError(
+                    "Can't do CTC viterbi align as self.ctc is None")
+            return ctc_viterbi_align(ctc_prob, y, blank=self.vocab_size - 1)
 
     def beam_search(self,
                     x: th.Tensor,
