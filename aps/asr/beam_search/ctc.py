@@ -113,21 +113,19 @@ def ctc_viterbi_align(ctc_enc: th.Tensor,
     """
     if blank < 0:
         raise ValueError(f"Invalid blank ID: {blank}")
+
     ctc_prob = th.log_softmax(ctc_enc, -1)
     T, V = ctc_prob.shape
     logger.info(f"--- shape of the encoder output (CTC): {T} x {V}")
 
     U = dec_seq.shape[-1]
-    # make target like: <b> U1 <b> U2 <b> U3 ... <b>
     if U * 2 + 1 > T:
         raise ValueError(f"Invalid target length: {U}")
 
     dec_seq = dec_seq.tolist()
     # T x U*2+1
     score = NEG_INF * th.ones(T, U * 2 + 1, device=ctc_prob.device)
-    point = -1 * th.ones(T, U * 2 + 1, device=ctc_prob.device)
-    # T
-    align = th.zeros(T, dtype=th.int64, device=ctc_prob.device)
+    point = -1 * th.ones(T, U * 2 + 1, dtype=th.int32, device=ctc_prob.device)
 
     # time step: 0
     score[0, 0] = ctc_prob[0, blank]
@@ -135,7 +133,8 @@ def ctc_viterbi_align(ctc_enc: th.Tensor,
 
     # time step: 1 -> T - 1
     for t in range(1, T):
-        for u in range(U * 2 + 1):
+        max_u_step = min(t * 2, U * 2 + 1)
+        for u in range(max_u_step):
             # blank node
             if u % 2 == 0:
                 ctc_score = ctc_prob[t, blank]
@@ -154,25 +153,29 @@ def ctc_viterbi_align(ctc_enc: th.Tensor,
             prev_score = th.stack([score[t - 1, u] for u in tok_index])
             best_score, best_index = th.max(prev_score, 0)
             score[t, u] = best_score + ctc_score
+            # point to time t - 1
             point[t, u] = u - best_index.item()
 
     align_score = None
+    align = []
     for t in range(T - 1, -1, -1):
         if t == T - 1:
             last_score = th.stack([score[-1, u] for u in [-1, -2]])
             best_score, best_index = th.max(last_score, 0)
-            align[t] = U * 2 - best_index.item()
+            align.append(U * 2 - best_index.item())
             align_score = best_score.item()
         else:
-            align[t] = point[t + 1, align[t + 1]]
-
+            align.append(point[t + 1, align[-1]].item())
+    align = align[::-1]
     for t in range(T):
         align[t] = blank if align[t] % 2 == 0 else dec_seq[(align[t] - 1) // 2]
-    align = align.tolist()
     align_check = [a for a in align if a != blank]
     # check alignment
     assert sum([a != b for a, b in zip(align_check, dec_seq)]) == 0
-    ali_map = lambda v: "*" if v == blank else str(v)
+
+    def ali_map(v):
+        return "*" if v == blank else str(v)
+
     return {
         "score": align_score,
         "align_seq": align,
