@@ -20,10 +20,10 @@ from typing import Dict
 logger = get_logger(__name__)
 """
 Alignment format:
-utt-1 score <align>
-utt-2 score <align>
+utt-1 <alignment string>
+utt-2 <alignment string>
 ...
-utt-N score <align>
+utt-N <alignment string>
 """
 
 
@@ -48,6 +48,23 @@ class CtcAligner(NnetEvaluator):
         return self.nnet.ctc_align(inp, seq)
 
 
+def gen_word_boundary(key, dur, ali_str):
+    # e.g., * * * * * * * * * * 5464 * * * * * *
+    ali_seq = ali_str.split(" ")
+    dur_per_frame = dur / len(ali_seq)
+    # non-blank info
+    ali_pos = [((f + 1) * dur_per_frame, tok)
+               for f, tok in enumerate(ali_seq)
+               if tok != "*"]
+    boundary = [f"{key} {len(ali_seq)} {dur:.3f}"]
+    beg = 0
+    for pos in ali_pos:
+        end, tok = pos
+        boundary.append(f"{key} {tok} {beg:.3f} {end:.3f}")
+        beg = end
+    return boundary
+
+
 def run(args):
     print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
 
@@ -58,11 +75,18 @@ def run(args):
                                  channel=args.channel)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
+        if args.word_boundary:
+            raise RuntimeError(
+                "Now can't generate word boundary when using Kaldi's feature")
 
     txt_reader = Reader(args.text, num_tokens=-1, restrict=False)
     processor = TextPreProcessor(args.dict, space=args.space, spm=args.spm)
 
-    stdout_ali, ali_fd = io_wrapper(args.alignment, "w")
+    ali_stdout, ali_fd = io_wrapper(args.alignment, "w")
+
+    wdb_stdout, wdb_fd = False, None
+    if args.word_boundary:
+        wdb_stdout, wdb_fd = io_wrapper(args.word_boundary, "w")
     done = 0
     tot_utts = len(src_reader)
     timer = SimpleTimer()
@@ -75,9 +99,15 @@ def run(args):
         ali = aligner.run(wav_or_feats, int_seq)
         header = f"{ali['score']:.3f}, {len(ali['align_seq'])}"
         ali_fd.write(f"{key} {ali['align_str']}\n")
-        logger.info(f"{key} {header} {ali['align_str']}")
-    if not stdout_ali:
+        logger.info(f"{key} ({header}) {ali['align_str']}")
+        if wdb_fd:
+            dur = wav_or_feats.shape[-1] * 1.0 / args.sr
+            wdb = gen_word_boundary(key, dur, ali["align_str"])
+            wdb_fd.write("\n".join(wdb) + "\n")
+    if not ali_stdout:
         ali_fd.close()
+    if wdb_fd and not wdb_stdout:
+        wdb_fd.close()
     cost = timer.elapsed()
     logger.info(f"Generate alignments for {tot_utts} utterance done, " +
                 f"time cost = {cost:.2f}m")

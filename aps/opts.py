@@ -83,17 +83,11 @@ def get_aps_train_parser():
     return parser
 
 
-def get_aps_decode_parser():
+def get_asr_base_parser():
     """
-    Return default decoding parser for aps
+    Return base parser for ASR related commands
     """
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("feats_or_wav_scp",
-                        type=str,
-                        help="Feature/Wave scripts")
-    parser.add_argument("best",
-                        type=str,
-                        help="Wspecifier for decoded results (1-best)")
     parser.add_argument("--channel",
                         type=int,
                         default=-1,
@@ -101,7 +95,7 @@ def get_aps_decode_parser():
     parser.add_argument("--sr",
                         type=int,
                         default=16000,
-                        help="Sample rate of the original audio")
+                        help="Sample rate of the input audio")
     parser.add_argument("--am",
                         type=str,
                         required=True,
@@ -110,6 +104,39 @@ def get_aps_decode_parser():
                         type=str,
                         default="best",
                         help="Tag name to load the checkpoint: (tag).pt.tar")
+    parser.add_argument("--space",
+                        type=str,
+                        default="",
+                        help="Space symbol to inserted between the "
+                        "model units (if needed)")
+    parser.add_argument("--device-id",
+                        type=int,
+                        default=-1,
+                        help="GPU-id to offload model to, "
+                        "-1 means running on CPU")
+    parser.add_argument("--dict",
+                        type=str,
+                        default="",
+                        help="Dictionary file (if needed)")
+    parser.add_argument("--spm",
+                        type=str,
+                        default="",
+                        help="Path of the sentencepiece model "
+                        "(if we use subword unit)")
+    return parser
+
+
+def get_aps_decode_parser():
+    """
+    Return default decoding parser for aps
+    """
+    parser = get_asr_base_parser()
+    parser.add_argument("feats_or_wav_scp",
+                        type=str,
+                        help="Source scripts of the feature or audio")
+    parser.add_argument("best",
+                        type=str,
+                        help="Output file of the decoded results (1-best)")
     parser.add_argument("--beam-size",
                         type=int,
                         default=8,
@@ -161,24 +188,10 @@ def get_aps_decode_parser():
                         type=float,
                         default=0,
                         help="Threshold of the EOS symbol")
-    parser.add_argument("--dict",
-                        type=str,
-                        default="",
-                        help="Dictionary file (if needed)")
-    parser.add_argument("--spm",
-                        type=str,
-                        default="",
-                        help="Path of the sentencepiece's model "
-                        "if we choose subword unit")
     parser.add_argument("--show-unk",
                         type=str,
                         default="<unk>",
                         help="Which symbol to show when <unk> exists")
-    parser.add_argument("--device-id",
-                        type=int,
-                        default=-1,
-                        help="GPU-id to offload model to, "
-                        "-1 means running on CPU")
     parser.add_argument("--max-len",
                         type=int,
                         default=1000,
@@ -197,11 +210,6 @@ def get_aps_decode_parser():
                         default=0.0,
                         help="To derive min_len=max(#enc_len*min_len_ratio, "
                         "#min_len)")
-    parser.add_argument("--space",
-                        type=str,
-                        default="",
-                        help="Space flag for language like EN "
-                        "to merge characters to words")
     parser.add_argument("--nbest",
                         type=int,
                         default=1,
@@ -231,51 +239,20 @@ def get_aps_align_parser():
     """
     Return default align parser for aps
     """
-    parser = argparse.ArgumentParser(add_help=False)
+    parser = get_asr_base_parser()
     parser.add_argument("feats_or_wav_scp",
                         type=str,
-                        help="Feature/Wave scripts")
+                        help="Source scripts of the feature or audio")
     parser.add_argument("text",
                         type=str,
-                        help="Text that we want to get alignment")
+                        help="Text file that we want to get alignment")
     parser.add_argument("alignment",
                         type=str,
-                        help="Wspecifier of the alignment")
-    parser.add_argument("--channel",
-                        type=int,
-                        default=-1,
-                        help="Channel index for wav.scp")
-    parser.add_argument("--sr",
-                        type=int,
-                        default=16000,
-                        help="Sample rate of the original audio")
-    parser.add_argument("--am",
-                        type=str,
-                        required=True,
-                        help="Checkpoint directory of the AM")
-    parser.add_argument("--am-tag",
-                        type=str,
-                        default="best",
-                        help="Tag name to load the checkpoint: (tag).pt.tar")
-    parser.add_argument("--space",
+                        help="Output file of the alignment")
+    parser.add_argument("--word-boundary",
                         type=str,
                         default="",
-                        help="Space symbol to inserted between "
-                        "model units (if needed)")
-    parser.add_argument("--device-id",
-                        type=int,
-                        default=-1,
-                        help="GPU-id to offload model to, "
-                        "-1 means running on CPU")
-    parser.add_argument("--dict",
-                        type=str,
-                        default="",
-                        help="Dictionary file (if needed)")
-    parser.add_argument("--spm",
-                        type=str,
-                        default="",
-                        help="Path of the sentencepiece model "
-                        "if we use subword unit")
+                        help="To generate the word boundary file if assigned")
     return parser
 
 
