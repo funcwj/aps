@@ -63,7 +63,7 @@ class FasterDecoder(NnetEvaluator):
         self.decode = getattr(self.nnet, function)
         self.function = function
         logger.info(f"Use decoding function: {function}")
-        logger.info(f"Load checkpoint from {cpt_dir}, epoch: " +
+        logger.info(f"Load the checkpoint from {cpt_dir}, epoch: " +
                     f"{self.epoch}, tag: {cpt_tag}")
 
     def run(self, src, **kwargs):

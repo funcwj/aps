@@ -27,8 +27,8 @@ class ChunkStitcher(object):
             return succ
         num_streams = len(pred)
         # overlapped segment, to work out distance
-        pred_ov = [c[-self.lctx - self.rctx:-self.rctx] for c in pred]
-        succ_ov = [c[:self.lctx] for c in succ]
+        pred_ov = [c[-self.lctx - self.rctx:] for c in pred]
+        succ_ov = [c[:self.lctx + self.rctx] for c in succ]
         permu_list = list(permutations(range(num_streams)))
         dists = []
         for permu in permu_list:
@@ -62,7 +62,7 @@ class ChunkStitcher(object):
         # fix possible permutation problems
         for i, chunk in enumerate(chunks):
             if i:
-                chunk = self._reorder(chunks[-1], chunk)
+                chunk = self._reorder(stream_chunks[-1], chunk)
             stream_chunks.append(chunk)
         return [
             self._stitch_one_stream([s[i]
