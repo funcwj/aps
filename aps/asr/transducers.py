@@ -7,88 +7,37 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Optional, Dict, Tuple, List
+from typing import Optional, Dict, List
+from aps.asr.ctc import ASREncoderBase, NoneOrTensor, AMForwardOut
 from aps.asr.transducer.decoder import TorchTransformerDecoder, PyTorchRNNDecoder
-from aps.asr.xfmr.encoder import TransformerEncoder
-from aps.asr.base.encoder import encoder_instance
-from aps.asr.xfmr.impl import TransformerEncoderLayers
 from aps.asr.beam_search.transducer import greedy_search, beam_search
 from aps.libs import ApsRegisters
 
-NoneOrTensor = Optional[th.Tensor]
-TransducerOutputType = Tuple[th.Tensor, NoneOrTensor]
 
-
-class TransducerASRBase(nn.Module):
+class ASRTransducerBase(ASREncoderBase):
     """
     Base class for Transducer ASR
     """
 
     def __init__(self,
-                 input_size: int = 80,
-                 vocab_size: int = 40,
+                 input_size: int,
+                 vocab_size: int,
                  blank: int = -1,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "xfmr_abs",
                  enc_proj: Optional[int] = None,
                  enc_kwargs: Optional[Dict] = None) -> None:
-        super(TransducerASRBase, self).__init__()
+        super(ASRTransducerBase, self).__init__(input_size,
+                                                vocab_size,
+                                                ctc=False,
+                                                asr_transform=asr_transform,
+                                                enc_type=enc_type,
+                                                enc_proj=enc_proj,
+                                                enc_kwargs=enc_kwargs)
         if blank < 0:
             raise RuntimeError(f"Unsupported blank value: {blank}")
         self.blank = blank
-        self.asr_transform = asr_transform
-        if enc_type in TransformerEncoderLayers:
-            self.is_xfmr_encoder = True
-            self.encoder = TransformerEncoder(enc_type, input_size,
-                                              **enc_kwargs)
-        else:
-            self.is_xfmr_encoder = False
-            if enc_proj is None:
-                raise ValueError(
-                    "For non-transformer encoder, enc_proj can not be None")
-            self.encoder = encoder_instance(enc_type, input_size, enc_proj,
-                                            enc_kwargs)
         self.decoder = None
-
-    def _decoding_prep(self, x: th.Tensor) -> th.Tensor:
-        """
-        Parepare data for decoding
-        """
-        x_dim = x.dim()
-        # raw waveform or feature
-        if self.asr_transform:
-            if x_dim not in [1, 2]:
-                raise RuntimeError(
-                    "Expect 1/2D (single/multi-channel waveform or single " +
-                    f"channel feature) tensor, but get {x_dim}")
-            x, _ = self.asr_transform(x[None, ...], None)
-        # feature
-        else:
-            # T x F or Beam x T x F
-            if x_dim not in [2, 3]:
-                raise RuntimeError(
-                    "Expect 2/3D (single or multi-channel waveform) " +
-                    f"tensor, but got {x_dim}")
-            x = x[None, ...]
-        # N x Ti x D
-        enc_out, _ = self.encoder(x, None)
-        return enc_out
-
-    def _training_prep(
-            self, x_pad: th.Tensor, x_len: NoneOrTensor,
-            y_pad: th.Tensor) -> Tuple[th.Tensor, NoneOrTensor, th.Tensor]:
-        """
-        Parepare data for training
-        """
-        # feature transform
-        if self.asr_transform:
-            x_pad, x_len = self.asr_transform(x_pad, x_len)
-        # N x Ti x D
-        enc_out, enc_len = self.encoder(x_pad, x_len)
-        # N x To+1
-        tgt_pad = tf.pad(y_pad, (1, 0), value=self.blank)
-        # return
-        return enc_out, enc_len, tgt_pad
 
     def greedy_search(self, x: th.Tensor) -> List[Dict]:
         """
@@ -123,7 +72,7 @@ class TransducerASRBase(nn.Module):
 
 
 @ApsRegisters.asr.register("asr@transducer")
-class TransducerASR(TransducerASRBase):
+class TransducerASR(ASRTransducerBase):
     """
     Transducer based ASR model with (Non-)Transformer encoder + RNN decoder
     """
@@ -131,7 +80,6 @@ class TransducerASR(TransducerASRBase):
     def __init__(self,
                  input_size: int = 80,
                  vocab_size: int = 40,
-                 blank: int = -1,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "xfmr_abs",
                  enc_proj: Optional[int] = None,
@@ -140,22 +88,19 @@ class TransducerASR(TransducerASRBase):
                  dec_kwargs: Optional[Dict] = None) -> None:
         super(TransducerASR, self).__init__(input_size=input_size,
                                             vocab_size=vocab_size,
-                                            blank=blank,
+                                            blank=vocab_size - 1,
                                             asr_transform=asr_transform,
                                             enc_type=enc_type,
                                             enc_proj=enc_proj,
                                             enc_kwargs=enc_kwargs)
         if dec_type != "rnn":
-            raise ValueError(
-                "TorchTransducerASR: currently decoder must be rnn")
-        if self.is_xfmr_encoder:
-            dec_kwargs["enc_dim"] = enc_kwargs["att_dim"]
-        else:
-            dec_kwargs["enc_dim"] = enc_proj
+            raise ValueError("TransducerASR: the decoder must be rnn")
+        dec_kwargs["enc_dim"] = enc_kwargs[
+            "att_dim"] if self.is_xfmr_encoder else enc_proj
         self.decoder = PyTorchRNNDecoder(vocab_size, **dec_kwargs)
 
     def forward(self, x_pad: th.Tensor, x_len: NoneOrTensor, y_pad: th.Tensor,
-                y_len: NoneOrTensor) -> TransducerOutputType:
+                y_len: NoneOrTensor) -> AMForwardOut:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -163,17 +108,21 @@ class TransducerASR(TransducerASRBase):
             y_pad: N x To
             y_len: N or None (not used here)
         Return:
+            enc_out: N x Ti x D
             dec_out: N x Ti x To+1 x V
+            enc_len: N
         """
         # go through feature extractor & encoder
-        enc_out, enc_len, tgt_pad = self._training_prep(x_pad, x_len, y_pad)
+        enc_out, _, enc_len = self._training_prep(x_pad, x_len)
+        # N x To+1
+        tgt_pad = tf.pad(y_pad, (1, 0), value=self.blank)
         # N x Ti x To+1 x V
         dec_out = self.decoder(enc_out, tgt_pad)
-        return dec_out, enc_len
+        return enc_out, dec_out, enc_len
 
 
 @ApsRegisters.asr.register("asr@xfmr_transducer")
-class XfmrTransducerASR(TransducerASRBase):
+class XfmrTransducerASR(ASRTransducerBase):
     """
     Transducer based ASR model with (Non-)Transformer encoder + Transformer decoder
     """
@@ -181,7 +130,6 @@ class XfmrTransducerASR(TransducerASRBase):
     def __init__(self,
                  input_size: int = 80,
                  vocab_size: int = 40,
-                 blank: int = -1,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "xfmr_abs",
                  enc_proj: Optional[int] = None,
@@ -190,20 +138,19 @@ class XfmrTransducerASR(TransducerASRBase):
                  dec_kwargs: Optional[Dict] = None) -> None:
         super(XfmrTransducerASR, self).__init__(input_size=input_size,
                                                 vocab_size=vocab_size,
-                                                blank=blank,
+                                                blank=vocab_size - 1,
                                                 asr_transform=asr_transform,
                                                 enc_type=enc_type,
                                                 enc_proj=enc_proj,
                                                 enc_kwargs=enc_kwargs)
         if dec_type != "xfmr_abs":
-            raise ValueError("TransformerTransducerASR: currently decoder "
-                             "must be xfmr_abs")
+            raise ValueError("XfmrTransducerASR: the decoder must be xfmr_abs")
         if not self.is_xfmr_encoder and enc_proj != dec_kwargs["att_dim"]:
             raise ValueError("enc_proj should be equal to att_dim")
         self.decoder = TorchTransformerDecoder(vocab_size, **dec_kwargs)
 
     def forward(self, x_pad: th.Tensor, x_len: NoneOrTensor, y_pad: th.Tensor,
-                y_len: NoneOrTensor) -> TransducerOutputType:
+                y_len: NoneOrTensor) -> AMForwardOut:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -211,10 +158,14 @@ class XfmrTransducerASR(TransducerASRBase):
             y_pad: N x To
             y_len: N or None
         Return:
+            enc_out: N x Ti x D
             dec_out: N x Ti x To+1 x V
+            enc_len: N
         """
         # go through feature extractor & encoder
-        enc_out, enc_len, tgt_pad = self._training_prep(x_pad, x_len, y_pad)
+        enc_out, _, enc_len = self._training_prep(x_pad, x_len)
+        # N x To+1
+        tgt_pad = tf.pad(y_pad, (1, 0), value=self.blank)
         # N x Ti x To+1 x V
         dec_out = self.decoder(enc_out, tgt_pad, y_len + 1)
-        return dec_out, enc_len
+        return enc_out, dec_out, enc_len

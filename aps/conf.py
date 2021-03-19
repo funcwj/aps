@@ -124,8 +124,6 @@ def load_am_conf(yaml_conf: str, dict_path: str) -> Tuple[Dict, Dict]:
         conf["task_conf"]["blank"] = len(vocab)
         # add blank
         nnet_conf["vocab_size"] += 1
-        if is_transducer:
-            nnet_conf["blank"] = len(vocab)
-        else:
+        if use_ctc:
             nnet_conf["ctc"] = use_ctc
     return conf, vocab

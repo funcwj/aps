@@ -29,26 +29,55 @@ from aps.task.objf import ce_objf, ls_objf, ctc_objf
 from aps.const import IGNORE_ID
 from aps.libs import ApsRegisters
 
-__all__ = ["CtcXentHybridTask", "TransducerTask", "LmXentTask"]
+__all__ = ["CtcTask", "CtcXentHybridTask", "TransducerTask", "LmXentTask"]
 
 
-def compute_accu(outs: th.Tensor, tgts: th.Tensor) -> Tuple[float]:
+def compute_accu(dec_out: th.Tensor, tgt_pad: th.Tensor) -> Tuple[float]:
     """
     Compute frame-level accuracy
     Args:
-        outs: N x T, decoder output
-        tgts: N x T, padding target labels
+        dec_out: N x T, decoder output
+        tgt_ref: N x T, padding target labels
     """
     # N x (To+1)
-    pred = th.argmax(outs.detach(), dim=-1)
+    pred = th.argmax(dec_out.detach(), dim=-1)
     # ignore mask, -1
-    mask = (tgts != IGNORE_ID)
+    mask = (tgt_pad != IGNORE_ID)
     # numerator
-    ncorr = th.sum(pred[mask] == tgts[mask]).float()
+    num_correct = th.sum(pred[mask] == tgt_pad[mask]).float()
     # denumerator
     total = th.sum(mask)
     # return pair
-    accu = ncorr / total
+    accu = num_correct / total
+    return (accu.item(), total.item())
+
+
+def compute_ctc_accu(enc_out: th.Tensor,
+                     tgt_pad: th.Tensor,
+                     tgt_len: th.Tensor,
+                     blank: int = -1) -> Tuple[float]:
+    """
+    Compute token accuracy for CTC greedy search sequence
+    Args:
+        enc_out: N x T, decoder output
+        tgt_pad: N x T, padding target labels
+    """
+    # N x T
+    pred = th.argmax(enc_out.detach(), dim=-1)
+    # ignore blank
+    blk_mask = (pred != blank)
+    ctc_len = th.sum(blk_mask, -1)
+    num_correct = 0
+    for i, p in enumerate(pred):
+        cur_tok = p[blk_mask[i]]
+        cur_ref = tgt_pad[i]
+        # padding
+        to_pad = (tgt_len[i] - ctc_len[i]).item()
+        if to_pad:
+            cur_tok = tf.pad(cur_tok, (0, to_pad))
+        num_correct += th.sum(cur_tok == cur_ref[:tgt_len[i]]).float()
+    total = th.sum(tgt_len)
+    accu = num_correct / total
     return (accu.item(), total.item())
 
 
@@ -102,6 +131,48 @@ def load_label_count(label_count: str) -> Optional[th.Tensor]:
     return th.clamp_min(counts, 1)
 
 
+@ApsRegisters.task.register("asr@ctc")
+class CtcTask(Task):
+    """
+    For CTC objective function only
+    Args:
+        nnet: AM network
+        blank: blank id for CTC
+        reduction: reduction option applied to the sum of the loss
+    """
+
+    def __init__(self,
+                 nnet: nn.Module,
+                 blank: int = 0,
+                 reduction: str = "batchmean") -> None:
+        super(CtcTask, self).__init__(
+            nnet, description="CTC objective function training for ASR")
+        if reduction not in ["mean", "batchmean"]:
+            raise ValueError(f"Unsupported reduction option: {reduction}")
+        self.reduction = reduction
+        self.ctc_blank = blank
+
+    def forward(self, egs: Dict) -> Dict:
+        """
+        Compute CTC loss, egs contains:
+        src_pad: N x Ti x F, src_len: N, tgt_pad: N x To, tgt_len: N
+        """
+        # ctc_enc: N x T x V
+        _, ctc_enc, enc_len = self.nnet(egs["src_pad"], egs["src_len"])
+        ctc_loss = ctc_objf(ctc_enc,
+                            egs["tgt_pad"],
+                            enc_len,
+                            egs["tgt_len"],
+                            blank=self.ctc_blank,
+                            reduction=self.reduction,
+                            add_softmax=True)
+        ctc_accu = compute_ctc_accu(ctc_enc,
+                                    egs["tgt_pad"],
+                                    egs["tgt_len"],
+                                    blank=self.ctc_blank)
+        return {"loss": ctc_loss, "accu": ctc_accu}
+
+
 @ApsRegisters.task.register("asr@ctc_xent")
 class CtcXentHybridTask(Task):
     """
@@ -142,11 +213,7 @@ class CtcXentHybridTask(Task):
     def forward(self, egs: Dict) -> Dict:
         """
         Compute CTC & Attention loss, egs contains:
-            src_pad: N x Ti x F
-            src_len: N
-            tgt_pad: N x To
-            tgt_len: N
-            ssr (float): const if needed
+        src_pad: N x Ti x F, src_len: N, tgt_pad: N x To, tgt_len: N, ssr: float if needed
         """
         # tgt_pad: N x To (replace ignore_id with eos, used in decoder)
         # tgts: N x To+1 (pad eos, used in loss)
@@ -157,11 +224,11 @@ class CtcXentHybridTask(Task):
         # outs: N x (To+1) x V
         # alis: N x (To+1) x Ti
         ssr = egs["ssr"] if "ssr" in egs else 0
-        outs, _, ctc_enc, enc_len = self.nnet(egs["src_pad"],
-                                              egs["src_len"],
-                                              tgt_pad,
-                                              egs["tgt_len"],
-                                              ssr=ssr)
+        outs, ctc_enc, enc_len = self.nnet(egs["src_pad"],
+                                           egs["src_len"],
+                                           tgt_pad,
+                                           egs["tgt_len"],
+                                           ssr=ssr)
         # compute loss
         if self.lsm_factor > 0:
             att_loss = ls_objf(outs,
@@ -241,10 +308,7 @@ class TransducerTask(Task):
     def forward(self, egs: Dict) -> Dict:
         """
         Compute transducer loss, egs contains:
-            src_pad: N x Ti x F
-            src_len: N
-            tgt_pad: N x To
-            tgt_len: N
+        src_pad: N x Ti x F, src_len: N, tgt_pad: N x To, tgt_len: N
         """
         # tgt_pad: N x To (replace ignore_id with blank)
         tgt_pad, _ = prep_asr_label(egs["tgt_pad"],
@@ -252,17 +316,18 @@ class TransducerTask(Task):
                                     pad_value=self.blank)
         tgt_len = egs["tgt_len"]
         # N x Ti x To+1 x V
-        outs, enc_len = self.nnet(egs["src_pad"], egs["src_len"], tgt_pad,
-                                  tgt_len)
+        _, dec_out, enc_len = self.nnet(egs["src_pad"], egs["src_len"], tgt_pad,
+                                        tgt_len)
         rnnt_kwargs = {"blank": self.blank, "reduction": "sum"}
         # add log_softmax if use https://github.com/1ytic/warp-rnnt
         if self.interface == "warp_rnnt":
-            outs = tf.log_softmax(outs, -1)
+            dec_out = tf.log_softmax(dec_out, -1)
             rnnt_kwargs["gather"] = True
         # compute loss
-        loss = self.rnnt_objf(outs, tgt_pad.to(th.int32), enc_len.to(th.int32),
+        loss = self.rnnt_objf(dec_out,
+                              tgt_pad.to(th.int32), enc_len.to(th.int32),
                               tgt_len.to(th.int32), **rnnt_kwargs)
-        K = th.sum(tgt_len) if self.reduction == "mean" else outs.shape[0]
+        K = th.sum(tgt_len) if self.reduction == "mean" else dec_out.shape[0]
         return {"loss": loss / K}
 
 

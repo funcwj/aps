@@ -238,7 +238,7 @@ def test_conv2d_encoder(inp_len, num_layers, kernel_size):
         "att_head": 4
     }),
 ])
-def test_att(att_type, att_kwargs):
+def test_asr_att(att_type, att_kwargs):
     nnet_cls = aps_asr_nnet("asr@att")
     vocab_size = 100
     batch_size = 4
@@ -260,7 +260,7 @@ def test_att(att_type, att_kwargs):
                        dec_dim=512,
                        dec_kwargs=default_rnn_dec_kwargs)
     x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
-    z, _, _, _ = att_asr(x, x_len, y, y_len)
+    z, _, _ = att_asr(x, x_len, y, y_len)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -316,7 +316,7 @@ def test_mvdr_att(att_type, att_kwargs):
     x, x_len, y, y_len, u = gen_egs(vocab_size,
                                     batch_size,
                                     num_channels=num_channels)
-    z, _, _, _ = mvdr_att_asr(x, x_len, y, y_len)
+    z, _, _ = mvdr_att_asr(x, x_len, y, y_len)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -378,7 +378,7 @@ def test_beam_att(enh_type, enh_kwargs):
     x, x_len, y, y_len, u = gen_egs(vocab_size,
                                     batch_size,
                                     num_channels=num_channels)
-    z, _, _, _ = beam_att_asr(x, x_len, y, y_len)
+    z, _, _ = beam_att_asr(x, x_len, y, y_len)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -417,7 +417,7 @@ def test_att_encoder(enc_type, enc_kwargs):
                        dec_dim=512,
                        dec_kwargs=default_rnn_dec_kwargs)
     x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
-    z, _, _, _ = att_asr(x, x_len, y, y_len)
+    z, _, _ = att_asr(x, x_len, y, y_len)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -454,7 +454,7 @@ def test_xfmr_encoder(enc_type, enc_kwargs):
                         dec_type="xfmr_abs",
                         dec_kwargs=default_xfmr_dec_kwargs)
     x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
-    z, _, _, _ = xfmr_asr(x, x_len, y, y_len)
+    z, _, _ = xfmr_asr(x, x_len, y, y_len)
     assert z.shape == th.Size([4, u + 1, vocab_size - 1])
 
 
@@ -489,14 +489,13 @@ def test_common_transducer(enc_type, enc_kwargs):
     xfmr_encoders = ["xfmr_abs", "xfmr_rel", "xfmr_xl", "cfmr_xl"]
     rnnt = nnet_cls(input_size=80,
                     vocab_size=vocab_size,
-                    blank=vocab_size - 1,
                     asr_transform=asr_transform,
                     enc_type=enc_type,
                     enc_proj=None if enc_type in xfmr_encoders else 512,
                     enc_kwargs=enc_kwargs,
                     dec_kwargs=dec_kwargs)
     x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
-    z, _ = rnnt(x, x_len, y, y_len)
+    _, z, _ = rnnt(x, x_len, y, y_len)
     assert z.shape[2:] == th.Size([u + 1, vocab_size])
 
 
@@ -530,12 +529,11 @@ def test_xfmr_transducer(enc_type, enc_kwargs):
                                  window="hamm")
     xfmr_rnnt = nnet_cls(input_size=80,
                          vocab_size=vocab_size,
-                         blank=vocab_size - 1,
                          asr_transform=asr_transform,
                          enc_type=enc_type,
                          enc_proj=512,
                          enc_kwargs=enc_kwargs,
                          dec_kwargs=dec_kwargs)
     x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
-    z, _ = xfmr_rnnt(x, x_len, y, y_len)
+    _, z, _ = xfmr_rnnt(x, x_len, y, y_len)
     assert z.shape[2:] == th.Size([u + 1, vocab_size])

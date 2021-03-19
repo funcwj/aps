@@ -48,8 +48,10 @@ class ChunkStitcher(object):
             if i == 0:
                 stream[:beg + self.chunk_len] = chunk[:beg + self.chunk_len]
             elif i == len(chunks) - 1:
-                stream[beg:] = chunk[self.lctx:self.lctx + expected_length -
-                                     beg]
+                last_len = min(expected_length - beg,
+                               chunk.shape[-1] - self.lctx)
+                stream[beg:beg + last_len] = chunk[self.lctx:self.lctx +
+                                                   last_len]
             else:
                 stream[beg:beg + self.chunk_len] = chunk[self.lctx:self.lctx +
                                                          self.chunk_len]
