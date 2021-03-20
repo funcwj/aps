@@ -23,7 +23,7 @@ AMForwardOut = Tuple[th.Tensor, NoneOrTensor, NoneOrTensor]
 
 class ASREncoderBase(nn.Module):
     """
-    ASR decoder class
+    ASR encoder class
     """
 
     def __init__(self,
