@@ -1,11 +1,12 @@
-## Overview of Monthly Update
+## Overview of the Monthly Update
 
 ### 2021/03
 
 1. Unify distributed/non-distributed training command
 2. Add stitcher for chunk-wise evaluation in SE/SS task
 3. Add CTC alignment command
-4. ...
+4. Unify ASR base class (for CTC & Attention & RNNT AM)
+5. ...
 
 ### 2021/02
 

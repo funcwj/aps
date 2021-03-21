@@ -166,11 +166,13 @@ class CtcTask(Task):
                             blank=self.ctc_blank,
                             reduction=self.reduction,
                             add_softmax=True)
-        ctc_accu = compute_ctc_accu(ctc_enc,
-                                    egs["tgt_pad"],
-                                    egs["tgt_len"],
-                                    blank=self.ctc_blank)
-        return {"loss": ctc_loss, "accu": ctc_accu}
+        accu, den = compute_ctc_accu(ctc_enc,
+                                     egs["tgt_pad"],
+                                     egs["tgt_len"],
+                                     blank=self.ctc_blank)
+        # ignore length of eos
+        assert den == egs["#tok"] - ctc_enc.shape[0]
+        return {"loss": ctc_loss, "accu": accu}
 
 
 @ApsRegisters.task.register("asr@ctc_xent")
@@ -327,8 +329,9 @@ class TransducerTask(Task):
         loss = self.rnnt_objf(dec_out,
                               tgt_pad.to(th.int32), enc_len.to(th.int32),
                               tgt_len.to(th.int32), **rnnt_kwargs)
-        K = th.sum(tgt_len) if self.reduction == "mean" else dec_out.shape[0]
-        return {"loss": loss / K}
+        denorm = th.sum(
+            tgt_len) if self.reduction == "mean" else dec_out.shape[0]
+        return {"loss": loss / denorm}
 
 
 @ApsRegisters.task.register("asr@lm")
@@ -355,10 +358,7 @@ class LmXentTask(Task):
 
     def forward(self, egs: Dict) -> Dict:
         """
-        Compute CE loss, egs contains
-            src: N x T+1
-            tgt: N x T+1
-            len: N
+        Compute CE loss, egs contains src: N x T+1, tgt: N x T+1, len: N
         """
         # pred: N x T+1 x V
         if self.bptt_mode:
