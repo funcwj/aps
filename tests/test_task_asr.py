@@ -67,8 +67,23 @@ def gen_asr_egs(batch_size, vocab_size):
     }
 
 
+def test_ctc_only():
+    nnet_cls = aps_asr_nnet("asr@ctc")
+    vocab_size = 100
+    batch_size = 4
+    ctc_asr = nnet_cls(input_size=80,
+                       vocab_size=vocab_size,
+                       asr_transform=asr_transform,
+                       enc_type="pytorch_rnn",
+                       enc_proj=256,
+                       enc_kwargs=att_enc_kwargs)
+    task = aps_task("asr@ctc", ctc_asr, blank=vocab_size - 1)
+    egs = gen_asr_egs(batch_size, vocab_size)
+    stats = task(egs)
+    assert not th.isnan(stats["loss"])
+
+
 def test_ctc_xent():
-    # th.random.manual_seed(666)
     nnet_cls = aps_asr_nnet("asr@att")
     vocab_size = 100
     batch_size = 4
@@ -103,7 +118,6 @@ def test_rnnt():
     rnnt_asr = nnet_cls(input_size=80,
                         vocab_size=vocab_size,
                         asr_transform=asr_transform,
-                        blank=vocab_size - 1,
                         enc_type="pytorch_rnn",
                         enc_kwargs=att_enc_kwargs,
                         enc_proj=512,

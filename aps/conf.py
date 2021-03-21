@@ -110,22 +110,22 @@ def load_am_conf(yaml_conf: str, dict_path: str) -> Tuple[Dict, Dict]:
 
     # add dict info
     nnet_conf = conf["nnet_conf"]
-    vocab = load_dict(dict_path)
+    vocab = load_dict(
+        dict_path,
+        required=[] if conf["task"] == "asr@ctc" else ["<eos>", "<sos>"])
     nnet_conf["vocab_size"] = len(vocab)
 
     task_conf = conf["task_conf"]
     use_ctc = "ctc_weight" in task_conf and task_conf["ctc_weight"] > 0
-    is_transducer = conf["task"] == "asr@transducer"
-    if not is_transducer:
+    is_transducer_or_ctc = conf["task"] in ["asr@transducer", "asr@ctc"]
+    if not is_transducer_or_ctc:
         nnet_conf["sos"] = vocab["<sos>"]
         nnet_conf["eos"] = vocab["<eos>"]
     # for CTC/RNNT
-    if use_ctc or is_transducer:
+    if use_ctc or is_transducer_or_ctc:
         conf["task_conf"]["blank"] = len(vocab)
         # add blank
         nnet_conf["vocab_size"] += 1
-        if is_transducer:
-            nnet_conf["blank"] = len(vocab)
-        else:
+        if use_ctc:
             nnet_conf["ctc"] = use_ctc
     return conf, vocab

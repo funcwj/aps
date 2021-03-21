@@ -42,8 +42,6 @@ def ctc_beam_search(ctc_prob: th.Tensor,
     Args:
         ctc_prob: T x V
     """
-    if sos < 0 or eos < 0:
-        raise ValueError(f"Invalid SOS/EOS ID: {sos:d}/{eos:d}")
     if blank < 0:
         raise ValueError(f"Invalid blank ID: {blank}")
     ctc_prob = th.log_softmax(ctc_prob, -1)
@@ -54,6 +52,7 @@ def ctc_beam_search(ctc_prob: th.Tensor,
     neg_inf = th.tensor(NEG_INF).to(ctc_prob.device)
     zero = th.tensor(0.0).to(ctc_prob.device)
     # (prefix, log_pb, log_pn)
+    # NOTE: actually do not need sos/eos here, just place it in the sentence
     prev_beam = [(str(sos), PrefixScore(zero, neg_inf))]
     for t in range(T):
         next_beam = defaultdict(lambda: PrefixScore(neg_inf, neg_inf))
@@ -168,7 +167,12 @@ def ctc_viterbi_align(ctc_enc: th.Tensor,
             align.append(point[t + 1, align[-1]].item())
     align = align[::-1]
     for t in range(T):
-        align[t] = blank if align[t] % 2 == 0 else dec_seq[(align[t] - 1) // 2]
+        u = blank if align[t] % 2 == 0 else dec_seq[(align[t] - 1) // 2]
+        # <b> x x x <b> => <b> <b> <b> x <b>
+        if u != blank and t and u == align[t - 1]:
+            align[t - 1] = blank
+        align[t] = u
+    # remove blank
     align_check = [a for a in align if a != blank]
     # check alignment
     assert sum([a != b for a, b in zip(align_check, dec_seq)]) == 0

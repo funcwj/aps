@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 
 from typing import Optional, Dict, List
-from aps.asr.att import AttASR, XfmrASR, NoneOrTensor, ASROutputType
+from aps.asr.att import AttASR, XfmrASR, NoneOrTensor, AMForwardOut
 from aps.asr.filter.conv import EnhFrontEnds
 from aps.libs import ApsRegisters
 
@@ -66,7 +66,7 @@ class EnhASRBase(nn.Module):
                 x_len: NoneOrTensor,
                 y_pad: th.Tensor,
                 y_len: NoneOrTensor,
-                ssr: float = 0) -> ASROutputType:
+                ssr: float = 0) -> AMForwardOut:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -75,9 +75,9 @@ class EnhASRBase(nn.Module):
             y_len: N or None, not used here
             ssr: schedule sampling rate
         Return:
-            outs: N x (To+1) x V
-            alis: N x (To+1) x T
-            ...
+            dec_out: N x (To+1) x V
+            enc_ctc: N x T x V or None
+            enc_len: N or None
         """
         # feature for enhancement
         feats, cstft, x_len = self.enh_transform(x_pad, x_len)

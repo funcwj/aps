@@ -16,7 +16,6 @@ def run(args):
     _ = set_seed(args.seed)
     conf = load_ss_conf(args.conf)
 
-    _ = set_seed(args.seed)
     print(f"Arguments in args:\n{pprint.pformat(vars(args))}", flush=True)
     print(f"Arguments in yaml:\n{pprint.pformat(conf)}", flush=True)
 
