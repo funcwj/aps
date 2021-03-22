@@ -31,8 +31,6 @@ class Separator(NnetEvaluator):
         super(Separator, self).__init__(cpt_dir,
                                         cpt_tag=cpt_tag,
                                         device_id=device_id)
-        logger.info(f"Load checkpoint from {cpt_dir}, epoch: " +
-                    f"{self.epoch}, tag: {cpt_tag}")
         lctx, chunk_len, rctx = [
             int(v * sr) for v in list(map(float, chunk_cfg.split(",")))
         ]

@@ -11,11 +11,12 @@ import numpy as np
 
 from aps.opts import AlignmentParser
 from aps.eval import NnetEvaluator, TextPreProcessor
+from aps.conf import load_dict
 from aps.utils import get_logger, io_wrapper, SimpleTimer
 from aps.loader import AudioReader
 
 from kaldi_python_io import ScriptReader, Reader
-from typing import Dict
+from typing import Dict, Optional
 
 logger = get_logger(__name__)
 """
@@ -48,7 +49,10 @@ class CtcAligner(NnetEvaluator):
         return self.nnet.ctc_align(inp, seq)
 
 
-def gen_word_boundary(key, dur, ali_str):
+def gen_word_boundary(key: str,
+                      dur: float,
+                      ali_str: str,
+                      vocab: Optional[Dict] = None):
     # e.g., * * * * * * * * * * 5464 * * * * * *
     ali_seq = ali_str.split(" ")
     dur_per_frame = dur / len(ali_seq)
@@ -56,10 +60,12 @@ def gen_word_boundary(key, dur, ali_str):
     ali_pos = [((f + 1) * dur_per_frame, tok)
                for f, tok in enumerate(ali_seq)
                if tok != "*"]
-    boundary = [f"{key} {len(ali_seq)} {dur:.3f}"]
+    boundary = [f"{key} {len(ali_seq)} {len(ali_pos)} {dur:.3f}"]
     beg = 0
     for pos in ali_pos:
         end, tok = pos
+        if vocab:
+            tok = vocab[int(tok)]
         boundary.append(f"{key} {tok} {beg:.3f} {end:.3f}")
         beg = end
     return boundary
@@ -85,7 +91,10 @@ def run(args):
     ali_stdout, ali_fd = io_wrapper(args.alignment, "w")
 
     wdb_stdout, wdb_fd = False, None
+    vocab_dict = None
     if args.word_boundary:
+        if args.dict:
+            vocab_dict = load_dict(args.dict, reverse=True)
         wdb_stdout, wdb_fd = io_wrapper(args.word_boundary, "w")
     done = 0
     tot_utts = len(src_reader)
@@ -102,7 +111,10 @@ def run(args):
         logger.info(f"{key} ({header}) {ali['align_str']}")
         if wdb_fd:
             dur = wav_or_feats.shape[-1] * 1.0 / args.sr
-            wdb = gen_word_boundary(key, dur, ali["align_str"])
+            wdb = gen_word_boundary(key,
+                                    dur,
+                                    ali["align_str"],
+                                    vocab=vocab_dict)
             wdb_fd.write("\n".join(wdb) + "\n")
     if not ali_stdout:
         ali_fd.close()
