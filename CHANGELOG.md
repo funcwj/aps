@@ -1,12 +1,18 @@
 ## Overview of the Monthly Update
 
+### 2021/04
+
+1. Fix bugs in CTC beam search
+2. Remove duplicated layernorm in Conformer
+3. Update result to WSJ recipe
+4. ...
+
 ### 2021/03
 
 1. Unify distributed/non-distributed training command
 2. Add stitcher for chunk-wise evaluation in SE/SS task
 3. Add CTC alignment command
 4. Unify ASR base class (for CTC & Attention & RNNT AM)
-5. ...
 
 ### 2021/02
 

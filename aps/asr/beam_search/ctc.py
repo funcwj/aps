@@ -48,7 +48,8 @@ def ctc_beam_search(ctc_prob: th.Tensor,
     # T x B
     topk_score, topk_token = th.topk(ctc_prob, beam_size, -1)
     T, V = ctc_prob.shape
-    logger.info(f"--- shape of the encoder output (CTC): {T} x {V}")
+    logger.info(
+        f"--- shape of the encoder output (CTC): {T} x {V}, blank = {blank}")
     neg_inf = th.tensor(NEG_INF).to(ctc_prob.device)
     zero = th.tensor(0.0).to(ctc_prob.device)
     # (prefix, log_pb, log_pn)
@@ -68,10 +69,14 @@ def ctc_beam_search(ctc_prob: th.Tensor,
                                                  other.log_pb)
                     next_beam[prefix] = PrefixScore(log_pb_update, other.log_pn)
                 else:
+                    # str
+                    symb = str(symb)
                     prefix_symb = prefix + f",{symb}"
+                    # str list
+                    prefix_toks = prefix.split(",")
                     other = next_beam[prefix_symb]
                     # repeat
-                    if prefix[-1] == symb:
+                    if prefix_toks[-1] == symb:
                         log_pn_update = th.logaddexp(prev.log_pb + logp,
                                                      other.log_pn)
                     else:
@@ -81,7 +86,7 @@ def ctc_beam_search(ctc_prob: th.Tensor,
                     next_beam[prefix_symb] = PrefixScore(
                         other.log_pb, log_pn_update)
                     # repeat case
-                    if prefix[-1] == symb:
+                    if prefix_toks[-1] == symb:
                         other = next_beam[prefix]
                         log_pn_update = th.logaddexp(prev.log_pn + logp,
                                                      other.log_pn)
@@ -115,8 +120,8 @@ def ctc_viterbi_align(ctc_enc: th.Tensor,
 
     ctc_prob = th.log_softmax(ctc_enc, -1)
     T, V = ctc_prob.shape
-    logger.info(f"--- shape of the encoder output (CTC): {T} x {V}")
-
+    logger.info(
+        f"--- shape of the encoder output (CTC): {T} x {V}, blank = {blank}")
     U = dec_seq.shape[-1]
     if U * 2 + 1 > T:
         raise ValueError(f"Invalid target length: {U}")
