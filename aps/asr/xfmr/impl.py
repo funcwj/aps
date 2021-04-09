@@ -475,15 +475,17 @@ class ApsConformerEncoderLayer(nn.Module):
                  dim_feedforward: int = 2048,
                  dropout: float = 0.1,
                  kernel_size: int = 16,
+                 macaron: float = True,
                  activation: str = "swish"):
         super(ApsConformerEncoderLayer, self).__init__()
         self.self_attn = self_attn
-        self.feedforward1 = nn.Sequential(nn.LayerNorm(d_model),
-                                          nn.Linear(d_model, dim_feedforward),
-                                          _get_activation_fn(activation),
-                                          nn.Dropout(dropout),
-                                          nn.Linear(dim_feedforward, d_model),
-                                          nn.Dropout(dropout))
+        if macaron:
+            self.feedforward1 = nn.Sequential(
+                nn.LayerNorm(d_model), nn.Linear(d_model, dim_feedforward),
+                _get_activation_fn(activation), nn.Dropout(dropout),
+                nn.Linear(dim_feedforward, d_model), nn.Dropout(dropout))
+        else:
+            self.feedforward1 = None
         self.convolution = nn.Sequential(
             nn.Conv1d(d_model, d_model * 2, 1), nn.GLU(dim=-2),
             nn.Conv1d(d_model,
@@ -501,7 +503,6 @@ class ApsConformerEncoderLayer(nn.Module):
                                           nn.Dropout(dropout))
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
-        self.norm3 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
 
     def conv(self, inp: th.Tensor) -> th.Tensor:
@@ -511,10 +512,8 @@ class ApsConformerEncoderLayer(nn.Module):
         Return
             out (Tensor): T x N x D
         """
-        # T x N x F
-        src = self.norm2(inp)
         # T x N x F => N x F x T
-        src = th.einsum("tnf->nft", src)
+        src = th.einsum("tnf->nft", inp)
         out = self.convolution(src)
         # N x F x T => T x N x F
         out = th.einsum("nft->tnf", out)
@@ -534,8 +533,12 @@ class ApsConformerEncoderLayer(nn.Module):
         Return:
             out (Tensor): T x N x D
         """
+        # NOTE: use pre-norm by default
         # 1) FFN
-        src1 = self.feedforward1(src) * 0.5 + src
+        if self.feedforward1:
+            src1 = self.feedforward1(src) * 0.5 + src
+        else:
+            src1 = src
         # self-attention block
         src2 = self.norm1(src1)
         att, _ = self.self_attn(src2,
@@ -546,11 +549,13 @@ class ApsConformerEncoderLayer(nn.Module):
                                 key_padding_mask=src_key_padding_mask)
         src = src1 + self.dropout(att)
         # conv
-        src = self.conv(src) + src
+        src = self.conv(self.norm2(src)) + src
         # 2) FFN
-        src = self.feedforward2(src) * 0.5 + src
-        # layernorm
-        return self.norm3(src)
+        if self.feedforward1:
+            out = self.feedforward2(src) * 0.5 + src
+        else:
+            out = self.feedforward2(src) + src
+        return out
 
 
 @TransformerEncoderLayers.register("xfmr_abs")
@@ -646,8 +651,8 @@ class ConformerEncoderLayer(ApsConformerEncoderLayer):
                  dim_feedforward: int = 2048,
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
-                 pre_norm: bool = True,
                  kernel_size: int = 16,
+                 pre_norm: float = True,
                  activation: str = "swish") -> None:
         self_attn = ApsMultiheadAttention(d_model,
                                           nhead,
@@ -674,8 +679,8 @@ class ConformerRelEncoderLayer(ApsConformerEncoderLayer):
                  dim_feedforward: int = 2048,
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
-                 pre_norm: bool = True,
                  kernel_size: int = 16,
+                 pre_norm: float = True,
                  activation: str = "swish",
                  rel_u: Optional[nn.Parameter] = None,
                  rel_v: Optional[nn.Parameter] = None) -> None:
@@ -701,8 +706,8 @@ class ConformerXLEncoderLayer(ApsConformerEncoderLayer):
                  dim_feedforward: int = 2048,
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
-                 pre_norm: bool = True,
                  kernel_size: int = 16,
+                 pre_norm: float = True,
                  activation: str = "swish",
                  rel_u: Optional[nn.Parameter] = None,
                  rel_v: Optional[nn.Parameter] = None) -> None:

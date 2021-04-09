@@ -28,6 +28,7 @@ lm_num_workers=8
 
 # beam search
 lm_weight=0.2
+ctc_weight=0.4
 beam_size=16
 len_norm=true
 eos_threshold=0
@@ -77,7 +78,7 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   echo "Stage 4: decoding ..."
   for name in $test_sets; do
     ./scripts/decode.sh \
-      --score true
+      --score true \
       --text data/wsj/$name/text \
       --log-suffix $name \
       --beam-size $beam_size \
@@ -85,7 +86,9 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
       --dict exp/wsj/$am_exp/dict \
       --nbest 8 \
       --space "<space>" \
+      --ctc-weight $ctc_weight \
       --len-norm $len_norm \
+      --ctc-weight $ctc_weight \
       --eos-threshold $eos_threshold \
       wsj $am_exp \
       data/wsj/$name/wav.scp \
@@ -119,7 +122,7 @@ if [ $end -ge 6 ] && [ $beg -le 6 ]; then
     --batch-size $lm_batch_size \
     --num-workers $lm_num_workers \
     --prog-interval 100 \
-    --eval-interval -1 \
+    --eval-interval 5000 \
     lm wsj $lm_exp
 fi
 

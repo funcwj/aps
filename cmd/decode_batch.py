@@ -42,8 +42,6 @@ class BatchDecoder(NnetEvaluator):
         super(BatchDecoder, self).__init__(cpt_dir,
                                            device_id=device_id,
                                            cpt_tag=cpt_tag)
-        logger.info(f"Load the checkpoint from {cpt_dir}, epoch: " +
-                    f"{self.epoch}, tag: {cpt_tag}")
 
     def run(self, inps, **kwargs):
         return self.nnet.beam_search_batch(

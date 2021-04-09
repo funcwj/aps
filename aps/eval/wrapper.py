@@ -8,7 +8,10 @@ import torch as th
 import torch.nn as nn
 
 from aps.libs import aps_transform, aps_nnet
+from aps.utils import get_logger
 from typing import Dict, Tuple
+
+logger = get_logger(__name__)
 
 
 class NnetEvaluator(object):
@@ -30,14 +33,13 @@ class NnetEvaluator(object):
             self.nnet.to(self.device)
         # set eval model
         self.nnet.eval()
+        # logging
+        logger.info(f"Load the checkpoint from {cpt_dir}, epoch: " +
+                    f"{self.epoch}, tag: {cpt_tag}, device: {device_id}")
 
     def _load(self,
               cpt_dir: str,
-              cpt_tag: str = "best",
-              task: str = "asr") -> Tuple[int, nn.Module, Dict]:
-        # TODO: make task name not hard coded
-        if task not in ["asr", "sse"]:
-            raise ValueError(f"Unknown task name: {task}")
+              cpt_tag: str = "best") -> Tuple[int, nn.Module, Dict]:
         cpt_dir = pathlib.Path(cpt_dir)
         # load checkpoint
         cpt = th.load(cpt_dir / f"{cpt_tag}.pt.tar", map_location="cpu")
