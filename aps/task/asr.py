@@ -320,15 +320,16 @@ class TransducerTask(Task):
         # N x Ti x To+1 x V
         _, dec_out, enc_len = self.nnet(egs["src_pad"], egs["src_len"], tgt_pad,
                                         tgt_len)
-        rnnt_kwargs = {"blank": self.blank, "reduction": "sum"}
         # add log_softmax if use https://github.com/1ytic/warp-rnnt
         if self.interface == "warp_rnnt":
             dec_out = tf.log_softmax(dec_out, -1)
-            rnnt_kwargs["gather"] = True
         # compute loss
         loss = self.rnnt_objf(dec_out,
-                              tgt_pad.to(th.int32), enc_len.to(th.int32),
-                              tgt_len.to(th.int32), **rnnt_kwargs)
+                              tgt_pad.to(th.int32),
+                              enc_len.to(th.int32),
+                              tgt_len.to(th.int32),
+                              blank=self.blank,
+                              reduction="sum")
         denorm = th.sum(
             tgt_len) if self.reduction == "mean" else dec_out.shape[0]
         return {"loss": loss / denorm}
