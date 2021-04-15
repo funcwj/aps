@@ -120,6 +120,10 @@ conv1d_fsmn_enc_kwargs = {
 
 xfmr_enc_kwargs = {
     "proj_layer": "conv2d",
+    "proj_kwargs": {
+        "conv_channels": 128,
+        "num_layers": 3
+    },
     "att_dim": 512,
     "nhead": 8,
     "feedforward_dim": 2048,
@@ -132,6 +136,10 @@ xfmr_enc_kwargs = {
 
 xfmr_rel_enc_kwargs = {
     "proj_layer": "conv2d",
+    "proj_kwargs": {
+        "conv_channels": 128,
+        "num_layers": 3
+    },
     "att_dim": 512,
     "nhead": 8,
     "radius": 128,
@@ -145,6 +153,10 @@ xfmr_rel_enc_kwargs = {
 
 xfmr_xl_enc_kwargs = {
     "proj_layer": "conv2d",
+    "proj_kwargs": {
+        "conv_channels": 128,
+        "num_layers": 3
+    },
     "att_dim": 512,
     "nhead": 8,
     "feedforward_dim": 2048,
@@ -157,6 +169,10 @@ xfmr_xl_enc_kwargs = {
 
 conformer_enc_kwargs = {
     "proj_layer": "conv2d",
+    "proj_kwargs": {
+        "conv_channels": 128,
+        "num_layers": 3
+    },
     "att_dim": 512,
     "nhead": 8,
     "feedforward_dim": 2048,
