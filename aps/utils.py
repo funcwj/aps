@@ -15,7 +15,7 @@ import numpy as np
 from typing import NoReturn, Tuple, Any, Union, Optional
 
 # google-style log prefix
-common_logger_format = "{levelname} {asctime} PID:{process} {filename}:{lineno}] {message}"
+common_logger_format = "{levelname} {asctime} PID:{process} {module}:{lineno}] {message}"
 stdout_logger_format = "{levelname} {asctime} PID:{process}] {message}"
 time_format = "%Y-%m-%d %H:%M:%S"
 

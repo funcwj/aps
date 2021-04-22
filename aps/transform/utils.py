@@ -12,6 +12,13 @@ import librosa.filters as filters
 from aps.const import EPSILON
 from typing import Optional, Union, Tuple
 
+TORCH_VERSION = float(".".join(th.__version__.split(".")[:2]))
+
+if TORCH_VERSION >= 1.7:
+    from torch.fft import fft as fft_func
+else:
+    import torch.fft as fft_func
+
 
 def init_window(wnd: str, frame_len: int) -> th.Tensor:
     """
@@ -74,9 +81,13 @@ def init_kernel(frame_len: int,
         S = B**0.5
     else:
         S = 1
-    I = th.stack([th.eye(B), th.zeros(B, B)], dim=-1)
     # W x B x 2
-    K = th.fft(I / S, 1)
+    if TORCH_VERSION >= 1.7:
+        K = fft_func(th.eye(B) / S, dim=-1)
+        K = th.stack([K.real, K.imag], dim=-1)
+    else:
+        I = th.stack([th.eye(B), th.zeros(B, B)], dim=-1)
+        K = fft_func(I / S, 1)
     if mode == "kaldi":
         K = K[:frame_len]
     if inverse and not normalized:
