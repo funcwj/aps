@@ -17,7 +17,7 @@ TORCH_VERSION = float(".".join(th.__version__.split(".")[:2]))
 if TORCH_VERSION >= 1.7:
     from torch.fft import fft as fft_func
 else:
-    import torch.fft as fft_func
+    pass
 
 
 def init_window(wnd: str, frame_len: int) -> th.Tensor:
@@ -87,7 +87,7 @@ def init_kernel(frame_len: int,
         K = th.stack([K.real, K.imag], dim=-1)
     else:
         I = th.stack([th.eye(B), th.zeros(B, B)], dim=-1)
-        K = fft_func(I / S, 1)
+        K = th.fft(I / S, 1)
     if mode == "kaldi":
         K = K[:frame_len]
     if inverse and not normalized:
