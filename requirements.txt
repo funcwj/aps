@@ -10,7 +10,7 @@ pystoi==0.3.3
 pytest==6.1.1
 pypesq==1.2.4
 museval==0.3.1
-torch==1.6.0
+torch==1.7.0
 tqdm==4.50.2
 numpy==1.20.1
 PyYAML==5.4.1

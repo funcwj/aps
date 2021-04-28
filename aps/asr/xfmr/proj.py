@@ -74,10 +74,18 @@ class Conv1dProj(nn.Module):
                  embed_dim: int = 512,
                  norm: str = "BN",
                  dropout: float = 0,
-                 dim: int = 256) -> None:
+                 dim: int = 256,
+                 num_layers: int = 2) -> None:
         super(Conv1dProj, self).__init__()
-        self.conv1 = Conv1d(input_size, dim, dropout=dropout, norm=norm)
-        self.conv2 = Conv1d(dim, embed_dim, dropout=dropout, norm=norm)
+        # generally num_layers should not be too large
+        assert num_layers in [2, 3, 4]
+        conv_inst = [
+            Conv1d(input_size if i == 0 else dim,
+                   embed_dim if i == num_layers - 1 else dim,
+                   dropout=dropout,
+                   norm=norm) for i in range(num_layers)
+        ]
+        self.conv = nn.Sequential(*conv_inst)
 
     def check_args(self, inp: th.Tensor) -> NoReturn:
         """
@@ -94,8 +102,9 @@ class Conv1dProj(nn.Module):
         if inp_len is None:
             return None
         else:
-            out_len = self.conv1.compute_outp_dim(inp_len)
-            out_len = self.conv2.compute_outp_dim(out_len)
+            out_len = inp_len
+            for conv_layer in self.conv:
+                out_len = conv_layer.compute_outp_dim(out_len)
             return out_len
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
@@ -111,7 +120,7 @@ class Conv1dProj(nn.Module):
             inp = inp.contiguous()
             # N x T x DC
             inp = inp.view(N, T, -1)
-        out = self.conv2(self.conv1(inp))
+        out = self.conv(inp)
         return out
 
 
@@ -125,13 +134,19 @@ class Conv2dProj(nn.Module):
                  input_size: int,
                  embed_dim: int = 512,
                  in_channels: int = 1,
-                 conv_channels: int = 256) -> None:
+                 conv_channels: int = 256,
+                 num_layers: int = 2) -> None:
         super(Conv2dProj, self).__init__()
+        # generally num_layers should not be too large
+        assert num_layers in [2, 3, 4]
         # kernel size = 3, stride = 2
-        self.conv1 = Conv2d(in_channels, conv_channels)
-        input_size = self.conv1.compute_outp_dim(input_size, 1)
-        self.conv2 = Conv2d(conv_channels, conv_channels)
-        input_size = self.conv2.compute_outp_dim(input_size, 1)
+        conv_inst = [
+            Conv2d(conv_channels if i else in_channels, conv_channels)
+            for i in range(num_layers)
+        ]
+        self.conv = nn.Sequential(*conv_inst)
+        for conv_layer in conv_inst:
+            input_size = conv_layer.compute_outp_dim(input_size, 1)
         self.proj = nn.Linear(input_size * conv_channels, embed_dim)
 
     def check_args(self, inp: th.Tensor) -> NoReturn:
@@ -149,8 +164,9 @@ class Conv2dProj(nn.Module):
         if inp_len is None:
             return None
         else:
-            out_len = self.conv1.compute_outp_dim(inp_len, 0)
-            out_len = self.conv2.compute_outp_dim(out_len, 0)
+            out_len = inp_len
+            for conv_layer in self.conv:
+                out_len = conv_layer.compute_outp_dim(out_len, 0)
             return out_len
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
@@ -160,9 +176,7 @@ class Conv2dProj(nn.Module):
         """
         self.check_args(inp)
         # N x 1 x T x F => N x A x T' x F'
-        out = self.conv1(inp[:, None] if inp.dim() == 3 else inp)
-        # N x A x T' x F'
-        out = self.conv2(out)
+        out = self.conv(inp[:, None] if inp.dim() == 3 else inp)
         # N x T' x A x F'
         out = out.transpose(1, 2)
         N, T, _, _ = out.shape

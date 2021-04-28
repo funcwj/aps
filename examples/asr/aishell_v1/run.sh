@@ -38,7 +38,7 @@ eos_threshold=1
 beam_size=16
 len_norm=false
 nbest=$beam_size
-ngram=5
+ctc_weight=0
 lm_weight=0.2
 test_sets="dev test"
 
@@ -81,6 +81,7 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
       --beam-size $beam_size \
       --nbest $nbest \
       --max-len 50 \
+      --ctc-weight $ctc_weight \
       --len-norm $len_norm \
       --dict exp/$dataset/$am_exp/dict \
       --log-suffix $name \
@@ -116,6 +117,7 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
       --max-len 50 \
       --len-norm $len_norm \
       --beam-size $beam_size \
+      --ctc-weight $ctc_weight \
       --lm-weight $lm_weight \
       --log-suffix $name \
       $dataset $am_exp \
@@ -152,6 +154,7 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
       --max-len 50 \
       --beam-size $beam_size \
       --lm-weight $lm_weight \
+      --ctc-weight $ctc_weight \
       --log-suffix $name \
       $dataset $am_exp \
       data/$dataset/$name/wav.scp \

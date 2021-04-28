@@ -12,7 +12,7 @@ ARG OPENMPI_VERSION=4.0.5
 LABEL description="Dockerfile for APS toolkit"
 LABEL tag="pt${PYTORCH_VERSION}-py${PYTHON_VERSION}-cuda${CUDA}-ubuntu18.04"
 LABEL creator="funcwj"
-LABEL time="2020/09/04"
+LABEL time="2021/04/08"
 
 # install tools
 RUN apt-get update && apt-get install -y --no-install-recommends --allow-downgrades \
@@ -40,7 +40,8 @@ ENV LD_LIBRARY_PATH=$CUDA_HOME/lib64:/usr/local/lib:$LD_LIBRARY_PATH
 
 # install python dependency
 RUN conda install -y python=${PYTHON_VERSION}
-RUN conda install -y pytorch==${PYTORCH_VERSION} torchvision cudatoolkit=${CUDA_VERSION} -c pytorch
+# see https://pytorch.org/get-started/previous-versions/
+RUN conda install -y pytorch==${PYTORCH_VERSION} cudatoolkit=${CUDA_TOOLKIT} -c pytorch -c conda-forge
 RUN conda install -y pyyaml matplotlib tqdm scipy h5py pybind11 yapf
 RUN conda install -y -c conda-forge tensorboard pysoundfile librosa pre-commit && conda clean -ya
 RUN pip install kaldi_python_io edit-distance museval sentencepiece pystoi pypesq pytest flake8
@@ -53,7 +54,8 @@ RUN ldconfig /usr/local/cuda/targets/x86_64-linux/lib/stubs && \
 
 # one RNNT implementation (or pip install warp_rnnt)
 ENV CFLAGS="-I $CUDA_HOME/include $CFLAGS"
-RUN git clone https://github.com/HawkAaron/warp-transducer.git && cd warp-transducer && \
+# for CUDA11
+RUN git clone https://github.com/ncilfone/warp-transducer.git && cd warp-transducer && \
     mkdir build && cd build && cmake .. && make -j $(nproc) && make install && ldconfig -v && \
     cd ../pytorch_binding && python setup.py install && cd ../../ && rm -rf warp-transducer
 
