@@ -10,6 +10,8 @@ import torch.nn.functional as tf
 from typing import Optional, Tuple, Union, NoReturn
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
+from aps.const import TORCH_VERSION
+
 HiddenType = Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]
 
 rnn_output_nonlinear = {
@@ -37,11 +39,11 @@ def var_len_rnn_forward(rnn_impl: nn.Module,
         raise ValueError(
             f"RNN forward needs 3D tensor, got {inp.dim()} instead")
     if inp_len is not None:
-        inp = pack_padded_sequence(inp,
-                                   inp_len,
-                                   batch_first=True,
-                                   enforce_sorted=enforce_sorted)
-
+        inp = pack_padded_sequence(
+            inp,
+            inp_len if TORCH_VERSION < 1.7 else inp_len.tolist(),
+            batch_first=True,
+            enforce_sorted=enforce_sorted)
     out, _ = rnn_impl(inp)
     if inp_len is not None:
         out, _ = pad_packed_sequence(out, batch_first=True)

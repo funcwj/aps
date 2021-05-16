@@ -12,10 +12,11 @@ fi
 aishell_audio_dir=$1
 aishell_text_dir=$2
 aishell_data_dir=$3
+dataset=`basename $aishell_data_dir`
 
-train_dir=data/local/train
-dev_dir=data/local/dev
-test_dir=data/local/test
+train_dir=$aishell_data_dir/local/train
+dev_dir=$aishell_data_dir/local/dev
+test_dir=$aishell_data_dir/local/test
 
 mkdir -p $train_dir
 mkdir -p $dev_dir
@@ -59,7 +60,7 @@ echo "$0: Prepare dictionary..."
 
 echo "$0: Prepare utt2dur..."
 for dir in train dev; do
-  scripts/get_wav_dur.sh --nj 10 --output "time" $aishell_data_dir/$dir exp/utt2dur/$dir
+  scripts/get_wav_dur.sh --nj 10 --output "time" $aishell_data_dir/$dir exp/$dataset/utt2dur/$dir
 done
 
 echo "$0: AISHELL data preparation succeeded"
