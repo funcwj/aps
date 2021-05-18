@@ -94,8 +94,8 @@ fi
 
 if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   echo "Stage 4: training ngram LM ..."
-  exp_dir=exp/aishell_v1/ngram && mkdir -p $exp_dir
-  cat data/aishell_v1/train/text | awk '{$1=""; print}' > $exp_dir/train.text
+  exp_dir=exp/$dataset/ngram && mkdir -p $exp_dir
+  cat data/$dataset/train/text | awk '{$1=""; print}' > $exp_dir/train.text
   lmplz -o $ngram --text $exp_dir/train.text --arpa $exp_dir/${ngram}gram.arpa
   build_binary $exp_dir/${ngram}gram.arpa $exp_dir/${ngram}gram.arpa.bin
 fi
@@ -107,11 +107,10 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
     ./scripts/decode.sh \
       --score true \
       --text data/$dataset/$name/text \
-      --lm exp/aishell_v1/nnlm/$lm_exp \
       --gpu $gpu \
       --dict exp/$dataset/$am_exp/dict \
       --nbest $nbest \
-      --lm exp/aishell_v1/ngram/${ngram}gram.arpa.bin \
+      --lm exp/$dataset/ngram/${ngram}gram.arpa.bin \
       --lm-weight $lm_weight \
       --eos-threshold $eos_threshold \
       --max-len 50 \
@@ -147,7 +146,7 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
     ./scripts/decode.sh \
       --score true \
       --text data/$dataset/$name/text \
-      --lm exp/aishell_v1/nnlm/$lm_exp \
+      --lm exp/$dataset/nnlm/$lm_exp \
       --gpu $gpu \
       --dict exp/$dataset/$am_exp/dict \
       --nbest $nbest \
