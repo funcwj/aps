@@ -55,7 +55,7 @@ def run(args):
             try:
                 info = sf.info(path)
                 dur = info.duration if args.output == "time" else info.frames
-            except:
+            except RuntimeError:
                 succ = False
                 print(f"Failed to work out duration of utterance {key} ...")
         if not succ:

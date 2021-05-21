@@ -32,8 +32,9 @@ def run(args):
                 try:
                     with open(value, "rb") as wav:
                         wav_ark.write(wav.read())
-                except:
+                except FileNotFoundError:
                     succ = False
+                    print(f"Open {value} failed ...")
             if not succ:
                 continue
             if scp_out:
