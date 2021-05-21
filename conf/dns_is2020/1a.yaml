@@ -1,0 +1,46 @@
+# Conv-TasNet
+
+nnet: sse@demucs
+
+nnet_conf:
+  channel: 64
+  stride: 4
+  kernel: 8
+  resampling_factor: 4
+  num_layers: 5
+  rnn_layers: 2
+  growth: 2
+  bidirectional: false
+  rescale: 0.1
+
+task: "sse@wa"
+
+task_conf:
+  num_spks: 1
+  permute: false
+  objf: L1
+
+trainer_conf:
+  optimizer: "adam"
+  optimizer_kwargs:
+    lr: 3.0e-4
+    weight_decay: 1.0e-5
+  lr_scheduler_kwargs:
+    min_lr: 1.0e-8
+    patience: 1
+    factor: 0.5
+  clip_gradient: 10
+  no_impr: 6
+  no_impr_thres: 0.1
+
+data_conf:
+  fmt: "se@chunk"
+  loader:
+    chunk_size: 32007
+    sr: 16000
+  train:
+    mix_scp: data/dns_is2020/train/noisy.scp
+    ref_scp: data/dns_is2020/train/clean.scp
+  valid:
+    mix_scp: data/dns_is2020/dev/noisy.scp
+    ref_scp: data/dns_is2020/dev/clean.scp
