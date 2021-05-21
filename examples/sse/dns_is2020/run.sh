@@ -58,7 +58,7 @@ fi
 
 if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   echo "Stage 4: run speech enhancement ..."
-  for subdir in `ls $data_dir | grep test`; do
+  for subdir in $(ls $data_dir | grep test); do
     ./cmd/separate.py \
       --checkpoint exp/$dataset/$exp \
       --sr 16000 \
@@ -70,14 +70,16 @@ fi
 
 if [ $end -ge 5 ] && [ $beg -le 5 ]; then
   echo "Stage 5: evaluate ..."
-  for subdir in `ls $data_dir | grep test`; do
+  for subdir in $(ls $data_dir | grep test); do
     find exp/$dataset/$exp/$subdir -name "*.wav" | \
       awk -F '/' '{printf("%s %s\n", $NF, $0)}' | \
       sed 's:\.wav::' > exp/$dataset/$exp/$subdir/enhan.scp
   done
-  for subdir in `ls $data_dir | grep test_synt`; do
+  for subdir in $(ls $data_dir | grep test_synt); do
     for cur_metric in $metric; do
-      ./cmd/compute_ss_metric.py --sr 16000 \
+      ./cmd/compute_ss_metric.py \
+        --sr 16000 \
+        --metric $cur_metric \
         exp/$dataset/$exp/$subdir/enhan.scp \
         $data_dir/$subdir/clean.scp
     done
