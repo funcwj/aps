@@ -36,7 +36,7 @@ trainer_conf:
 data_conf:
   fmt: "se@chunk"
   loader:
-    chunk_size: 32007
+    chunk_size: 32085
     sr: 16000
   train:
     mix_scp: data/dns_is2020/train/noisy.scp
