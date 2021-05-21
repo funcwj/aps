@@ -9,10 +9,8 @@ import torch.nn as nn
 import torch.nn.functional as tf
 import librosa.filters as filters
 
-from aps.const import EPSILON
+from aps.const import EPSILON, TORCH_VERSION
 from typing import Optional, Union, Tuple
-
-TORCH_VERSION = float(".".join(th.__version__.split(".")[:2]))
 
 if TORCH_VERSION >= 1.7:
     from torch.fft import fft as fft_func

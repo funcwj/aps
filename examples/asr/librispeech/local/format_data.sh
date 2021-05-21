@@ -11,6 +11,7 @@ nj=20
 [ $# -ne 1 ] && echo "Script format error: $0 <data-dir>" && exit 1
 
 data_dir=$1
+dataset=`basename $data_dir`
 
 mkdir -p $data_dir/{train,dev}
 
@@ -21,7 +22,7 @@ done
 
 for data in train dev; do
   echo "$0: prepare utt2dur for $data_dir/$data ..."
-  scripts/get_wav_dur.sh --nj $nj --output "time" $data_dir/$data exp/utt2dur/$data
+  scripts/get_wav_dur.sh --nj $nj --output "time" $data_dir/$data exp/$dataset/$data
 done
 
 echo "$0: format data in $data_dir done"

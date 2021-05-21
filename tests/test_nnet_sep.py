@@ -271,3 +271,19 @@ def test_rnn_enh_ml(num_bins):
     assert y.shape == th.Size([2, 249, num_bins])
     z = rnn_enh_ml.infer(inp[0])
     assert z.shape == th.Size([249, num_bins])
+
+
+@pytest.mark.parametrize("resampling_factor", [1, 2, 4])
+@pytest.mark.parametrize("chunk_len", [16000, 32000])
+def test_demucs(resampling_factor, chunk_len):
+    nnet_cls = aps_sse_nnet("sse@demucs")
+    from aps.sse.enh.demucs import workout_train_chunk_length
+    chunk_len_for_train = workout_train_chunk_length(
+        chunk_len, resampling_factor=resampling_factor)
+    demucs = nnet_cls(resampling_factor=resampling_factor)
+    x = th.rand(2, chunk_len_for_train)
+    y = demucs(x)
+    assert y.shape == th.Size([2, chunk_len_for_train])
+    x = th.rand(chunk_len)
+    y = demucs.infer(x)
+    assert y.shape == th.Size([chunk_len])

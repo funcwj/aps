@@ -15,7 +15,7 @@ if [ $# -ne 1 ]; then
    exit 1;
 fi
 
-dir=data/local
+dir=data/$dataset/local
 data_dir=data/$dataset
 conf=$PWD/conf/$dataset
 local=$PWD/local

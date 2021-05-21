@@ -17,7 +17,7 @@ echo "$0 $@"  # Print the command line for logging
 . utils/parse_options.sh || exit 1;
 
 echo "Preparing train and test data"
-srcdir=data/local/data
+srcdir=data/wsj/local/data
 
 for x in train_si284 test_eval92 test_dev93; do
   mkdir -p data/wsj/$x

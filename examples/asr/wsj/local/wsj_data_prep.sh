@@ -11,7 +11,7 @@ if [ $# -le 3 ]; then
 fi
 
 
-dir=$PWD/data/local/data
+dir=$PWD/data/wsj/local/data
 mkdir -p $dir
 local=$PWD/local
 sph2pipe=sph2pipe

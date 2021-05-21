@@ -23,7 +23,7 @@ jobs:
         run: |
           sudo apt-get install -y shellcheck
           shellcheck -e SC2086,SC2002 -x tests/*.sh utils/subword.sh scripts/*.sh
-          shellcheck -e SC2086,SC2001,SC2002 -x examples/*/*/run.sh
+          shellcheck -e SC2086,SC2001,SC2002,SC2010 -x examples/*/*/run.sh
 
       - name: Python check
         run: |

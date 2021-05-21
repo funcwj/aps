@@ -74,7 +74,8 @@ class ApsModules(object):
     ]
     sse_submodules = [
         "toy", "unsuper.rnn", "enh.crn", "enh.phasen", "enh.dcunet",
-        "bss.dccrn", "bss.dprnn", "bss.tasnet", "bss.xfmr", "bss.dense_unet"
+        "enh.demucs", "bss.dccrn", "bss.dprnn", "bss.tasnet", "bss.xfmr",
+        "bss.dense_unet"
     ]
     loader_submodules = [
         "am.kaldi", "am.raw", "se.chunk", "se.online", "lm.utt", "lm.bptt"

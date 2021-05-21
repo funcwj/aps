@@ -30,6 +30,7 @@ def run(args):
         total += 1
         line = raw_line.strip()
         toks = line.split()
+        succ = True
         if line[-1] == "|":
             key, cmd = toks[0], " ".join(toks[1:-1])
             p = subprocess.Popen(cmd,
@@ -51,18 +52,21 @@ def run(args):
                 warnings.warn(f"Line format error: {line}")
                 continue
             key, path = toks
-            info = sf.info(path)
-            if args.output == "time":
-                dur = info.duration
-            else:
-                dur = info.frames
+            try:
+                info = sf.info(path)
+                dur = info.duration if args.output == "time" else info.frames
+            except RuntimeError:
+                succ = False
+                print(f"Failed to work out duration of utterance {key} ...")
+        if not succ:
+            continue
         done += 1
         if args.output == "time":
             utt2dur.write(f"{key}\t{dur:.4f}\n")
         else:
             utt2dur.write(f"{key}\t{dur:d}\n")
         if done % prog_interval == 0:
-            print(f"Processed {done} utterances...", flush=True)
+            print(f"Processed {done}/{total} utterances...", flush=True)
     if args.utt2dur != "-":
         utt2dur.close()
     if args.wav_scp != "-":
