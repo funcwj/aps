@@ -9,24 +9,19 @@ import torch.nn.functional as tf
 
 from aps.asr.base.layer import Conv1d, Conv2d, Normalize1d
 from aps.libs import Register
-from typing import Optional, NoReturn, Dict
+from typing import Optional, NoReturn
 
 XfmrProjLayer = Register("xfmr_proj_layer")
 
 
-def get_xfmr_proj(proj_name: str,
-                  in_features: int,
-                  att_dim: int,
-                  kwargs: Optional[Dict] = None) -> nn.Module:
+def get_xfmr_proj(proj_name: str, in_features: int, att_dim: int,
+                  **kwargs) -> nn.Module:
     """
     Return projection layers
     """
     if proj_name not in XfmrProjLayer:
         raise ValueError(f"Unsupported projection layer: {proj_name}")
-    if kwargs is None:
-        return XfmrProjLayer[proj_name](in_features, att_dim)
-    else:
-        return XfmrProjLayer[proj_name](in_features, att_dim, **kwargs)
+    return XfmrProjLayer[proj_name](in_features, att_dim, **kwargs)
 
 
 @XfmrProjLayer.register("linear")

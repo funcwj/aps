@@ -13,27 +13,15 @@ from aps.libs import Register
 PosEncodings = Register("pos_encodings")
 
 
-def get_xfmr_pose(enc_type: str,
-                  dim: int,
-                  nhead: int = 4,
-                  radius: int = 16,
-                  dropout: float = 0.1,
-                  scale_embed: bool = False) -> nn.Module:
+def get_xfmr_pose(pose: str, dim: int, **kwargs) -> nn.Module:
     """
     Return position encodings layer
     Args:
-        enc_type (str): transformer encoder type, {xfmr|cfmr}_{abs|rel|xl}
+        pose (str): positional encoding type, {abs|rel|xl|conv1d}
     """
-    pose = enc_type.split("_")[-1]
     if pose not in PosEncodings:
-        raise ValueError(f"Unsupported enc_type: {enc_type}")
-    pose_cls = PosEncodings[pose]
-    if pose == "abs":
-        return pose_cls(dim, dropout=dropout, scale_embed=scale_embed)
-    elif pose == "rel":
-        return pose_cls(dim // nhead, dropout=dropout, radius=radius)
-    else:
-        return pose_cls(dim, dropout=dropout)
+        raise ValueError(f"Unsupported pose layer: {pose}")
+    return PosEncodings[pose](dim, **kwargs)
 
 
 def digit_shift(term: th.Tensor) -> th.Tensor:
@@ -150,9 +138,9 @@ class InputSinPosEncoding(SinPosEncoding):
     def __init__(self,
                  embed_dim: int,
                  dropout: float = 0.1,
-                 scale_embed: bool = False) -> None:
+                 scaled: bool = False) -> None:
         super(InputSinPosEncoding, self).__init__(embed_dim, dropout=dropout)
-        self.factor = embed_dim**0.5 if scale_embed else 1
+        self.factor = embed_dim**0.5 if scaled else 1
 
     def forward(self, inp: th.Tensor, t: int = 0) -> th.Tensor:
         """
@@ -170,3 +158,41 @@ class InputSinPosEncoding(SinPosEncoding):
         # T x N x D
         out = out.transpose(0, 1)
         return out
+
+
+@PosEncodings.register("conv1d")
+class Conv1dPosEncoding(nn.Module):
+    """
+    1D convolutional position encoding
+    """
+
+    def __init__(self,
+                 embed_dim: int,
+                 dropout: float = 0.1,
+                 kernel: int = 33,
+                 groups: int = 16):
+        super(Conv1dPosEncoding, self).__init__()
+        conv = nn.Conv1d(embed_dim,
+                         embed_dim,
+                         kernel,
+                         1,
+                         padding=(kernel - 1) // 2,
+                         groups=groups)
+        nn.init.normal_(conv.weight,
+                        mean=0,
+                        std=math.sqrt(4 / (kernel * embed_dim)))
+        nn.init.constant_(conv.bias, 0)
+        self.conv = nn.utils.weight_norm(conv, name="weight", dim=2)
+        self.drop = nn.Dropout(p=dropout)
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp (Tensor): N x T x D
+        Return:
+            out (Tensor): T x N x D (for transformer input)
+        """
+        # N x D x T
+        inp = inp.transpose(1, 2)
+        pos = tf.gelu(self.drop(self.conv(inp)))
+        return pos + inp

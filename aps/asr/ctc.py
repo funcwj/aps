@@ -13,7 +13,6 @@ from torch.nn.utils.rnn import pad_sequence
 from typing import Optional, Dict, Tuple, List
 from aps.asr.base.encoder import encoder_instance
 from aps.asr.xfmr.encoder import TransformerEncoder
-from aps.asr.xfmr.impl import TransformerEncoderLayers
 from aps.asr.beam_search.ctc import ctc_beam_search, ctc_viterbi_align
 from aps.libs import ApsRegisters
 
@@ -37,11 +36,11 @@ class ASREncoderBase(nn.Module):
         super(ASREncoderBase, self).__init__()
         self.vocab_size = vocab_size
         self.asr_transform = asr_transform
-        if enc_type in TransformerEncoderLayers:
+        if enc_type in ["xfmr", "cfmr"]:
+            enc_proj = enc_kwargs["arch_kwargs"]["att_dim"]
             self.encoder = TransformerEncoder(enc_type, input_size,
                                               **enc_kwargs)
             self.is_xfmr_encoder = True
-            enc_proj = enc_kwargs["att_dim"]
         else:
             if enc_proj is None:
                 raise ValueError(

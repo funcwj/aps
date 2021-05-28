@@ -6,7 +6,7 @@
 import torch as th
 import torch.nn as nn
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 from aps.asr.xfmr.decoder import prep_sub_mask
 from aps.asr.xfmr.impl import get_xfmr_encoder
 from aps.asr.xfmr.pose import get_xfmr_pose
@@ -118,14 +118,9 @@ class TorchTransformerDecoder(DecoderBase):
                  enc_dim: Optional[int] = None,
                  jot_dim: int = 512,
                  att_dim: int = 512,
-                 nhead: int = 8,
-                 feedforward_dim: int = 2048,
-                 scale_embed: bool = False,
-                 pos_dropout: float = 0.1,
-                 att_dropout: float = 0.1,
-                 ffn_dropout: float = 0.1,
+                 pose_kwargs: Dict = {},
+                 arch_kwargs: Dict = {},
                  num_layers: int = 6,
-                 post_norm: bool = True,
                  onehot_embed: bool = False) -> None:
         super(TorchTransformerDecoder,
               self).__init__(vocab_size,
@@ -133,18 +128,8 @@ class TorchTransformerDecoder(DecoderBase):
                              dec_dim=att_dim,
                              jot_dim=jot_dim,
                              onehot_embed=onehot_embed)
-        self.abs_pos_enc = get_xfmr_pose("xfmr_abs",
-                                         att_dim,
-                                         dropout=pos_dropout,
-                                         scale_embed=scale_embed)
-        self.decoder = get_xfmr_encoder("xfmr_abs",
-                                        num_layers,
-                                        att_dim,
-                                        nhead,
-                                        dim_feedforward=feedforward_dim,
-                                        att_dropout=att_dropout,
-                                        ffn_dropout=ffn_dropout,
-                                        pre_norm=not post_norm)
+        self.abs_pos_enc = get_xfmr_pose("abs", att_dim, **pose_kwargs)
+        self.decoder = get_xfmr_encoder("xfmr", "abs", num_layers, arch_kwargs)
 
     def forward(self, enc_out: th.Tensor, tgt_pad: th.Tensor,
                 tgt_len: Optional[th.Tensor]) -> th.Tensor:

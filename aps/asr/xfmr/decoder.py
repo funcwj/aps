@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 
 from torch.nn import MultiheadAttention, TransformerDecoder
-from typing import Union, Tuple, Optional
+from typing import Union, Tuple, Optional, Dict
 from aps.asr.xfmr.pose import get_xfmr_pose
 from aps.asr.xfmr.impl import _get_activation_fn
 from aps.asr.base.attention import padding_mask
@@ -37,27 +37,27 @@ class TransformerDncoderLayer(nn.Module):
     """
 
     def __init__(self,
-                 d_model: int,
+                 att_dim: int,
                  nhead: int,
-                 dim_feedforward: int = 2048,
+                 feedforward_dim: int = 2048,
                  pre_norm: bool = False,
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
                  activation: str = "relu") -> None:
         super(TransformerDncoderLayer, self).__init__()
         self.pre_norm = pre_norm
-        self.self_attn = MultiheadAttention(d_model, nhead, dropout=att_dropout)
-        self.multihead_attn = MultiheadAttention(d_model,
+        self.self_attn = MultiheadAttention(att_dim, nhead, dropout=att_dropout)
+        self.multihead_attn = MultiheadAttention(att_dim,
                                                  nhead,
                                                  dropout=att_dropout)
-        self.feedforward = nn.Sequential(nn.Linear(d_model, dim_feedforward),
+        self.feedforward = nn.Sequential(nn.Linear(att_dim, feedforward_dim),
                                          _get_activation_fn(activation),
                                          nn.Dropout(ffn_dropout),
-                                         nn.Linear(dim_feedforward, d_model),
+                                         nn.Linear(feedforward_dim, att_dim),
                                          nn.Dropout(ffn_dropout))
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.norm3 = nn.LayerNorm(d_model)
+        self.norm1 = nn.LayerNorm(att_dim)
+        self.norm2 = nn.LayerNorm(att_dim)
+        self.norm3 = nn.LayerNorm(att_dim)
         self.dropout1 = nn.Dropout(ffn_dropout)
         self.dropout2 = nn.Dropout(ffn_dropout)
 
@@ -123,30 +123,20 @@ class TorchTransformerDecoder(nn.Module):
 
     def __init__(self,
                  vocab_size: int,
-                 att_dim: int = 512,
-                 nhead: int = 8,
-                 feedforward_dim: int = 2048,
-                 scale_embed: bool = False,
-                 pos_dropout: float = 0,
-                 att_dropout: float = 0.1,
-                 ffn_dropout: float = 0.1,
-                 num_layers: int = 6,
-                 post_norm: bool = True) -> None:
+                 pose_kwargs: Dict = {},
+                 arch_kwargs: Dict = {},
+                 num_layers: int = 6) -> None:
         super(TorchTransformerDecoder, self).__init__()
+        att_dim = arch_kwargs["att_dim"]
         # default normal init (std=1), do not need to scale
         self.vocab_embed = nn.Embedding(vocab_size, att_dim)
         # use absolute positional embedding here
-        self.abs_pos_enc = get_xfmr_pose("xfmr_abs",
-                                         att_dim,
-                                         dropout=pos_dropout,
-                                         scale_embed=scale_embed)
-        decoder_layer = TransformerDncoderLayer(att_dim,
-                                                nhead,
-                                                dim_feedforward=feedforward_dim,
-                                                att_dropout=att_dropout,
-                                                ffn_dropout=ffn_dropout,
-                                                pre_norm=not post_norm)
-        final_norm = nn.LayerNorm(att_dim) if not post_norm else None
+        self.abs_pos_enc = get_xfmr_pose("abs", att_dim, **pose_kwargs)
+        decoder_layer = TransformerDncoderLayer(**arch_kwargs)
+        if "pre_norm" in arch_kwargs and arch_kwargs["pre_norm"]:
+            final_norm = nn.LayerNorm(att_dim)
+        else:
+            final_norm = None
         self.decoder = TransformerDecoder(decoder_layer,
                                           num_layers,
                                           norm=final_norm)
