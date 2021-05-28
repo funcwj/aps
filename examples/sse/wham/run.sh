@@ -7,7 +7,7 @@ set -eu
 
 wsj0_data=/scratch/jwu/wsj0
 wham_data=/scratch/jwu/wham
-dataset=wham_16k_min
+dataset=wham
 
 stage=2
 
@@ -21,6 +21,8 @@ num_workers=4
 eval_interval=-1
 save_interval=-1
 prog_interval=100
+
+metric=sisnr
 
 . ./utils/parse_options.sh || exit 1
 
@@ -43,7 +45,7 @@ fi
 
 if [ $end -ge 3 ] && [ $beg -le 3 ]; then
   echo "Stage 3: formating data ..."
-  ./local/format_data.sh $wham_data/wav16k/min $data_dir
+  ./local/format_data.sh $wham_data/wham_mix/wav16k/min $data_dir
 fi
 
 cpt_dir=exp/$dataset/$exp

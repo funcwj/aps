@@ -50,8 +50,8 @@ data_conf:
     chunk_size: 64000
     sr: 16000
   train:
-    mix_scp: "data/wham_16k_min/tr/mix.scp"
-    ref_scp: "data/wham_16k_min/tr/spk1.scp,data/wham_16k_min/tr/spk2.scp"
+    mix_scp: "data/wham/tr/mix.scp"
+    ref_scp: "data/wham/tr/spk1.scp,data/wham/tr/spk2.scp"
   valid:
-    mix_scp: "data/wham_16k_min/cv/mix.scp"
-    ref_scp: "data/wham_16k_min/cv/spk1.scp,data/wham_16k_min/cv/spk2.scp"
+    mix_scp: "data/wham/cv/mix.scp"
+    ref_scp: "data/wham/cv/spk1.scp,data/wham/cv/spk2.scp"

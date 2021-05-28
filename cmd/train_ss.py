@@ -31,7 +31,7 @@ def run(args):
     if is_distributed and args.eval_interval <= 0:
         raise RuntimeError("For distributed training of SE/SS model, "
                            "--eval-interval must be larger than 0")
-    start_trainer(args.trainer, conf, nnet, args, reduction_tag="none")
+    start_trainer(args.trainer, conf, nnet, args, reduction_tag="#utt")
 
 
 if __name__ == "__main__":

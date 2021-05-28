@@ -34,7 +34,7 @@ data_dir=data/$dataset
 if [ $end -ge 1 ] && [ $beg -le 1 ]; then
   echo "Stage 1: preparing data ..."
   for subdir in "tr" "tt" "cv"; do
-    [ ! -d $wsj0_2mix_dir/$x ] && echo "$wsj0_2mix_dir/$subdir not exists, exit ..." && exit 1
+    [ ! -d $wsj0_2mix_dir/$subdir ] && echo "$wsj0_2mix_dir/$subdir not exists, exit ..." && exit 1
   done
   ./local/format_data.sh $wsj0_2mix_dir/wav8k/min $data_dir
 fi
