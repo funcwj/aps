@@ -28,17 +28,29 @@ def run(args):
     if single_speaker:
         est_reader = AudioReader(args.est_scp, sr=args.sr)
         ref_reader = AudioReader(args.ref_scp, sr=args.sr)
-        for key, sep in tqdm.tqdm(est_reader):
+        for key, est in tqdm.tqdm(est_reader):
             ref = ref_reader[key]
-            end = min(sep.size, ref.size)
-            metric = permute_metric(args.metric,
-                                    ref[:end],
-                                    sep[:end],
-                                    fs=args.sr,
-                                    compute_permutation=False)
+            end = min(est.shape[-1], ref.shape[-1])
+            assert est.ndim == ref.ndim
+            ali = None
+            if est.ndim == 2:
+                metric, ali = permute_metric(args.metric,
+                                             ref[:, :end],
+                                             est[:, :end],
+                                             fs=args.sr,
+                                             compute_permutation=True)
+            else:
+                metric = permute_metric(args.metric,
+                                        ref[:end],
+                                        est[:end],
+                                        fs=args.sr,
+                                        compute_permutation=False)
             reporter.add(key, metric)
             if utt_val:
                 utt_val.write(f"{key}\t{metric:.2f}\n")
+            if utt_ali and ali:
+                ali_str = " ".join(map(str, ali))
+                utt_ali.write(f"{key}\t{ali_str}\n")
     else:
         est_reader = [AudioReader(scp, sr=args.sr) for scp in splited_est_scps]
         ref_reader = [AudioReader(scp, sr=args.sr) for scp in splited_ref_scps]
@@ -73,7 +85,7 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("est_scp",
                         type=str,
-                        help="Estimated speech scripts, waiting for measure"
+                        help="Estimated speech scripts, waiting for measure "
                         "(support multi-speaker, egs: spk1.scp,spk2.scp)")
     parser.add_argument("ref_scp",
                         type=str,

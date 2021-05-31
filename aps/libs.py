@@ -11,6 +11,7 @@ from importlib.machinery import SourceFileLoader
 from typing import Any, Dict, List, Iterable
 from argparse import Namespace
 from aps import distributed
+from aps.utils import get_device_ids
 
 
 class Register(dict):
@@ -202,13 +203,25 @@ def start_trainer(trainer: str,
     """
     Run the instance of the aps Trainer
     """
+    device_ids = get_device_ids(args.device_ids)
     is_distributed = args.distributed != "none"
     if is_distributed:
         # init torch/horovod backend
         distributed.init(args.distributed)
+        # local rank (decide which GPU to use)
+        local_rank = distributed.local_rank()
+        if local_rank >= len(device_ids):
+            raise ValueError("local rank value exceeds number of GPUs: " +
+                             f"{local_rank} vs {len(device_ids)}")
+        # global rank (for logging)
         rank = distributed.rank()
+        device_id = device_ids[local_rank]
+        # global world size
+        num_process = distributed.world_size()
     else:
         rank = None
+        device_id = device_ids[0]
+        num_process = 1
 
     task = aps_task(conf["task"], nnet, **conf["task_conf"])
 
@@ -218,7 +231,7 @@ def start_trainer(trainer: str,
     # environment variables, and requires that you use init_method="env://".
     trainer = TrainerClass(task,
                            rank=rank,
-                           device_ids=args.device_ids,
+                           device_id=device_id,
                            checkpoint=args.checkpoint,
                            resume=args.resume,
                            init=args.init,
@@ -232,16 +245,6 @@ def start_trainer(trainer: str,
         conf["cmd_args"] = vars(args)
         with open(f"{args.checkpoint}/train.yaml", "w") as f:
             yaml.dump(conf, f)
-
-    # check if #devices == world_size
-    if is_distributed:
-        num_process = len(args.device_ids.split(","))
-        if num_process != distributed.world_size():
-            raise RuntimeError(
-                f"Number of process != world size: {num_process} " +
-                f"vs {distributed.world_size()}")
-    else:
-        num_process = 1
 
     data_conf = conf["data_conf"]
     loader_conf = {

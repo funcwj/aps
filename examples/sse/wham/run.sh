@@ -78,15 +78,11 @@ fi
 
 if [ $end -ge 6 ] && [ $beg -le 6 ]; then
   echo "Stage 6: evaluate ..."
-  # remix
-  mkdir -p $cpt_dir/bss/spk{1,2}
-  prepare_scp wav $cpt_dir/bss | awk -v dir=$cpt_dir/bss/spk1 \
-    '{printf("sox %s %s/%s.wav remix 1\n", $2, dir, $1)}' | bash
-  prepare_scp wav $cpt_dir/bss | awk -v dir=$cpt_dir/bss/spk2 \
-    '{printf("sox %s %s/%s.wav remix 2\n", $2, dir, $1)}' | bash
-  # compute si-snr
-  prepare_scp wav $cpt_dir/bss/spk1 > $cpt_dir/bss/spk1.scp
-  prepare_scp wav $cpt_dir/bss/spk2 > $cpt_dir/bss/spk2.scp
+  for index in 1 2; do
+    find $cpt_dir/bss -name "*.wav" | \
+      awk -v ch=$index -F '/' '{printf("%s sox %s -t wav - remix %d |\n", $NF, $0, ch)}' | \
+      sed "s:.wav::" > $cpt_dir/bss/spk${index}.scp
+  done
   ./cmd/compute_ss_metric.py --sr 16000 --metric $metric \
     $data_dir/tt/spk1.scp,$data_dir/tt/spk2.scp \
     $cpt_dir/bss/spk1.scp,$cpt_dir/bss/spk2.scp
