@@ -4,7 +4,7 @@
 import torch as th
 import torch.nn as nn
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 from aps.asr.xfmr.pose import get_xfmr_pose
 from aps.asr.xfmr.impl import get_xfmr_encoder
 from aps.asr.xfmr.decoder import prep_sub_mask
@@ -20,27 +20,14 @@ class TorchXfmrLM(nn.Module):
 
     def __init__(self,
                  vocab_size: int = 40,
-                 att_dim: int = 512,
-                 nhead: int = 8,
-                 feedforward_dim: int = 2048,
-                 scale_embed: bool = False,
-                 pos_dropout: float = 0.1,
-                 att_dropout: float = 0.1,
-                 ffn_dropout: float = 0.1,
-                 num_layers: int = 6) -> None:
+                 num_layers: int = 6,
+                 pose_kwargs: Dict = {},
+                 arch_kwargs: Dict = {}) -> None:
         super(TorchXfmrLM, self).__init__()
+        att_dim = arch_kwargs["att_dim"]
         self.vocab_embed = nn.Embedding(vocab_size, att_dim)
-        self.abs_pos_enc = get_xfmr_pose("xfmr_abs",
-                                         att_dim,
-                                         dropout=pos_dropout,
-                                         scale_embed=scale_embed)
-        self.encoder = get_xfmr_encoder("xfmr_abs",
-                                        num_layers,
-                                        att_dim,
-                                        nhead,
-                                        dim_feedforward=feedforward_dim,
-                                        att_dropout=att_dropout,
-                                        ffn_dropout=ffn_dropout)
+        self.abs_pos_enc = get_xfmr_pose("abs", att_dim, **pose_kwargs)
+        self.encoder = get_xfmr_encoder("xfmr", "abs", num_layers, arch_kwargs)
         # output distribution
         self.dist = nn.Linear(att_dim, vocab_size)
         self.vocab_size = vocab_size
