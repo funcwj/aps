@@ -10,7 +10,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 from aps.libs import Register
 from aps.asr.xfmr.pose import digit_shift
 
@@ -412,22 +412,22 @@ class ApsTransformerEncoderLayer(nn.Module):
     """
 
     def __init__(self,
-                 d_model: int,
+                 att_dim: int,
                  self_attn: nn.Module,
-                 dim_feedforward: int = 2048,
+                 feedforward_dim: int = 2048,
                  dropout: float = 0.1,
                  activation: str = "relu",
                  pre_norm: bool = False) -> None:
         super(ApsTransformerEncoderLayer, self).__init__()
         self.self_attn = self_attn
         # implementation of feedforward model
-        self.feedforward = nn.Sequential(nn.Linear(d_model, dim_feedforward),
+        self.feedforward = nn.Sequential(nn.Linear(att_dim, feedforward_dim),
                                          _get_activation_fn(activation),
                                          nn.Dropout(dropout),
-                                         nn.Linear(dim_feedforward, d_model),
+                                         nn.Linear(feedforward_dim, att_dim),
                                          nn.Dropout(dropout))
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
+        self.norm1 = nn.LayerNorm(att_dim)
+        self.norm2 = nn.LayerNorm(att_dim)
         self.dropout = nn.Dropout(dropout)
         self.pre_norm = pre_norm
 
@@ -470,9 +470,9 @@ class ApsConformerEncoderLayer(nn.Module):
     """
 
     def __init__(self,
-                 d_model: int,
+                 att_dim: int,
                  self_attn: nn.Module,
-                 dim_feedforward: int = 2048,
+                 feedforward_dim: int = 2048,
                  dropout: float = 0.1,
                  kernel_size: int = 16,
                  macaron: float = True,
@@ -481,28 +481,28 @@ class ApsConformerEncoderLayer(nn.Module):
         self.self_attn = self_attn
         if macaron:
             self.feedforward1 = nn.Sequential(
-                nn.LayerNorm(d_model), nn.Linear(d_model, dim_feedforward),
+                nn.LayerNorm(att_dim), nn.Linear(att_dim, feedforward_dim),
                 _get_activation_fn(activation), nn.Dropout(dropout),
-                nn.Linear(dim_feedforward, d_model), nn.Dropout(dropout))
+                nn.Linear(feedforward_dim, att_dim), nn.Dropout(dropout))
         else:
             self.feedforward1 = None
         self.convolution = nn.Sequential(
-            nn.Conv1d(d_model, d_model * 2, 1), nn.GLU(dim=-2),
-            nn.Conv1d(d_model,
-                      d_model,
+            nn.Conv1d(att_dim, att_dim * 2, 1), nn.GLU(dim=-2),
+            nn.Conv1d(att_dim,
+                      att_dim,
                       kernel_size * 2 + 1,
-                      groups=d_model,
-                      padding=kernel_size), nn.BatchNorm1d(d_model),
-            _get_activation_fn(activation), nn.Conv1d(d_model, d_model, 1),
+                      groups=att_dim,
+                      padding=kernel_size), nn.BatchNorm1d(att_dim),
+            _get_activation_fn(activation), nn.Conv1d(att_dim, att_dim, 1),
             nn.Dropout(p=dropout))
-        self.feedforward2 = nn.Sequential(nn.LayerNorm(d_model),
-                                          nn.Linear(d_model, dim_feedforward),
+        self.feedforward2 = nn.Sequential(nn.LayerNorm(att_dim),
+                                          nn.Linear(att_dim, feedforward_dim),
                                           _get_activation_fn(activation),
                                           nn.Dropout(dropout),
-                                          nn.Linear(dim_feedforward, d_model),
+                                          nn.Linear(feedforward_dim, att_dim),
                                           nn.Dropout(dropout))
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
+        self.norm1 = nn.LayerNorm(att_dim)
+        self.norm2 = nn.LayerNorm(att_dim)
         self.dropout = nn.Dropout(dropout)
 
     def conv(self, inp: th.Tensor) -> th.Tensor:
@@ -565,21 +565,21 @@ class TransformerEncoderLayer(ApsTransformerEncoderLayer):
     """
 
     def __init__(self,
-                 d_model: int,
+                 att_dim: int,
                  nhead: int,
-                 dim_feedforward: int = 2048,
+                 feedforward_dim: int = 2048,
                  pre_norm: bool = False,
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
                  activation: str = "relu") -> None:
-        self_attn = ApsMultiheadAttention(d_model,
+        self_attn = ApsMultiheadAttention(att_dim,
                                           nhead,
                                           dropout=att_dropout,
                                           use_torch=True)
         super(TransformerEncoderLayer,
-              self).__init__(d_model,
+              self).__init__(att_dim,
                              self_attn,
-                             dim_feedforward=dim_feedforward,
+                             feedforward_dim=feedforward_dim,
                              dropout=ffn_dropout,
                              activation=activation,
                              pre_norm=pre_norm)
@@ -592,18 +592,18 @@ class TransformerRelEncoderLayer(ApsTransformerEncoderLayer):
     """
 
     def __init__(self,
-                 d_model: int,
+                 att_dim: int,
                  nhead: int,
-                 dim_feedforward: int = 2048,
+                 feedforward_dim: int = 2048,
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
                  activation: str = "relu",
                  pre_norm: bool = False) -> None:
-        self_attn = RelMultiheadAttention(d_model, nhead, dropout=att_dropout)
+        self_attn = RelMultiheadAttention(att_dim, nhead, dropout=att_dropout)
         super(TransformerRelEncoderLayer,
-              self).__init__(d_model,
+              self).__init__(att_dim,
                              self_attn,
-                             dim_feedforward=dim_feedforward,
+                             feedforward_dim=feedforward_dim,
                              dropout=ffn_dropout,
                              activation=activation,
                              pre_norm=pre_norm)
@@ -616,24 +616,24 @@ class TransformerXLEncoderLayer(ApsTransformerEncoderLayer):
     """
 
     def __init__(self,
-                 d_model: int,
+                 att_dim: int,
                  nhead: int,
-                 dim_feedforward: int = 2048,
+                 feedforward_dim: int = 2048,
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
                  activation: str = "relu",
                  pre_norm: bool = False,
                  rel_u: Optional[nn.Parameter] = None,
                  rel_v: Optional[nn.Parameter] = None) -> None:
-        self_attn = XlMultiheadAttention(d_model,
+        self_attn = XlMultiheadAttention(att_dim,
                                          nhead,
                                          dropout=att_dropout,
                                          rel_u=rel_u,
                                          rel_v=rel_v)
         super(TransformerXLEncoderLayer,
-              self).__init__(d_model,
+              self).__init__(att_dim,
                              self_attn,
-                             dim_feedforward=dim_feedforward,
+                             feedforward_dim=feedforward_dim,
                              dropout=ffn_dropout,
                              activation=activation,
                              pre_norm=pre_norm)
@@ -646,22 +646,21 @@ class ConformerEncoderLayer(ApsConformerEncoderLayer):
     """
 
     def __init__(self,
-                 d_model: int,
+                 att_dim: int,
                  nhead: int,
-                 dim_feedforward: int = 2048,
+                 feedforward_dim: int = 2048,
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
                  kernel_size: int = 16,
-                 pre_norm: float = True,
                  activation: str = "swish") -> None:
-        self_attn = ApsMultiheadAttention(d_model,
+        self_attn = ApsMultiheadAttention(att_dim,
                                           nhead,
                                           dropout=att_dropout,
                                           use_torch=True)
         super(ConformerEncoderLayer,
-              self).__init__(d_model,
+              self).__init__(att_dim,
                              self_attn,
-                             dim_feedforward=dim_feedforward,
+                             feedforward_dim=feedforward_dim,
                              dropout=ffn_dropout,
                              activation=activation,
                              kernel_size=kernel_size)
@@ -674,21 +673,20 @@ class ConformerRelEncoderLayer(ApsConformerEncoderLayer):
     """
 
     def __init__(self,
-                 d_model: int,
+                 att_dim: int,
                  nhead: int,
-                 dim_feedforward: int = 2048,
+                 feedforward_dim: int = 2048,
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
                  kernel_size: int = 16,
-                 pre_norm: float = True,
                  activation: str = "swish",
                  rel_u: Optional[nn.Parameter] = None,
                  rel_v: Optional[nn.Parameter] = None) -> None:
-        self_attn = RelMultiheadAttention(d_model, nhead, dropout=att_dropout)
+        self_attn = RelMultiheadAttention(att_dim, nhead, dropout=att_dropout)
         super(ConformerRelEncoderLayer,
-              self).__init__(d_model,
+              self).__init__(att_dim,
                              self_attn,
-                             dim_feedforward=dim_feedforward,
+                             feedforward_dim=feedforward_dim,
                              dropout=ffn_dropout,
                              activation=activation,
                              kernel_size=kernel_size)
@@ -701,25 +699,24 @@ class ConformerXLEncoderLayer(ApsConformerEncoderLayer):
     """
 
     def __init__(self,
-                 d_model: int,
+                 att_dim: int,
                  nhead: int,
-                 dim_feedforward: int = 2048,
+                 feedforward_dim: int = 2048,
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
                  kernel_size: int = 16,
-                 pre_norm: float = True,
                  activation: str = "swish",
                  rel_u: Optional[nn.Parameter] = None,
                  rel_v: Optional[nn.Parameter] = None) -> None:
-        self_attn = XlMultiheadAttention(d_model,
+        self_attn = XlMultiheadAttention(att_dim,
                                          nhead,
                                          dropout=att_dropout,
                                          rel_u=rel_u,
                                          rel_v=rel_v)
         super(ConformerXLEncoderLayer,
-              self).__init__(d_model,
+              self).__init__(att_dim,
                              self_attn,
-                             dim_feedforward=dim_feedforward,
+                             feedforward_dim=feedforward_dim,
                              dropout=ffn_dropout,
                              activation=activation,
                              kernel_size=kernel_size)
@@ -759,43 +756,32 @@ class ApsTransformerEncoder(nn.Module):
         return out
 
 
-def get_xfmr_encoder(name: str,
-                     num_layers: int,
-                     att_dim: int,
-                     nhead: int,
-                     dim_feedforward: int = 1024,
-                     att_dropout: float = 0.0,
-                     ffn_dropout: float = 0.0,
-                     kernel_size: int = 16,
-                     pre_norm: bool = True,
-                     untie_rel: bool = True) -> nn.Module:
+def get_xfmr_encoder(arch: str, pose: str, num_layers: int,
+                     arch_kwargs: Dict) -> nn.Module:
     """
     Return transformer based encoders
     """
+    name = f"{arch}_{pose}"
     if name not in TransformerEncoderLayers:
         raise ValueError(f"Unknown type of the encoders: {name}")
-    final_norm = nn.LayerNorm(att_dim) if pre_norm else None
+    att_dim = arch_kwargs["att_dim"]
+    if "pre_norm" in arch_kwargs and arch_kwargs["pre_norm"]:
+        final_norm = nn.LayerNorm(att_dim)
+    else:
+        final_norm = None
     enc_layer_cls = TransformerEncoderLayers[name]
-    enc_kwargs = {
-        "pre_norm": pre_norm,
-        "att_dropout": att_dropout,
-        "ffn_dropout": ffn_dropout,
-        "dim_feedforward": dim_feedforward
-    }
-    arch, att = name.split("_")
-    # for conformer
-    if arch == "cfmr":
-        enc_kwargs["kernel_size"] = kernel_size
     # for xl-attention
-    if att == "xl":
-        if not untie_rel:
-            rel_u = _get_relative_uv((nhead, att_dim // nhead))
-            rel_v = _get_relative_uv((nhead, att_dim // nhead))
-            print("Tie relative trainable parameters", flush=True)
-        else:
-            rel_u, rel_v = None, None
-        enc_kwargs["rel_u"] = rel_u
-        enc_kwargs["rel_v"] = rel_v
-    return ApsTransformerEncoder(enc_layer_cls(att_dim, nhead, **enc_kwargs),
+    if pose == "xl":
+        rel_u, rel_v = None, None
+        if "tie" in arch_kwargs:
+            tie = arch_kwargs.pop("tie")
+            if tie:
+                nhead = arch_kwargs["nhead"]
+                rel_u = _get_relative_uv((nhead, att_dim // nhead))
+                rel_v = _get_relative_uv((nhead, att_dim // nhead))
+                print("Tie relative trainable parameters", flush=True)
+        arch_kwargs["rel_u"] = rel_u
+        arch_kwargs["rel_v"] = rel_v
+    return ApsTransformerEncoder(enc_layer_cls(**arch_kwargs),
                                  num_layers,
                                  norm=final_norm)

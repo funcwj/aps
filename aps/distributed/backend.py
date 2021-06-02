@@ -16,6 +16,19 @@ except ImportError:
 
 BACKEND = "none"
 
+__all__ = [
+    "init", "rank", "local_rank", "world_size", "local_world_size",
+    "get_backend", "all_reduce", "hvd_available"
+]
+
+
+def env_error(key: str) -> str:
+    """
+    Return error message
+    """
+    return (f"Not found \"{key}\" in environments, using python " +
+            "-m torch.distributed.launch to launch the command")
+
 
 def init(backend) -> NoReturn:
     """
@@ -28,14 +41,12 @@ def init(backend) -> NoReturn:
     if backend == "horovod":
         hvd.init()
     if backend == "torch":
-        for env in ["LOCAL_RANK", "WORLD_SIZE"]:
+        for env in ["RANK", "WORLD_SIZE"]:
             if env not in environ:
-                raise RuntimeError(
-                    f"Not found in {env} environments, using python "
-                    "-m torch.distributed.launch to launch the command")
+                raise RuntimeError(env_error(env))
         dist.init_process_group(backend="nccl",
                                 init_method="env://",
-                                rank=int(environ["LOCAL_RANK"]),
+                                rank=int(environ["RANK"]),
                                 world_size=int(environ["WORLD_SIZE"]))
 
 
@@ -58,24 +69,50 @@ def get_backend() -> str:
 
 def rank() -> int:
     """
-    Return rank id
+    Return rank id (global)
     """
     check_backend()
     if BACKEND == "torch":
         return dist.get_rank()
+    else:
+        return hvd.rank()
+
+
+def local_rank() -> int:
+    """
+    Return rank id (local)
+    """
+    check_backend()
+    if BACKEND == "torch":
+        if "LOCAL_RANK" not in environ:
+            raise RuntimeError(env_error("LOCAL_RANK"))
+        return int(environ["LOCAL_RANK"])
     else:
         return hvd.local_rank()
 
 
 def world_size() -> int:
     """
-    Return world size
+    Return global world size
     """
     check_backend()
     if BACKEND == "torch":
         return dist.get_world_size()
     else:
         return hvd.size()
+
+
+def local_world_size() -> int:
+    """
+    Return local world size
+    """
+    check_backend()
+    if BACKEND == "torch":
+        if "LOCAL_WORLD_SIZE" not in environ:
+            raise RuntimeError(env_error("LOCAL_WORLD_SIZE"))
+        return int(environ["LOCAL_WORLD_SIZE"])
+    else:
+        return hvd.local_size()
 
 
 def all_reduce(tensor: th.Tensor) -> th.Tensor:

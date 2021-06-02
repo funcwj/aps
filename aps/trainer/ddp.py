@@ -24,7 +24,7 @@ class DdpTrainer(Trainer):
     def __init__(self,
                  task: th.nn.Module,
                  rank: Optional[int] = None,
-                 device_ids: Union[str, int, List[int]] = 0,
+                 device_id: int = 0,
                  checkpoint: Union[str, Path] = "cpt",
                  optimizer: str = "adam",
                  optimizer_kwargs: Optional[Dict] = None,
@@ -53,7 +53,7 @@ class DdpTrainer(Trainer):
         super(DdpTrainer,
               self).__init__(task,
                              rank=rank,
-                             device_ids=device_ids,
+                             device_id=device_id,
                              checkpoint=checkpoint,
                              optimizer=optimizer,
                              optimizer_kwargs=optimizer_kwargs,
@@ -81,20 +81,20 @@ class DdpTrainer(Trainer):
         if dist.get_backend() not in ["torch", "none"]:
             raise ValueError(
                 "DdpTrainer should use torch/none as distributed backend")
-        self.setup_distributed()
+        self.setup_distributed(device_id)
 
-    def setup_distributed(self) -> NoReturn:
+    def setup_distributed(self, device_id: int) -> NoReturn:
         """
         Setup environment for distributed training
         """
-        if self.cuda_devices >= 2:
+        if self.rank is not None:
             self.distributed = True
             self.reporter.log(
                 f"DDP: using distributed data parallel (DDP), rank={self.rank}, "
                 + f"world_size={dist.world_size()}")
             # find_unused_parameters=True helps us report potential code errors
             self.task = DistributedDataParallel(self.task,
-                                                device_ids=[self.rank],
+                                                device_ids=[device_id],
                                                 find_unused_parameters=False)
         else:
             self.distributed = False

@@ -61,13 +61,13 @@ class AttASR(ASREncoderDecoderBase):
                  ctc: bool = False,
                  asr_transform: Optional[nn.Module] = None,
                  att_type: str = "ctx",
-                 att_kwargs: Optional[Dict] = None,
+                 att_kwargs: Dict = {},
                  enc_type: str = "common",
                  dec_type: str = "rnn",
                  enc_proj: Optional[int] = None,
-                 enc_kwargs: Optional[Dict] = None,
+                 enc_kwargs: Dict = {},
                  dec_dim: int = 512,
-                 dec_kwargs: Optional[Dict] = None) -> None:
+                 dec_kwargs: Dict = {}) -> None:
         super(AttASR, self).__init__(input_size,
                                      vocab_size,
                                      sos=sos,
@@ -80,7 +80,7 @@ class AttASR(ASREncoderDecoderBase):
         if dec_type != "rnn":
             raise ValueError("AttASR: currently decoder must be rnn")
         if self.is_xfmr_encoder:
-            enc_proj = enc_kwargs["att_dim"]
+            enc_proj = enc_kwargs["arch_kwargs"]["att_dim"]
         self.att_net = att_instance(att_type, enc_proj, dec_dim, **att_kwargs)
         # TODO: make decoder flexible here
         self.decoder = PyTorchRNNDecoder(enc_proj,
@@ -199,11 +199,11 @@ class XfmrASR(ASREncoderDecoderBase):
                  eos: int = -1,
                  ctc: bool = False,
                  asr_transform: Optional[nn.Module] = None,
-                 enc_type: str = "xfmr_abs",
-                 dec_type: str = "xfmr_abs",
+                 enc_type: str = "xfmr",
+                 dec_type: str = "xfmr",
                  enc_proj: Optional[int] = None,
-                 enc_kwargs: Optional[Dict] = None,
-                 dec_kwargs: Optional[Dict] = None) -> None:
+                 enc_kwargs: Dict = {},
+                 dec_kwargs: Dict = {}) -> None:
         super(XfmrASR, self).__init__(input_size,
                                       vocab_size,
                                       sos=sos,
@@ -213,9 +213,10 @@ class XfmrASR(ASREncoderDecoderBase):
                                       enc_type=enc_type,
                                       enc_proj=enc_proj,
                                       enc_kwargs=enc_kwargs)
-        if dec_type != "xfmr_abs":
-            raise ValueError("XfmrASR: currently decoder must be xfmr_abs")
-        if not self.is_xfmr_encoder and enc_proj != dec_kwargs["att_dim"]:
+        if dec_type != "xfmr":
+            raise ValueError("XfmrASR: currently decoder must be xfmr")
+        if not self.is_xfmr_encoder and enc_proj != dec_kwargs["arch_kwargs"][
+                "att_dim"]:
             raise ValueError("enc_proj should be equal to att_dim")
         self.decoder = TorchTransformerDecoder(
             vocab_size - 1 if ctc else vocab_size, **dec_kwargs)

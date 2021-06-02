@@ -1,0 +1,57 @@
+# BLSTM
+
+nnet: sse@base_rnn
+
+nnet_conf:
+  input_size: 257
+  num_bins: 257
+  num_spks: 2
+  rnn: "lstm"
+  num_layers: 4
+  hidden: 512
+  dropout: 0.2
+  bidirectional: true
+  output_nonlinear: "relu"
+  training_mode: "freq"
+
+enh_transform:
+    feats: "spectrogram-log-cmvn"
+    frame_len: 512
+    frame_hop: 256
+    window: sqrthann
+    center: true
+    round_pow_of_two: true
+    stft_normalized: false
+
+task: "sse@freq_linear_sa"
+
+task_conf:
+  num_spks: 2
+  permute: true
+  phase_sensitive: true
+  truncated: 1
+
+trainer_conf:
+  optimizer: "adam"
+  optimizer_kwargs:
+    lr: 1.0e-3
+    weight_decay: 1.0e-5
+  lr_scheduler_kwargs:
+    min_lr: 1.0e-8
+    patience: 1
+    factor: 0.5
+  clip_gradient: 10
+  no_impr: 6
+  no_impr_thres: 0.1
+
+data_conf:
+  fmt: "se@chunk"
+  loader:
+    chunk_size: 64000
+    sr: 16000
+  train:
+    mix_scp: "data/wham/tr/mix.scp"
+    ref_scp: "data/wham/tr/spk1.scp,data/wham/tr/spk2.scp"
+  valid:
+    mix_scp: "data/wham/cv/mix.scp"
+    ref_scp: "data/wham/cv/spk1.scp,data/wham/cv/spk2.scp"

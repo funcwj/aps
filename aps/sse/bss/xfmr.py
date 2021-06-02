@@ -6,7 +6,7 @@
 import torch as th
 import torch.nn as nn
 
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Dict
 from aps.asr.xfmr.encoder import TransformerEncoder
 from aps.sse.base import SseBase, MaskNonLinear
 from aps.libs import ApsRegisters
@@ -23,35 +23,29 @@ class FreqRelXfmr(SseBase):
                  input_size: int = 257,
                  num_spks: int = 2,
                  num_bins: int = 257,
-                 att_dim: int = 512,
-                 nhead: int = 8,
-                 radius: int = 256,
-                 feedforward_dim: int = 2048,
-                 att_dropout: float = 0.1,
-                 ffn_dropout: float = 0.1,
-                 proj_dropout: float = 0.1,
-                 post_norm: bool = True,
+                 arch: str = "xfmr",
+                 arch_kwargs: Dict = {},
+                 pose_kwargs: Dict = {},
+                 proj_kwargs: Dict = {},
                  num_layers: int = 6,
                  non_linear: str = "sigmoid",
+                 mask_dropout: float = 0.1,
                  training_mode: str = "freq") -> None:
         super(FreqRelXfmr, self).__init__(enh_transform,
                                           training_mode=training_mode)
         assert enh_transform is not None
-        self.rel_xfmr = TransformerEncoder("xfmr_rel",
+        att_dim = arch_kwargs["att_dim"]
+        self.rel_xfmr = TransformerEncoder(arch,
                                            input_size,
-                                           proj_layer="linear",
-                                           att_dim=att_dim,
-                                           radius=radius,
-                                           nhead=nhead,
-                                           feedforward_dim=feedforward_dim,
-                                           scale_embed=False,
-                                           ffn_dropout=ffn_dropout,
-                                           att_dropout=att_dropout,
-                                           post_norm=post_norm,
-                                           num_layers=num_layers)
+                                           num_layers=num_layers,
+                                           proj="linear",
+                                           proj_kwargs=proj_kwargs,
+                                           pose="rel",
+                                           pose_kwargs=pose_kwargs,
+                                           arch_kwargs=arch_kwargs)
         self.proj = nn.Sequential(nn.Linear(input_size, att_dim),
                                   nn.LayerNorm(att_dim),
-                                  nn.Dropout(proj_dropout))
+                                  nn.Dropout(mask_dropout))
         self.mask = nn.Linear(att_dim, num_bins * num_spks)
         self.non_linear = MaskNonLinear(non_linear,
                                         enable="positive_wo_softmax")

@@ -24,9 +24,9 @@ class ASRTransducerBase(ASREncoderBase):
                  vocab_size: int,
                  blank: int = -1,
                  asr_transform: Optional[nn.Module] = None,
-                 enc_type: str = "xfmr_abs",
+                 enc_type: str = "xfmr",
                  enc_proj: Optional[int] = None,
-                 enc_kwargs: Optional[Dict] = None) -> None:
+                 enc_kwargs: Dict = {}) -> None:
         super(ASRTransducerBase, self).__init__(input_size,
                                                 vocab_size,
                                                 ctc=False,
@@ -81,11 +81,11 @@ class TransducerASR(ASRTransducerBase):
                  input_size: int = 80,
                  vocab_size: int = 40,
                  asr_transform: Optional[nn.Module] = None,
-                 enc_type: str = "xfmr_abs",
+                 enc_type: str = "xfmr",
                  enc_proj: Optional[int] = None,
                  dec_type: str = "rnn",
-                 enc_kwargs: Optional[Dict] = None,
-                 dec_kwargs: Optional[Dict] = None) -> None:
+                 enc_kwargs: Dict = None,
+                 dec_kwargs: Dict = None) -> None:
         super(TransducerASR, self).__init__(input_size=input_size,
                                             vocab_size=vocab_size,
                                             blank=vocab_size - 1,
@@ -95,8 +95,10 @@ class TransducerASR(ASRTransducerBase):
                                             enc_kwargs=enc_kwargs)
         if dec_type != "rnn":
             raise ValueError("TransducerASR: the decoder must be rnn")
-        dec_kwargs["enc_dim"] = enc_kwargs[
-            "att_dim"] if self.is_xfmr_encoder else enc_proj
+        if self.is_xfmr_encoder:
+            dec_kwargs["enc_dim"] = enc_kwargs["arch_kwargs"]["att_dim"]
+        else:
+            dec_kwargs["enc_dim"] = enc_proj
         self.decoder = PyTorchRNNDecoder(vocab_size, **dec_kwargs)
 
     def forward(self, x_pad: th.Tensor, x_len: NoneOrTensor, y_pad: th.Tensor,
@@ -131,11 +133,11 @@ class XfmrTransducerASR(ASRTransducerBase):
                  input_size: int = 80,
                  vocab_size: int = 40,
                  asr_transform: Optional[nn.Module] = None,
-                 enc_type: str = "xfmr_abs",
+                 enc_type: str = "xfmr",
                  enc_proj: Optional[int] = None,
-                 enc_kwargs: Optional[Dict] = None,
-                 dec_type: str = "xfmr_abs",
-                 dec_kwargs: Optional[Dict] = None) -> None:
+                 enc_kwargs: Dict = {},
+                 dec_type: str = "xfmr",
+                 dec_kwargs: Dict = {}) -> None:
         super(XfmrTransducerASR, self).__init__(input_size=input_size,
                                                 vocab_size=vocab_size,
                                                 blank=vocab_size - 1,
@@ -143,9 +145,10 @@ class XfmrTransducerASR(ASRTransducerBase):
                                                 enc_type=enc_type,
                                                 enc_proj=enc_proj,
                                                 enc_kwargs=enc_kwargs)
-        if dec_type != "xfmr_abs":
-            raise ValueError("XfmrTransducerASR: the decoder must be xfmr_abs")
-        if not self.is_xfmr_encoder and enc_proj != dec_kwargs["att_dim"]:
+        if dec_type != "xfmr":
+            raise ValueError("XfmrTransducerASR: the decoder must be xfmr")
+        att_dim = dec_kwargs["arch_kwargs"]["att_dim"]
+        if not self.is_xfmr_encoder and enc_proj != att_dim:
             raise ValueError("enc_proj should be equal to att_dim")
         self.decoder = TorchTransformerDecoder(vocab_size, **dec_kwargs)
 

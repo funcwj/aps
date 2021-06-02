@@ -11,7 +11,7 @@ import torch as th
 from typing import Optional, Dict, List, Union, Tuple, NoReturn, Iterable
 from aps.trainer.ss import SsScheduler
 from aps.trainer.lr import LrScheduler
-from aps.utils import load_obj, get_device_ids, get_logger, SimpleTimer
+from aps.utils import load_obj, get_logger, SimpleTimer
 from aps.task import Task
 
 try:
@@ -343,8 +343,8 @@ class Trainer(object):
     The base trainer (to be inherited)
     Args:
         task: Task class from aps.task
-        rank: rank value (for distributed training)
-        device_ids: GPU device ID
+        rank: global rank value (for distributed training)
+        device_id: GPU device ID
         checkpoint: directory for checkpoint storage
         optimizer: optimizer name (see function create_optimizer)
         optimizer_kwargs: parameters for the optimizer
@@ -371,7 +371,7 @@ class Trainer(object):
     def __init__(self,
                  task: th.nn.Module,
                  rank: Optional[int] = None,
-                 device_ids: Union[str, int, List[int]] = 0,
+                 device_id: int = 0,
                  checkpoint: Union[str, Path] = "cpt",
                  optimizer: str = "adam",
                  optimizer_kwargs: Optional[Dict] = None,
@@ -408,22 +408,8 @@ class Trainer(object):
                              f"report_metrics: {stop_criterion}")
         if rank is not None and rank < 0:
             raise ValueError(f"Got invalid rank value: {rank}")
-        if not isinstance(device_ids, tuple):
-            device_ids = get_device_ids(device_ids)
-        self.cuda_devices = len(device_ids)
-        self.device_ids = device_ids
 
-        if rank is None:
-            # single GPU
-            self.default_device = th.device(f"cuda:{device_ids[0]:d}")
-        else:
-            # in distributed mode
-            if rank >= self.cuda_devices:
-                raise ValueError("rank value exceeds number of GPUs: " +
-                                 f"{rank} vs {self.cuda_devices}")
-            self.default_device = th.device(f"cuda:{device_ids[rank]:d}")
-
-        # avoid alloc memory from gpu0
+        self.default_device = th.device(f"cuda:{device_id:d}")
         th.cuda.set_device(self.default_device)
 
         self.rank = rank
@@ -519,14 +505,8 @@ class Trainer(object):
             p.nelement() for p in task.nnet.parameters() if p.requires_grad
         ]) / 10.0**6
         # logging
-        if rank is None:
-            self.reporter.log(f"Load model to GPU:{device_ids[0]}, " +
-                              f"#param: {self.num_params:.2f}M")
-        else:
-            self.reporter.log(
-                f"Load model to GPU-{rank}/{self.cuda_devices}, " +
-                f"#param: {self.num_params:.2f}M")
-
+        self.reporter.log(
+            f"Load model to GPU-{device_id}, #param: {self.num_params:.2f}M")
         self.reporter.log(
             f"Track the metrics during training: {report_metrics}, " +
             f"reduction = {reduction_tag}")

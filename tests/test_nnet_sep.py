@@ -146,18 +146,23 @@ def test_freq_xfmr_rel(num_spks):
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
                              frame_hop=256)
-    xfmr = nnet_cls(input_size=257,
+    pose_kwargs = {"radius": 256, "dropout": 0.1}
+    arch_kwargs = {
+        "att_dropout": 0.1,
+        "feedforward_dim": 512,
+        "pre_norm": False,
+        "att_dim": 256,
+        "nhead": 4
+    }
+    xfmr = nnet_cls(arch="xfmr",
+                    input_size=257,
                     enh_transform=transform,
                     num_spks=num_spks,
                     num_bins=257,
-                    att_dim=256,
-                    nhead=4,
-                    radius=256,
-                    feedforward_dim=512,
-                    att_dropout=0.1,
-                    proj_dropout=0.1,
-                    post_norm=True,
+                    arch_kwargs=arch_kwargs,
+                    pose_kwargs=pose_kwargs,
                     num_layers=3,
+                    mask_dropout=0.1,
                     non_linear="sigmoid",
                     training_mode="time")
     inp = th.rand(4, 64000)
