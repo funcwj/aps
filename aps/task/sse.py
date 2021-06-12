@@ -58,6 +58,7 @@ def sisnr(x: th.Tensor,
 def snr(x: th.Tensor,
         s: th.Tensor,
         eps: float = 1e-8,
+        threshold: float = -1,
         non_nagetive: bool = False) -> th.Tensor:
     """
     Computer SNR
@@ -74,6 +75,9 @@ def snr(x: th.Tensor,
     if x.shape != s.shape:
         raise RuntimeError("Dimention mismatch when calculate " +
                            f"si-snr, {x.shape} vs {s.shape}")
+    if threshold > 0:
+        tau = 10**(-threshold / 10)
+        return 10 * th.log10(s**2 / (tau * s**2 + (x - s)**2 + eps))
     snr_linear = l2norm(s) / (l2norm(x - s) + eps)
     if non_nagetive:
         return 10 * th.log10(1 + snr_linear**2)
@@ -249,6 +253,7 @@ class SnrTask(TimeDomainTask):
                  num_spks: int = 2,
                  permute: bool = True,
                  weight: Optional[str] = None,
+                 threshold: float = -1,
                  non_nagetive: bool = False) -> None:
         super(SnrTask, self).__init__(
             nnet,
@@ -257,12 +262,14 @@ class SnrTask(TimeDomainTask):
             weight=weight,
             description="Using SNR objective function for training")
         self.non_nagetive = non_nagetive
+        self.threshold = threshold
 
     def objf(self, out: th.Tensor, ref: th.Tensor) -> th.Tensor:
         """
         Return negative SNR
         """
-        return -snr(out, ref, non_nagetive=self.non_nagetive)
+        return -snr(
+            out, ref, non_nagetive=self.non_nagetive, threshold=self.threshold)
 
 
 @ApsRegisters.task.register("sse@wa")

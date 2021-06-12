@@ -4,7 +4,7 @@
 import torch as th
 import torch.nn as nn
 
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Tuple
 from aps.sse.base import SseBase, MaskNonLinear
 from aps.libs import ApsRegisters
 
@@ -90,97 +90,7 @@ def build_norm(norm: str, dim: int) -> nn.Module:
         return GlobalChannelLayerNorm(dim, elementwise_affine=True)
 
 
-def build_blocks(N: int, B: int, **kwargs) -> nn.Module:
-    """
-    Build Conv1D blocks
-    """
-
-    def one_block(B, **kwargs):
-        blocks = [Conv1DBlock(**kwargs, dilation=(2**n)) for n in range(B)]
-        return nn.Sequential(*blocks)
-
-    repeats = [one_block(B, **kwargs) for _ in range(N)]
-    return nn.Sequential(*repeats)
-
-
-class Conv1D(nn.Conv1d):
-    """
-    1D conv in ConvTasNet
-    """
-
-    def __init__(self, *args, **kwargs):
-        super(Conv1D, self).__init__(*args, **kwargs)
-
-    def forward(self, x: th.Tensor, squeeze: bool = False) -> th.Tensor:
-        """
-        x: N x L or N x C x L
-        """
-        if x.dim() not in [2, 3]:
-            raise RuntimeError("Conv1D expects 2/3D tensor as input")
-        x = super().forward(x if x.dim() == 3 else th.unsqueeze(x, 1))
-        if squeeze:
-            x = th.squeeze(x)
-        return x
-
-
-class ConvTrans1D(nn.ConvTranspose1d):
-    """
-    1D conv transpose in ConvTasNet
-    """
-
-    def __init__(self, *args, **kwargs):
-        super(ConvTrans1D, self).__init__(*args, **kwargs)
-
-    def forward(self, x: th.Tensor, squeeze: bool = False) -> th.Tensor:
-        """
-        x: N x L or N x C x L
-        """
-        if x.dim() not in [2, 3]:
-            raise RuntimeError("ConvTrans1D expects 2/3D tensor as input")
-        x = super().forward(x if x.dim() == 3 else th.unsqueeze(x, 1))
-        if squeeze:
-            x = th.squeeze(x)
-        return x
-
-
-class DsConv1D(nn.Module):
-    """
-    Depth-wise separable conv1d block
-    """
-
-    def __init__(self,
-                 in_channels: int,
-                 out_channels: int,
-                 kernel_size: int,
-                 dilation: int = 1,
-                 causal: bool = False,
-                 bias: bool = True,
-                 norm: str = "BN") -> None:
-        super(DsConv1D, self).__init__()
-        self.dconv_causal = causal
-        self.pad_value = dilation * (kernel_size - 1)
-        self.dconv = nn.Conv1d(
-            in_channels,
-            in_channels,
-            kernel_size,
-            groups=in_channels,
-            padding=self.pad_value if causal else self.pad_value // 2,
-            dilation=dilation,
-            bias=True)
-        self.prelu = nn.PReLU()
-        self.norm = build_norm(norm, in_channels)
-        self.sconv = nn.Conv1d(in_channels, out_channels, 1, bias=True)
-
-    def forward(self, x: th.Tensor) -> th.Tensor:
-        x = self.dconv(x)
-        if self.dconv_causal:
-            x = x[:, :, :-self.pad_value]
-        x = self.norm(self.prelu(x))
-        x = self.sconv(x)
-        return x
-
-
-class Conv1DBlock(nn.Module):
+class Conv1dBlock(nn.Module):
     """
     1D convolutional block in TasNet
     """
@@ -191,26 +101,99 @@ class Conv1DBlock(nn.Module):
                  kernel_size: int = 3,
                  dilation: int = 1,
                  norm: str = "cLN",
+                 scalar: float = 0,
+                 skip_connection: bool = True,
                  causal: bool = False) -> None:
-        super(Conv1DBlock, self).__init__()
+        super(Conv1dBlock, self).__init__()
+        self.pad = dilation * (kernel_size - 1)
+        self.cau = causal
         # 1x1 conv
-        self.conv = Conv1D(in_channels, conv_channels, 1)
-        self.prelu = nn.PReLU()
-        self.norm = build_norm(norm, conv_channels)
-        self.dsconv = DsConv1D(conv_channels,
-                               in_channels,
+        self.conv1 = nn.Conv1d(in_channels, conv_channels, 1)
+        self.norm1 = nn.Sequential(nn.PReLU(), build_norm(norm, conv_channels))
+        self.dconv = nn.Conv1d(conv_channels,
+                               conv_channels,
                                kernel_size,
-                               dilation=dilation,
-                               causal=causal,
-                               bias=True,
-                               norm=norm)
+                               groups=conv_channels,
+                               padding=self.pad if causal else self.pad // 2,
+                               dilation=dilation)
+        self.norm2 = nn.Sequential(nn.PReLU(), build_norm(norm, conv_channels))
+        self.conv2 = nn.Conv1d(conv_channels, in_channels, 1)
+        self.conv2_scaler = nn.Parameter(th.tensor(scalar)) if scalar else 1
+        if skip_connection:
+            self.conv2_skip = nn.Conv1d(conv_channels, in_channels, 1)
+        else:
+            self.conv2_skip = None
 
-    def forward(self, x: th.Tensor) -> th.Tensor:
-        y = self.conv(x)
-        y = self.norm(self.prelu(y))
-        y = self.dsconv(y)
-        x = x + y
-        return x
+    def forward(self, inp: th.Tensor) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+        """
+        Args:
+            inp (Tensor): N x C x T
+        Return:
+            out (Tensor): N x C x T
+            out_skip (Tensor): N x C x T or None
+        """
+        out = self.norm1(self.conv1(inp))
+        out = self.dconv(out)
+        if self.cau:
+            out = out[..., :-self.pad]
+        out = self.norm2(out)
+        out_skip = self.conv2_skip(out) if self.conv2_skip else None
+        out = self.conv2(out) * self.conv2_scaler
+        return out + inp, out_skip
+
+
+class Conv1dRepeat(nn.Module):
+    """
+    Stack of Conv1d blocks
+    """
+
+    def __init__(self,
+                 num_repeats: int,
+                 blocks_per_repeat: int,
+                 in_channels: int = 128,
+                 conv_channels: int = 128,
+                 kernel_size: int = 3,
+                 norm: str = "BN",
+                 skip_connection: bool = True,
+                 scaling_param: bool = False,
+                 causal: bool = False):
+        super(Conv1dRepeat, self).__init__()
+        repeats = []
+        for r in range(num_repeats):
+            block = nn.Sequential(*[
+                Conv1dBlock(in_channels=in_channels,
+                            conv_channels=conv_channels,
+                            kernel_size=kernel_size,
+                            norm=norm,
+                            causal=causal,
+                            skip_connection=False if r == num_repeats -
+                            1 and n == blocks_per_repeat -
+                            1 else skip_connection,
+                            dilation=2**n,
+                            scalar=0 if scaling_param else 0.9**n)
+                for n in range(blocks_per_repeat)
+            ])
+            repeats.append(block)
+        self.repeat = nn.Sequential(*repeats)
+        self.skip_connection = skip_connection
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp (Tensor): N x C x T
+        Return:
+            out (Tensor): N x C x T
+        """
+        skips = []
+        for block in self.repeat:
+            for layer in block:
+                inp, out_skip = layer(inp)
+                if out_skip is not None:
+                    skips.append(out_skip)
+        if self.skip_connection:
+            return inp + sum(skips)
+        else:
+            return inp
 
 
 @ApsRegisters.sse.register("sse@time_tasnet")
@@ -232,39 +215,40 @@ class TimeConvTasNet(SseBase):
                  norm: str = "BN",
                  num_spks: int = 2,
                  non_linear: str = "relu",
-                 input_norm: str = "cLN",
-                 block_residual: bool = False,
+                 scaling_param: bool = False,
+                 skip_connection: bool = False,
                  causal: bool = False) -> None:
         super(TimeConvTasNet, self).__init__(None, training_mode="time")
         self.non_linear_type = non_linear
         self.non_linear = MaskNonLinear(non_linear,
                                         enable="positive_wo_softplus")
         # n x S => n x N x T, S = 4s*8000 = 32000
-        self.encoder = Conv1D(1, N, L, stride=L // 2, padding=0)
+        self.encoder = nn.Conv1d(1, N, L, stride=L // 2, padding=0)
         # before repeat blocks, always cLN
-        self.ln = build_norm(input_norm, N)
+        self.ln = build_norm("cLN", N)
         # n x N x T => n x B x T
-        self.proj = Conv1D(N, B, 1)
+        self.proj = nn.Conv1d(N, B, 1)
         # repeat blocks
         # n x B x T => n x B x T
-        self.conv = build_blocks(R,
+        self.conv = Conv1dRepeat(R,
                                  X,
                                  in_channels=B,
                                  conv_channels=H,
                                  kernel_size=P,
                                  norm=norm,
+                                 skip_connection=skip_connection,
+                                 scaling_param=scaling_param,
                                  causal=causal)
         # n x B x T => n x 2N x T
-        self.mask = Conv1D(B, num_spks * N, 1)
+        self.mask = nn.Sequential(nn.PReLU(), nn.Conv1d(B, num_spks * N, 1))
         # using ConvTrans1D: n x N x T => n x 1 x To
         # To = (T - 1) * L // 2 + L
-        self.decoder = ConvTrans1D(N,
-                                   1,
-                                   kernel_size=L,
-                                   stride=L // 2,
-                                   bias=True)
+        self.decoder = nn.ConvTranspose1d(N,
+                                          1,
+                                          kernel_size=L,
+                                          stride=L // 2,
+                                          bias=True)
         self.num_spks = num_spks
-        self.block_residual = block_residual
 
     def infer(self,
               mix: th.Tensor,
@@ -291,15 +275,11 @@ class TimeConvTasNet(SseBase):
         """
         self.check_args(mix, training=True, valid_dim=[2])
         # n x 1 x S => n x N x T
-        w = th.relu(self.encoder(mix))
+        w = th.relu(self.encoder(mix[:, None]))
         # n x B x T
         y = self.proj(self.ln(w))
         # n x B x T
-        if self.block_residual:
-            for layer in self.conv:
-                y = y + layer(y)
-        else:
-            y = self.conv(y)
+        y = self.conv(y)
         # n x 2N x T
         e = th.chunk(self.mask(y), self.num_spks, 1)
         # n x N x T
@@ -310,7 +290,7 @@ class TimeConvTasNet(SseBase):
         # spks x [n x N x T]
         s = [w * m[n] for n in range(self.num_spks)]
         # spks x n x S
-        spk = [self.decoder(x, squeeze=True) for x in s]
+        spk = [self.decoder(x)[:, 0] for x in s]
         return spk[0] if self.num_spks == 1 else spk
 
 
@@ -333,25 +313,27 @@ class FreqConvTasNet(SseBase):
                  num_bins: int = 257,
                  non_linear: str = "relu",
                  causal: bool = False,
-                 block_residual: bool = False,
+                 skip_connection: bool = False,
                  training_mode: str = "freq") -> None:
         super(FreqConvTasNet, self).__init__(enh_transform,
                                              training_mode=training_mode)
         assert enh_transform is not None
         self.enh_transform = enh_transform
         self.non_linear = MaskNonLinear(non_linear, enable="common")
-        self.proj = Conv1D(in_features, proj_channels, 1)
+        self.proj = nn.Conv1d(in_features, proj_channels, 1)
         # n x B x T => n x B x T
-        self.conv = build_blocks(N,
+        self.conv = Conv1dRepeat(N,
                                  B,
                                  in_channels=proj_channels,
                                  conv_channels=conv_channels,
                                  kernel_size=K,
                                  causal=causal,
+                                 skip_connection=skip_connection,
+                                 scaling_param=scaling_param,
                                  norm=norm)
-        self.mask = Conv1D(proj_channels, num_bins * num_spks, 1)
+        self.mask = nn.Sequential(
+            nn.PReLU(), nn.Conv1d(proj_channels, num_bins * num_spks, 1))
         self.num_spks = num_spks
-        self.block_residual = block_residual
 
     def _forward(self, mix: th.Tensor,
                  mode: str) -> Union[th.Tensor, List[th.Tensor]]:
@@ -369,11 +351,7 @@ class FreqConvTasNet(SseBase):
         # N x C x T
         x = self.proj(mix_feat)
         # n x B x T
-        if self.block_residual:
-            for layer in self.conv:
-                x = x + layer(x)
-        else:
-            x = self.conv(x)
+        x = self.conv(x)
         # N x F* x T
         masks = self.non_linear(self.mask(x))
         if self.num_spks > 1:

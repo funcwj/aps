@@ -192,11 +192,10 @@ def test_tasnet(num_spks, nonlinear):
                       B=256,
                       H=512,
                       P=3,
-                      input_norm="gLN",
                       norm="BN",
                       num_spks=num_spks,
                       non_linear=nonlinear,
-                      block_residual=True,
+                      skip_connection=True,
                       causal=False)
     inp = th.rand(4, 64000)
     x = tasnet(inp)
@@ -206,7 +205,7 @@ def test_tasnet(num_spks, nonlinear):
     y = tasnet.infer(inp[1])
     if num_spks > 1:
         y = y[0]
-    assert y.shape == th.Size([64000])
+    assert y.shape == th.Size([1, 64000])
 
 
 def test_dprnn():
