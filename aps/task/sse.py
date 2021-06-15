@@ -76,8 +76,9 @@ def snr(x: th.Tensor,
         raise RuntimeError("Dimention mismatch when calculate " +
                            f"si-snr, {x.shape} vs {s.shape}")
     if threshold > 0:
-        tau = 10**(-threshold / 10)
-        return 10 * th.log10(s**2 / (tau * s**2 + (x - s)**2 + eps))
+        s_norm = l2norm(s)**2
+        return 10 * th.log10(s_norm /
+                             (threshold * s_norm + l2norm(x - s)**2 + eps))
     snr_linear = l2norm(s) / (l2norm(x - s) + eps)
     if non_nagetive:
         return 10 * th.log10(1 + snr_linear**2)
@@ -262,7 +263,7 @@ class SnrTask(TimeDomainTask):
             weight=weight,
             description="Using SNR objective function for training")
         self.non_nagetive = non_nagetive
-        self.threshold = threshold
+        self.threshold = 10**(-threshold / 10)
 
     def objf(self, out: th.Tensor, ref: th.Tensor) -> th.Tensor:
         """

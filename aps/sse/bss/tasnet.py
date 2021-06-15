@@ -264,7 +264,7 @@ class TimeConvTasNet(SseBase):
             # when inference, only one utt
             mix = mix[None, ...]
             sep = self.forward(mix)
-            return sep
+            return sep[0] if self.num_spks == 1 else [s[0] for s in sep]
 
     def forward(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
@@ -329,7 +329,6 @@ class FreqConvTasNet(SseBase):
                                  kernel_size=K,
                                  causal=causal,
                                  skip_connection=skip_connection,
-                                 scaling_param=scaling_param,
                                  norm=norm)
         self.mask = nn.Sequential(
             nn.PReLU(), nn.Conv1d(proj_channels, num_bins * num_spks, 1))
