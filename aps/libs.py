@@ -83,7 +83,7 @@ class ApsModules(object):
     ]
     asr = Module("aps.asr", asr_submodules)
     sse = Module("aps.sse", sse_submodules)
-    task = Module("aps.task", ["asr", "sse", "unsuper"])
+    task = Module("aps.task", ["asr", "sse", "ml", "kd"])
     loader = Module("aps.loader", loader_submodules)
     trainer = Module("aps.trainer", ["ddp", "hvd", "apex"])
     transform = Module("aps.transform", ["asr", "enh"])

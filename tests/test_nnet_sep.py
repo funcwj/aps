@@ -187,16 +187,17 @@ def test_tasnet(num_spks, nonlinear):
     nnet_cls = aps_sse_nnet("sse@time_tasnet")
     tasnet = nnet_cls(L=40,
                       N=256,
-                      X=8,
-                      R=4,
+                      X=6,
+                      R=2,
                       B=256,
                       H=512,
                       P=3,
-                      norm="BN",
+                      norm="cLN",
                       num_spks=num_spks,
                       non_linear=nonlinear,
-                      skip_connection=True,
-                      causal=False)
+                      skip_residual=True,
+                      causal=False,
+                      mixture_consistency=True)
     inp = th.rand(4, 64000)
     x = tasnet(inp)
     if num_spks > 1:
@@ -205,7 +206,7 @@ def test_tasnet(num_spks, nonlinear):
     y = tasnet.infer(inp[1])
     if num_spks > 1:
         y = y[0]
-    assert y.shape == th.Size([1, 64000])
+    assert y.shape == th.Size([64000])
 
 
 def test_dprnn():
