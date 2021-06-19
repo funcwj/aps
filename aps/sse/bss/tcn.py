@@ -3,15 +3,17 @@
 
 import torch as th
 import torch.nn as nn
+import torch.nn.functional as tf
 
-from typing import Optional, Union, List, Tuple
+from typing import Optional, Union, List
 from aps.sse.base import SseBase, MaskNonLinear
 from aps.transform.enh import TFTransposeTransform
 from aps.libs import ApsRegisters
 
 
-def mixture_consistency(mix: th.Tensor,
-                        sep: List[th.Tensor]) -> List[th.Tensor]:
+def signal_mix_consistency(
+        mix: th.Tensor, sep: List[th.Tensor],
+        weight: Optional[List[th.Tensor]]) -> List[th.Tensor]:
     """
     Apply mixture consistency projection to the resulting separated waveforms, which projects
     them such that they sum up to the original mixture
@@ -21,9 +23,11 @@ def mixture_consistency(mix: th.Tensor,
     return:
         sep list(Tensor): [N x S, ...]
     """
-    sep_sum = sum(sep)
-    delta = (mix - sep_sum) / len(sep)
-    return [s + delta for s in sep]
+    delta = mix - sum(sep)
+    if weight is None:
+        return [s + delta / len(sep) for s in sep]
+    else:
+        return [s + delta * w for s, w in zip(sep, weight)]
 
 
 class GlobalChannelLayerNorm(nn.Module):
@@ -216,7 +220,7 @@ class Conv1dRepeat(nn.Module):
         return inp
 
 
-@ApsRegisters.sse.register("sse@time_tasnet")
+@ApsRegisters.sse.register("sse@time_tcn")
 class TimeConvTasNet(SseBase):
     """
     Reference:
@@ -242,8 +246,9 @@ class TimeConvTasNet(SseBase):
                  non_linear: str = "relu",
                  scaling_param: bool = False,
                  skip_residual: bool = False,
-                 mixture_consistency: bool = True) -> None:
+                 mixture_consistency: str = "none") -> None:
         super(TimeConvTasNet, self).__init__(None, training_mode="time")
+        assert mixture_consistency in ["none", "fix", "mag", "learn"]
         self.non_linear_type = non_linear
         self.non_linear = MaskNonLinear(non_linear,
                                         enable="positive_wo_softplus")
@@ -275,6 +280,8 @@ class TimeConvTasNet(SseBase):
                                           bias=True)
         self.num_spks = num_spks
         self.mixture_consistency = mixture_consistency
+        if mixture_consistency == "learn":
+            self.weight = nn.Linear(num_spks * N, num_spks)
 
     def infer(self,
               mix: th.Tensor,
@@ -292,6 +299,28 @@ class TimeConvTasNet(SseBase):
             sep = self.forward(mix)
             return sep[0] if self.num_spks == 1 else [s[0] for s in sep]
 
+    def mix_consistency(self, out: th.Tensor, mix: th.Tensor,
+                        bss: List[th.Tensor]) -> List[th.Tensor]:
+        """
+        Args:
+            out (Tensor): N x 2F x T
+            mix (Tensor): N x S
+            sep list(Tensor): [N x S, ...]
+        """
+        if self.mixture_consistency == "fix":
+            weight = None
+        elif self.mixture_consistency == "mag":
+            mix_sum = th.sum(mix, -1, keepdim=True)
+            # [N x 1, ...]
+            weight = [th.mean(s**2, -1, keepdim=True) / mix_sum for s in bss]
+        else:
+            # N x 2F => N x 2
+            weight = tf.softmax(self.weight(th.mean(out, -1)), -1)
+            # [N x 1, ...]
+            weight = th.chunk(weight, self.num_spks, -1)
+        # apply signal level mixture consistency
+        return signal_mix_consistency(mix, bss, weight)
+
     def forward(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
@@ -307,22 +336,23 @@ class TimeConvTasNet(SseBase):
         # n x B x T
         y = self.conv(y)
         # n x 2N x T
-        e = th.chunk(self.mask(y), self.num_spks, 1)
+        e = self.mask(y)
+        m = th.chunk(e, self.num_spks, 1)
         # n x N x T
         if self.non_linear_type == "softmax":
-            m = self.non_linear(th.stack(e, dim=0), dim=0)
+            m = self.non_linear(th.stack(m, dim=0), dim=0)
         else:
-            m = self.non_linear(th.stack(e, dim=0))
+            m = self.non_linear(th.stack(m, dim=0))
         # spks x [n x N x T]
         s = [w * m[n] for n in range(self.num_spks)]
         # spks x n x S
         bss = [self.decoder(x)[:, 0] for x in s]
-        if self.mixture_consistency:
-            bss = mixture_consistency(mix, bss)
+        if self.mixture_consistency != "none":
+            bss = self.mix_consistency(e, mix, bss)
         return bss[0] if self.num_spks == 1 else bss
 
 
-@ApsRegisters.sse.register("sse@freq_tasnet")
+@ApsRegisters.sse.register("sse@freq_tcn")
 class FreqConvTasNet(SseBase):
     """
     Frequency domain ConvTasNet

@@ -77,13 +77,14 @@ def snr(x: th.Tensor,
                            f"si-snr, {x.shape} vs {s.shape}")
     if threshold > 0:
         s_norm = l2norm(s)**2
-        return 10 * th.log10(s_norm /
-                             (threshold * s_norm + l2norm(x - s)**2 + eps))
-    snr_linear = l2norm(s) / (l2norm(x - s) + eps)
-    if non_nagetive:
-        return 10 * th.log10(1 + snr_linear**2)
+        snr_linear = s_norm / (threshold * s_norm + l2norm(x - s)**2 + eps)
+        return 10 * th.log10(eps + snr_linear)
     else:
-        return 20 * th.log10(eps + snr_linear)
+        snr_linear = l2norm(s) / (l2norm(x - s) + eps)
+        if non_nagetive:
+            return 10 * th.log10(1 + snr_linear**2)
+        else:
+            return 20 * th.log10(eps + snr_linear)
 
 
 def hybrid_objf(out: List[Any],

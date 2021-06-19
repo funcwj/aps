@@ -9,7 +9,7 @@ import torch.nn.functional as tf
 
 from typing import Optional, List, Union
 
-from aps.sse.bss.tasnet import normalize_layer
+from aps.sse.bss.tcn import normalize_layer
 from aps.sse.base import SseBase, MaskNonLinear
 from aps.libs import ApsRegisters
 
