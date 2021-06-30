@@ -9,7 +9,7 @@ import torch.nn.functional as tf
 
 from typing import Optional, List, Union
 
-from aps.sse.bss.tasnet import build_norm
+from aps.sse.bss.tcn import normalize_layer
 from aps.sse.base import SseBase, MaskNonLinear
 from aps.libs import ApsRegisters
 
@@ -220,7 +220,8 @@ class DPRNN(nn.Module):
             BLOCK(proj_filters, rnn_hidden, bi_inter=rnn_bi_inter)
             for _ in range(num_layers)
         ])
-        self.norm = build_norm(input_norm, conv_filters) if input_norm else None
+        self.norm = normalize_layer(input_norm,
+                                    conv_filters) if input_norm else None
         self.proj = nn.Conv1d(conv_filters, proj_filters, 1)
         # NOTE: add prelu here
         self.mask = nn.Sequential(

@@ -58,6 +58,7 @@ def sisnr(x: th.Tensor,
 def snr(x: th.Tensor,
         s: th.Tensor,
         eps: float = 1e-8,
+        threshold: float = -1,
         non_nagetive: bool = False) -> th.Tensor:
     """
     Computer SNR
@@ -74,11 +75,16 @@ def snr(x: th.Tensor,
     if x.shape != s.shape:
         raise RuntimeError("Dimention mismatch when calculate " +
                            f"si-snr, {x.shape} vs {s.shape}")
-    snr_linear = l2norm(s) / (l2norm(x - s) + eps)
-    if non_nagetive:
-        return 10 * th.log10(1 + snr_linear**2)
+    if threshold > 0:
+        s_norm = l2norm(s)**2
+        snr_linear = s_norm / (threshold * s_norm + l2norm(x - s)**2 + eps)
+        return 10 * th.log10(eps + snr_linear)
     else:
-        return 20 * th.log10(eps + snr_linear)
+        snr_linear = l2norm(s) / (l2norm(x - s) + eps)
+        if non_nagetive:
+            return 10 * th.log10(1 + snr_linear**2)
+        else:
+            return 20 * th.log10(eps + snr_linear)
 
 
 def hybrid_objf(out: List[Any],
@@ -249,6 +255,7 @@ class SnrTask(TimeDomainTask):
                  num_spks: int = 2,
                  permute: bool = True,
                  weight: Optional[str] = None,
+                 threshold: float = -1,
                  non_nagetive: bool = False) -> None:
         super(SnrTask, self).__init__(
             nnet,
@@ -257,12 +264,14 @@ class SnrTask(TimeDomainTask):
             weight=weight,
             description="Using SNR objective function for training")
         self.non_nagetive = non_nagetive
+        self.threshold = 10**(-threshold / 10)
 
     def objf(self, out: th.Tensor, ref: th.Tensor) -> th.Tensor:
         """
         Return negative SNR
         """
-        return -snr(out, ref, non_nagetive=self.non_nagetive)
+        return -snr(
+            out, ref, non_nagetive=self.non_nagetive, threshold=self.threshold)
 
 
 @ApsRegisters.task.register("sse@wa")
