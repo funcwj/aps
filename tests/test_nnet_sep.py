@@ -184,7 +184,7 @@ def test_freq_xfmr_rel(num_spks):
     pytest.param(2, "relu")
 ])
 def test_tasnet(num_spks, nonlinear):
-    nnet_cls = aps_sse_nnet("sse@time_tasnet")
+    nnet_cls = aps_sse_nnet("sse@time_tcn")
     tasnet = nnet_cls(L=40,
                       N=256,
                       X=6,
@@ -197,7 +197,7 @@ def test_tasnet(num_spks, nonlinear):
                       non_linear=nonlinear,
                       skip_residual=True,
                       causal=False,
-                      mixture_consistency=True)
+                      mixture_consistency="none")
     inp = th.rand(4, 64000)
     x = tasnet(inp)
     if num_spks > 1:

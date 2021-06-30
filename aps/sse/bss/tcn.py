@@ -302,6 +302,7 @@ class TimeConvTasNet(SseBase):
     def mix_consistency(self, out: th.Tensor, mix: th.Tensor,
                         bss: List[th.Tensor]) -> List[th.Tensor]:
         """
+        NOTE: current not working
         Args:
             out (Tensor): N x 2F x T
             mix (Tensor): N x S
@@ -371,12 +372,12 @@ class FreqConvTasNet(SseBase):
                  num_bins: int = 257,
                  non_linear: str = "relu",
                  causal: bool = False,
+                 scaling_param: bool = False,
                  skip_residual: bool = False,
                  training_mode: str = "freq") -> None:
         super(FreqConvTasNet, self).__init__(enh_transform,
                                              training_mode=training_mode)
         assert enh_transform is not None
-        self.enh_transform = enh_transform
         self.non_linear = MaskNonLinear(non_linear, enable="common")
         self.proj = nn.Sequential(TFTransposeTransform(),
                                   nn.Conv1d(in_features, proj_channels, 1))
@@ -387,6 +388,7 @@ class FreqConvTasNet(SseBase):
                                  conv_channels=conv_channels,
                                  kernel_size=K,
                                  causal=causal,
+                                 scaling_param=scaling_param,
                                  skip_residual=skip_residual,
                                  norm=norm)
         self.mask = nn.Sequential(
