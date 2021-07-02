@@ -98,7 +98,7 @@ class RelPosEncoding(nn.Module):
 
     def __init__(self,
                  embed_dim: int,
-                 dropout: float = 0.1,
+                 dropout: float = 0.0,
                  radius: int = 128) -> None:
         super(RelPosEncoding, self).__init__()
         self.radius = radius
@@ -137,7 +137,7 @@ class InputSinPosEncoding(SinPosEncoding):
 
     def __init__(self,
                  embed_dim: int,
-                 dropout: float = 0.1,
+                 dropout: float = 0.0,
                  scaled: bool = False) -> None:
         super(InputSinPosEncoding, self).__init__(embed_dim, dropout=dropout)
         self.factor = embed_dim**0.5 if scaled else 1

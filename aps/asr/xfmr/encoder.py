@@ -29,8 +29,11 @@ class TransformerEncoder(nn.Module):
                  pose_kwargs: Dict = {},
                  arch_kwargs: Dict = {}):
         super(TransformerEncoder, self).__init__()
-        self.proj = get_xfmr_proj(proj, input_size, arch_kwargs["att_dim"],
-                                  **proj_kwargs)
+        if proj == "none":
+            self.proj = None
+        else:
+            self.proj = get_xfmr_proj(proj, input_size, arch_kwargs["att_dim"],
+                                      **proj_kwargs)
         self.pose = get_xfmr_pose(
             pose, arch_kwargs["att_dim"] //
             arch_kwargs["nhead"] if pose == "rel" else arch_kwargs["att_dim"],
@@ -51,8 +54,12 @@ class TransformerEncoder(nn.Module):
             inp_len: N or None
             src_pad_mask: N x Ti or None
         """
-        inp_len = self.proj.num_frames(inp_len)
-        enc_inp = self.proj(inp_pad)
+        if self.proj is None:
+            enc_inp = inp_pad
+        else:
+            inp_len = self.proj.num_frames(inp_len)
+            enc_inp = self.proj(inp_pad)
+
         src_pad_mask = None if inp_len is None else (padding_mask(inp_len) == 1)
 
         if self.pose_type == "abs":

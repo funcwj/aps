@@ -339,11 +339,13 @@ class TimeConvTasNet(SseBase):
         # n x 2N x T
         e = self.mask(y)
         m = th.chunk(e, self.num_spks, 1)
+        # 2 x n x N x T
+        m = th.stack(m, dim=0)
         # n x N x T
         if self.non_linear_type == "softmax":
-            m = self.non_linear(th.stack(m, dim=0), dim=0)
+            m = self.non_linear(m, dim=0)
         else:
-            m = self.non_linear(th.stack(m, dim=0))
+            m = self.non_linear(m,)
         # spks x [n x N x T]
         s = [w * m[n] for n in range(self.num_spks)]
         # spks x n x S

@@ -292,3 +292,34 @@ def test_demucs(resampling_factor, chunk_len):
     x = th.rand(chunk_len)
     y = demucs.infer(x)
     assert y.shape == th.Size([chunk_len])
+
+
+def test_sepformer():
+    nnet_cls = aps_sse_nnet("sse@freq_sepformer")
+    arch_kwargs = {
+        "att_dim": 256,
+        "nhead": 4,
+        "feedforward_dim": 1024,
+        "pre_norm": True,
+        "att_dropout": 0.1,
+        "ffn_dropout": 0.1,
+        "activation": "relu"
+    }
+    transform = EnhTransform(feats="spectrogram-log-cmvn",
+                             frame_len=256,
+                             frame_hop=128,
+                             center=True)
+    sepformer = nnet_cls("xfmr",
+                         enh_transform=transform,
+                         num_bins=129,
+                         num_spks=1,
+                         num_blocks=2,
+                         num_layers=2,
+                         chunk_size=16,
+                         arch_kwargs=arch_kwargs,
+                         training_mode="time")
+    mix = th.rand(2, 32000)
+    bss = sepformer(mix)
+    assert bss.shape == th.Size([2, 32000])
+    bss = sepformer.infer(mix[1])
+    assert bss.shape == th.Size([32000])

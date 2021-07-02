@@ -83,9 +83,7 @@ class DpB(nn.Module):
         Return:
             ...
         """
-        if chunk.dim() not in [3, 4]:
-            raise RuntimeError(
-                f"DpB expects 3/4D tensor, got {chunk.dim()} instead")
+        assert chunk.dim() in [3, 4]
         if chunk.dim() == 3:
             chunk = chunk[None, ...]
         # N x L x K x F
@@ -181,9 +179,7 @@ class McB(nn.Module):
         Return:
             ...
         """
-        if chunk.dim() not in [3, 4]:
-            raise RuntimeError(
-                f"DpB expects 3/4D tensor, got {chunk.dim()} instead")
+        assert chunk.dim() in [3, 4]
         if chunk.dim() == 3:
             chunk = chunk[None, ...]
         # N x L x K x F
