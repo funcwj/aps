@@ -86,7 +86,7 @@ class SepFormer(nn.Module):
         Args:
             inp (Tensor): N x C x T
         Return:
-            masks: N x S*C x T
+            masks (Tensor): N x S*C x T
         """
         batch_size, num_bins, num_frames = inp.shape
         # N x C x T x 1 => N x CK x L
@@ -94,7 +94,6 @@ class SepFormer(nn.Module):
                            stride=self.chunk_size // 2)
         # N x C x K x L
         chunks = chunks.view(batch_size, num_bins, self.chunk_size, -1)
-        print(chunks.shape)
         # N x K x L x C
         chunks = chunks.permute(0, 2, 3, 1)
         # N x K x L x C
@@ -223,7 +222,7 @@ class FreqSeqFormer(SseBase):
         """
         Forward function in time|freq mode
         """
-        # mix_stft: N x x F x T
+        # mix_stft: N x F x T
         feats, mix_stft, _ = self.enh_transform(mix, None)
         # N x S*F x T
         masks = self.mask(self.separator(feats.transpose(1, 2)))
