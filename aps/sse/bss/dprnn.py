@@ -9,6 +9,7 @@ import torch.nn.functional as tf
 
 from typing import Optional, List, Union
 
+from aps.transform.asr import TFTransposeTransform
 from aps.sse.bss.tcn import normalize_layer
 from aps.sse.base import SseBase, MaskNonLinear
 from aps.libs import ApsRegisters
@@ -67,17 +68,14 @@ class DPRNN(nn.Module):
                  bidirectional: bool = True) -> None:
         super(DPRNN, self).__init__()
         self.chunk_size = chunk_size
-        separator = []
-        separator += [nn.Linear(num_bins, rnn_hidden)]
-        separator += [
-            LSTMBlock(rnn_hidden,
+        # [intra, inter, intra, inter, ...]
+        separator = [
+            LSTMBlock(num_bins,
                       rnn_hidden,
-                      bidirectional=False if i % 2 == 0 else bidirectional)
+                      bidirectional=True if i % 2 == 0 else bidirectional)
             for i in range(num_layers * 2)
         ]
-        separator += [nn.PReLU(), nn.Linear(rnn_hidden, num_bins)]
         self.separator = nn.Sequential(*separator)
-        self.mask = nn.Conv1d(num_bins, num_bins * num_spks, 1)
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
@@ -105,7 +103,7 @@ class DPRNN(nn.Module):
         out = tf.fold(chunks, (num_frames, 1), (self.chunk_size, 1),
                       stride=self.chunk_size // 2)
         # N x C*S x T
-        return self.mask(out[..., 0])
+        return out[..., 0]
 
 
 @ApsRegisters.sse.register("sse@time_dprnn")
@@ -126,19 +124,18 @@ class TimeDPRNN(SseBase):
                  non_linear: str = "relu") -> None:
         super(TimeDPRNN, self).__init__(None, training_mode="time")
         # conv1d encoder
-        self.encoder = nn.Conv1d(1,
-                                 num_bins,
-                                 kernel_size=kernel,
-                                 stride=stride,
-                                 padding=0)
-        self.norm = normalize_layer("cLN", num_bins)
+        self.encoder = nn.Sequential(
+            nn.Conv1d(1, num_bins, kernel_size=kernel, stride=stride,
+                      padding=0), nn.ReLU(), normalize_layer("cLN", num_bins))
         self.separator = DPRNN(num_bins=num_bins,
                                num_spks=num_spks,
                                num_layers=num_layers,
                                chunk_size=chunk_size,
                                rnn_hidden=rnn_hidden,
                                bidirectional=bidirectional)
-        self.mask = MaskNonLinear(non_linear, enable="positive_wo_softmax")
+        self.mask = nn.Sequential(
+            nn.Conv1d(num_bins, num_bins * num_spks, 1),
+            MaskNonLinear(non_linear, enable="positive_wo_softmax"))
         # conv1d decoder
         self.decoder = nn.ConvTranspose1d(num_bins,
                                           1,
@@ -169,7 +166,7 @@ class TimeDPRNN(SseBase):
         """
         self.check_args(mix, training=True, valid_dim=[2])
         # N x 1 x S => N x F x T
-        w = self.norm(tf.relu(self.encoder(mix[:, None, :])))
+        w = self.encoder(mix[:, None, :])
         # N x S*F x T
         mask = self.mask(self.separator(w))
         # [N x C x T, ...]
@@ -202,13 +199,15 @@ class FreqDPRNN(SseBase):
         super(FreqDPRNN, self).__init__(enh_transform,
                                         training_mode=training_mode)
         assert enh_transform is not None
+        self.swap = TFTransposeTransform()
         self.separator = DPRNN(num_bins=num_bins,
                                num_spks=num_spks,
                                num_layers=num_layers,
                                chunk_size=chunk_size,
                                rnn_hidden=rnn_hidden,
                                bidirectional=bidirectional)
-        self.mask = MaskNonLinear(non_linear, enable="common")
+        self.mask = nn.Sequential(nn.Conv1d(num_bins, num_bins * num_spks, 1),
+                                  MaskNonLinear(non_linear, enable="common"))
         self.num_spks = num_spks
 
     def _forward(self, mix: th.Tensor,
@@ -219,23 +218,16 @@ class FreqDPRNN(SseBase):
         # mix_stft: N x x F x T
         feats, mix_stft, _ = self.enh_transform(mix, None)
         # N x S*F x T
-        masks = self.mask(self.separator(feats.transpose(1, 2)))
-        if self.num_spks > 1:
-            masks = th.chunk(masks, self.num_spks, 1)
-        # N x F x T, ...
-        if mode == "freq":
-            return masks
-        else:
+        masks = self.mask(self.separator(self.swap(feats)))
+        # [N x F x T, ...]
+        masks = th.chunk(masks, self.num_spks, 1)
+        if mode == "time":
             decoder = self.enh_transform.inverse_stft
-            if self.num_spks == 1:
-                enh_stft = mix_stft * masks
-                enh = decoder((enh_stft.real, enh_stft.imag), input="complex")
-            else:
-                enh_stft = [mix_stft * m for m in masks]
-                enh = [
-                    decoder((s.real, s.imag), input="complex") for s in enh_stft
-                ]
-            return enh
+            bss_stft = [mix_stft * m for m in masks]
+            bss = [decoder((s.real, s.imag), input="complex") for s in bss_stft]
+        else:
+            bss = masks
+        return bss[0] if self.num_spks == 1 else bss
 
     def infer(self,
               mix: th.Tensor,

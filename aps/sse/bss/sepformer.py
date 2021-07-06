@@ -5,6 +5,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from aps.transform.asr import TFTransposeTransform
 from aps.asr.xfmr.encoder import TransformerEncoder
 from aps.sse.base import SseBase, MaskNonLinear
 from aps.sse.bss.tcn import normalize_layer
@@ -74,6 +75,7 @@ class SepFormer(nn.Module):
         }
         separator = []
         separator += [nn.Linear(num_bins, arch_kwargs["att_dim"])]
+        # [intra, inter, intra, inter, ...]
         separator += [
             Transformer(**transformer_kwargs) for _ in range(num_blocks * 2)
         ]
@@ -207,6 +209,7 @@ class FreqSeqFormer(SseBase):
         super(FreqSeqFormer, self).__init__(enh_transform,
                                             training_mode=training_mode)
         assert enh_transform is not None
+        self.swap = TFTransposeTransform()
         self.separator = SepFormer(arch,
                                    num_bins=num_bins,
                                    num_spks=num_spks,
@@ -225,23 +228,16 @@ class FreqSeqFormer(SseBase):
         # mix_stft: N x F x T
         feats, mix_stft, _ = self.enh_transform(mix, None)
         # N x S*F x T
-        masks = self.mask(self.separator(feats.transpose(1, 2)))
-        if self.num_spks > 1:
-            masks = th.chunk(masks, self.num_spks, 1)
-        # N x F x T, ...
-        if mode == "freq":
-            return masks
-        else:
+        masks = self.mask(self.separator(self.swap(feats)))
+        # [N x F x T, ...]
+        masks = th.chunk(masks, self.num_spks, 1)
+        if mode == "time":
             decoder = self.enh_transform.inverse_stft
-            if self.num_spks == 1:
-                enh_stft = mix_stft * masks
-                enh = decoder((enh_stft.real, enh_stft.imag), input="complex")
-            else:
-                enh_stft = [mix_stft * m for m in masks]
-                enh = [
-                    decoder((s.real, s.imag), input="complex") for s in enh_stft
-                ]
-            return enh
+            bss_stft = [mix_stft * m for m in masks]
+            bss = [decoder((s.real, s.imag), input="complex") for s in bss_stft]
+        else:
+            bss = masks
+        return bss[0] if self.num_spks == 1 else bss
 
     def infer(self,
               mix: th.Tensor,

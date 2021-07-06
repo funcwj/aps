@@ -414,22 +414,15 @@ class FreqConvTasNet(SseBase):
         x = self.conv(x)
         # N x F* x T
         masks = self.non_linear(self.mask(x))
-        if self.num_spks > 1:
-            masks = th.chunk(masks, self.num_spks, 1)
-        # N x F x T, ...
-        if mode == "freq":
-            return masks
-        else:
+        # [N x F x T, ...]
+        masks = th.chunk(masks, self.num_spks, 1)
+        if mode == "time":
             decoder = self.enh_transform.inverse_stft
-            if self.num_spks == 1:
-                enh_stft = mix_stft * masks
-                enh = decoder((enh_stft.real, enh_stft.imag), input="complex")
-            else:
-                enh_stft = [mix_stft * m for m in masks]
-                enh = [
-                    decoder((s.real, s.imag), input="complex") for s in enh_stft
-                ]
-            return enh
+            bss_stft = [mix_stft * m for m in masks]
+            bss = [decoder((s.real, s.imag), input="complex") for s in bss_stft]
+        else:
+            bss = masks
+        return bss[0] if self.num_spks == 1 else bss
 
     def infer(self,
               mix: th.Tensor,
