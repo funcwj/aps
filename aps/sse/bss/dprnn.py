@@ -49,7 +49,9 @@ class LSTMBlock(nn.Module):
         # NL x K x H
         rnn_out, _ = self.lstm(rnn_inp)
         # NL x K x C
-        chunk = rnn_inp + self.norm(self.proj(rnn_out))
+        rnn_out = self.norm(self.proj(rnn_out))
+        # NL x K x C
+        chunk = rnn_inp + rnn_out
         # N x L x K x C
         return chunk.view(N, L, K, -1)
 
@@ -115,8 +117,8 @@ class TimeDPRNN(SseBase):
     def __init__(self,
                  num_spks: int = 2,
                  num_bins: int = 64,
-                 stride: int = 8,
                  kernel: int = 16,
+                 stride: int = 8,
                  chunk_size: int = 100,
                  num_layers: int = 6,
                  bidirectional: bool = True,
@@ -144,7 +146,9 @@ class TimeDPRNN(SseBase):
                                           bias=True)
         self.num_spks = num_spks
 
-    def infer(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
+    def infer(self,
+              mix: th.Tensor,
+              mode: str = "time") -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): S

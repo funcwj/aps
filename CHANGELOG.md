@@ -1,5 +1,10 @@
 ## Overview of the Monthly Update
 
+### 2021/07
+
+1. Update implementation of DPRNN
+2. Add SepFormer
+
 ### 2021/06
 
 1. Setup WHAM recipe

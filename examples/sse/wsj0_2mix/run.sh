@@ -34,7 +34,8 @@ data_dir=data/$dataset
 if [ $end -ge 1 ] && [ $beg -le 1 ]; then
   echo "Stage 1: preparing data ..."
   for subdir in "tr" "tt" "cv"; do
-    [ ! -d $wsj0_2mix_dir/$subdir ] && echo "$wsj0_2mix_dir/$subdir not exists, exit ..." && exit 1
+    [ ! -d $wsj0_2mix_dir/wav8k/min/$subdir ] && \
+      echo "$wsj0_2mix_dir/wav8k/min/$subdir not exists, exit ..." && exit 1
   done
   ./local/format_data.sh $wsj0_2mix_dir/wav8k/min $data_dir
 fi
@@ -59,22 +60,26 @@ fi
 if [ $end -ge 3 ] && [ $beg -le 3 ]; then
   echo "Stage 3: run speech separation ..."
   # generate separation audio under $cpt_dir/bss
-  ./cmd/separate.py \
-    --checkpoint $cpt_dir \
-    --sr 8000 \
-    --device-id $gpu \
-    $data_dir/tt/mix.scp \
-    $cpt_dir/bss
+  for name in cv tt; do
+    ./cmd/separate.py \
+      --checkpoint $cpt_dir \
+      --sr 8000 \
+      --device-id $gpu \
+      $data_dir/$name/mix.scp \
+      $cpt_dir/bss_$name
+  done
 fi
 
 if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   echo "Stage 4: evaluate ..."
-  for index in 1 2; do
-    find $cpt_dir/bss -name "*.wav" | \
-      awk -v ch=$index -F '/' '{printf("%s sox %s -t wav - remix %d |\n", $NF, $0, ch)}' | \
-      sed "s:.wav::" > $cpt_dir/bss/spk${index}.scp
+  for name in cv tt; do
+    for index in 1 2; do
+      find $cpt_dir/bss_$name -name "*.wav" | \
+        awk -v ch=$index -F '/' '{printf("%s sox %s -t wav - remix %d |\n", $NF, $0, ch)}' | \
+        sed "s:.wav::" > $cpt_dir/bss_$name /spk${index}.scp
+    done
+    ./cmd/compute_ss_metric.py --sr 8000 --metric $metric \
+      $data_dir/$name/spk1.scp,$data_dir/$name/spk2.scp \
+      $cpt_dir/bss_$name/spk1.scp,$cpt_dir/bss_$name/spk2.scp
   done
-  ./cmd/compute_ss_metric.py --sr 8000 --metric $metric \
-    $data_dir/tt/spk1.scp,$data_dir/tt/spk2.scp \
-    $cpt_dir/bss/spk1.scp,$cpt_dir/bss/spk2.scp
 fi

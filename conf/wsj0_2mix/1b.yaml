@@ -1,5 +1,21 @@
 # Conv-TasNet
 
+# cmd_args:
+#   batch_size: 32
+#   dev_batch_factor: 2
+#   device_ids: 0,1,2,3
+#   distributed: torch
+#   epochs: 100
+#   eval_interval: 1000
+#   init: ''
+#   num_workers: 32
+#   prog_interval: 100
+#   resume: ''
+#   save_interval: -1
+#   seed: '888'
+#   tensorboard: false
+#   trainer: ddp
+
 nnet: sse@time_tcn
 
 nnet_conf:
