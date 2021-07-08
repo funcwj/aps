@@ -77,7 +77,8 @@ def write_audio(fname: Union[str, IO[Any]],
 def add_room_response(spk: np.ndarray,
                       rir: np.ndarray,
                       early_energy: bool = False,
-                      sr: int = 16000) -> Tuple[np.ndarray, float]:
+                      early_revb_duration: float = 0.05,
+                      sr: int = 16000):
     """
     Convolute source signal with selected rirs
     Args
@@ -93,18 +94,20 @@ def add_room_response(spk: np.ndarray,
     S = spk.shape[-1]
     revb = ss.convolve(spk[None, ...], rir)[..., :S]
     revb = np.asarray(revb)
+    early_revb = None
 
     if early_energy:
         rir_ch0 = rir[0]
         rir_peak = np.argmax(rir_ch0)
         rir_beg_idx = max(0, int(rir_peak - 0.001 * sr))
-        rir_end_idx = min(rir_ch0.size, int(rir_peak + 0.05 * sr))
+        rir_end_idx = min(rir_ch0.size,
+                          int(rir_peak + early_revb_duration * sr))
         early_rir = np.zeros_like(rir_ch0)
         early_rir[rir_beg_idx:rir_end_idx] = rir_ch0[rir_beg_idx:rir_end_idx]
-        early_rev = ss.convolve(spk, early_rir)[:S]
-        return revb, np.mean(early_rev**2)
+        early_revb = ss.convolve(spk, early_rir)[:S]
+        return revb, early_revb, np.mean(early_revb**2)
     else:
-        return revb, np.mean(revb[0]**2)
+        return revb, early_revb, np.mean(revb[0]**2)
 
 
 def run_command(command: str, wait: bool = True):

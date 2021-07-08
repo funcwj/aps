@@ -9,12 +9,12 @@ import numpy as np
 
 from typing import Optional, Dict, Iterable
 from aps.loader.am.utils import AsrDataset, AsrDataLoader
-from aps.loader.se.online import SimuOptionsDataset
+from aps.loader.se.command import CommandOptionsDataset
 from aps.loader.am.raw import egs_collate
 from aps.libs import ApsRegisters
 
 
-@ApsRegisters.loader.register("am@online")
+@ApsRegisters.loader.register("am@command")
 def DataLoader(train: bool = True,
                distributed: bool = False,
                simu_cfg: str = "",
@@ -33,7 +33,7 @@ def DataLoader(train: bool = True,
                max_batch_size: int = 32,
                min_batch_size: int = 4) -> Iterable[Dict]:
     """
-    Return the online simulation dataloader (for AM training)
+    Return the online simulation dataloader (for AM training, command version)
     Args:
         train: in training mode or not
         distributed: in distributed mode or not
@@ -70,7 +70,7 @@ def DataLoader(train: bool = True,
                          min_batch_size=min_batch_size)
 
 
-class AsrSimuReader(SimuOptionsDataset):
+class AsrSimuReader(CommandOptionsDataset):
     """
     Simulation audio reader for ASR task
     Args:

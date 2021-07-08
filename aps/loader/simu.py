@@ -23,7 +23,10 @@ def coeff_snr(sig_pow, ref_pow, snr):
     we got
         alpha = Pa/[Pb*10^(SNR/10)]^0.5
     """
-    return (ref_pow / (sig_pow * 10**(snr / 10) + EPSILON))**0.5
+    if sig_pow == 0:
+        return 0
+    else:
+        return (ref_pow / (sig_pow * 10**(snr / 10) + EPSILON))**0.5
 
 
 def add_speaker(mix_nsamps,
@@ -49,7 +52,7 @@ def add_speaker(mix_nsamps,
             if channel >= 0:
                 if rir.ndim == 2:
                     rir = rir[channel:channel + 1]
-            revb, p = add_room_response(spk, rir, sr=sr)
+            revb, _, p = add_room_response(spk, rir, sr=sr)
             spk_image.append(revb)
             spk_power.append(p)
     # make mix
@@ -101,7 +104,7 @@ def add_point_noise(mix_nsamps,
             if channel >= 0:
                 if rir.ndim == 2:
                     rir = rir[channel:channel + 1]
-            revb, revb_power = add_room_response(noise[:dur], rir, sr=sr)
+            revb, _, revb_power = add_room_response(noise[:dur], rir, sr=sr)
             image.append(revb)
             image_power.append(revb_power)
     # make noise mix

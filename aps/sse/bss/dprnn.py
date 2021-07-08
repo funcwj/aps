@@ -36,6 +36,7 @@ class LSTMBlock(nn.Module):
 
     def forward(self, chunk: th.Tensor) -> th.Tensor:
         """
+        Sequence modeling along axis K
         Args:
             chunk (Tensor): N x K x L x C
         Return:
@@ -92,12 +93,12 @@ class DPRNN(nn.Module):
                            stride=self.chunk_size // 2)
         # N x C x K x L
         chunks = chunks.view(batch_size, num_bins, self.chunk_size, -1)
-        # N x K x L x C
-        chunks = chunks.permute(0, 2, 3, 1)
-        # N x K x L x C
+        # N x L x K x C
+        chunks = chunks.transpose(1, -1)
+        # N x L x K x C
         chunks = self.separator(chunks)
         # N x C x K x L
-        chunks = chunks.permute(0, 3, 1, 2)
+        chunks = chunks.transpose(1, -1)
         # N x CK x L
         chunks = chunks.contiguous()
         chunks = chunks.view(batch_size, -1, chunks.shape[-1])

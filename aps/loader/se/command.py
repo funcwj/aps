@@ -16,7 +16,7 @@ from aps.libs import ApsRegisters
 from aps.loader.simu import run_simu, make_argparse
 
 
-@ApsRegisters.loader.register("se@online")
+@ApsRegisters.loader.register("se@command")
 def DataLoader(train: bool = True,
                sr: int = 16000,
                simu_cfg: str = "",
@@ -26,7 +26,7 @@ def DataLoader(train: bool = True,
                distributed: bool = False,
                num_workers: int = 4) -> Iterable[Dict]:
     """
-    Return a online simulation dataloader for enhancement/separation tasks
+    Return a online simulation dataloader for enhancement/separation tasks (command version)
     Args
         train: in training mode or not
         sr: sample rate of the audio
@@ -36,9 +36,9 @@ def DataLoader(train: bool = True,
         distributed: in distributed mode or not
         num_workers: number of workers used in dataloader
     """
-    dataset = SimuOptionsDataset(simu_cfg,
-                                 return_in_egs=["mix", "ref", "noise"]
-                                 if noise_label else ["mix", "ref"])
+    dataset = CommandOptionsDataset(simu_cfg,
+                                    return_in_egs=["mix", "ref", "noise"]
+                                    if noise_label else ["mix", "ref"])
     return WaveChunkDataLoader(dataset,
                                train=train,
                                chunk_size=chunk_size,
@@ -47,9 +47,9 @@ def DataLoader(train: bool = True,
                                distributed=distributed)
 
 
-class SimuOptionsDataset(dat.Dataset):
+class CommandOptionsDataset(dat.Dataset):
     """
-    A dataset drived by the simulation configurations. The format of the "simu.cfg" looks like
+    A dataset drived by the command-line configurations. The format of the "simu.cfg" looks like
         2spk_mix02  --src-spk /path/to/XXXX1.wav,/path/to/XXXX2.wav --src-begin 4000,0 --src-sdr 1 ...
         2spk_mix03  --src-spk /path/to/XXXX3.wav,/path/to/XXXX4.wav --src-begin 0,900 --src-sdr -1 ...
         ...

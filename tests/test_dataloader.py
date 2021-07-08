@@ -109,10 +109,10 @@ def test_ss_chunk_loader(batch_size, chunk_size, num_workers):
 @pytest.mark.parametrize("batch_size", [1, 2, 4])
 @pytest.mark.parametrize("chunk_size", [32000, 64000])
 @pytest.mark.parametrize("num_workers", [0, 2])
-def test_ss_online_loader(batch_size, chunk_size, num_workers):
+def test_ss_command_loader(batch_size, chunk_size, num_workers):
     egs_dir = "data/dataloader/se"
-    loader = aps_dataloader(fmt="se@online",
-                            simu_cfg=f"{egs_dir}/online.opts",
+    loader = aps_dataloader(fmt="se@command",
+                            simu_cfg=f"{egs_dir}/cmd.options",
                             sr=16000,
                             max_batch_size=batch_size,
                             chunk_size=chunk_size,
@@ -151,6 +151,5 @@ def test_lm_bptt_loader(batch_size, obj):
                             bptt_size=10,
                             max_batch_size=batch_size)
     for egs in loader:
-        print(egs)
         assert egs["src"].shape == egs["tgt"].shape
         assert egs["src"].shape == th.Size([batch_size, 10])
