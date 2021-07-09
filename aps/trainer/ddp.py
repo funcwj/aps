@@ -11,6 +11,7 @@ from pathlib import Path
 
 from aps.trainer.base import Trainer
 from aps.libs import ApsRegisters
+from aps.const import OOM_STRING
 
 import aps.distributed as dist
 
@@ -121,7 +122,7 @@ class DdpTrainer(Trainer):
             else:
                 stats = self.task(egs)
         except RuntimeError as rt_err:
-            if "out of memory" in str(rt_err):
+            if OOM_STRING in str(rt_err):
                 th.cuda.empty_cache()
                 self.reporter.log("Get CUDA OOM during forward, skip...")
                 return False

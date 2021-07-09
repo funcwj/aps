@@ -33,6 +33,7 @@ class Transformer(nn.Module):
 
     def forward(self, chunk: th.Tensor) -> th.Tensor:
         """
+        Sequence modeling along axis K
         Args:
             chunk (Tensor): N x K x L x C
         Return:
@@ -68,7 +69,7 @@ class SepFormer(nn.Module):
                  arch_kwargs: Dict = {}):
         super(SepFormer, self).__init__()
         self.chunk_size = chunk_size
-        transformer_kwargs = {
+        xfmr_kwargs = {
             "arch": arch,
             "num_layers": num_layers,
             "arch_kwargs": arch_kwargs
@@ -76,9 +77,7 @@ class SepFormer(nn.Module):
         separator = []
         separator += [nn.Linear(num_bins, arch_kwargs["att_dim"])]
         # [intra, inter, intra, inter, ...]
-        separator += [
-            Transformer(**transformer_kwargs) for _ in range(num_blocks * 2)
-        ]
+        separator += [Transformer(**xfmr_kwargs) for _ in range(num_blocks * 2)]
         separator += [nn.PReLU(), nn.Linear(arch_kwargs["att_dim"], num_bins)]
         self.separator = nn.Sequential(*separator)
         self.mask = nn.Conv1d(num_bins, num_bins * num_spks, 1)
@@ -96,12 +95,12 @@ class SepFormer(nn.Module):
                            stride=self.chunk_size // 2)
         # N x C x K x L
         chunks = chunks.view(batch_size, num_bins, self.chunk_size, -1)
-        # N x K x L x C
-        chunks = chunks.permute(0, 2, 3, 1)
+        # N x L x K x C
+        chunks = chunks.transpose(1, -1)
         # N x K x L x C
         chunks = self.separator(chunks)
         # N x C x K x L
-        chunks = chunks.permute(0, 3, 1, 2)
+        chunks = chunks.transpose(1, -1)
         # N x CK x L
         chunks = chunks.contiguous()
         chunks = chunks.view(batch_size, -1, chunks.shape[-1])

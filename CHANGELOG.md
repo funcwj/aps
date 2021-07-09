@@ -4,6 +4,7 @@
 
 1. Update implementation of DPRNN
 2. Add SepFormer
+3. Add online dataloader (based on json configuration) for SSE tasks
 
 ### 2021/06
 
