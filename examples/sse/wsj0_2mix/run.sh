@@ -76,7 +76,7 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
     for index in 1 2; do
       find $cpt_dir/bss_$name -name "*.wav" | \
         awk -v ch=$index -F '/' '{printf("%s sox %s -t wav - remix %d |\n", $NF, $0, ch)}' | \
-        sed "s:.wav::" > $cpt_dir/bss_$name /spk${index}.scp
+        sed "s:.wav::" > $cpt_dir/bss_$name/spk${index}.scp
     done
     ./cmd/compute_ss_metric.py --sr 8000 --metric $metric \
       $data_dir/$name/spk1.scp,$data_dir/$name/spk2.scp \
