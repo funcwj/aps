@@ -118,7 +118,7 @@ class ApexTrainer(Trainer):
         Make one training step for hovorod
 
         1) Forward & Backword
-        2) Clip Gradient
+        2) Clip gradient
         3) Step optimizer
         4) Zero optimizer
         """
@@ -161,8 +161,8 @@ class ApexTrainer(Trainer):
 
         # clip gradient after backward
         norm = -1
-        if self.clip_gradient:
-            # for apex
+        if self.clip_gradient > 0:
+            # for apex (TODO: why norm = nan here)
             norm = clip_grad_norm_(apex.amp.master_params(self.optimizer),
                                    self.clip_gradient)
 

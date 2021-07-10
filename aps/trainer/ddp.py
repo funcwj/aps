@@ -105,7 +105,7 @@ class DdpTrainer(Trainer):
         Make one training step (return true if no error exists)
 
         1) Forward & Backword
-        2) Clip Gradient
+        2) Clip gradient
         3) Step optimizer
         4) Zero optimizer
         """
@@ -148,7 +148,7 @@ class DdpTrainer(Trainer):
 
         # clip gradient after backward
         norm = -1
-        if self.clip_gradient:
+        if self.clip_gradient > 0:
             norm = clip_grad_norm_(self.task.parameters(), self.clip_gradient)
 
         # step optimizer and update statistics

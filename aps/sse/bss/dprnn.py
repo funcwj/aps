@@ -38,23 +38,23 @@ class LSTMBlock(nn.Module):
         """
         Sequence modeling along axis K
         Args:
-            chunk (Tensor): N x K x L x C
-        Return:
             chunk (Tensor): N x L x K x C
+        Return:
+            chunk (Tensor): N x K x L x C
         """
-        N, K, L, C = chunk.shape
-        # N x L x K x C
+        N, L, K, C = chunk.shape
+        # N x K x L x C
         chunk = chunk.transpose(1, 2).contiguous()
-        # NL x K x C
-        rnn_inp = chunk.view(-1, K, C)
-        # NL x K x H
+        # NK x L x C
+        rnn_inp = chunk.view(-1, L, C)
+        # NK x L x H
         rnn_out, _ = self.lstm(rnn_inp)
-        # NL x K x C
+        # NK x L x C
         rnn_out = self.norm(self.proj(rnn_out))
-        # NL x K x C
+        # NK x L x C
         chunk = rnn_inp + rnn_out
-        # N x L x K x C
-        return chunk.view(N, L, K, -1)
+        # N x K x L x C
+        return chunk.view(N, K, L, -1)
 
 
 class DPRNN(nn.Module):
@@ -186,12 +186,8 @@ class TimeDPRNN(SseBase):
         mask = self.non_linear(self.separator(w))
         # [N x C x T, ...]
         m = th.chunk(mask, self.num_spks, 1)
-        # S x N x C x T
-        m = th.stack(m, dim=0)
-        # spks x [n x N x T]
-        s = [w * m[n] for n in range(self.num_spks)]
-        # spks x n x S
-        bss = [self.decoder(x)[:, 0] for x in s]
+        # spks x [n x N x T] => spks x [n x S]
+        bss = [self.decoder(w * m[n])[:, 0] for n in range(self.num_spks)]
         return bss[0] if self.num_spks == 1 else bss
 
 

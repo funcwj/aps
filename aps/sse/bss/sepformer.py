@@ -179,12 +179,8 @@ class TimeSeqFormer(SseBase):
         m = self.mask(self.separator(w))
         # [N x C x T, ...]
         m = th.chunk(m, self.num_spks, 1)
-        # S x N x C x T
-        m = th.stack(m, dim=0)
-        # spks x [n x N x T]
-        s = [w * m[n] for n in range(self.num_spks)]
-        # spks x n x S
-        bss = [self.decoder(x)[:, 0] for x in s]
+        # spks x [n x N x T] => spks x [n x S]
+        bss = [self.decoder(w * m[n])[:, 0] for n in range(self.num_spks)]
         return bss[0] if self.num_spks == 1 else bss
 
 

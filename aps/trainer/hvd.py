@@ -105,7 +105,7 @@ class HvdTrainer(Trainer):
         Make one training step for hovorod
 
         1) Forward & Backword
-        2) Clip Gradient
+        2) Clip gradient
         3) Step optimizer
         4) Zero optimizer
         """
@@ -144,7 +144,7 @@ class HvdTrainer(Trainer):
 
         # clip gradient after backward
         norm = -1
-        if self.clip_gradient:
+        if self.clip_gradient > 0:
             # for horovod
             self.optimizer.synchronize()
             norm = clip_grad_norm_(self.task.parameters(), self.clip_gradient)
