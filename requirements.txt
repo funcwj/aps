@@ -2,7 +2,7 @@ kenlm==0.0.0
 h5py==2.10.0
 librosa==0.8.0
 tqdm==4.50.2
-pytest==0.0.0
+pytest==6.1.1
 kaldi_python_io==1.2.0
 sentencepiece==0.1.91
 torch==1.7.1
