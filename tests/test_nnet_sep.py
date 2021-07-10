@@ -209,26 +209,6 @@ def test_tasnet(num_spks, nonlinear):
     assert y.shape == th.Size([64000])
 
 
-def test_dprnn():
-    nnet_cls = aps_sse_nnet("sse@time_dprnn")
-    dprnn = nnet_cls(num_spks=1,
-                     input_norm="cLN",
-                     block_type="dp",
-                     conv_kernels=16,
-                     conv_filters=64,
-                     proj_filters=64,
-                     chunk_len=100,
-                     num_layers=2,
-                     rnn_hidden=64,
-                     rnn_bi_inter=True,
-                     non_linear="relu")
-    inp = th.rand(4, 64000)
-    x = dprnn(inp)
-    assert x.shape == th.Size([4, 64000])
-    y = dprnn.infer(inp[1])
-    assert y.shape == th.Size([64000])
-
-
 @pytest.mark.parametrize("num_spks", [1, 2])
 @pytest.mark.parametrize("cplx", [True, False])
 def test_dccrn(num_spks, cplx):
@@ -292,3 +272,51 @@ def test_demucs(resampling_factor, chunk_len):
     x = th.rand(chunk_len)
     y = demucs.infer(x)
     assert y.shape == th.Size([chunk_len])
+
+
+def test_dprnn():
+    nnet_cls = aps_sse_nnet("sse@time_dprnn")
+    dprnn = nnet_cls(num_spks=1,
+                     kernel=16,
+                     num_bins=64,
+                     chunk_size=100,
+                     num_layers=2,
+                     rnn_hidden=64,
+                     bidirectional=True,
+                     non_linear="relu")
+    inp = th.rand(4, 64000)
+    x = dprnn(inp)
+    assert x.shape == th.Size([4, 64000])
+    y = dprnn.infer(inp[1])
+    assert y.shape == th.Size([64000])
+
+
+def test_sepformer():
+    nnet_cls = aps_sse_nnet("sse@freq_sepformer")
+    arch_kwargs = {
+        "att_dim": 256,
+        "nhead": 4,
+        "feedforward_dim": 1024,
+        "pre_norm": True,
+        "att_dropout": 0.1,
+        "ffn_dropout": 0.1,
+        "activation": "relu"
+    }
+    transform = EnhTransform(feats="spectrogram-log-cmvn",
+                             frame_len=256,
+                             frame_hop=128,
+                             center=True)
+    sepformer = nnet_cls("xfmr",
+                         enh_transform=transform,
+                         num_bins=129,
+                         num_spks=1,
+                         num_blocks=2,
+                         num_layers=2,
+                         chunk_size=16,
+                         arch_kwargs=arch_kwargs,
+                         training_mode="time")
+    mix = th.rand(2, 32000)
+    bss = sepformer(mix)
+    assert bss.shape == th.Size([2, 32000])
+    bss = sepformer.infer(mix[1])
+    assert bss.shape == th.Size([32000])

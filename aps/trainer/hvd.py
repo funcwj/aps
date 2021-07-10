@@ -10,6 +10,7 @@ from typing import Optional, Dict, List, Union, NoReturn
 
 from aps.trainer.base import Trainer
 from aps.libs import ApsRegisters
+from aps.const import OOM_STRING
 import aps.distributed as dist
 
 
@@ -104,7 +105,7 @@ class HvdTrainer(Trainer):
         Make one training step for hovorod
 
         1) Forward & Backword
-        2) Clip Gradient
+        2) Clip gradient
         3) Step optimizer
         4) Zero optimizer
         """
@@ -113,7 +114,17 @@ class HvdTrainer(Trainer):
             self.weight_noise_adder(self.task, self.cur_step)
 
         is_backward_step = (self.cur_step + 1) % self.acmu_gradient == 0
-        stats = self.task(egs)
+
+        # handle OOM during forward
+        try:
+            stats = self.task(egs)
+        except RuntimeError as rt_err:
+            if OOM_STRING in str(rt_err):
+                th.cuda.empty_cache()
+                self.reporter.log("Get CUDA OOM during forward, skip...")
+                return False
+            else:
+                raise rt_err
 
         if is_backward_step:
             loss = dist.all_reduce(stats["loss"])
@@ -133,7 +144,7 @@ class HvdTrainer(Trainer):
 
         # clip gradient after backward
         norm = -1
-        if self.clip_gradient:
+        if self.clip_gradient > 0:
             # for horovod
             self.optimizer.synchronize()
             norm = clip_grad_norm_(self.task.parameters(), self.clip_gradient)

@@ -4,9 +4,10 @@ nnet: sse@time_dprnn
 
 nnet_conf:
   num_spks: 2
-  conv_kernels: 8
-  conv_filters: 64
-  chunk_len: 150
+  kernel: 8
+  stride: 4
+  num_bins: 64
+  chunk_size: 150
   num_layers: 6
   rnn_hidden: 128
 
@@ -15,6 +16,7 @@ task: "sse@sisnr"
 task_conf:
   num_spks: 2
   permute: true
+  zero_mean: false
 
 trainer_conf:
   optimizer: "adam"

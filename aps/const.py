@@ -15,4 +15,5 @@ EPSILON = np.finfo(np.float32).eps
 MAX_INT16 = np.iinfo(np.int16).max
 UNK_TOKEN = "<unk>"
 BLK_TOKEN = "<b>"
+OOM_STRING = "out of memory"
 TORCH_VERSION = float(".".join(th.__version__.split(".")[:2]))

@@ -59,7 +59,7 @@ Supported task in APS. The `Task` class is responsible for the computation of an
 * `LmXentTask`: for LM training
 * `CtcXentHybridTask`: CTC & Xent multi-task training for E2E ASR ([paper](https://arxiv.org/abs/1211.3711))
 * `TransducerTask`: for RNNT training ([paper](https://ieeexplore.ieee.org/document/8068205))
-* `UnsuperEnhTask`: for unsupervised multi-channel speech enhancement ([paper](https://arxiv.org/abs/1904.01578))
+* `MlEnhTask`: for unsupervised multi-channel speech enhancement ([paper](https://arxiv.org/abs/1904.01578))
 * `SisnrTask`: SiSNR loss for time domain enhancement/separation model ([paper](https://arxiv.org/abs/1711.00541))
 * `SnrTask`: SNR loss for time domain enhancement/separation model
 * `WaTask`: waveform L1/L2 loss for time domain enhancement/separation model ([paper](https://arxiv.org/abs/1804.10204))
@@ -68,6 +68,7 @@ Supported task in APS. The `Task` class is responsible for the computation of an
 * `LinearTimeSaTask`: spectral approximation loss for time domain enhancement/separation model
 * `MelTimeSaTask`: mel domain spectral approximation loss for time domain enhancement/separation model
 * `ComplexMappingTask`: frequency domain complex mapping objective function ([paper](https://ieeexplore.ieee.org/document/9103053))
+* `SseFreqKdTask`: frequency domain TS-learning task
 
 ## `aps.loader`
 
@@ -75,12 +76,13 @@ The supported data loader in APS. For acoustic model training, we have three opt
 
 * `am@raw`: Raw waveform data loader which do not need us to prepare acoustic features beforehead (recommended way).
 * `am@kaldi`: The data loader that supports the Kaldi format feature.
-* `am@online`: The dataloader which generates the training audio (noisy, far-field, etc) on-the-fly.
+* `am@command`: The dataloader which generates the training audio on-the-fly based on command-line configurations (see `se@command` for details).
 
 For separation/enhancement model training, we also have two options
 
 * `se@chunk`: Raw waveform data loader and also no need to prepare features.
-* `se@online`: A data loader performing online data simulation which generates training audio pairs (noisy, single/multi-speaker, close-talk/far-field) on-the-fly.
+* `se@command`: A data loader performing online data simulation which generates training audio pairs (noisy, single/multi-speaker, close-talk/far-field) on-the-fly based on the command-line configurations.
+* `se@config`: Another version of data loader for online data simulation (based on json configurations)
 
 For language model (target at ASR task), we have
 
@@ -136,8 +138,8 @@ The beam search algothrim is provided in `aps.asr.beam_search`.
 
 The submodule for speech enhancement/separation model. The provided model are shown below:
 
-* `TimeConvTasNet`: Time domain Conv-TasNet ([paper](https://arxiv.org/pdf/1809.07454.pdf))
-* `FreqConvTasNet`: Frequency domain TCN (Temporal Convolutional Network)
+* `TimeTCN`: Time domain Conv-TasNet ([paper](https://arxiv.org/pdf/1809.07454.pdf))
+* `FreqTCN`: Frequency domain TCN (Temporal Convolutional Network)
 * `DCUNet`: Deep Complexed Unet
 * `DCCRN`: Deep Complexed Convolutional Recurrent Network ([paper](https://arxiv.org/pdf/2008.00264.pdf))
 * `DenseUnet`: A Unet structure network boosted with DenseBlock ([paper](https://arxiv.org/abs/2010.01703))
@@ -147,5 +149,7 @@ The submodule for speech enhancement/separation model. The provided model are sh
 * `FreqDPRNN`: Frequency domain DPRNN
 * `ToyRNN`: Basic RNN model
 * `FreqRelXfmr`: A simple transformer model for enhancement/separation
+* `DEMUCS`: Real Time Speech Enhancement in the Waveform Domain ([paper](https://www.isca-speech.org/archive/Interspeech_2020/pdfs/2409.pdf))
+* `SepFormer`: Attention is All You Need in Speech Separation ([paper](https://arxiv.org/abs/2010.13154))
 
 Note that in `aps.sse`, each network should have function `infer()` for inference while `forward()` is left for training only.

@@ -1,5 +1,17 @@
 ## Overview of the Monthly Update
 
+### 2021/07
+
+1. Update implementation of DPRNN
+2. Add SepFormer
+3. Add online dataloader (based on json configuration) for SSE tasks
+
+### 2021/06
+
+1. Setup WHAM recipe
+2. Add support for training across the node (multi-nodes)
+3. Add DEMUCS model
+
 ### 2021/05
 
 1. Setup aishell_v2 & DNS recipe

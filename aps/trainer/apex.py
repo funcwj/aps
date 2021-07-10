@@ -16,6 +16,7 @@ from typing import Optional, Dict, List, Union, NoReturn
 from torch.nn.utils import clip_grad_norm_
 from aps.trainer.ddp import Trainer
 from aps.libs import ApsRegisters
+from aps.const import OOM_STRING
 import aps.distributed as dist
 
 
@@ -38,6 +39,7 @@ class ApexTrainer(Trainer):
                  ss_scheduler: str = "const",
                  ss_scheduler_kwargs: Optional[Dict] = None,
                  clip_gradient: Optional[float] = None,
+                 acmu_gradient: int = -1,
                  weight_noise_cfg: List[int] = [0, 1, -1],
                  weight_noise_std: Optional[float] = None,
                  prog_interval: int = 100,
@@ -66,6 +68,7 @@ class ApexTrainer(Trainer):
                              ss_scheduler=ss_scheduler,
                              ss_scheduler_kwargs=ss_scheduler_kwargs,
                              clip_gradient=clip_gradient,
+                             acmu_gradient=acmu_gradient,
                              weight_noise_cfg=weight_noise_cfg,
                              weight_noise_std=weight_noise_std,
                              prog_interval=prog_interval,
@@ -97,7 +100,7 @@ class ApexTrainer(Trainer):
                                                         self.optimizer,
                                                         opt_level=opt_level)
         self.reporter.log(f"Apex: Using opt-level {opt_level}")
-        if self.cuda_devices >= 2:
+        if self.rank is not None:
             self.distributed = True
             self.reporter.log(
                 f"Apex: using distributed data parallel (DDP), rank={self.rank}, "
@@ -115,7 +118,7 @@ class ApexTrainer(Trainer):
         Make one training step for hovorod
 
         1) Forward & Backword
-        2) Clip Gradient
+        2) Clip gradient
         3) Step optimizer
         4) Zero optimizer
         """
@@ -123,7 +126,19 @@ class ApexTrainer(Trainer):
         if self.weight_noise_adder:
             self.weight_noise_adder(self.task, self.cur_step)
 
-        stats = self.task(egs)
+        is_backward_step = (self.cur_step + 1) % self.acmu_gradient == 0
+
+        # handle OOM during forward
+        try:
+            stats = self.task(egs)
+        except RuntimeError as rt_err:
+            if OOM_STRING in str(rt_err):
+                th.cuda.empty_cache()
+                self.reporter.log("Get CUDA OOM during forward, skip...")
+                return False
+            else:
+                raise rt_err
+
         # use all reduce to check loss
         if self.distributed:
             loss = dist.all_reduce(stats["loss"].clone()).item()
@@ -131,17 +146,23 @@ class ApexTrainer(Trainer):
             loss = stats["loss"].item()
         # backward if not nan/inf
         if math.isfinite(loss):
-            with apex.amp.scale_loss(stats["loss"],
-                                     self.optimizer) as scaled_loss:
+            with apex.amp.scale_loss(
+                    stats["loss"] / self.acmu_gradient,
+                    self.optimizer,
+                    delay_unscale=not is_backward_step) as scaled_loss:
                 scaled_loss.backward()
         else:
             self.reporter.log(f"Invalid loss {loss:.3f}, skip...")
             return False
 
+        # if not backward step, return
+        if not is_backward_step:
+            return True
+
         # clip gradient after backward
         norm = -1
-        if self.clip_gradient:
-            # for apex
+        if self.clip_gradient > 0:
+            # for apex (TODO: why norm = nan here)
             norm = clip_grad_norm_(apex.amp.master_params(self.optimizer),
                                    self.clip_gradient)
 

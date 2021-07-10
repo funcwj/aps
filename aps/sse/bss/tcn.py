@@ -339,11 +339,13 @@ class TimeConvTasNet(SseBase):
         # n x 2N x T
         e = self.mask(y)
         m = th.chunk(e, self.num_spks, 1)
+        # 2 x n x N x T
+        m = th.stack(m, dim=0)
         # n x N x T
         if self.non_linear_type == "softmax":
-            m = self.non_linear(th.stack(m, dim=0), dim=0)
+            m = self.non_linear(m, dim=0)
         else:
-            m = self.non_linear(th.stack(m, dim=0))
+            m = self.non_linear(m,)
         # spks x [n x N x T]
         s = [w * m[n] for n in range(self.num_spks)]
         # spks x n x S
@@ -412,22 +414,15 @@ class FreqConvTasNet(SseBase):
         x = self.conv(x)
         # N x F* x T
         masks = self.non_linear(self.mask(x))
-        if self.num_spks > 1:
-            masks = th.chunk(masks, self.num_spks, 1)
-        # N x F x T, ...
-        if mode == "freq":
-            return masks
-        else:
+        # [N x F x T, ...]
+        masks = th.chunk(masks, self.num_spks, 1)
+        if mode == "time":
             decoder = self.enh_transform.inverse_stft
-            if self.num_spks == 1:
-                enh_stft = mix_stft * masks
-                enh = decoder((enh_stft.real, enh_stft.imag), input="complex")
-            else:
-                enh_stft = [mix_stft * m for m in masks]
-                enh = [
-                    decoder((s.real, s.imag), input="complex") for s in enh_stft
-                ]
-            return enh
+            bss_stft = [mix_stft * m for m in masks]
+            bss = [decoder((s.real, s.imag), input="complex") for s in bss_stft]
+        else:
+            bss = masks
+        return bss[0] if self.num_spks == 1 else bss
 
     def infer(self,
               mix: th.Tensor,

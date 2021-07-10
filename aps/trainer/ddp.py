@@ -11,6 +11,7 @@ from pathlib import Path
 
 from aps.trainer.base import Trainer
 from aps.libs import ApsRegisters
+from aps.const import OOM_STRING
 
 import aps.distributed as dist
 
@@ -104,7 +105,7 @@ class DdpTrainer(Trainer):
         Make one training step (return true if no error exists)
 
         1) Forward & Backword
-        2) Clip Gradient
+        2) Clip gradient
         3) Step optimizer
         4) Zero optimizer
         """
@@ -121,7 +122,7 @@ class DdpTrainer(Trainer):
             else:
                 stats = self.task(egs)
         except RuntimeError as rt_err:
-            if "out of memory" in str(rt_err):
+            if OOM_STRING in str(rt_err):
                 th.cuda.empty_cache()
                 self.reporter.log("Get CUDA OOM during forward, skip...")
                 return False
@@ -147,7 +148,7 @@ class DdpTrainer(Trainer):
 
         # clip gradient after backward
         norm = -1
-        if self.clip_gradient:
+        if self.clip_gradient > 0:
             norm = clip_grad_norm_(self.task.parameters(), self.clip_gradient)
 
         # step optimizer and update statistics
