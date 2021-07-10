@@ -12,6 +12,7 @@ import torch.utils.data as dat
 
 from aps.loader.audio import add_room_response
 from aps.loader.simu import coeff_snr
+from aps.loader.se.chunk import WaveChunkDataLoader
 from aps.const import MAX_INT16, EPSILON
 from aps.libs import ApsRegisters
 
