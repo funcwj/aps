@@ -44,7 +44,7 @@ class HvdTrainer(Trainer):
                  stop_criterion: str = "loss",
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
-                 average_checkpoint: bool = False,
+                 average_checkpoint: int = 0,
                  report_metrics: List[str] = ["loss"],
                  reduction_tag: str = "none",
                  stop_on_errors: int = 10,

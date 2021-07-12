@@ -361,7 +361,7 @@ class Trainer(object):
         init: checkpoint for model initialization
         tensorboard: use tensorboard or not
         no_impr: stop training when it reaches the number of epochs that no improvements exist
-        average_checkpoint: average the checkpoints over no improvement epochs or not
+        average_checkpoint: average the checkpoints over several epochs
         stop_criterion: do early stopping detection on which metrics (must in in report_metrics)
         report_metrics: metrics to be tracked during training
         reduction_tag: used in ProgressReporter
@@ -392,7 +392,7 @@ class Trainer(object):
                  stop_criterion: str = "loss",
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
-                 average_checkpoint: bool = False,
+                 average_checkpoint: int = 0,
                  report_metrics: List[str] = ["loss"],
                  reduction_tag: str = "none",
                  stop_on_errors: int = 10,
@@ -435,10 +435,10 @@ class Trainer(object):
         self.acmu_gradient = acmu_gradient
         self.cur_epoch = 0  # zero based
         self.cur_step = 0
-        self.save_interval = save_interval
         self.ssr = 0
         self.no_impr = no_impr
         self.average_checkpoint = average_checkpoint
+        self.save_interval = 1 if average_checkpoint > 1 and save_interval < 1 else save_interval
 
         mode = "max" if stop_criterion == "accu" else "min"
         self.stop_on = stop_criterion
@@ -521,7 +521,7 @@ class Trainer(object):
             self.reporter.log("Add gaussian noise to gradient, with " +
                               f"std = {weight_noise_std}")
         if save_interval > 0:
-            self.reporter.log("Will save model states only in #epoch.pt.tar " +
+            self.reporter.log("Save model states in epoch.#epoch.pt.tar " +
                               f"(interval = {save_interval})")
 
     def create_optimizer(self,
@@ -626,16 +626,18 @@ class Trainer(object):
         """
         Average checkpoint over no improvement epochs
         """
-        if not self.average_checkpoint:
+        if self.average_checkpoint <= 1:
             return
         if self.rank not in [0, None]:
             return
-        self.reporter.log("Average checkpoints best.pt.tar + no_impr" +
-                          f".(1..{self.no_impr}).pt.tar ...")
+        beg_epoch = self.cur_epoch - (self.average_checkpoint -
+                                      1) * self.save_interval
+        self.reporter.log(f"Average checkpoints ...")
         averaged = OrderedDict()
-        for i in range(self.no_impr + 1):
-            name = f"no_impr.{i}.pt.tar" if i else "best.pt.tar"
-            cpt = th.load(self.checkpoint / name, map_location="cpu")
+        for i in range(beg_epoch, self.cur_epoch + 1, self.save_interval):
+            self.reporter.log(f"Loading epoch.{i}.pt.tar ...")
+            cpt = th.load(self.checkpoint / f"epoch.{i}.pt.tar",
+                          map_location="cpu")
             param = cpt["model_state"]
             for key in param.keys():
                 p = param[key]
@@ -645,9 +647,9 @@ class Trainer(object):
                     averaged[key] += p
         for key in averaged:
             if averaged[key].is_floating_point():
-                averaged[key].div_(self.no_impr + 1)
+                averaged[key].div_(self.average_checkpoint)
             else:
-                averaged[key] //= (self.no_impr + 1)
+                averaged[key] //= (self.average_checkpoint)
 
         final = {
             "step": self.cur_step,
@@ -753,11 +755,6 @@ class Trainer(object):
             no_impr = self.stop_detector.no_impr
             logstr += f" | no impr: {no_impr:d}, "
             logstr += f"best = {self.stop_detector.best:.4f}"
-            # save for average
-            if self.average_checkpoint:
-                self.save_checkpoint(status,
-                                     tag=f"no_impr.{no_impr:d}",
-                                     keep_optimizer=False)
 
         self.reporter.log(logstr)
         # << valid
@@ -769,7 +766,7 @@ class Trainer(object):
         self.save_checkpoint(status, tag="last")
         if self.save_interval > 0 and self.cur_epoch % self.save_interval == 0:
             self.save_checkpoint(status,
-                                 tag=f"{self.cur_epoch}",
+                                 tag=f"epoch.{self.cur_epoch}",
                                  keep_optimizer=False)
         # early stop
         if self.stop_detector.stop():
