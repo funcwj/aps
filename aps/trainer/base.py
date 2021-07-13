@@ -632,7 +632,7 @@ class Trainer(object):
             return
         if self.rank not in [0, None]:
             return
-        self.reporter.log(f"Average checkpoints ...")
+        self.reporter.log("Average checkpoints ...")
         averaged = OrderedDict()
         for i in range(self.cur_epoch - self.average_checkpoint + 1,
                        self.cur_epoch + 1):
@@ -771,7 +771,7 @@ class Trainer(object):
                                  keep_optimizer=False)
         # early stop
         if self.stop_detector.stop():
-            self.reporter.log("Stop training cause no impr for " +
+            self.reporter.log("Stop training cause no improvements for " +
                               f"{self.no_impr} epochs")
             return True
         return False
