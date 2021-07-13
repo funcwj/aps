@@ -23,7 +23,7 @@ import aps.distributed as dist
 @ApsRegisters.trainer.register("apex")
 class ApexTrainer(Trainer):
     """
-    Trainer using the NVIDIA's apex (https://github.com/NVIDIA/apex)
+    AMP (Automatic Mixed Precision) Trainer using apex from NVIDIA (https://github.com/NVIDIA/apex)
     """
 
     def __init__(self,
@@ -161,20 +161,25 @@ class ApexTrainer(Trainer):
         if not is_backward_step:
             return True
 
+        norm = -1
         # clip gradient after backward
         if self.clip_gradient > 0:
-            # for apex, returned norm = nan here, do we didn't track it
-            clip_grad_norm_(apex.amp.master_params(self.optimizer),
-                            self.clip_gradient)
+            # NOTE: norm maybe NAN here
+            norm = clip_grad_norm_(apex.amp.master_params(self.optimizer),
+                                   self.clip_gradient)
 
         # step optimizer and update statistics
-        self.optimizer.step()
-        self.optimizer.zero_grad()
-        stats["rate"] = self.optimizer.param_groups[0]["lr"]
-        self.reporter.update(egs, ["#utt", "#tok"])
-        self.reporter.update(stats)
-        self.lr_scheduler_step(None, end_at="step")
-        return True
+        if math.isfinite(norm):
+            self.optimizer.step()
+            self.optimizer.zero_grad()
+            stats["rate"] = self.optimizer.param_groups[0]["lr"]
+            self.reporter.update(egs, ["#utt", "#tok"])
+            self.reporter.update(stats)
+            self.lr_scheduler_step(None, end_at="step")
+            return True
+        else:
+            self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
+            return False
 
     def model_states(self) -> Dict:
         """

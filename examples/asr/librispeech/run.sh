@@ -94,7 +94,6 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
     ./scripts/decode.sh \
       --score true \
       --text $data_dir/$name/text \
-      --log-suffix $name \
       --beam-size $beam_size \
       --max-len 150 \
       --ctc-weight $ctc_weight \
@@ -147,7 +146,6 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
     ./scripts/decode.sh \
       --score true \
       --text $data_dir/$name/text \
-      --log-suffix $name \
       --spm exp/librispeech/$wp_name/$wp_mode.model \
       --lm exp/librispeech/nnlm/$lm_exp \
       --lm-weight $lm_weight \

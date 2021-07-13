@@ -51,21 +51,16 @@ log_dir=$dec_dir/log && mkdir -p $log_dir
 [ ! -f $tst_scp ] && echo "$0: missing test wave script: $tst_scp" && exit 0
 [ ! -d $exp_dir ] && echo "$0: missing experiment directory: $exp_dir" && exit 0
 
-dec_prefix=beam${beam_size}_eos${eos_threshold}_lp${len_penalty}_ctc${ctc_weight}
-[ $len_norm ] && dec_prefix=${dec_prefix}_norm
-
-if [ -z $log_suffix ]; then
-  log_suffix=$dec_prefix
-else
-  log_suffix=${dec_prefix}_${log_suffix}
-fi
+# generate random string
+random_str=$(date +%s%N | md5sum | cut -c 1-9)
+dec_prefix=beam${beam_size}_${random_str}
 
 wav_sp_scp=""
 for n in $(seq $nj); do wav_sp_scp="$wav_sp_scp $log_dir/wav.$n.scp"; done
 
 ./utils/split_scp.pl $tst_scp $wav_sp_scp || exit 1
 
-$cmd JOB=1:$nj $log_dir/decode.$log_suffix.JOB.log \
+$cmd JOB=1:$nj $log_dir/decode.$dec_prefix.JOB.log \
   cmd/decode.py \
   $log_dir/wav.JOB.scp \
   $log_dir/${dec_prefix}.JOB.decode \
@@ -83,7 +78,7 @@ $cmd JOB=1:$nj $log_dir/decode.$log_suffix.JOB.log \
   --temperature $temperature \
   --space "$space" \
   --nbest $nbest \
-  --dump-nbest $log_dir/${dec_prefix}.JOB.${nbest}best \
+  --dump-nbest $log_dir/${dec_prefix}.JOB.nbest \
   --dump-align "$dump_align" \
   --max-len $max_len \
   --min-len $min_len \
@@ -97,7 +92,7 @@ $cmd JOB=1:$nj $log_dir/decode.$log_suffix.JOB.log \
   --eos-threshold $eos_threshold
 
 cat $log_dir/${dec_prefix}.*.decode | sort -k1 > $dec_dir/${dec_prefix}.decode
-cat $log_dir/${dec_prefix}.*.${nbest}best | sort -k1 > $dec_dir/${dec_prefix}.${nbest}best
+cat $log_dir/${dec_prefix}.*.nbest | sort -k1 > $dec_dir/${dec_prefix}.nbest
 
 if $score ; then
   [ -z $text ] && echo "for --score true, you must given --text <reference-transcription>" && exit -1

@@ -395,7 +395,7 @@ class Trainer(object):
                  average_checkpoint: int = 0,
                  report_metrics: List[str] = ["loss"],
                  reduction_tag: str = "none",
-                 stop_on_errors: int = 10,
+                 stop_on_errors: int = 32,
                  **kwargs) -> None:
         if not isinstance(task, Task):
             raise TypeError(
@@ -438,7 +438,8 @@ class Trainer(object):
         self.ssr = 0
         self.no_impr = no_impr
         self.average_checkpoint = average_checkpoint
-        self.save_interval = 1 if average_checkpoint > 1 and save_interval < 1 else save_interval
+        # if we average checkpoints, save_interval is set to 1
+        self.save_interval = 1 if average_checkpoint > 1 else save_interval
 
         mode = "max" if stop_criterion == "accu" else "min"
         self.stop_on = stop_criterion
@@ -452,6 +453,7 @@ class Trainer(object):
         if self.rank in [0, None]:
             self.reporter.log(f"Model summary:\n{task.nnet}")
 
+        # avoid overwrite parameters
         _lr_scheduler_kwargs = lr_scheduler_kwargs.copy()
         # init state as None
         _lr_scheduler_kwargs["state"] = None
@@ -520,7 +522,7 @@ class Trainer(object):
         if weight_noise_std:
             self.reporter.log("Add gaussian noise to gradient, with " +
                               f"std = {weight_noise_std}")
-        if save_interval > 0:
+        if self.save_interval > 0:
             self.reporter.log("Save model states in epoch.#epoch.pt.tar " +
                               f"(interval = {save_interval})")
 
@@ -630,11 +632,10 @@ class Trainer(object):
             return
         if self.rank not in [0, None]:
             return
-        beg_epoch = self.cur_epoch - (self.average_checkpoint -
-                                      1) * self.save_interval
         self.reporter.log(f"Average checkpoints ...")
         averaged = OrderedDict()
-        for i in range(beg_epoch, self.cur_epoch + 1, self.save_interval):
+        for i in range(self.cur_epoch - self.average_checkpoint + 1,
+                       self.cur_epoch + 1):
             self.reporter.log(f"Loading epoch.{i}.pt.tar ...")
             cpt = th.load(self.checkpoint / f"epoch.{i}.pt.tar",
                           map_location="cpu")

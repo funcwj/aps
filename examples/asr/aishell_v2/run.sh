@@ -86,7 +86,6 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
       --ctc-weight $ctc_weight \
       --len-norm $len_norm \
       --dict exp/$dataset/$am_exp/dict \
-      --log-suffix $name \
       $dataset $am_exp \
       $data_dir/$name/wav.scp \
       exp/$dataset/$am_exp/$name &
@@ -119,7 +118,6 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
       --beam-size $beam_size \
       --ctc-weight $ctc_weight \
       --lm-weight $lm_weight \
-      --log-suffix $name \
       $dataset $am_exp \
       $data_dir/$name/wav.scp \
       exp/$dataset/$am_exp/$dec_dir &
