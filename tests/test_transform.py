@@ -23,20 +23,19 @@ egs2_wav = read_audio("data/transform/egs2.wav", sr=16000)
 @pytest.mark.parametrize("frame_len, frame_hop", [(512, 256), (1024, 256),
                                                   (256, 128)])
 @pytest.mark.parametrize("window", ["hamm", "sqrthann"])
-@pytest.mark.parametrize("center", [True, False])
-def test_forward_inverse_stft(wav, frame_len, frame_hop, window, center, mode):
-    wav = th.from_numpy(wav)
-    mid = forward_stft(wav[None, ...],
+def test_forward_inverse_stft(wav, frame_len, frame_hop, window, mode):
+    wav = th.from_numpy(wav)[None, ...]
+    mid = forward_stft(wav,
                        frame_len,
                        frame_hop,
                        mode=mode,
                        window=window,
-                       center=center)
+                       center=True)
     out = inverse_stft(mid,
                        frame_len,
                        frame_hop,
                        window=window,
-                       center=center,
+                       center=True,
                        mode=mode)
     trunc = min(out.shape[-1], wav.shape[-1])
     th.testing.assert_allclose(out[..., :trunc], wav[..., :trunc])
@@ -77,14 +76,16 @@ def test_with_librosa_stft(wav, frame_len, frame_hop, window, center):
 
 
 @pytest.mark.parametrize("wav", [egs1_wav])
+@pytest.mark.parametrize("mode", ["librosa", "torch"])
 @pytest.mark.parametrize("feats,shape", [("spectrogram-log", [1, 807, 257]),
                                          ("emph-fbank-log-cmvn", [1, 807, 80]),
                                          ("mfcc", [1, 807, 13]),
                                          ("mfcc-aug", [1, 807, 13]),
                                          ("mfcc-splice", [1, 807, 39]),
                                          ("mfcc-aug-delta", [1, 807, 39])])
-def test_asr_transform(wav, feats, shape):
+def test_asr_transform(wav, mode, feats, shape):
     transform = AsrTransform(feats=feats,
+                             stft_mode=mode,
                              frame_len=400,
                              frame_hop=160,
                              use_power=True,

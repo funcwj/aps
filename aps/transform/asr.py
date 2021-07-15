@@ -257,7 +257,7 @@ class SpectrogramTransform(STFT):
         return self.num_frames(xlen)
 
     def extra_repr(self) -> str:
-        return self.expr + f", use_power={self.use_power}"
+        return super().extra_repr() + f", use_power={self.use_power}"
 
     def forward(self, wav: th.Tensor) -> th.Tensor:
         """
