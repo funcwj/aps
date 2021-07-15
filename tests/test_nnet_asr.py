@@ -539,6 +539,7 @@ def test_common_transducer(enc_type, enc_kwargs):
         "embed_size": 512,
         "enc_dim": 512,
         "jot_dim": 512,
+        "add_ln": True,
         "dec_rnn": "lstm",
         "dec_layers": 2,
         "dec_hidden": 512,

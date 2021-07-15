@@ -580,7 +580,9 @@ class Trainer(object):
         if manner not in ["resume", "init"]:
             raise ValueError(f"Unsupported manner: {manner}")
         cpt_stats = th.load(cpt_path, map_location="cpu")
-        self.task.nnet.load_state_dict(cpt_stats["model_state"])
+        # NOTE: when init, let strict = false
+        self.task.nnet.load_state_dict(cpt_stats["model_state"],
+                                       strict=manner == "resume")
         cpt_str = (f"checkpoint {cpt_path}: " +
                    f"epoch/step {cpt_stats['epoch']}/{cpt_stats['step']}")
         optimizer_dict = None

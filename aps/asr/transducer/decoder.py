@@ -14,6 +14,53 @@ from aps.asr.base.attention import padding_mask
 from aps.asr.base.layer import OneHotEmbedding, PyTorchRNN
 
 
+class LayerNormRNN(nn.Module):
+    """
+    RNNs with layer normalization
+    """
+
+    def __init__(self,
+                 mode: str,
+                 input_size: int,
+                 hidden_size: int,
+                 num_layers: int = 1,
+                 bias: bool = True,
+                 dropout: float = 0.,
+                 bidirectional: bool = False) -> None:
+        super(LayerNormRNN, self).__init__()
+        self.rn = nn.ModuleList([
+            PyTorchRNN(mode,
+                       input_size,
+                       hidden_size,
+                       bias=bias,
+                       dropout=0,
+                       bidirectional=bidirectional) for _ in range(num_layers)
+        ])
+        self.dropout = nn.ModuleList(
+            nn.Dropout(p=dropout) for _ in range(num_layers - 1))
+        self.ln = nn.ModuleList(
+            nn.LayerNorm(hidden_size * 2 if bidirectional else hidden_size)
+            for _ in range(num_layers))
+
+    def forward(self, inp, hidden=None):
+        """
+        Args:
+            inp (Tensor): N x T x F
+            hidden (list(Tensor)): [N x ..., ]
+        Return:
+            out (Tensor): N x T x F
+            hidden (list(Tensor)): [N x ..., ]
+        """
+        ret_hidden = []
+        for i, rnn in enumerate(self.rn):
+            inp, hid = rnn(inp, None if hidden is None else hidden[i])
+            ret_hidden.append(hid)
+            if i != len(self.rn) - 1:
+                inp = self.dropout[i](inp)
+            inp = self.ln[i](inp)
+        return inp, ret_hidden
+
+
 class DecoderBase(nn.Module):
     """
     Base class for RNNT decoders
@@ -65,6 +112,7 @@ class PyTorchRNNDecoder(DecoderBase):
                  embed_size: int = 512,
                  enc_dim: int = 512,
                  jot_dim: int = 512,
+                 add_ln: bool = False,
                  dec_rnn: str = "lstm",
                  dec_layers: int = 3,
                  dec_hidden: int = 512,
@@ -77,12 +125,20 @@ class PyTorchRNNDecoder(DecoderBase):
                                                 jot_dim=jot_dim,
                                                 onehot_embed=onehot_embed)
         # uni-dir RNNs
-        self.decoder = PyTorchRNN(dec_rnn,
-                                  embed_size,
-                                  dec_hidden,
-                                  dec_layers,
-                                  dropout=dec_dropout,
-                                  bidirectional=False)
+        if add_ln:
+            self.decoder = LayerNormRNN(dec_rnn,
+                                        embed_size,
+                                        dec_hidden,
+                                        dec_layers,
+                                        dropout=dec_dropout,
+                                        bidirectional=False)
+        else:
+            self.decoder = PyTorchRNN(dec_rnn,
+                                      embed_size,
+                                      dec_hidden,
+                                      dec_layers,
+                                      dropout=dec_dropout,
+                                      bidirectional=False)
 
     def forward(self, enc_out: th.Tensor, tgt_pad: th.Tensor) -> th.Tensor:
         """
