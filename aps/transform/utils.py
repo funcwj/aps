@@ -222,7 +222,7 @@ def _forward_stft(
         onesided: bool = False,
         center: bool = False) -> Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]:
     """
-    STFT inner function
+    STFT function implemented by conv1d
     Args:
         wav (Tensor), N x (C) x S
         kernel (Tensor), STFT transform kernels, from init_kernel(...)
@@ -290,7 +290,7 @@ def _inverse_stft(transform: Union[th.Tensor, Tuple[th.Tensor, th.Tensor]],
                   onesided: bool = False,
                   center: bool = False) -> th.Tensor:
     """
-    iSTFT inner function
+    iSTFT function implemented by conv1d
     Args:
         transform (Tensor or [Tensor, Tensor]), STFT transform results
         kernel (Tensor), STFT transform kernels, from init_kernel(...)
@@ -317,13 +317,12 @@ def _inverse_stft(transform: Union[th.Tensor, Tuple[th.Tensor, th.Tensor]],
 
     # (N) x F x T
     imag_dim = imag.dim()
-    if imag_dim not in [2, 3]:
-        raise RuntimeError(f"Expect 2D/3D tensor, but got {imag_dim}D")
-
     # if F x T, reshape 1 x F x T
     if imag_dim == 2:
         real = th.unsqueeze(real, 0)
         imag = th.unsqueeze(imag, 0)
+    if imag_dim != 3:
+        raise RuntimeError(f"Expect 3D tensor, but got {imag_dim}D")
 
     if onesided:
         # [self.num_bins - 2, ..., 1]
@@ -355,6 +354,132 @@ def _inverse_stft(transform: Union[th.Tensor, Tuple[th.Tensor, th.Tensor]],
     return s
 
 
+def _pytorch_stft(
+        wav: th.Tensor,
+        frame_len: int,
+        frame_hop: int,
+        output: str = "complex",
+        window: str = "sqrthann",
+        round_pow_of_two: bool = True,
+        pre_emphasis: float = 0,
+        normalized: bool = False,
+        onesided: bool = True,
+        center: bool = False) -> Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]:
+    """
+    Wrapper of PyTorch STFT function
+    Args:
+        wav: source audio signal
+        frame_len: length of the frame
+        frame_hop: hop size between frames
+        output: output type (complex, real, polar)
+        window: window name
+        center: center flag (similar with that in librosa.stft)
+        round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
+        normalized: use normalized DFT kernel
+        onesided: output onesided STFT
+    Return:
+        transform (Tensor or [Tensor, Tensor]), STFT transform results
+    """
+    if TORCH_VERSION < 1.7:
+        raise RuntimeError("Can not use this function as TORCH_VERSION < 1.7")
+    wav_dim = wav.dim()
+    if output not in ["polar", "complex", "real"]:
+        raise ValueError(f"Unknown output format: {output}")
+    if wav_dim not in [2, 3]:
+        raise RuntimeError(f"STFT expect 2D/3D tensor, but got {wav_dim:d}D")
+    # if N x C x S, reshape NC x S
+    N, S = wav.shape[0], wav.shape[-1]
+    wav = wav.view(-1, S)
+    # n_fft
+    n_fft = 2**math.ceil(
+        math.log2(frame_len)) if round_pow_of_two else frame_len
+    # window
+    window = init_window(window, frame_len)
+    # STFT: N x F x T x 2
+    stft = th.stft(wav,
+                   n_fft,
+                   hop_length=frame_hop,
+                   win_length=frame_len,
+                   window=window,
+                   center=center,
+                   normalized=normalized,
+                   onesided=onesided,
+                   return_complex=False)
+    if wav_dim == 3:
+        stft = stft.view(N, -1, stft.shape[-3], stft.shape[-2])
+    # N x (C) x F x T x 2
+    if output == "real":
+        return stft
+    # N x (C) x F x T
+    real, imag = stft[..., 0], stft[..., 1]
+    if output == "complex":
+        return (real, imag)
+    else:
+        mag = (real**2 + imag**2 + EPSILON)**0.5
+        pha = th.atan2(imag, real)
+        return (mag, pha)
+
+
+def _pytorch_istft(transform: Union[th.Tensor, Tuple[th.Tensor, th.Tensor]],
+                   frame_len: int,
+                   frame_hop: int,
+                   input: str = "complex",
+                   window: str = "sqrthann",
+                   round_pow_of_two: bool = True,
+                   normalized: bool = False,
+                   onesided: bool = True,
+                   center: bool = False) -> th.Tensor:
+    """
+    Wrapper of PyTorch iSTFT function
+    Args:
+        transform: results of STFT
+        frame_len: length of the frame
+        frame_hop: hop size between frames
+        input: input format (complex, real, polar)
+        window: window name
+        center: center flag (similar with that in librosa.stft)
+        round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
+        normalized: use normalized DFT kernel
+        onesided: output onesided STFT
+    """
+    if TORCH_VERSION < 1.7:
+        raise RuntimeError("Can not use this function as TORCH_VERSION < 1.7")
+    if input not in ["polar", "complex", "real"]:
+        raise ValueError(f"Unknown output format: {input}")
+    # stft is a complex tensor of PyTorch
+    if input == "real":
+        stft = th.view_as_complex(transform)
+    else:
+        if input == "polar":
+            real = transform[0] * th.cos(transform[1])
+            imag = transform[0] * th.sin(transform[1])
+        else:
+            real, imag = transform
+        stft = th.view_as_complex(th.stack([real, imag], -1))
+    # (N) x F x T
+    stft_dim = stft.dim()
+    if stft_dim == 2:
+        stft = stft[None, ...]
+    if stft_dim != 3:
+        raise RuntimeError(f"Expect 3D tensor, but got {stft_dim}D")
+    # n_fft
+    n_fft = 2**math.ceil(
+        math.log2(frame_len)) if round_pow_of_two else frame_len
+    # window
+    window = init_window(window, frame_len)
+    # (N) x S
+    wav = th.istft(stft,
+                   n_fft,
+                   hop_length=frame_hop,
+                   win_length=frame_len,
+                   window=window,
+                   center=center,
+                   normalized=normalized,
+                   onesided=onesided,
+                   return_complex=False)
+    return wav
+
+
 def forward_stft(
         wav: th.Tensor,
         frame_len: int,
@@ -381,22 +506,33 @@ def forward_stft(
         normalized: use normalized DFT kernel
         onesided: output onesided STFT
         inverse: using iDFT kernel (for iSTFT)
-        mode: "kaldi"|"librosa", slight difference on applying window function
+        mode: "kaldi"|"librosa|torch", slight difference on applying window function
     """
-    K, _ = init_kernel(frame_len,
-                       frame_hop,
-                       init_window(window, frame_len),
-                       round_pow_of_two=round_pow_of_two,
-                       normalized=normalized,
-                       inverse=False,
-                       mode=mode)
-    return _forward_stft(wav,
-                         K.to(wav.device),
-                         output=output,
-                         frame_hop=frame_hop,
-                         pre_emphasis=pre_emphasis,
-                         onesided=onesided,
-                         center=center)
+    if mode == "torch":
+        return _pytorch_stft(wav,
+                             frame_len,
+                             frame_hop,
+                             output=output,
+                             window=window,
+                             round_pow_of_two=round_pow_of_two,
+                             normalized=normalized,
+                             onesided=onesided,
+                             center=center)
+    else:
+        K, _ = init_kernel(frame_len,
+                           frame_hop,
+                           init_window(window, frame_len),
+                           round_pow_of_two=round_pow_of_two,
+                           normalized=normalized,
+                           inverse=False,
+                           mode=mode)
+        return _forward_stft(wav,
+                             K.to(wav.device),
+                             output=output,
+                             frame_hop=frame_hop,
+                             pre_emphasis=pre_emphasis,
+                             onesided=onesided,
+                             center=center)
 
 
 def inverse_stft(transform: Union[th.Tensor, Tuple[th.Tensor, th.Tensor]],
@@ -421,26 +557,39 @@ def inverse_stft(transform: Union[th.Tensor, Tuple[th.Tensor, th.Tensor]],
         round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
         normalized: use normalized DFT kernel
         onesided: output onesided STFT
-        mode: "kaldi"|"librosa", slight difference on applying window function
+        mode: "kaldi"|"librosa|torch", slight difference on applying window function
+    Return:
+        wav: synthetic signals
     """
-    if isinstance(transform, th.Tensor):
-        device = transform.device
+    if mode == "torch":
+        return _pytorch_istft(transform,
+                              frame_len,
+                              frame_hop,
+                              input=input,
+                              window=window,
+                              round_pow_of_two=round_pow_of_two,
+                              normalized=normalized,
+                              onesided=onesided,
+                              center=center)
     else:
-        device = transform[0].device
-    K, w = init_kernel(frame_len,
-                       frame_hop,
-                       init_window(window, frame_len),
-                       round_pow_of_two=round_pow_of_two,
-                       normalized=normalized,
-                       inverse=True,
-                       mode=mode)
-    return _inverse_stft(transform,
-                         K.to(device),
-                         w.to(device),
-                         input=input,
-                         frame_hop=frame_hop,
-                         onesided=onesided,
-                         center=center)
+        if isinstance(transform, th.Tensor):
+            device = transform.device
+        else:
+            device = transform[0].device
+        K, w = init_kernel(frame_len,
+                           frame_hop,
+                           init_window(window, frame_len),
+                           round_pow_of_two=round_pow_of_two,
+                           normalized=normalized,
+                           inverse=True,
+                           mode=mode)
+        return _inverse_stft(transform,
+                             K.to(device),
+                             w.to(device),
+                             input=input,
+                             frame_hop=frame_hop,
+                             onesided=onesided,
+                             center=center)
 
 
 class STFTBase(nn.Module):
