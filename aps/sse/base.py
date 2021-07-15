@@ -14,7 +14,7 @@ supported_nonlinear = {
     "tanh": th.tanh,  # [-oo, +oo]
     "softplus": tf.softplus,  # [0, +oo]
     "sigmoid": th.sigmoid,  # [0, 1]
-    "softmax": th.softmax
+    "softmax": th.softmax,  # [0, 1]
 }
 
 all_nonlinear = ["relu", "tanh", "softplus", "sigmoid", "softmax"]

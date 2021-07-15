@@ -274,6 +274,32 @@ def test_demucs(resampling_factor, chunk_len):
     assert y.shape == th.Size([chunk_len])
 
 
+@pytest.mark.parametrize("num_spks", [1, 2])
+def test_dfsmn(num_spks):
+    nnet_cls = aps_sse_nnet("sse@dfsmn")
+    transform = EnhTransform(feats="spectrogram-log",
+                             frame_len=512,
+                             frame_hop=256,
+                             center=True)
+    dfsmn = nnet_cls(enh_transform=transform,
+                     num_layers=3,
+                     dim=512,
+                     num_spks=num_spks,
+                     project=256,
+                     lcontext=11,
+                     rcontext=5,
+                     training_mode="time")
+    inp = th.rand(4, 64000)
+    x = dfsmn(inp)
+    if num_spks > 1:
+        x = x[0]
+    assert x.shape == th.Size([4, 64000])
+    y = dfsmn.infer(inp[1])
+    if num_spks > 1:
+        y = y[0]
+    assert y.shape == th.Size([64000])
+
+
 def test_dprnn():
     nnet_cls = aps_sse_nnet("sse@time_dprnn")
     dprnn = nnet_cls(num_spks=1,
