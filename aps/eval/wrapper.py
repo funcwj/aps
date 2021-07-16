@@ -13,7 +13,9 @@ from typing import Dict
 logger = get_logger(__name__)
 
 
-def load_checkpoint(cpt_dir: str, cpt_tag: str = "best") -> Dict:
+def load_checkpoint(cpt_dir: str,
+                    cpt_tag: str = "best",
+                    nnet_cls: object = None) -> Dict:
     """
     Load well trained checkpoint
     """
@@ -22,7 +24,8 @@ def load_checkpoint(cpt_dir: str, cpt_tag: str = "best") -> Dict:
     cpt = th.load(cpt_dir / f"{cpt_tag}.pt.tar", map_location="cpu")
     with open(cpt_dir / "train.yaml", "r") as f:
         conf = yaml.full_load(f)
-    nnet_cls = aps_nnet(conf["nnet"])
+    if nnet_cls is None:
+        nnet_cls = aps_nnet(conf["nnet"])
     asr_transform = None
     enh_transform = None
     accept_raw = False

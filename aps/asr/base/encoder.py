@@ -141,16 +141,18 @@ class PyTorchRNNEncoder(EncoderBase):
             out (Tensor): (N) x Ti x F
             inp_len (Tensor): (N) x Ti
         """
-        if self.proj:
+        if self.proj is not None:
             inp = tf.relu(self.proj(inp))
-        out = var_len_rnn_forward(self.rnns,
-                                  inp,
-                                  inp_len=inp_len,
-                                  enforce_sorted=False,
-                                  add_forward_backward=False)
+        out, _ = self.rnns(inp)
+        # out = var_len_rnn_forward(self.rnns,
+        #                           inp,
+        #                           inp_len=inp_len,
+        #                           enforce_sorted=False,
+        #                           add_forward_backward=False)
+        # NOTE: for torch.jit.script
         out = self.outp(out)
         # pass through non-linear
-        if self.non_linear:
+        if self.non_linear is not None:
             out = self.non_linear(out)
         return out, inp_len
 
@@ -206,13 +208,13 @@ class JitLSTMEncoder(EncoderBase):
         """
         if inp.dim() != 3:
             inp = inp[..., None]
-        if self.proj:
+        if self.proj is not None:
             inp = tf.relu(self.proj(inp))
         rnn_out, _ = self.rnns(inp)
         # rnn_out: N x T x D
         out = self.outp(rnn_out)
         # pass through non-linear
-        if self.non_linear:
+        if self.non_linear is not None:
             out = self.non_linear(out)
         return out, inp_len
 
@@ -475,7 +477,7 @@ class FSMNEncoder(EncoderBase):
             out (Tensor): N x T x F
             out_len (Tensor or None)
         """
-        memory = None
+        memory = th.jit.annotate(Optional[th.Tensor], None)
         for fsmn in self.enc_layers:
             if self.residual:
                 inp, memory = fsmn(inp, memory=memory)

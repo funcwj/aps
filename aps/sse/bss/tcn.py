@@ -105,8 +105,8 @@ class ScaleLinear(nn.Conv1d):
         self.scale = nn.Parameter(th.tensor(scale_param)) if scale_param else 1
 
     def forward(self, inp: th.Tensor):
-        out = super().forward(inp)
-        return out * self.scale
+        return tf.conv1d(inp, self.weight, self.bias, self.stride, self.padding,
+                         self.dilation, self.groups) * self.scale
 
 
 class Conv1dBlock(nn.Module):
@@ -211,7 +211,9 @@ class Conv1dRepeat(nn.Module):
             skip_index = 0
             for index, layer in enumerate(self.repeat):
                 for i in range(index):
-                    inp += self.skip_linear[skip_index](outputs[i])
+                    cur_inp = outputs[i]
+                    skip_linear = self.skip_linear[skip_index]
+                    inp += skip_linear(cur_inp)
                     skip_index += 1
                 inp = layer(inp)
                 outputs.append(inp)
@@ -339,13 +341,10 @@ class TimeConvTasNet(SseBase):
         # n x 2N x T
         e = self.mask(y)
         m = th.chunk(e, self.num_spks, 1)
-        # 2 x n x N x T
+        # 2 x n x N x T (for softmax, put speaker dim at first)
         m = th.stack(m, dim=0)
         # n x N x T
-        if self.non_linear_type == "softmax":
-            m = self.non_linear(m, dim=0)
-        else:
-            m = self.non_linear(m,)
+        m = self.non_linear(m)
         # spks x [n x N x T]
         s = [w * m[n] for n in range(self.num_spks)]
         # spks x n x S
@@ -380,7 +379,6 @@ class FreqConvTasNet(SseBase):
         super(FreqConvTasNet, self).__init__(enh_transform,
                                              training_mode=training_mode)
         assert enh_transform is not None
-        self.non_linear = MaskNonLinear(non_linear, enable="common")
         self.proj = nn.Sequential(TFTransposeTransform(),
                                   nn.Conv1d(in_features, proj_channels, 1))
         # n x B x T => n x B x T
@@ -395,6 +393,7 @@ class FreqConvTasNet(SseBase):
                                  norm=norm)
         self.mask = nn.Sequential(
             nn.PReLU(), nn.Conv1d(proj_channels, num_bins * num_spks, 1))
+        self.non_linear = MaskNonLinear(non_linear, enable="common")
         self.num_spks = num_spks
 
     def _forward(self, mix: th.Tensor,

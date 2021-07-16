@@ -236,8 +236,7 @@ class SpectrogramTransform(STFT):
                  normalized: bool = False,
                  pre_emphasis: float = 0.97,
                  onesided: bool = True,
-                 mode: str = "librosa",
-                 use_power: bool = False) -> None:
+                 mode: str = "librosa") -> None:
         super(SpectrogramTransform,
               self).__init__(frame_len,
                              frame_hop,
@@ -248,16 +247,12 @@ class SpectrogramTransform(STFT):
                              normalized=normalized,
                              onesided=onesided,
                              mode=mode)
-        self.use_power = use_power
 
     def dim(self):
         return self.num_bins
 
     def len(self, xlen: th.Tensor) -> th.Tensor:
         return self.num_frames(xlen)
-
-    def extra_repr(self) -> str:
-        return super().extra_repr() + f", use_power={self.use_power}"
 
     def forward(self, wav: th.Tensor) -> th.Tensor:
         """
@@ -268,8 +263,6 @@ class SpectrogramTransform(STFT):
         """
         # N x (C) x F x T
         mag, _ = super().forward(wav)
-        if self.use_power:
-            mag = mag**2
         return mag
 
 
@@ -280,7 +273,7 @@ class AbsTransform(nn.Module):
         eps: small floor value to avoid NAN when backward
     """
 
-    def __init__(self, eps: float = 1e-5) -> None:
+    def __init__(self, eps: float = 1e-6) -> None:
         super(AbsTransform, self).__init__()
         self.eps = eps
 
@@ -304,8 +297,12 @@ class PowerTransform(nn.Module):
     Power transform
     """
 
-    def __init__(self) -> None:
+    def __init__(self, power: float = 2) -> None:
         super(PowerTransform, self).__init__()
+        self.power = power
+
+    def extra_repr(self) -> str:
+        return f"power={self.power}"
 
     def forward(self, tensor: th.Tensor) -> th.Tensor:
         """
@@ -314,7 +311,7 @@ class PowerTransform(nn.Module):
         Return:
             tensor (Tensor): N x T x F
         """
-        return tensor**2
+        return tensor**self.power
 
 
 class MelTransform(nn.Module):
@@ -798,7 +795,6 @@ class FeatureTransform(nn.Module):
             "mode": stft_mode,
             "window": window,
             "center": center,
-            "use_power": use_power,
             "normalized": stft_normalized,
             "pre_emphasis": pre_emphasis,
             "round_pow_of_two": round_pow_of_two
@@ -828,18 +824,16 @@ class FeatureTransform(nn.Module):
                 spectrogram = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
                     TFTransposeTransform(),
+                    PowerTransform(power=2 if use_power else 1)
                 ]
                 transform += spectrogram
-                feats_dim = transform[-2].dim()
-            elif tok == "trans":
-                transform.append(TFTransposeTransform())
-            elif tok == "power":
-                transform.append(PowerTransform())
+                feats_dim = transform[-3].dim()
             elif tok == "fbank":
                 self.spectra_index = len(transform)
                 fbank = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
                     TFTransposeTransform(),
+                    PowerTransform(power=2 if use_power else 1),
                     MelTransform(frame_len, **mel_kwargs)
                 ]
                 transform += fbank
@@ -849,6 +843,7 @@ class FeatureTransform(nn.Module):
                 mfcc = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
                     TFTransposeTransform(),
+                    PowerTransform(power=2 if use_power else 1),
                     MelTransform(frame_len, **mel_kwargs),
                     LogTransform(eps=eps),
                     DiscreteCosineTransform(num_ceps=num_ceps,
@@ -857,6 +852,10 @@ class FeatureTransform(nn.Module):
                 ]
                 transform += mfcc
                 feats_dim = transform[-1].dim()
+            elif tok == "trans":
+                transform.append(TFTransposeTransform())
+            elif tok == "pow":
+                transform.append(PowerTransform())
             elif tok == "mel":
                 transform.append(MelTransform(frame_len, **mel_kwargs))
                 feats_dim = transform[-1].dim()

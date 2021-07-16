@@ -26,7 +26,7 @@ class DFSMN(SseBase):
                  num_spks: int = 1,
                  num_layers: int = 4,
                  project: int = 512,
-                 dropout: float = 0,
+                 dropout: float = 0.0,
                  residual: bool = True,
                  lcontext: int = 3,
                  rcontext: int = 3,
@@ -51,46 +51,71 @@ class DFSMN(SseBase):
                                    TFTransposeTransform())
         self.num_spks = num_spks
 
-    def _forward(self, mix: th.Tensor,
-                 mode: str) -> Union[th.Tensor, List[th.Tensor]]:
+    def _tf_mask(self, feats: th.Tensor, num_spks: int) -> List[th.Tensor]:
         """
-        Forward function in time|freq mode
+        TF mask estimation from given features
         """
-        # mix_stft: N x F x T
-        feats, mix_stft, _ = self.enh_transform(mix, None)
-        # N x T x P
         proj, _ = self.dfsmn(feats, None)
         # N x S*F x T
         masks = self.masks(proj)
         # [N x F x T, ...]
-        masks = th.chunk(masks, self.num_spks, 1)
+        return th.chunk(masks, self.num_spks, 1)
+
+    def _infer(self, mix: th.Tensor,
+               mode: str) -> Union[th.Tensor, List[th.Tensor]]:
+        """
+        Return time signals or frequency TF masks
+        """
+        # mix_stft: N x F x T
+        feats, mix_stft, _ = self.enh_transform(mix, None)
+        # [N x F x T, ...]
+        masks = self._tf_mask(feats, self.num_spks)
+        # post processing
         if mode == "time":
             decoder = self.enh_transform.inverse_stft
             bss_stft = [mix_stft * m for m in masks]
-            bss = [decoder((s.real, s.imag), input="complex") for s in bss_stft]
+            packed = [
+                decoder((s.real, s.imag), input="complex") for s in bss_stft
+            ]
         else:
-            bss = masks
-        return bss[0] if self.num_spks == 1 else bss
+            packed = masks
+        return packed[0] if self.num_spks == 1 else packed
 
     def infer(self,
               mix: th.Tensor,
               mode: str = "time") -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
-            mix (Tensor): N x S
+            mix (Tensor): N x S, mixture signals
+        Return:
+            [Tensor, ...]: enhanced signals or TF masks
         """
         self.check_args(mix, training=False, valid_dim=[1])
         with th.no_grad():
             mix = mix[None, :]
-            ret = self._forward(mix, mode=mode)
+            ret = self._infer(mix, mode=mode)
             return ret[0] if self.num_spks == 1 else [r[0] for r in ret]
 
+    @th.jit.ignore
     def forward(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
-            mix (Tensor): N x S
+            mix (Tensor): N x S, mixture signals
         Return:
-            [Tensor, ...]: N x S
+            [Tensor, ...]: enhanced signals or TF masks
         """
         self.check_args(mix, training=True, valid_dim=[2])
-        return self._forward(mix, self.training_mode)
+        return self._infer(mix, self.training_mode)
+
+    @th.jit.export
+    def mask_predict(self, feats: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            feats (Tensor): noisy feature, N x T x F
+        Return:
+            masks (Tensor): masks of each speaker, N x T x F
+        """
+        masks = self._tf_mask(feats, self.num_spks)
+        # S x N x F x T
+        masks = th.stack(masks)
+        return masks[0] if self.num_spks == 1 else masks

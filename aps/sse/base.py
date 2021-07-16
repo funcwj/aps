@@ -9,14 +9,6 @@ import torch.nn.functional as tf
 
 from typing import Optional, Union, List, NoReturn
 
-supported_nonlinear = {
-    "relu": th.relu,  # [0, +oo]
-    "tanh": th.tanh,  # [-oo, +oo]
-    "softplus": tf.softplus,  # [0, +oo]
-    "sigmoid": th.sigmoid,  # [0, 1]
-    "softmax": th.softmax,  # [0, 1]
-}
-
 all_nonlinear = ["relu", "tanh", "softplus", "sigmoid", "softmax"]
 all_wo_softmax = ["relu", "tanh", "softplus", "sigmoid"]
 positive_nonlinear = ["relu", "softplus", "sigmoid", "softmax"]
@@ -25,6 +17,19 @@ positive_nonlinear_wo_softplus = ["relu", "sigmoid", "softmax"]
 common_nonlinear = ["relu", "sigmoid"]
 bounded_nonlinear = ["sigmoid", "softmax"]
 unbounded_nonlinear = ["relu", "tanh", "softplus"]
+
+
+def softmax(tensor: th.Tensor) -> th.Tensor:
+    return th.softmax(tensor, 0)
+
+
+supported_nonlinear = {
+    "relu": th.relu,  # [0, +oo]
+    "tanh": th.tanh,  # [-oo, +oo]
+    "softplus": tf.softplus,  # [0, +oo]
+    "sigmoid": th.sigmoid,  # [0, 1]
+    "softmax": softmax,  # [0, 1]
+}
 
 
 class SseBase(nn.Module):
@@ -94,29 +99,21 @@ class MaskNonLinear(nn.Module):
         }
         if non_linear not in supported_set[enable]:
             raise ValueError(f"Unsupported nonlinear: {non_linear}")
-        self.func = supported_nonlinear[non_linear]
+        self.non_linear = supported_nonlinear[non_linear]
         self.value_clip = value_clip
         self.scale = scale
-        self.non_linear = non_linear
 
-    def forward(self, inp: th.Tensor, **kwargs) -> th.Tensor:
+    def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
-            inp (Tensor): N x T x F or N x F x T or N x S x F x T
+            inp (Tensor): (S) x N x ... x ...
         Return:
             out (Tensor): same shape as inp
         """
         if inp.dim() not in [3, 4]:
             raise RuntimeError(
                 f"MaskNonLinear expects 3/4D tensor, got {inp.dim()}")
-        if self.non_linear == "softmax" and inp.dim() != 4:
-            raise RuntimeError(
-                f"MaskNonLinear (softmax) expects 4D tensor, got {inp.dim()}")
-        out = self.func(inp, **kwargs)
-        if self.non_linear == "softmax":
-            return out
-        else:
-            out = out * self.scale
-            if self.value_clip is not None:
-                out = th.clamp_max(out, self.value_clip)
-            return out
+        out = self.non_linear(inp) * self.scale
+        if self.value_clip is not None:
+            out = th.clamp_max(out, self.value_clip)
+        return out
