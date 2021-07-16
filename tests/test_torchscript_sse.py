@@ -18,12 +18,15 @@ transform = EnhTransform(feats="spectrogram-log-cmvn",
 num_bins = transform.feats_dim
 
 
-def scriped_and_check(export_nnet):
+def scriped_and_check(export_nnet, is_cplx=False):
     # disable enh_transform
     export_nnet.enh_transform = None
     export_nnet.eval()
     scripted_nnet = th.jit.script(export_nnet)
-    egs_inp = th.rand(1, 20, num_bins) * 10
+    if is_cplx:
+        egs_inp = th.rand(1, 20, num_bins, 2) * 10
+    else:
+        egs_inp = th.rand(1, 20, num_bins) * 10
     ref_out = export_nnet.mask_predict(egs_inp)
     jit_out = scripted_nnet.mask_predict(egs_inp)
     th.testing.assert_allclose(ref_out, jit_out)
@@ -94,3 +97,43 @@ def test_freq_xfmr(arch, pose):
                            non_linear="sigmoid",
                            training_mode="freq")
     scriped_and_check(export_nnet)
+
+
+@pytest.mark.parametrize("num_branch", [1, 2])
+@pytest.mark.parametrize("cplx", [True, False])
+def test_freq_dcunet(num_branch, cplx):
+    nnet_cls = aps_sse_nnet("sse@dcunet")
+    export_nnet = nnet_cls(enh_transform=transform,
+                           K="7,5;7,5;5,3;5,3;3,3;3,3",
+                           S="2,1;2,1;2,1;2,1;2,1;2,1",
+                           C="32,32,64,64,64,128",
+                           P="1,1,1,1,1,0",
+                           O="0,0,1,1,1,0",
+                           num_branch=num_branch,
+                           cplx=cplx,
+                           causal_conv=False,
+                           non_linear="tanh" if cplx else "relu",
+                           connection="cat")
+    export_nnet.forward_stft = None
+    export_nnet.inverse_stft = None
+    scriped_and_check(export_nnet, is_cplx=True)
+
+
+@pytest.mark.parametrize("num_spks", [1, 2])
+@pytest.mark.parametrize("cplx", [True, False])
+def test_freq_dccrn(num_spks, cplx):
+    nnet_cls = aps_sse_nnet("sse@dccrn")
+    export_nnet = nnet_cls(enh_transform=transform,
+                           cplx=cplx,
+                           K="3,3;3,3;3,3;3,3;3,3;3,3;3,3",
+                           S="2,1;2,1;2,1;2,1;2,1;2,1;2,1",
+                           P="1,1,1,1,1,0,0",
+                           O="0,0,0,0,0,0,1",
+                           C="16,32,64,64,128,128,256",
+                           num_spks=num_spks,
+                           rnn_resize=512 if cplx else 256,
+                           non_linear="tanh" if cplx else "relu",
+                           connection="cat")
+    export_nnet.forward_stft = None
+    export_nnet.inverse_stft = None
+    scriped_and_check(export_nnet, is_cplx=True)

@@ -90,7 +90,6 @@ def test_dcunet(num_branch, cplx):
                       num_branch=num_branch,
                       cplx=cplx,
                       causal_conv=False,
-                      freq_padding=True,
                       connection="cat")
     inp = th.rand(4, 64000)
     x = dcunet(inp)
