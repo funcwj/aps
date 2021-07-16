@@ -33,7 +33,7 @@ class LinearProj(nn.Module):
     def __init__(self,
                  input_size: int,
                  embed_dim: int = 512,
-                 dropout: float = 0,
+                 dropout: float = 0.0,
                  norm: str = "LN") -> None:
         super(LinearProj, self).__init__()
         self.proj = nn.Linear(input_size, embed_dim)
@@ -68,7 +68,7 @@ class Conv1dProj(nn.Module):
                  input_size: int,
                  embed_dim: int = 512,
                  norm: str = "BN",
-                 dropout: float = 0,
+                 dropout: float = 0.0,
                  dim: int = 256,
                  num_layers: int = 2) -> None:
         super(Conv1dProj, self).__init__()

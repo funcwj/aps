@@ -210,11 +210,15 @@ class Conv1dRepeat(nn.Module):
             outputs = [inp]
             skip_index = 0
             for index, layer in enumerate(self.repeat):
-                for i in range(index):
-                    cur_inp = outputs[i]
-                    skip_linear = self.skip_linear[skip_index]
-                    inp += skip_linear(cur_inp)
-                    skip_index += 1
+                # NOTE: make it support torchscript
+                for i, linear in enumerate(self.skip_linear):
+                    if i >= skip_index and i < skip_index + index:
+                        inp += linear(outputs[i - skip_index])
+                skip_index += index
+                # for i in range(index):
+                #     print(i, skip_index)
+                #     inp += self.skip_linear[skip_index](outputs[i])
+                #     skip_index += 1
                 inp = layer(inp)
                 outputs.append(inp)
         else:
@@ -396,10 +400,23 @@ class FreqConvTasNet(SseBase):
         self.non_linear = MaskNonLinear(non_linear, enable="common")
         self.num_spks = num_spks
 
-    def _forward(self, mix: th.Tensor,
-                 mode: str) -> Union[th.Tensor, List[th.Tensor]]:
+    def _tf_mask(self, feats: th.Tensor, num_spks: int) -> List[th.Tensor]:
         """
-        Forward function in time|freq mode
+        TF mask estimation from given features
+        """
+        # N x C x T
+        x = self.proj(feats)
+        # n x B x T
+        x = self.conv(x)
+        # N x F* x T
+        masks = self.non_linear(self.mask(x))
+        # [N x F x T, ...]
+        return th.chunk(masks, self.num_spks, 1)
+
+    def _infer(self, mix: th.Tensor,
+               mode: str) -> Union[th.Tensor, List[th.Tensor]]:
+        """
+        Return time signals or frequency TF masks
         """
         # mix_feat: N x T x F
         # mix_stft: N x (C) x F x T
@@ -407,14 +424,8 @@ class FreqConvTasNet(SseBase):
         # N x F x T
         if mix_stft.dim() == 4:
             mix_stft = mix_stft[:, 0]
-        # N x C x T
-        x = self.proj(mix_feat)
-        # n x B x T
-        x = self.conv(x)
-        # N x F* x T
-        masks = self.non_linear(self.mask(x))
         # [N x F x T, ...]
-        masks = th.chunk(masks, self.num_spks, 1)
+        masks = self._tf_mask(mix_feat, self.num_spks)
         if mode == "time":
             decoder = self.enh_transform.inverse_stft
             bss_stft = [mix_stft * m for m in masks]
@@ -433,9 +444,10 @@ class FreqConvTasNet(SseBase):
         self.check_args(mix, training=False, valid_dim=[1, 2])
         with th.no_grad():
             mix = mix[None, :]
-            ret = self._forward(mix, mode=mode)
+            ret = self._infer(mix, mode=mode)
             return ret[0] if self.num_spks == 1 else [r[0] for r in ret]
 
+    @th.jit.ignore
     def forward(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args
@@ -445,4 +457,17 @@ class FreqConvTasNet(SseBase):
             s (List(Tensor)): [N x S, ...]
         """
         self.check_args(mix, training=True, valid_dim=[2, 3])
-        return self._forward(mix, mode=self.training_mode)
+        return self._infer(mix, mode=self.training_mode)
+
+    @th.jit.export
+    def mask_predict(self, feats: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            feats (Tensor): noisy feature, N x T x F
+        Return:
+            masks (Tensor): masks of each speaker, N x T x F
+        """
+        masks = self._tf_mask(feats, self.num_spks)
+        # S x N x F x T
+        masks = th.stack(masks)
+        return masks[0] if self.num_spks == 1 else masks

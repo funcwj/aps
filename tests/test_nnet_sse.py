@@ -141,8 +141,8 @@ def test_dense_unet(num_spks, non_linear):
 
 
 @pytest.mark.parametrize("num_spks", [1, 2])
-def test_freq_xfmr_rel(num_spks):
-    nnet_cls = aps_sse_nnet("sse@freq_xfmr_rel")
+def test_freq_xfmr(num_spks):
+    nnet_cls = aps_sse_nnet("sse@freq_xfmr")
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
                              frame_hop=256)
@@ -162,7 +162,6 @@ def test_freq_xfmr_rel(num_spks):
                     arch_kwargs=arch_kwargs,
                     pose_kwargs=pose_kwargs,
                     num_layers=3,
-                    mask_dropout=0.1,
                     non_linear="sigmoid",
                     training_mode="time")
     inp = th.rand(4, 64000)

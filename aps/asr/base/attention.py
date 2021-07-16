@@ -14,7 +14,7 @@ from aps.libs import Register
 AsrAtt = Register("asr_att")
 
 
-def padding_mask(vec: th.Tensor, device: th.device = None) -> th.Tensor:
+def padding_mask(vec: th.Tensor) -> th.Tensor:
     """
     Generate padding masks
 
@@ -27,12 +27,12 @@ def padding_mask(vec: th.Tensor, device: th.device = None) -> th.Tensor:
             [False, False, False, False, False, False],
             [False,  True,  True,  True,  True,  True]])
     """
-    N = vec.nelement()
+    N = vec.shape[-1]
     # vector may not in sorted order
     M = vec.max().item()
     templ = th.arange(M, device=vec.device).repeat([N, 1])
     mask = (templ >= vec.unsqueeze(1))
-    return mask.to(device) if device is not None else mask
+    return mask
 
 
 def att_instance(att_type: str, enc_dim: int, dec_dim: int,
