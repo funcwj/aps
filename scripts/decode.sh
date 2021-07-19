@@ -30,7 +30,6 @@ lm_weight=0
 ctc_weight=0
 spm=""
 dump_align=""
-log_suffix=""
 text=""
 score=false
 
@@ -53,14 +52,9 @@ exp_dir=exp/$mdl_id/$exp_id
 
 mkdir -p $dec_dir $dec_dir/log
 
-dec_prefix=beam${beam_size}_eos${eos_threshold}_lp${len_penalty}_ctc${ctc_weight}
-$len_norm && dec_prefix=${dec_prefix}_norm
-
-if [ -z $log_suffix ]; then
-  log_suffix=$dec_prefix
-else
-  log_suffix=${dec_prefix}_${log_suffix}
-fi
+# generate random string
+random_str=$(date +%s%N | md5sum | cut -c 1-9)
+dec_prefix=beam${beam_size}_${random_str}
 
 if [ -z $batch_size ]; then
   cmd/decode.py \
@@ -80,7 +74,7 @@ if [ -z $batch_size ]; then
     --ctc-weight $ctc_weight \
     --space "$space" \
     --nbest $nbest \
-    --dump-nbest $dec_dir/${dec_prefix}.${nbest}best \
+    --dump-nbest $dec_dir/${dec_prefix}.nbest \
     --dump-align "$dump_align" \
     --max-len $max_len \
     --min-len $min_len \
@@ -92,7 +86,7 @@ if [ -z $batch_size ]; then
     --cov-penalty $cov_penalty \
     --cov-threshold $cov_threshold \
     --eos-threshold $eos_threshold \
-    > $dec_dir/log/$mdl_id.decode.$exp_id.$log_suffix.log 2>&1
+    > $dec_dir/log/decode.$dec_prefix.log 2>&1
 else
   cmd/decode_batch.py \
     $tst_scp \
@@ -112,7 +106,7 @@ else
     --lm-weight $lm_weight \
     --ctc-weight $ctc_weight \
     --nbest $nbest \
-    --dump-nbest $dec_dir/${dec_prefix}.${nbest}best \
+    --dump-nbest $dec_dir/${dec_prefix}.nbest \
     --dump-align "$dump_align" \
     --max-len $max_len \
     --min-len $min_len \
@@ -123,7 +117,7 @@ else
     --cov-penalty $cov_penalty \
     --cov-threshold $cov_threshold \
     --eos-threshold $eos_threshold \
-    > $dec_dir/log/$mdl_id.decode.$exp_id.$log_suffix.log 2>&1
+    > $dec_dir/log/decode.$dec_prefix.log 2>&1
 fi
 
 if $score ; then

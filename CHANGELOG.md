@@ -3,8 +3,8 @@
 ### 2021/07
 
 1. Update implementation of DPRNN
-2. Add SepFormer
-3. Add online dataloader (based on json configuration) for SSE tasks
+2. Add SepFormer & DFSMN & json based online dataloader (for SSE tasks)
+3. Begin to add torchscript export testing (dccrn, dcunet, dfsmn, tcn, transformer ...)
 
 ### 2021/06
 

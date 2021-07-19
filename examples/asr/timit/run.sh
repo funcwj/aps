@@ -63,7 +63,6 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
       --ctc-weight $ctc_weight \
       --function "beam_search" \
       --beam-size $beam_size \
-      --log-suffix $name \
       $dataset $exp \
       data/timit/$name/wav.scp \
       exp/timit/$exp/dec_$name &

@@ -89,8 +89,8 @@ def test_dcunet(num_branch, cplx):
                       O="0,0,1,1,1,0",
                       num_branch=num_branch,
                       cplx=cplx,
+                      non_linear="tanh" if cplx else "sigmoid",
                       causal_conv=False,
-                      freq_padding=True,
                       connection="cat")
     inp = th.rand(4, 64000)
     x = dcunet(inp)
@@ -141,8 +141,8 @@ def test_dense_unet(num_spks, non_linear):
 
 
 @pytest.mark.parametrize("num_spks", [1, 2])
-def test_freq_xfmr_rel(num_spks):
-    nnet_cls = aps_sse_nnet("sse@freq_xfmr_rel")
+def test_freq_xfmr(num_spks):
+    nnet_cls = aps_sse_nnet("sse@freq_xfmr")
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
                              frame_hop=256)
@@ -162,7 +162,6 @@ def test_freq_xfmr_rel(num_spks):
                     arch_kwargs=arch_kwargs,
                     pose_kwargs=pose_kwargs,
                     num_layers=3,
-                    mask_dropout=0.1,
                     non_linear="sigmoid",
                     training_mode="time")
     inp = th.rand(4, 64000)
@@ -272,6 +271,32 @@ def test_demucs(resampling_factor, chunk_len):
     x = th.rand(chunk_len)
     y = demucs.infer(x)
     assert y.shape == th.Size([chunk_len])
+
+
+@pytest.mark.parametrize("num_spks", [1, 2])
+def test_dfsmn(num_spks):
+    nnet_cls = aps_sse_nnet("sse@dfsmn")
+    transform = EnhTransform(feats="spectrogram-log",
+                             frame_len=512,
+                             frame_hop=256,
+                             center=True)
+    dfsmn = nnet_cls(enh_transform=transform,
+                     num_layers=3,
+                     dim=512,
+                     num_spks=num_spks,
+                     project=256,
+                     lcontext=11,
+                     rcontext=5,
+                     training_mode="time")
+    inp = th.rand(4, 64000)
+    x = dfsmn(inp)
+    if num_spks > 1:
+        x = x[0]
+    assert x.shape == th.Size([4, 64000])
+    y = dfsmn.infer(inp[1])
+    if num_spks > 1:
+        y = y[0]
+    assert y.shape == th.Size([64000])
 
 
 def test_dprnn():

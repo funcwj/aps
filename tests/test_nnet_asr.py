@@ -82,7 +82,8 @@ fsmn_enc_kwargs = {
     "project": 512,
     "num_layers": 4,
     "residual": True,
-    "context": 10,
+    "lcontext": 10,
+    "rcontext": 10,
     "norm": "BN",
     "dropout": 0.2
 }
@@ -132,7 +133,8 @@ conv1d_fsmn_enc_kwargs = {
     },
     "fsmn": {
         "num_layers": 3,
-        "context": 10,
+        "lcontext": 10,
+        "rcontext": 10,
         "norm": "LN",
         "residual": False,
         "dilation": 1,
@@ -539,6 +541,7 @@ def test_common_transducer(enc_type, enc_kwargs):
         "embed_size": 512,
         "enc_dim": 512,
         "jot_dim": 512,
+        "add_ln": True,
         "dec_rnn": "lstm",
         "dec_layers": 2,
         "dec_hidden": 512,

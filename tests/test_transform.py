@@ -19,18 +19,24 @@ egs2_wav = read_audio("data/transform/egs2.wav", sr=16000)
 
 
 @pytest.mark.parametrize("wav", [egs1_wav])
+@pytest.mark.parametrize("mode", ["librosa", "torch"])
 @pytest.mark.parametrize("frame_len, frame_hop", [(512, 256), (1024, 256),
                                                   (256, 128)])
 @pytest.mark.parametrize("window", ["hamm", "sqrthann"])
-@pytest.mark.parametrize("center", [True, False])
-def test_forward_inverse_stft(wav, frame_len, frame_hop, window, center):
-    wav = th.from_numpy(wav)
-    mid = forward_stft(wav[None, ...],
+def test_forward_inverse_stft(wav, frame_len, frame_hop, window, mode):
+    wav = th.from_numpy(wav)[None, ...]
+    mid = forward_stft(wav,
+                       frame_len,
+                       frame_hop,
+                       mode=mode,
+                       window=window,
+                       center=True)
+    out = inverse_stft(mid,
                        frame_len,
                        frame_hop,
                        window=window,
-                       center=center)
-    out = inverse_stft(mid, frame_len, frame_hop, window=window, center=center)
+                       center=True,
+                       mode=mode)
     trunc = min(out.shape[-1], wav.shape[-1])
     th.testing.assert_allclose(out[..., :trunc], wav[..., :trunc])
 
@@ -40,13 +46,21 @@ def test_forward_inverse_stft(wav, frame_len, frame_hop, window, center):
                                                   (400, 160)])
 @pytest.mark.parametrize("window", ["hann", "hamm"])
 @pytest.mark.parametrize("center", [False, True])
-def test_with_librosa(wav, frame_len, frame_hop, window, center):
-    real, imag = forward_stft(th.from_numpy(wav)[None, ...],
-                              frame_len,
-                              frame_hop,
-                              window=window,
-                              center=center,
-                              output="complex")
+def test_with_librosa_stft(wav, frame_len, frame_hop, window, center):
+    real1, imag1 = forward_stft(th.from_numpy(wav)[None, ...],
+                                frame_len,
+                                frame_hop,
+                                mode="librosa",
+                                window=window,
+                                center=center,
+                                output="complex")
+    real2, imag2 = forward_stft(th.from_numpy(wav)[None, ...],
+                                frame_len,
+                                frame_hop,
+                                mode="torch",
+                                window=window,
+                                center=center,
+                                output="complex")
     librosa_stft = librosa.stft(wav,
                                 n_fft=2**math.ceil(math.log2(frame_len)),
                                 hop_length=frame_hop,
@@ -55,19 +69,23 @@ def test_with_librosa(wav, frame_len, frame_hop, window, center):
                                 center=center)
     librosa_real = th.tensor(librosa_stft.real, dtype=th.float32)
     librosa_imag = th.tensor(librosa_stft.imag, dtype=th.float32)
-    th.testing.assert_allclose(real[0], librosa_real)
-    th.testing.assert_allclose(imag[0], librosa_imag)
+    th.testing.assert_allclose(real1[0], librosa_real)
+    th.testing.assert_allclose(imag1[0], librosa_imag)
+    th.testing.assert_allclose(real2[0], librosa_real)
+    th.testing.assert_allclose(imag2[0], librosa_imag)
 
 
 @pytest.mark.parametrize("wav", [egs1_wav])
+@pytest.mark.parametrize("mode", ["librosa", "torch"])
 @pytest.mark.parametrize("feats,shape", [("spectrogram-log", [1, 807, 257]),
                                          ("emph-fbank-log-cmvn", [1, 807, 80]),
                                          ("mfcc", [1, 807, 13]),
                                          ("mfcc-aug", [1, 807, 13]),
                                          ("mfcc-splice", [1, 807, 39]),
                                          ("mfcc-aug-delta", [1, 807, 39])])
-def test_asr_transform(wav, feats, shape):
+def test_asr_transform(wav, mode, feats, shape):
     transform = AsrTransform(feats=feats,
+                             stft_mode=mode,
                              frame_len=400,
                              frame_hop=160,
                              use_power=True,

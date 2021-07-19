@@ -9,6 +9,7 @@ import torch.nn as nn
 from typing import Optional, Tuple, List
 from aps.sse.enh.dcunet import Encoder, Decoder, parse_1dstr, parse_2dstr
 from aps.sse.base import SseBase, MaskNonLinear
+from aps.const import EPSILON
 from aps.libs import ApsRegisters
 
 
@@ -170,7 +171,8 @@ class DCCRN(SseBase):
         assert enh_transform is not None
         self.cplx = cplx
         self.non_linear = MaskNonLinear(non_linear, enable="all_wo_softmax")
-        self.enh_transform = enh_transform
+        self.forward_stft = enh_transform.ctx(name="forward_stft")
+        self.inverse_stft = enh_transform.ctx(name="inverse_stft")
         K = parse_2dstr(K)
         S = parse_2dstr(S)
         C = parse_1dstr(C)
@@ -179,15 +181,18 @@ class DCCRN(SseBase):
         self.encoder = Encoder(cplx, K, S, [1] + C, P, causal=causal_conv)
         if connection == "cat":
             C[-1] *= 2
+        # decoder: type of ModuleList for th.jit.export
         if share_decoder:
-            self.decoder = Decoder(cplx,
-                                   K[::-1],
-                                   S[::-1],
-                                   C[::-1] + [num_spks],
-                                   P[::-1],
-                                   O[::-1],
-                                   causal=causal_conv,
-                                   connection=connection)
+            self.decoder = nn.ModuleList([
+                Decoder(cplx,
+                        K[::-1],
+                        S[::-1],
+                        C[::-1] + [num_spks],
+                        P[::-1],
+                        O[::-1],
+                        causal=causal_conv,
+                        connection=connection)
+            ])
         else:
             self.decoder = nn.ModuleList([
                 Decoder(cplx,
@@ -209,33 +214,82 @@ class DCCRN(SseBase):
         self.connection = connection
         self.share_decoder = share_decoder
 
-    def sep(self,
-            m: th.Tensor,
-            sr: th.Tensor,
-            si: th.Tensor,
-            mode: str = "freq") -> th.Tensor:
-        decoder = self.enh_transform.inverse_stft
+    def _sep(self,
+             m: th.Tensor,
+             sr: th.Tensor,
+             si: th.Tensor,
+             mode: str = "freq") -> th.Tensor:
         # m: N x 2F x T
         if self.cplx:
             # N x F x T
             mr, mi = th.chunk(m, 2, -2)
-            m_abs = (mr**2 + mi**2)**0.5
+            m_abs = (mr**2 + mi**2 + EPSILON)**0.5
             m_mag = self.non_linear(m_abs)
+            mr, mi = m_mag * mr / m_abs, m_mag * mi / m_abs
             if mode == "freq":
-                # s = (si**2 + sr**2)**0.5 * m_mag
-                s = m_mag
+                # N x F x T x 2
+                s = th.stack([mr, mi], -1)
             else:
-                mr, mi = m_mag * mr / m_abs, m_mag * mi / m_abs
-                s = decoder((sr * mr - si * mi, sr * mi + si * mr),
-                            input="complex")
+                s = self.inverse_stft((sr * mr - si * mi, sr * mi + si * mr),
+                                      input="complex")
         else:
             m = self.non_linear(m)
             if mode == "freq":
-                # s = (si**2 + sr**2)**0.5 * m
                 s = m
             else:
-                s = decoder((sr * m, si * m), input="complex")
+                s = self.inverse_stft((sr * m, si * m), input="complex")
         return s
+
+    def _infer(self,
+               mix: th.Tensor,
+               mode: str = "freq") -> Tuple[th.Tensor, List[th.Tensor]]:
+        # N x F x T
+        sr, si = self.forward_stft(mix, output="complex")
+        # N x C x 2F x T
+        masks = self._tf_mask(sr, si)
+        if self.num_spks == 1:
+            return self._sep(masks[:, 0], sr, si, mode=mode)
+        else:
+            return [
+                self._sep(masks[:, i], sr, si, mode=mode)
+                for i in range(self.num_spks)
+            ]
+
+    def _tf_mask(self,
+                 real: th.Tensor,
+                 imag: th.Tensor,
+                 eps: float = EPSILON) -> th.Tensor:
+        """
+        TF mask estimation from given features
+        """
+        if self.cplx:
+            # N x 2F x T
+            s = th.cat([real, imag], -2)
+        else:
+            # N x F x T
+            s = (real**2 + imag**2 + eps)**0.5
+            # s, stft, _ = self.enh_transform(mix, None)
+            # sr, si = stft.real, stft.imag
+            # N x F x T
+            # s = s.transpose(1, 2)
+        # encoder
+        enc_h, h = self.encoder(s[:, None])
+        # h: N x C x (2F) x T
+        out_h = self.rnn(h)
+        if self.connection == "sum":
+            h = h + out_h
+        else:
+            h = th.cat([out_h, h], 1)
+        # reverse
+        # enc_h = enc_h[::-1]
+        enc_h = [enc_h[-i] for i in range(1, 1 + len(enc_h))]
+        # decoder
+        # N x C x 2F x T
+        if self.share_decoder:
+            masks = self.decoder[0](h, enc_h)
+        else:
+            masks = th.cat([decoder(h, enc_h) for decoder in self.decoder], 1)
+        return masks
 
     def infer(self,
               mix: th.Tensor,
@@ -249,51 +303,13 @@ class DCCRN(SseBase):
         self.check_args(mix, training=False, valid_dim=[1])
         with th.no_grad():
             mix = mix[None, :]
-            sep = self._forward(mix, mode=mode)
+            sep = self._infer(mix, mode=mode)
             if self.num_spks == 1:
                 return sep[0]
             else:
                 return [s[0] for s in sep]
 
-    def _forward(self,
-                 mix: th.Tensor,
-                 mode: str = "freq") -> Tuple[th.Tensor, List[th.Tensor]]:
-        if self.cplx:
-            # N x F x T
-            sr, si = self.enh_transform.forward_stft(mix, output="complex")
-            # N x 2F x T
-            s = th.cat([sr, si], -2)
-        else:
-            # N x F x T
-            # s = (sr**2 + si**2)**0.5
-            s, stft, _ = self.enh_transform(mix, None)
-            # N x F x T
-            s = s.transpose(1, 2)
-            sr, si = stft.real, stft.imag
-        # encoder
-        enc_h, h = self.encoder(s[:, None])
-        # h: N x C x (2F) x T
-        out_h = self.rnn(h)
-        if self.connection == "sum":
-            h = h + out_h
-        else:
-            h = th.cat([out_h, h], 1)
-        # reverse
-        enc_h = enc_h[::-1]
-        # decoder
-        # N x C x 2F x T
-        if self.share_decoder:
-            spk_m = self.decoder(h, enc_h)
-        else:
-            spk_m = th.cat([decoder(h, enc_h) for decoder in self.decoder], 1)
-        if self.num_spks == 1:
-            return self.sep(spk_m[:, 0], sr, si, mode=mode)
-        else:
-            return [
-                self.sep(spk_m[:, i], sr, si, mode=mode)
-                for i in range(self.num_spks)
-            ]
-
+    @th.jit.ignore
     def forward(self, s: th.Tensor) -> Tuple[th.Tensor, List[th.Tensor]]:
         """
         Args:
@@ -302,4 +318,30 @@ class DCCRN(SseBase):
             Tensor: N x S or N x F x T
         """
         self.check_args(s, training=True, valid_dim=[2])
-        return self._forward(s, mode=self.training_mode)
+        return self._infer(s, mode=self.training_mode)
+
+    @th.jit.export
+    def mask_predict(self, stft: th.Tensor, eps: float = EPSILON) -> th.Tensor:
+        """
+        Args:
+            stft (Tensor): real part of STFT, N x T x F (x2)
+        Return:
+            masks (Tensor): masks of each speaker, N x T x F (x2)
+        """
+        # N x F x T x 2
+        stft = stft.transpose(1, 2)
+        # N x C x (2)F x T
+        masks = self._tf_mask(stft[..., 0], stft[..., 1], eps=eps)
+        # C x N x T x (2)F
+        masks = masks.permute(1, 0, 3, 2)
+        if self.cplx:
+            # [C x N x T x F, ...]
+            real, imag = th.chunk(masks, 2, -1)
+            m_abs = (real**2 + imag**2 + eps)**0.5
+            m_mag = self.non_linear(m_abs)
+            real, imag = m_mag * real / m_abs, m_mag * imag / m_abs
+            # C x N x T x F x (2)
+            masks = th.stack([real, imag], -1)
+        else:
+            masks = self.non_linear(masks)
+        return masks[0] if self.num_spks == 1 else masks

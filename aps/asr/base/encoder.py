@@ -10,7 +10,7 @@ import torch.nn.functional as tf
 from typing import Optional, Tuple, Union, List, Dict
 
 from aps.asr.base.layer import VariantRNN, FSMN, Conv1d, Conv2d, PyTorchRNN
-from aps.asr.base.layer import var_len_rnn_forward, rnn_output_nonlinear
+from aps.asr.base.layer import rnn_output_nonlinear
 from aps.asr.base.jit import LSTM
 from aps.libs import Register
 
@@ -141,16 +141,18 @@ class PyTorchRNNEncoder(EncoderBase):
             out (Tensor): (N) x Ti x F
             inp_len (Tensor): (N) x Ti
         """
-        if self.proj:
+        if self.proj is not None:
             inp = tf.relu(self.proj(inp))
-        out = var_len_rnn_forward(self.rnns,
-                                  inp,
-                                  inp_len=inp_len,
-                                  enforce_sorted=False,
-                                  add_forward_backward=False)
+        out, _ = self.rnns(inp)
+        # out = var_len_rnn_forward(self.rnns,
+        #                           inp,
+        #                           inp_len=inp_len,
+        #                           enforce_sorted=False,
+        #                           add_forward_backward=False)
+        # NOTE: for torch.jit.script
         out = self.outp(out)
         # pass through non-linear
-        if self.non_linear:
+        if self.non_linear is not None:
             out = self.non_linear(out)
         return out, inp_len
 
@@ -206,13 +208,13 @@ class JitLSTMEncoder(EncoderBase):
         """
         if inp.dim() != 3:
             inp = inp[..., None]
-        if self.proj:
+        if self.proj is not None:
             inp = tf.relu(self.proj(inp))
         rnn_out, _ = self.rnns(inp)
         # rnn_out: N x T x D
         out = self.outp(rnn_out)
         # pass through non-linear
-        if self.non_linear:
+        if self.non_linear is not None:
             out = self.non_linear(out)
         return out, inp_len
 
@@ -445,7 +447,8 @@ class FSMNEncoder(EncoderBase):
                  project: int = 512,
                  num_layers: int = 4,
                  residual: bool = True,
-                 context: int = 3,
+                 lcontext: int = 3,
+                 rcontext: int = 3,
                  norm: str = "BN",
                  dilation: Union[List[int], int] = 1,
                  dropout: float = 0):
@@ -456,7 +459,8 @@ class FSMNEncoder(EncoderBase):
             FSMN(inp_features if i == 0 else out_features,
                  out_features,
                  project,
-                 context=context,
+                 lctx=lcontext,
+                 rctx=rcontext,
                  norm=norm,
                  dilation=dilation[i],
                  dropout=dropout) for i in range(num_layers)
@@ -473,7 +477,7 @@ class FSMNEncoder(EncoderBase):
             out (Tensor): N x T x F
             out_len (Tensor or None)
         """
-        memory = None
+        memory = th.jit.annotate(Optional[th.Tensor], None)
         for fsmn in self.enc_layers:
             if self.residual:
                 inp, memory = fsmn(inp, memory=memory)

@@ -81,19 +81,18 @@ class NoamLR(lr._LRScheduler):
         ]
 
 
-@LrScheduler.register("warmup_exp_decay_lr")
-class ExponentialLR(lr._LRScheduler):
+class WarmupDecayBase(lr._LRScheduler):
     """
-    Exponential scheduler proposed in SpecAugment paper：
+    Base class for warmup and decay lr scheduler:
 
-    1) 0 < cur_step <= sr: ramp up (use sr == 0 can skip this stage)
-    2) sr < cur_step <= si: hold on (use si == sr can skip this stage)
-    3) si < cur_step <= sf: exponential decay
-    4) cur_step > sf: hold on
+    1) 0 < cur_step <= warmup: ramp up (use warmup == 0 can skip this stage)
+    2) warmup < cur_step <= holdon: hold on (use warmup == holdon can skip this stage)
+    3) holdon < cur_step <= max_steps: user-defined decay policy
+    4) cur_step > max_steps: hold on
 
     Args:
         optimizer: optimizer object in torch.optim.Optimizer
-        time_stamps: [sr, si, sf] in the paper
+        time_stamps: [warmup steps, holdon steps, max steps]
         peak_lr: the peak value of the learning rate
         stop_lr: the minimum value of the learning rate
     """
@@ -104,37 +103,55 @@ class ExponentialLR(lr._LRScheduler):
                  peak_lr: float = 1e-3,
                  stop_lr: float = 1e-5,
                  last_epoch: int = -1) -> None:
-        self.peak_lr = peak_lr
-        self.sr, self.si, self.sf = time_stamps
-        self.gamma = math.log(stop_lr / peak_lr) / (self.sf - self.si)
-        super(ExponentialLR, self).__init__(optimizer, last_epoch=last_epoch)
+        self.gamma = None
+        self.peak_lr, self.stop_lr = peak_lr, stop_lr
+        self.warmup, self.holdon, self.max_steps = time_stamps
+        super(WarmupDecayBase, self).__init__(optimizer, last_epoch=last_epoch)
 
     def get_lr(self, step: Optional[int] = None) -> List[float]:
         if step is None:
             step = self._step_count
-        if step <= self.si:
-            cur_lr = min(self.sr, step) * 1.0 * self.peak_lr / self.sr
+        if step <= self.holdon:
+            cur_lr = min(self.warmup, step) * 1.0 * self.peak_lr / self.warmup
+        elif step >= self.max_steps:
+            cur_lr = self.stop_lr
         else:
-            cur_lr = self.peak_lr * math.exp(self.gamma *
-                                             (min(step, self.sf) - self.si))
+            cur_lr = self._decay_lr(step)
         return [cur_lr for _ in self.optimizer.param_groups]
+
+    def _decay_lr(self, step: int):
+        raise NotImplementedError()
+
+
+@LrScheduler.register("warmup_exp_decay_lr")
+class ExponentialDecayLR(WarmupDecayBase):
+    """
+    Warmup and exponential decay lr scheduler proposed in SpecAugment paper
+    """
+
+    def __init__(self,
+                 optimizer: Optimizer,
+                 time_stamps: List[int] = [1000, 4000, 16000],
+                 peak_lr: float = 1e-3,
+                 stop_lr: float = 1e-5,
+                 last_epoch: int = -1) -> None:
+        super(ExponentialDecayLR, self).__init__(optimizer,
+                                                 time_stamps=time_stamps,
+                                                 peak_lr=peak_lr,
+                                                 stop_lr=stop_lr,
+                                                 last_epoch=last_epoch)
+
+    def _decay_lr(self, step: int):
+        if self.gamma is None:
+            self.gamma = math.log(
+                self.stop_lr / self.peak_lr) / (self.max_steps - self.holdon)
+        return self.peak_lr * math.exp(self.gamma * (step - self.holdon))
 
 
 @LrScheduler.register("warmup_linear_decay_lr")
-class LinearLR(lr._LRScheduler):
+class LinearDecayLR(WarmupDecayBase):
     """
-    Linear warmup scheduler (using linear decay in ExponentialLR):
-
-    1) 0 < cur_step <= sr: ramp up (use sr == 0 can skip this stage)
-    2) sr < cur_step <= si: hold on (use si == sr can skip this stage)
-    3) si < cur_step <= sf: linear decay
-    4) cur_step > sf: hold on
-
-    Args:
-        optimizer: optimizer object in torch.optim.Optimizer
-        time_stamps: similar with ExponentialLR
-        peak_lr: the peak value of the learning rate
-        stop_lr: the minimum value of the learning rate
+    Warmup and linear decay lr scheduler
     """
 
     def __init__(self,
@@ -143,17 +160,66 @@ class LinearLR(lr._LRScheduler):
                  peak_lr: float = 1e-3,
                  stop_lr: float = 1e-8,
                  last_epoch: int = -1) -> None:
-        self.peak_lr = peak_lr
-        self.sr, self.si, self.sf = time_stamps
-        self.gamma = (stop_lr - peak_lr) / (self.sf - self.si)
-        super(LinearLR, self).__init__(optimizer, last_epoch=last_epoch)
+        super(LinearDecayLR, self).__init__(optimizer,
+                                            time_stamps=time_stamps,
+                                            peak_lr=peak_lr,
+                                            stop_lr=stop_lr,
+                                            last_epoch=last_epoch)
 
-    def get_lr(self, step: Optional[int] = None) -> List[float]:
-        if step is None:
-            step = self._step_count
-        if step <= self.si:
-            cur_lr = min(self.sr, step) * 1.0 * self.peak_lr / self.sr
-        else:
-            cur_lr = self.peak_lr + (self.gamma *
-                                     (min(step, self.sf) - self.si))
-        return [cur_lr for _ in self.optimizer.param_groups]
+    def _decay_lr(self, step: int):
+        if self.gamma is None:
+            self.gamma = (self.stop_lr - self.peak_lr) / (self.max_steps -
+                                                          self.holdon)
+        return self.peak_lr + (self.gamma * (step - self.holdon))
+
+
+@LrScheduler.register("warmup_cos_decay_lr")
+class CosineDecayLR(WarmupDecayBase):
+    """
+    Warmup and cosine decay lr scheduler
+    """
+
+    def __init__(self,
+                 optimizer: Optimizer,
+                 time_stamps: List[int] = [1000, 4000, 16000],
+                 peak_lr: float = 1e-3,
+                 stop_lr: float = 1e-8,
+                 last_epoch: int = -1) -> None:
+        super(CosineDecayLR, self).__init__(optimizer,
+                                            time_stamps=time_stamps,
+                                            peak_lr=peak_lr,
+                                            stop_lr=stop_lr,
+                                            last_epoch=last_epoch)
+
+    def _decay_lr(self, step: int):
+        if self.gamma is None:
+            self.gamma = math.pi / (self.max_steps - self.holdon)
+        return (self.peak_lr - self.stop_lr) * (
+            1 + math.cos(self.gamma * (step - self.holdon))) / 2 + self.stop_lr
+
+
+@LrScheduler.register("warmup_power_decay_lr")
+class PowerDecayLR(WarmupDecayBase):
+    """
+    Warmup and power (e.g., square or sqrt) decay lr scheduler
+    """
+
+    def __init__(self,
+                 optimizer: Optimizer,
+                 time_stamps: List[int] = [1000, 4000, 16000],
+                 power: float = 2,
+                 peak_lr: float = 1e-3,
+                 stop_lr: float = 1e-8,
+                 last_epoch: int = -1) -> None:
+        self.power = power
+        super(PowerDecayLR, self).__init__(optimizer,
+                                           time_stamps=time_stamps,
+                                           peak_lr=peak_lr,
+                                           stop_lr=stop_lr,
+                                           last_epoch=last_epoch)
+
+    def _decay_lr(self, step: int):
+        if self.gamma is None:
+            self.gamma = 1 / (self.max_steps - self.holdon)
+        return (self.peak_lr - self.stop_lr) * (
+            (self.max_steps - step) * self.gamma)**self.power + self.stop_lr

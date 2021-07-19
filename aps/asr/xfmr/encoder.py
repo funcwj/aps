@@ -65,6 +65,7 @@ class TransformerEncoder(nn.Module):
         if self.pose_type == "abs":
             # enc_inp: N x Ti x D => Ti x N x D
             enc_inp = self.pose(enc_inp)
+            # fake placeholder
             inj_pose = None
         else:
             # enc_inp: N x Ti x D => Ti x N x D

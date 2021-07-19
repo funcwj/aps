@@ -23,7 +23,7 @@ import aps.distributed as dist
 @ApsRegisters.trainer.register("apex")
 class ApexTrainer(Trainer):
     """
-    Trainer using the NVIDIA's apex (https://github.com/NVIDIA/apex)
+    AMP (Automatic Mixed Precision) Trainer using apex from NVIDIA (https://github.com/NVIDIA/apex)
     """
 
     def __init__(self,
@@ -51,6 +51,7 @@ class ApexTrainer(Trainer):
                  opt_level: str = "O0",
                  no_impr: int = 6,
                  no_impr_thres: float = 1e-3,
+                 average_checkpoint: int = 0,
                  report_metrics: List[str] = ["loss"],
                  reduction_tag: str = "none",
                  stop_on_errors: int = 10,
@@ -79,6 +80,7 @@ class ApexTrainer(Trainer):
                              stop_criterion=stop_criterion,
                              no_impr=no_impr,
                              no_impr_thres=no_impr_thres,
+                             average_checkpoint=average_checkpoint,
                              report_metrics=report_metrics,
                              stop_on_errors=stop_on_errors,
                              reduction_tag=reduction_tag)
@@ -159,10 +161,10 @@ class ApexTrainer(Trainer):
         if not is_backward_step:
             return True
 
-        # clip gradient after backward
         norm = -1
+        # clip gradient after backward
         if self.clip_gradient > 0:
-            # for apex (TODO: why norm = nan here)
+            # NOTE: norm maybe NAN here
             norm = clip_grad_norm_(apex.amp.master_params(self.optimizer),
                                    self.clip_gradient)
 
@@ -170,8 +172,6 @@ class ApexTrainer(Trainer):
         if math.isfinite(norm):
             self.optimizer.step()
             self.optimizer.zero_grad()
-            if norm != -1:
-                stats["norm"] = norm
             stats["rate"] = self.optimizer.param_groups[0]["lr"]
             self.reporter.update(egs, ["#utt", "#tok"])
             self.reporter.update(stats)

@@ -80,7 +80,6 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
     ./scripts/decode.sh \
       --score true \
       --text data/wsj/$name/text \
-      --log-suffix $name \
       --beam-size $beam_size \
       --max-len 220 \
       --dict exp/wsj/$am_exp/dict \
@@ -132,7 +131,6 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
     ./scripts/decode.sh \
       --score true \
       --text data/wsj/$name/text \
-      --log-suffix $name \
       --beam-size $beam_size \
       --max-len 220 \
       --lm exp/wsj/nnlm/$lm_exp \

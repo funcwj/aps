@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Optional, Tuple, Union, NoReturn
+from typing import Optional, Tuple, Union
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 from aps.const import TORCH_VERSION
@@ -193,14 +193,6 @@ class Conv1d(nn.Module):
         return (dim + 2 * self.padding - self.dilation *
                 (self.kernel_size - 1) - 1) // self.stride + 1
 
-    def check_args(self, inp: th.Tensor) -> NoReturn:
-        """
-        Check args
-        """
-        if inp.dim() != 3:
-            raise RuntimeError(
-                f"TDNN expects 3D tensor, got {inp.dim()} instead")
-
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
@@ -208,7 +200,6 @@ class Conv1d(nn.Module):
         Return:
             out (Tensor): N x T x O, output of the layer
         """
-        self.check_args(inp)
         # N x T x F => N x F x T
         inp = inp.transpose(1, 2)
         out = self.conv(inp)
@@ -253,14 +244,6 @@ class Conv2d(nn.Module):
         return (dim + 2 * self.padding[axis] -
                 self.kernel_size[axis]) // self.stride[axis] + 1
 
-    def check_args(self, inp: th.Tensor) -> NoReturn:
-        """
-        Check args
-        """
-        if inp.dim() not in [3, 4]:
-            raise RuntimeError(
-                f"Conv2d expects 3/4D tensor, got {inp.dim()} instead")
-
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
@@ -268,7 +251,6 @@ class Conv2d(nn.Module):
         Return:
             out (Tensor): N x C' x T' x F'
         """
-        self.check_args(inp)
         out = self.norm(self.conv(inp[:, None] if inp.dim() == 3 else inp))
         return tf.relu(out)
 
@@ -282,30 +264,26 @@ class FSMN(nn.Module):
                  inp_features: int,
                  out_features: int,
                  proj_features: int,
-                 context: int = 3,
+                 lctx: int = 3,
+                 rctx: int = 3,
                  norm: int = "BN",
                  dilation: int = 0,
-                 dropout: float = 0):
+                 dropout: float = 0.0):
         super(FSMN, self).__init__()
         self.inp_proj = nn.Linear(inp_features, proj_features, bias=False)
-        self.ctx_size = 2 * context + 1
-        self.ctx_conv = nn.Conv1d(proj_features,
-                                  proj_features,
-                                  kernel_size=self.ctx_size,
-                                  dilation=dilation,
-                                  groups=proj_features,
-                                  padding=context,
-                                  bias=False)
+        self.ctx_size = lctx + rctx + 1
+        self.ctx_conv = nn.Sequential(
+            nn.ConstantPad1d((lctx, rctx), 0.0),
+            nn.Conv1d(proj_features,
+                      proj_features,
+                      kernel_size=self.ctx_size,
+                      dilation=dilation,
+                      groups=proj_features,
+                      padding=0,
+                      bias=False))
         self.out_proj = nn.Linear(proj_features, out_features)
         self.out_drop = nn.Dropout(p=dropout)
         self.norm = Normalize1d(norm, out_features) if norm else None
-
-    def check_args(self, inp: th.Tensor) -> NoReturn:
-        """
-        Check args
-        """
-        if inp.dim() not in [2, 3]:
-            raise RuntimeError(f"FSMN expects 2/3D input, got {inp.dim()}")
 
     def forward(
             self,
@@ -319,7 +297,6 @@ class FSMN(nn.Module):
             out (Tensor): N x T x O, output of the layer
             proj (Tensor): N x T x P, new memory block
         """
-        self.check_args(inp)
         # N x T x P
         proj = self.inp_proj(inp[None, ...] if inp.dim() == 2 else inp)
         # N x T x P => N x P x T => N x T x P
@@ -332,7 +309,7 @@ class FSMN(nn.Module):
             proj = proj + memory
         # N x T x O
         out = self.out_proj(proj)
-        if self.norm:
+        if self.norm is not None:
             out = self.out_drop(tf.relu(self.norm(out)))
         else:
             out = self.out_drop(tf.relu(out))

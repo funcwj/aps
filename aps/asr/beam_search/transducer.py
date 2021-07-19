@@ -125,9 +125,12 @@ def beam_search(decoder: nn.Module,
         list_a = merge_hypos(list_b)
         # logger.info(f"--- merge hypos: {len(list_b)} -> {len(list_a)}")
         list_b = []
-        for _ in range(beam_size):
+        # for _ in range(beam_size):
+        while True:
             # pop the best node
             cur_node = list_a[0]
+            list_a = list_a[1:]
+
             prefix_str = cur_node["hashid"]
             prefix_tok = cur_node["prefix"]
 
@@ -160,10 +163,13 @@ def beam_search(decoder: nn.Module,
                         "hidden": hidden
                     })
                 list_a.append(node)
-            # remove the best node
-            list_a = sorted(list_a[1:], key=lambda n: n.score, reverse=True)
-            # list_b = [n for n in list_b if n.score > list_a[0].score]
-        list_b = sorted(list_b, key=lambda n: n.score, reverse=True)[:beam_size]
+            # sort A
+            list_a = sorted(list_a, key=lambda n: n.score, reverse=True)
+            # while B contains less than W elements more probable than the most probable in A
+            cur_list_b = [n for n in list_b if n.score > list_a[0].score]
+            if len(cur_list_b) >= beam_size:
+                list_b = cur_list_b
+                break
 
     final_hypos = [{
         "score": n.score.item() / (len(n["prefix"]) if len_norm else 1),

@@ -473,15 +473,10 @@ class FeatureTransform(nn.Module):
         """
         Return ctx(STFT/iSTFT) for task defined in src/aps/task
         """
-        ctx = nn.ModuleDict({
-            "forward_stft":
-                STFT(self.frame_len, self.frame_hop, **self.stft_kwargs),
-            "inverse_stft":
-                iSTFT(self.frame_len, self.frame_hop, **self.stft_kwargs)
-        })
+        ctx = {"forward_stft": STFT, "inverse_stft": iSTFT}
         if name not in ctx:
             raise ValueError(f"Unknown task context: {name}")
-        return ctx[name]
+        return ctx[name](self.frame_len, self.frame_hop, **self.stft_kwargs)
 
     def num_frames(self, wav_len: th.Tensor) -> th.Tensor:
         """

@@ -45,52 +45,47 @@ class ToyRNN(SseBase):
                                           dropout=dropout,
                                           bidirectional=bidirectional,
                                           non_linear="none")
+        self.non_linear = MaskNonLinear(output_nonlinear, enable="positive")
         self.num_spks = num_spks
-        self.output_nonlinear = MaskNonLinear(output_nonlinear,
-                                              enable="positive")
-        self.non_linear_type = output_nonlinear
 
-    def _forward(self, mix: th.Tensor,
-                 mode: str) -> Union[th.Tensor, List[th.Tensor]]:
+    def _tf_mask(self, feats: th.Tensor, num_spks: int) -> th.Tensor:
         """
-        Forward function in time|freq mode
-            time mode: return time domain signal
-            freq mode: return TF-mask
+        TF mask estimation from given features
+        """
+        # N x T x S*F
+        masks, _ = self.base_rnn(feats, None)
+        # N x S*F x T
+        masks = masks.transpose(1, 2)
+        # [N x F x T, ]
+        masks = th.chunk(masks, self.num_spks, -2)
+        # S x N x F x T
+        return self.non_linear(th.stack(masks))
+
+    def _infer(self, mix: th.Tensor,
+               mode: str) -> Union[th.Tensor, List[th.Tensor]]:
+        """
+        Running in time or frequency mode and return time signals or frequency TF masks
         """
         # feats: N x T x F
         feats, stft, _ = self.enh_transform(mix, None)
         N, T, _ = feats.shape
         if stft.dim() == 4:
+            # N x F x T
             stft = stft[:, 0]
-        # N x T x 2F
-        masks, _ = self.base_rnn(feats, None)
-        # N x *F x T
-        masks = masks.transpose(1, 2)
+        # S x N x F x T
+        masks = self._tf_mask(feats, self.num_spks)
+        masks = th.chunk(masks, self.num_spks, 0)
         # [N x F x T, ...]
-        if self.num_spks > 1:
-            # N x S x F x T
-            masks = masks.view(N, self.num_spks, -1, T)
-            if self.non_linear_type == "softmax":
-                masks = self.output_nonlinear(masks, dim=1)
-            else:
-                masks = self.output_nonlinear(masks)
-            masks = masks.view(N, -1, T)
-            masks = th.chunk(masks, self.num_spks, 1)
-        else:
-            masks = self.output_nonlinear(masks)
+        masks = [m[0] for m in masks]
         if mode == "freq":
-            return masks
+            packed = masks
         else:
             decoder = self.enh_transform.inverse_stft
-            if self.num_spks == 1:
-                masks = [masks]
-            # complex tensor
-            spk_stft = [stft * m for m in masks]
-            spk = [decoder((s.real, s.imag), input="complex") for s in spk_stft]
-            if self.num_spks == 1:
-                return spk[0]
-            else:
-                return spk
+            bss_stft = [stft * m for m in masks]
+            packed = [
+                decoder((s.real, s.imag), input="complex") for s in bss_stft
+            ]
+        return packed[0] if self.num_spks == 1 else packed
 
     def infer(self,
               mix: th.Tensor,
@@ -99,22 +94,31 @@ class ToyRNN(SseBase):
         Args:
             mix (Tensor): (C) x S
         Return:
-            sep [Tensor, ...]: S or
-            masks [Tensor, ...]: F x T
+            [Tensor, ...]: enhanced signals or TF masks
         """
         self.check_args(mix, training=False, valid_dim=[1, 2])
         with th.no_grad():
             mix = mix[None, ...]
-            spk = self._forward(mix, mode)
+            spk = self._infer(mix, mode)
             return spk[0] if self.num_spks == 1 else [s[0] for s in spk]
 
+    @th.jit.ignore
     def forward(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
             mix (Tensor): N x (C) x S
         Return:
-            masks [Tensor, ...]: N x F x T or
-            spks [Tensor, ...]: N x S
+            [Tensor, ...]: enhanced signals (N x S) or TF masks (N x F x T)
         """
         self.check_args(mix, training=True, valid_dim=[2, 3])
-        return self._forward(mix, self.training_mode)
+        return self._infer(mix, self.training_mode)
+
+    @th.jit.export
+    def mask_predict(self, feats: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            feats (Tensor): noisy feature, N x T x F
+        Return:
+            masks (Tensor): masks of each speaker, N x T x F
+        """
+        return self._tf_mask(feats, self.num_spks)

@@ -60,7 +60,7 @@ def DataLoader(train: bool = True,
         sr=sr,
         early_reverb=early_reverb,
         noise_reference=noise_reference,
-        rir_prob=rir_prob if train else 1,
+        rir_prob=rir_prob if train else 0,
         isotropic_noise_prob=isotropic_noise_prob if train else 1,
         directional_noise_prob=directional_noise_prob if train else 1)
     return WaveChunkDataLoader(dataset,
@@ -343,7 +343,7 @@ class ConfigSimulationDataset(dat.Dataset):
 
     def _prepare_egs(self,
                      mix: np.ndarray,
-                     ref: np.ndarray,
+                     ref: List[np.ndarray],
                      dir_noise: np.ndarray,
                      iso_noise: np.ndarray,
                      inf_norm: float = 0.8):
@@ -357,7 +357,10 @@ class ConfigSimulationDataset(dat.Dataset):
             ref.append(dir_noise[0] + iso_noise[0])
         if self.force_single:
             mix = mix[0]
-        egs = {"mix": mix * scale, "ref": [r * scale for r in ref]}
+        ref = [r * scale for r in ref]
+        if len(ref) == 1:
+            ref = ref[0]
+        egs = {"mix": mix * scale, "ref": ref}
         return egs
 
     def _simu(self, cfg: Dict) -> Dict:

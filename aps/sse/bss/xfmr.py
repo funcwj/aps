@@ -9,13 +9,14 @@ import torch.nn as nn
 from typing import Optional, List, Union, Dict
 from aps.asr.xfmr.encoder import TransformerEncoder
 from aps.sse.base import SseBase, MaskNonLinear
+from aps.transform.asr import TFTransposeTransform
 from aps.libs import ApsRegisters
 
 
-@ApsRegisters.sse.register("sse@freq_xfmr_rel")
-class FreqRelXfmr(SseBase):
+@ApsRegisters.sse.register("sse@freq_xfmr")
+class FreqXfmr(SseBase):
     """
-    Frequency domain Transformer model
+    Frequency domain Transformer based model
     """
 
     def __init__(self,
@@ -24,32 +25,59 @@ class FreqRelXfmr(SseBase):
                  num_spks: int = 2,
                  num_bins: int = 257,
                  arch: str = "xfmr",
+                 pose: str = "rel",
                  arch_kwargs: Dict = {},
                  pose_kwargs: Dict = {},
                  proj_kwargs: Dict = {},
                  num_layers: int = 6,
                  non_linear: str = "sigmoid",
-                 mask_dropout: float = 0.1,
                  training_mode: str = "freq") -> None:
-        super(FreqRelXfmr, self).__init__(enh_transform,
-                                          training_mode=training_mode)
+        super(FreqXfmr, self).__init__(enh_transform,
+                                       training_mode=training_mode)
         assert enh_transform is not None
         att_dim = arch_kwargs["att_dim"]
-        self.rel_xfmr = TransformerEncoder(arch,
-                                           input_size,
-                                           num_layers=num_layers,
-                                           proj="linear",
-                                           proj_kwargs=proj_kwargs,
-                                           pose="rel",
-                                           pose_kwargs=pose_kwargs,
-                                           arch_kwargs=arch_kwargs)
-        self.proj = nn.Sequential(nn.Linear(input_size, att_dim),
-                                  nn.LayerNorm(att_dim),
-                                  nn.Dropout(mask_dropout))
-        self.mask = nn.Linear(att_dim, num_bins * num_spks)
-        self.non_linear = MaskNonLinear(non_linear,
-                                        enable="positive_wo_softmax")
+        self.xfmr = TransformerEncoder(arch,
+                                       input_size,
+                                       num_layers=num_layers,
+                                       proj="linear",
+                                       proj_kwargs=proj_kwargs,
+                                       pose=pose,
+                                       pose_kwargs=pose_kwargs,
+                                       arch_kwargs=arch_kwargs)
+        self.mask = nn.Sequential(nn.Linear(att_dim, num_bins * num_spks),
+                                  MaskNonLinear(non_linear, enable="common"),
+                                  TFTransposeTransform())
         self.num_spks = num_spks
+
+    def _tf_mask(self, feats: th.Tensor, num_spks: int) -> List[th.Tensor]:
+        """
+        TF mask estimation from given features
+        """
+        # stft: N x F x T
+        out, _ = self.xfmr(feats, None)
+        # N x T x F => N x S*F x T
+        mask = self.mask(out)
+        # [N x F x T, ...]
+        return th.chunk(mask, self.num_spks, 1)
+
+    def _infer(self,
+               mix: th.Tensor,
+               mode: str = "freq") -> Union[th.Tensor, List[th.Tensor]]:
+        """
+        Running in time or frequency mode and return time signals or frequency TF masks
+        """
+        feats, stft, _ = self.enh_transform(mix, None)
+        masks = self._tf_mask(feats, self.num_spks)
+        # post processing
+        if mode == "time":
+            decoder = self.enh_transform.inverse_stft
+            bss_stft = [stft * m for m in masks]
+            packed = [
+                decoder((s.real, s.imag), input="complex") for s in bss_stft
+            ]
+        else:
+            packed = masks
+        return packed[0] if self.num_spks == 1 else packed
 
     def infer(self,
               mix: th.Tensor,
@@ -63,41 +91,13 @@ class FreqRelXfmr(SseBase):
         self.check_args(mix, training=False, valid_dim=[1])
         with th.no_grad():
             mix = mix[None, :]
-            sep = self._forward(mix, mode=mode)
+            sep = self._infer(mix, mode=mode)
             if self.num_spks == 1:
                 return sep[0]
             else:
                 return [s[0] for s in sep]
 
-    def _forward(self,
-                 mix: th.Tensor,
-                 mode: str = "freq") -> Union[th.Tensor, List[th.Tensor]]:
-        """
-        Forward function in time|freq mode
-        """
-        feats, stft, _ = self.enh_transform(mix, None)
-        # stft: N x F x T
-        out, _ = self.rel_xfmr(feats, None)
-        # N x T x F
-        mask = self.non_linear(self.mask(out))
-        # N x F x T
-        mask = mask.transpose(1, 2)
-        if self.num_spks > 1:
-            mask = th.chunk(mask, self.num_spks, 1)
-        if mode == "freq":
-            return mask
-        else:
-            decoder = self.enh_transform.inverse_stft
-            if self.num_spks == 1:
-                mask = [mask]
-            # complex tensor
-            spk_stft = [stft * m for m in mask]
-            spk = [decoder((s.real, s.imag), input="complex") for s in spk_stft]
-            if self.num_spks == 1:
-                return spk[0]
-            else:
-                return spk
-
+    @th.jit.ignore
     def forward(self, s: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
         """
         Args:
@@ -106,4 +106,17 @@ class FreqRelXfmr(SseBase):
             Tensor: N x S or N x F x T
         """
         self.check_args(s, training=True, valid_dim=[2])
-        return self._forward(s, mode=self.training_mode)
+        return self._infer(s, mode=self.training_mode)
+
+    @th.jit.export
+    def mask_predict(self, feats: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            feats (Tensor): noisy feature, N x T x F
+        Return:
+            masks (Tensor): masks of each speaker, N x T x F
+        """
+        masks = self._tf_mask(feats, self.num_spks)
+        # S x N x F x T
+        masks = th.stack(masks)
+        return masks[0] if self.num_spks == 1 else masks

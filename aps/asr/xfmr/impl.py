@@ -10,12 +10,12 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, Dict, List
 from aps.libs import Register
 from aps.asr.xfmr.pose import digit_shift
 
 TransformerEncoderLayers = Register("xfmr_encoder_layer")
-MHSAReturnType = Tuple[th.Tensor, Optional[th.Tensor]]
+MHSAReturnType = List[th.Tensor]
 
 
 class Swish(nn.Module):
@@ -200,7 +200,7 @@ class ApsMultiheadAttention(nn.Module):
             context (Tensor): L x N x E
             weight (Tensor): N x L x S
         """
-        return tf.multi_head_attention_forward(
+        context, weight = tf.multi_head_attention_forward(
             query,
             key,
             value,
@@ -218,12 +218,16 @@ class ApsMultiheadAttention(nn.Module):
             key_padding_mask=key_padding_mask,
             need_weights=True,
             attn_mask=attn_mask)
+        if weight is None:
+            return [context]
+        else:
+            return [context, weight]
 
     def forward(self,
                 query: th.Tensor,
                 key: th.Tensor,
                 value: th.Tensor,
-                placehold: Optional[th.Tensor],
+                placehold: Optional[th.Tensor] = None,
                 key_padding_mask: Optional[th.Tensor] = None,
                 attn_mask: Optional[th.Tensor] = None) -> MHSAReturnType:
         """
@@ -300,7 +304,7 @@ class RelMultiheadAttention(ApsMultiheadAttention):
                 query: th.Tensor,
                 key: th.Tensor,
                 value: th.Tensor,
-                key_rel_pose: th.Tensor,
+                key_rel_pose: Optional[th.Tensor] = None,
                 key_padding_mask: Optional[th.Tensor] = None,
                 attn_mask: Optional[th.Tensor] = None) -> MHSAReturnType:
         """
@@ -315,6 +319,7 @@ class RelMultiheadAttention(ApsMultiheadAttention):
             context (Tensor): L x N x E
             weight (Tensor): N x L x S
         """
+        assert key_rel_pose is not None
         # query: L x N x H x D
         # key, value: S x N x H x D
         query, key, value = self.inp_proj(query, key, value)
@@ -379,7 +384,7 @@ class XlMultiheadAttention(ApsMultiheadAttention):
                 query: th.Tensor,
                 key: th.Tensor,
                 value: th.Tensor,
-                sin_pose: th.Tensor,
+                sin_pose: Optional[th.Tensor] = None,
                 key_padding_mask: Optional[th.Tensor] = None,
                 attn_mask: Optional[th.Tensor] = None) -> MHSAReturnType:
         """
@@ -394,6 +399,7 @@ class XlMultiheadAttention(ApsMultiheadAttention):
             context (Tensor): L x N x E
             weight (Tensor): N x L x S
         """
+        assert sin_pose is not None
         # query: L x N x H x D
         # key, value: S x N x H x D
         query, key, value = self.inp_proj(query, key, value)
@@ -535,7 +541,7 @@ class ApsConformerEncoderLayer(nn.Module):
         """
         # NOTE: use pre-norm by default
         # 1) FFN
-        if self.feedforward1:
+        if self.feedforward1 is not None:
             src1 = self.feedforward1(src) * 0.5 + src
         else:
             src1 = src
@@ -551,7 +557,7 @@ class ApsConformerEncoderLayer(nn.Module):
         # conv
         src = self.conv(self.norm2(src)) + src
         # 2) FFN
-        if self.feedforward1:
+        if self.feedforward1 is not None:
             out = self.feedforward2(src) * 0.5 + src
         else:
             out = self.feedforward2(src) + src
@@ -738,7 +744,11 @@ class ApsTransformerEncoder(nn.Module):
         self.num_layers = num_layers
         self.norm = norm
 
-    def forward(self, src: th.Tensor, **kwargs) -> th.Tensor:
+    def forward(self,
+                src: th.Tensor,
+                inj_pose: Optional[th.Tensor] = None,
+                src_mask: Optional[th.Tensor] = None,
+                src_key_padding_mask: Optional[th.Tensor] = None) -> th.Tensor:
         """
         Args:
             src (Tensor): T x N x D
@@ -748,7 +758,10 @@ class ApsTransformerEncoder(nn.Module):
         out = src
 
         for mod in self.layers:
-            out = mod(out, **kwargs)
+            out = mod(out,
+                      inj_pose=inj_pose,
+                      src_mask=src_mask,
+                      src_key_padding_mask=src_key_padding_mask)
 
         if self.norm is not None:
             out = self.norm(out)
