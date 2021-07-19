@@ -12,51 +12,10 @@ import torch.nn.functional as tf
 
 from typing import Optional, Tuple, Dict, List
 from aps.libs import Register
-from aps.asr.xfmr.pose import digit_shift
+from aps.asr.xfmr.utils import digit_shift, get_activation_fn, get_relative_uv
 
 TransformerEncoderLayers = Register("xfmr_encoder_layer")
 MHSAReturnType = List[th.Tensor]
-
-
-class Swish(nn.Module):
-    """
-    Swish activation
-    """
-
-    def __init__(self):
-        super(Swish, self).__init__()
-
-    def forward(self, inp: th.Tensor) -> th.Tensor:
-        return inp * th.sigmoid(inp)
-
-
-def _get_activation_fn(activation: str) -> nn.Module:
-    """
-    Return activation function for self-attention
-    """
-    if activation == "relu":
-        return nn.ReLU()
-    elif activation == "gelu":
-        return nn.GELU()
-    elif activation == "swish":
-        return Swish()
-    raise RuntimeError(f"activation should be relu/gelu, not {activation}")
-
-
-def _get_relative_uv(shape: Tuple[int],
-                     init: str = "xavier",
-                     std: float = 0.02) -> nn.Parameter:
-    """
-    Return rel_{u,v} used in transformer-XL's MHSA
-    """
-    if init not in ["xavier", "normal"]:
-        raise ValueError(f"Unknown init method: {init}")
-    rel_mat = nn.Parameter(th.Tensor(*shape))
-    if init == "xavier":
-        nn.init.xavier_uniform_(rel_mat)
-    if init == "uniform":
-        nn.init.normal_(rel_mat, std=std)
-    return rel_mat
 
 
 class ApsMultiheadAttention(nn.Module):
@@ -352,8 +311,8 @@ class XlMultiheadAttention(ApsMultiheadAttention):
                                                    dropout=dropout,
                                                    bias=bias)
         if rel_u is None or rel_v is None:
-            self.rel_u = _get_relative_uv((self.num_heads, self.head_dim))
-            self.rel_v = _get_relative_uv((self.num_heads, self.head_dim))
+            self.rel_u = get_relative_uv((self.num_heads, self.head_dim))
+            self.rel_v = get_relative_uv((self.num_heads, self.head_dim))
         else:
             self.rel_u = rel_u
             self.rel_v = rel_v
@@ -428,7 +387,7 @@ class ApsTransformerEncoderLayer(nn.Module):
         self.self_attn = self_attn
         # implementation of feedforward model
         self.feedforward = nn.Sequential(nn.Linear(att_dim, feedforward_dim),
-                                         _get_activation_fn(activation),
+                                         get_activation_fn(activation),
                                          nn.Dropout(dropout),
                                          nn.Linear(feedforward_dim, att_dim),
                                          nn.Dropout(dropout))
@@ -488,7 +447,7 @@ class ApsConformerEncoderLayer(nn.Module):
         if macaron:
             self.feedforward1 = nn.Sequential(
                 nn.LayerNorm(att_dim), nn.Linear(att_dim, feedforward_dim),
-                _get_activation_fn(activation), nn.Dropout(dropout),
+                get_activation_fn(activation), nn.Dropout(dropout),
                 nn.Linear(feedforward_dim, att_dim), nn.Dropout(dropout))
         else:
             self.feedforward1 = None
@@ -499,11 +458,11 @@ class ApsConformerEncoderLayer(nn.Module):
                       kernel_size * 2 + 1,
                       groups=att_dim,
                       padding=kernel_size), nn.BatchNorm1d(att_dim),
-            _get_activation_fn(activation), nn.Conv1d(att_dim, att_dim, 1),
+            get_activation_fn(activation), nn.Conv1d(att_dim, att_dim, 1),
             nn.Dropout(p=dropout))
         self.feedforward2 = nn.Sequential(nn.LayerNorm(att_dim),
                                           nn.Linear(att_dim, feedforward_dim),
-                                          _get_activation_fn(activation),
+                                          get_activation_fn(activation),
                                           nn.Dropout(dropout),
                                           nn.Linear(feedforward_dim, att_dim),
                                           nn.Dropout(dropout))
@@ -790,8 +749,8 @@ def get_xfmr_encoder(arch: str, pose: str, num_layers: int,
             tie = arch_kwargs.pop("tie")
             if tie:
                 nhead = arch_kwargs["nhead"]
-                rel_u = _get_relative_uv((nhead, att_dim // nhead))
-                rel_v = _get_relative_uv((nhead, att_dim // nhead))
+                rel_u = get_relative_uv((nhead, att_dim // nhead))
+                rel_v = get_relative_uv((nhead, att_dim // nhead))
                 print("Tie relative trainable parameters", flush=True)
         arch_kwargs["rel_u"] = rel_u
         arch_kwargs["rel_v"] = rel_v

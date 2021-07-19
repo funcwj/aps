@@ -9,9 +9,8 @@ import torch.nn as nn
 
 from aps.libs import dynamic_importlib, ApsRegisters, ApsModules
 from aps.conf import load_dict
-from aps.asr.xfmr.pose import digit_shift
-from aps.asr.xfmr.decoder import prep_sub_mask
 from aps.asr.xfmr.impl import ApsMultiheadAttention
+from aps.asr.xfmr.utils import digit_shift, prep_sub_mask
 from aps.asr.base.attention import padding_mask
 
 

@@ -24,34 +24,6 @@ def get_xfmr_pose(pose: str, dim: int, **kwargs) -> nn.Module:
     return PosEncodings[pose](dim, **kwargs)
 
 
-def digit_shift(term: th.Tensor) -> th.Tensor:
-    """
-    Got L x N x H x S from tensor L x N x H x 2S-1
-    The function is called when using 1D positional encodings instead of 2D matrices, refer testing cases in
-        tests/test_function.py:test_rel_pose()
-    Args:
-        term (Tensor): L x N x H x 2S(L)-1
-    Return:
-        term (Tensor): L x N x H x S(L)
-    """
-    L, N, H, X = term.shape
-    if L * 2 - 1 != X:
-        raise RuntimeError("digit_shift: tensor shape should be: " +
-                           f"L x N x H x 2L-1, but got {term.shape}")
-    # L x N x H x 2L
-    term_pad = tf.pad(term, (1, 0))
-    # L x 2L x H x N
-    term_pad = term_pad.transpose(1, -1).contiguous()
-    # 2L x L x H x N
-    term_pad = term_pad.view(2 * L, L, H, N)
-    # L x 2L-1 x H x N
-    term = term_pad[1:].view(L, 2 * L - 1, H, N)
-    # L x L x H x N
-    term = term[:, :L]
-    # L x N x H x L
-    return term.transpose(1, -1)
-
-
 @PosEncodings.register("xl")
 class SinPosEncoding(nn.Module):
     """

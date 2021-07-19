@@ -136,3 +136,7 @@ def test_freq_dccrn(num_spks, cplx):
     export_nnet.forward_stft = None
     export_nnet.inverse_stft = None
     scriped_and_check(export_nnet, is_cplx=True)
+
+
+if __name__ == "__main__":
+    test_freq_xfmr("xfmr", "abs")

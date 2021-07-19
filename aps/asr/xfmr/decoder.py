@@ -9,26 +9,8 @@ import torch.nn as nn
 from torch.nn import MultiheadAttention, TransformerDecoder
 from typing import Union, Tuple, Optional, Dict
 from aps.asr.xfmr.pose import get_xfmr_pose
-from aps.asr.xfmr.impl import _get_activation_fn
+from aps.asr.xfmr.utils import get_activation_fn, prep_sub_mask
 from aps.asr.base.attention import padding_mask
-
-
-def prep_sub_mask(T: int, device: Union[str, th.device] = "cpu") -> th.Tensor:
-    """
-    Prepare a square sub-sequence masks (-inf/0)
-    egs: for N = 8, output
-    tensor([[0., -inf, -inf, -inf, -inf, -inf, -inf, -inf],
-        [0., 0., -inf, -inf, -inf, -inf, -inf, -inf],
-        [0., 0., 0., -inf, -inf, -inf, -inf, -inf],
-        [0., 0., 0., 0., -inf, -inf, -inf, -inf],
-        [0., 0., 0., 0., 0., -inf, -inf, -inf],
-        [0., 0., 0., 0., 0., 0., -inf, -inf],
-        [0., 0., 0., 0., 0., 0., 0., -inf],
-        [0., 0., 0., 0., 0., 0., 0., 0.]])
-    """
-    mask = (th.triu(th.ones(T, T, device=device), diagonal=1) == 1).float()
-    mask = mask.masked_fill(mask == 1, float("-inf"))
-    return mask
 
 
 class TransformerDncoderLayer(nn.Module):
@@ -51,7 +33,7 @@ class TransformerDncoderLayer(nn.Module):
                                                  nhead,
                                                  dropout=att_dropout)
         self.feedforward = nn.Sequential(nn.Linear(att_dim, feedforward_dim),
-                                         _get_activation_fn(activation),
+                                         get_activation_fn(activation),
                                          nn.Dropout(ffn_dropout),
                                          nn.Linear(feedforward_dim, att_dim),
                                          nn.Dropout(ffn_dropout))

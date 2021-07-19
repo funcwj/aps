@@ -12,6 +12,7 @@ from aps.asr.base.encoder import EncRetType
 from aps.asr.xfmr.impl import get_xfmr_encoder
 from aps.asr.xfmr.pose import get_xfmr_pose
 from aps.asr.xfmr.proj import get_xfmr_proj
+from aps.asr.xfmr.utils import prep_sub_mask
 
 
 class TransformerEncoder(nn.Module):
@@ -23,6 +24,7 @@ class TransformerEncoder(nn.Module):
                  arch: str,
                  input_size: int,
                  num_layers: int = 6,
+                 casual: bool = False,
                  proj: str = "conv2d",
                  proj_kwargs: Dict = {},
                  pose: str = "abs",
@@ -41,6 +43,7 @@ class TransformerEncoder(nn.Module):
         self.pose_type = "abs" if pose == "conv1d" else pose
         self.encoder = get_xfmr_encoder(arch, self.pose_type, num_layers,
                                         arch_kwargs)
+        self.casual = casual
 
     def forward(self, inp_pad: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> EncRetType:
@@ -61,6 +64,7 @@ class TransformerEncoder(nn.Module):
             enc_inp = self.proj(inp_pad)
 
         src_pad_mask = None if inp_len is None else (padding_mask(inp_len) == 1)
+        nframes = enc_inp.shape[1]
 
         if self.pose_type == "abs":
             # enc_inp: N x Ti x D => Ti x N x D
@@ -70,7 +74,6 @@ class TransformerEncoder(nn.Module):
         else:
             # enc_inp: N x Ti x D => Ti x N x D
             enc_inp = enc_inp.transpose(0, 1)
-            nframes = enc_inp.shape[0]
             # 2Ti-1 x D
             if self.pose_type == "rel":
                 inj_pose = self.pose(
@@ -78,9 +81,15 @@ class TransformerEncoder(nn.Module):
             else:
                 inj_pose = self.pose(
                     th.arange(0, 2 * nframes - 1, 1.0, device=enc_inp.device))
+        # src_mask: Ti x Ti
+        if self.casual:
+            src_mask = prep_sub_mask(nframes, device=enc_inp.device)
+        else:
+            src_mask = None
         # Ti x N x D
         enc_out = self.encoder(enc_inp,
                                inj_pose=inj_pose,
+                               src_mask=src_mask,
                                src_key_padding_mask=src_pad_mask)
         # N x Ti x D
         return enc_out.transpose(0, 1), inp_len
