@@ -9,7 +9,6 @@ import torch.nn as nn
 from typing import Optional, Union, List
 from aps.asr.base.encoder import PyTorchRNNEncoder
 from aps.sse.base import SseBase, MaskNonLinear
-from aps.transform.asr import TFTransposeTransform
 from aps.libs import ApsRegisters
 
 

@@ -5,7 +5,6 @@
 
 import pytest
 import torch as th
-import torch.nn as nn
 
 from aps.transform.enh import FeatureTransform as EnhTransform
 from aps.libs import aps_sse_nnet

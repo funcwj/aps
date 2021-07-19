@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Optional, Tuple, Union, NoReturn
+from typing import Optional, Tuple, Union
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 from aps.const import TORCH_VERSION

@@ -7,8 +7,6 @@ import warnings
 import torch as th
 import torch.nn as nn
 
-import torch.nn.functional as F
-
 from typing import Tuple, List, Union, Optional
 from aps.sse.base import SseBase, MaskNonLinear
 from aps.libs import ApsRegisters

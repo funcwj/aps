@@ -6,7 +6,7 @@
 import torch as th
 import torch.nn as nn
 
-from typing import Optional, Tuple, List, Union
+from typing import Optional, Tuple, List
 from aps.sse.enh.dcunet import Encoder, Decoder, parse_1dstr, parse_2dstr
 from aps.sse.base import SseBase, MaskNonLinear
 from aps.const import EPSILON

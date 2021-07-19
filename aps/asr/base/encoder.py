@@ -10,7 +10,7 @@ import torch.nn.functional as tf
 from typing import Optional, Tuple, Union, List, Dict
 
 from aps.asr.base.layer import VariantRNN, FSMN, Conv1d, Conv2d, PyTorchRNN
-from aps.asr.base.layer import var_len_rnn_forward, rnn_output_nonlinear
+from aps.asr.base.layer import rnn_output_nonlinear
 from aps.asr.base.jit import LSTM
 from aps.libs import Register
 
