@@ -123,7 +123,7 @@ class LocAttention(Attention):
             self.enc_part = self.enc_proj(enc_pad)
             # init padding mask
             if enc_len is not None:
-                self.pad_mask = padding_mask(enc_len, enc_pad.device)
+                self.pad_mask = padding_mask(enc_len)
         if ali_prev is None:
             # initialize attention
             ali_prev = th.ones(N, T, device=enc_pad.device)
@@ -189,7 +189,7 @@ class CtxAttention(Attention):
             self.enc_part = self.enc_proj(enc_pad)
             # init padding mask
             if enc_len is not None:
-                self.pad_mask = padding_mask(enc_len, enc_pad.device)
+                self.pad_mask = padding_mask(enc_len)
         # N x D_att
         dec_part = self.dec_proj(dec_prev)
         # N x Ti x D_att
@@ -246,7 +246,7 @@ class DotAttention(Attention):
             self.enc_part = self.enc_proj(enc_pad)
             # init padding mask
             if enc_len is not None:
-                self.pad_mask = padding_mask(enc_len, enc_pad.device)
+                self.pad_mask = padding_mask(enc_len)
         # N x D_att
         dec_part = self.dec_proj(dec_prev)
         # N x Ti
@@ -325,7 +325,7 @@ class MHCtxAttention(Attention):
             self.key_part = kp.view(N, self.att_head, self.att_dim, T)
             # init padding mask
             if enc_len is not None:
-                self.pad_mask = padding_mask(enc_len, enc_pad.device)[:, None]
+                self.pad_mask = padding_mask(enc_len)[:, None]
         # N x H*D_att, query
         dec_part = self.dec_proj(dec_prev)
         # N x H x D_att
@@ -402,7 +402,7 @@ class MHDotAttention(Attention):
             self.key_part = kp.transpose(1, 2)
             # init padding mask
             if enc_len is not None:
-                self.pad_mask = padding_mask(enc_len, enc_pad.device)[:, None]
+                self.pad_mask = padding_mask(enc_len)[:, None]
         # N x H*D_att, query
         dec_part = self.dec_proj(dec_prev)
         # N x H x D_att
@@ -498,7 +498,7 @@ class MHLocAttention(Attention):
             self.key_part = kp.view(N, self.att_head, self.att_dim, T)
             # init padding mask
             if enc_len is not None:
-                self.pad_mask = padding_mask(enc_len, enc_pad.device)[:, None]
+                self.pad_mask = padding_mask(enc_len)[:, None]
         if ali_prev is None:
             # initialize attention
             ali_prev = th.ones(N, self.att_head, T, device=enc_pad.device)
