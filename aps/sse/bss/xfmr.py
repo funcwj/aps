@@ -91,7 +91,7 @@ class FreqXfmr(SseBase):
         self.check_args(mix, training=False, valid_dim=[1])
         with th.no_grad():
             mix = mix[None, :]
-            sep = self._forward(mix, mode=mode)
+            sep = self._infer(mix, mode=mode)
             if self.num_spks == 1:
                 return sep[0]
             else:
@@ -106,7 +106,7 @@ class FreqXfmr(SseBase):
             Tensor: N x S or N x F x T
         """
         self.check_args(s, training=True, valid_dim=[2])
-        return self._forward(s, mode=self.training_mode)
+        return self._infer(s, mode=self.training_mode)
 
     @th.jit.export
     def mask_predict(self, feats: th.Tensor) -> th.Tensor:

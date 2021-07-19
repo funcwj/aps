@@ -89,6 +89,7 @@ def test_dcunet(num_branch, cplx):
                       O="0,0,1,1,1,0",
                       num_branch=num_branch,
                       cplx=cplx,
+                      non_linear="tanh" if cplx else "sigmoid",
                       causal_conv=False,
                       connection="cat")
     inp = th.rand(4, 64000)

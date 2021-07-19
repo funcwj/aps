@@ -57,7 +57,7 @@ class ToyRNN(SseBase):
         # N x S*F x T
         masks = masks.transpose(1, 2)
         # [N x F x T, ]
-        masks = th.chunk(masks, self.num_spks, -1)
+        masks = th.chunk(masks, self.num_spks, -2)
         # S x N x F x T
         return self.non_linear(th.stack(masks))
 
@@ -70,6 +70,7 @@ class ToyRNN(SseBase):
         feats, stft, _ = self.enh_transform(mix, None)
         N, T, _ = feats.shape
         if stft.dim() == 4:
+            # N x F x T
             stft = stft[:, 0]
         # S x N x F x T
         masks = self._tf_mask(feats, self.num_spks)
