@@ -75,7 +75,7 @@ class CRNet(SseBase):
     def __init__(self,
                  num_bins: int = 161,
                  causal_conv: bool = False,
-                 mode: str = "masking",
+                 masking: bool = True,
                  training_mode: str = "freq",
                  output_nonlinear: str = "softplus",
                  enh_transform: Optional[nn.Module] = None) -> None:
@@ -85,8 +85,6 @@ class CRNet(SseBase):
             raise RuntimeError(f"Do not support num_bins={num_bins}")
         if enh_transform.feats_dim != num_bins:
             raise RuntimeError("Feature dimention != num_bins (num_bins)")
-        if mode not in ["masking", "mapping"]:
-            raise RuntimeError(f"Unsupported mode: {mode}")
         num_encoders = 5
         K = [16, 32, 64, 128, 256]
         P = [0, 1, 0, 0, 0]
@@ -112,7 +110,7 @@ class CRNet(SseBase):
                             2,
                             batch_first=True,
                             bidirectional=False)
-        self.mode = mode
+        self.masking = masking
 
     def _forward(self, mix: th.Tensor, mode: str = "freq") -> th.Tensor:
         """
@@ -152,12 +150,12 @@ class CRNet(SseBase):
             return out
         else:
             decoder = self.enh_transform.inverse_stft
-            if self.mode == "masking":
-                enh = mix_stft * out
-                return decoder((enh.real, enh.imag), input="complex")
+            if self.masking:
+                pack = (mix_stft * out).as_real()
+                return decoder(pack, return_polar=False)
             else:
-                phase = mix_stft.angle()
-                return decoder((out, phase), input="polar")
+                pack = th.stack([out, mix_stft.angle()], -1)
+                return decoder(pack, return_polar=True)
 
     def infer(self, mix: th.Tensor, mode: str = "time") -> th.Tensor:
         """

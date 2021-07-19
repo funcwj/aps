@@ -230,21 +230,23 @@ class DCCRN(SseBase):
                 # N x F x T x 2
                 s = th.stack([mr, mi], -1)
             else:
-                s = self.inverse_stft((sr * mr - si * mi, sr * mi + si * mr),
-                                      input="complex")
+                s = th.stack([sr * mr - si * mi, sr * mi + si * mr], -1)
+                s = self.inverse_stft(s, return_polar=False)
         else:
             m = self.non_linear(m)
             if mode == "freq":
                 s = m
             else:
-                s = self.inverse_stft((sr * m, si * m), input="complex")
+                s = th.stack([sr * m, si * m], -1)
+                s = self.inverse_stft(s, return_polar=False)
         return s
 
     def _infer(self,
                mix: th.Tensor,
                mode: str = "freq") -> Tuple[th.Tensor, List[th.Tensor]]:
         # N x F x T
-        sr, si = self.forward_stft(mix, output="complex")
+        packed = self.forward_stft(mix, return_polar=False)
+        sr, si = packed[..., 0], packed[..., 1]
         # N x C x 2F x T
         masks = self._tf_mask(sr, si)
         if self.num_spks == 1:

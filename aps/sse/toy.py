@@ -83,7 +83,7 @@ class ToyRNN(SseBase):
             decoder = self.enh_transform.inverse_stft
             bss_stft = [stft * m for m in masks]
             packed = [
-                decoder((s.real, s.imag), input="complex") for s in bss_stft
+                decoder(s.as_real(), return_polar=False) for s in bss_stft
             ]
         return packed[0] if self.num_spks == 1 else packed
 

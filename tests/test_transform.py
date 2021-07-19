@@ -30,13 +30,15 @@ def test_forward_inverse_stft(wav, frame_len, frame_hop, window, mode):
                        frame_hop,
                        mode=mode,
                        window=window,
-                       center=True)
+                       center=True,
+                       return_polar=False)
     out = inverse_stft(mid,
                        frame_len,
                        frame_hop,
                        window=window,
                        center=True,
-                       mode=mode)
+                       mode=mode,
+                       return_polar=False)
     trunc = min(out.shape[-1], wav.shape[-1])
     th.testing.assert_allclose(out[..., :trunc], wav[..., :trunc])
 
@@ -47,20 +49,20 @@ def test_forward_inverse_stft(wav, frame_len, frame_hop, window, mode):
 @pytest.mark.parametrize("window", ["hann", "hamm"])
 @pytest.mark.parametrize("center", [False, True])
 def test_with_librosa_stft(wav, frame_len, frame_hop, window, center):
-    real1, imag1 = forward_stft(th.from_numpy(wav)[None, ...],
-                                frame_len,
-                                frame_hop,
-                                mode="librosa",
-                                window=window,
-                                center=center,
-                                output="complex")
-    real2, imag2 = forward_stft(th.from_numpy(wav)[None, ...],
-                                frame_len,
-                                frame_hop,
-                                mode="torch",
-                                window=window,
-                                center=center,
-                                output="complex")
+    pack1 = forward_stft(th.from_numpy(wav)[None, ...],
+                         frame_len,
+                         frame_hop,
+                         mode="librosa",
+                         window=window,
+                         center=center,
+                         return_polar=False)
+    pack2 = forward_stft(th.from_numpy(wav)[None, ...],
+                         frame_len,
+                         frame_hop,
+                         mode="torch",
+                         window=window,
+                         center=center,
+                         return_polar=False)
     librosa_stft = librosa.stft(wav,
                                 n_fft=2**math.ceil(math.log2(frame_len)),
                                 hop_length=frame_hop,
@@ -69,10 +71,10 @@ def test_with_librosa_stft(wav, frame_len, frame_hop, window, center):
                                 center=center)
     librosa_real = th.tensor(librosa_stft.real, dtype=th.float32)
     librosa_imag = th.tensor(librosa_stft.imag, dtype=th.float32)
-    th.testing.assert_allclose(real1[0], librosa_real)
-    th.testing.assert_allclose(imag1[0], librosa_imag)
-    th.testing.assert_allclose(real2[0], librosa_real)
-    th.testing.assert_allclose(imag2[0], librosa_imag)
+    th.testing.assert_allclose(pack1[..., 0], librosa_real)
+    th.testing.assert_allclose(pack1[..., 1], librosa_imag)
+    th.testing.assert_allclose(pack2[..., 0], librosa_real)
+    th.testing.assert_allclose(pack2[..., 1], librosa_imag)
 
 
 @pytest.mark.parametrize("wav", [egs1_wav])

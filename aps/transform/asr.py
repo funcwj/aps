@@ -262,8 +262,8 @@ class SpectrogramTransform(STFT):
             mag (Tensor): magnitude, N x (C) x F x T
         """
         # N x (C) x F x T
-        mag, _ = super().forward(wav)
-        return mag
+        in_polar = super().forward(wav)
+        return in_polar[..., 0]
 
 
 class AbsTransform(nn.Module):

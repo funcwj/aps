@@ -335,12 +335,11 @@ class DCUNet(SseBase):
             m_abs = (mr**2 + mi**2 + EPSILON)**0.5
             m_mag = self.non_linear(m_abs)
             mr, mi = m_mag * mr / m_abs, m_mag * mi / m_abs
-            s = self.inverse_stft((sr * mr - si * mi, sr * mi + si * mr),
-                                  input="complex")
+            pack = th.stack([sr * mr - si * mi, sr * mi + si * mr], -1)
         else:
             m = self.non_linear(m)
-            s = self.inverse_stft((sr * m, si * m), input="complex")
-        return s
+            pack = th.stack([sr * m, si * m], -1)
+        return self.inverse_stft(pack, return_polar=False)
 
     def _tf_mask(self,
                  real: th.Tensor,
@@ -393,7 +392,8 @@ class DCUNet(SseBase):
         """
         self.check_args(s, training=True, valid_dim=[2])
         # N x F x T
-        sr, si = self.forward_stft(s, output="complex")
+        packed = self.forward_stft(s, return_polar=False)
+        sr, si = packed[..., 0], packed[..., 1]
         masks = self._tf_mask(sr, si)
         # N x C x 2F x T
         if self.num_branch == 1:

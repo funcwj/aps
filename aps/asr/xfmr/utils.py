@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Union, Tuple
+from typing import Tuple
 
 
 def digit_shift(term: th.Tensor) -> th.Tensor:

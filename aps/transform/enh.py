@@ -499,7 +499,8 @@ class FeatureTransform(nn.Module):
             num_frames (Tensor or None): number frames in each batch, N or None
         """
         # magnitude & phase: N x C x F x T
-        mag, pha = self.forward_stft(wav_pad)
+        in_polar = self.forward_stft(wav_pad, return_polar=True)
+        mag, pha = in_polar[..., 0], in_polar[..., 1]
         # STFT coefficients: N x C x F x T
         cplx = ComplexTensor(mag, pha, polar=True)
 

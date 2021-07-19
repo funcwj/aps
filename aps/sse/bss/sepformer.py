@@ -229,7 +229,7 @@ class FreqSeqFormer(SseBase):
         if mode == "time":
             decoder = self.enh_transform.inverse_stft
             bss_stft = [mix_stft * m for m in masks]
-            bss = [decoder((s.real, s.imag), input="complex") for s in bss_stft]
+            bss = [decoder(s.as_real(), return_polar=False) for s in bss_stft]
         else:
             bss = masks
         return bss[0] if self.num_spks == 1 else bss

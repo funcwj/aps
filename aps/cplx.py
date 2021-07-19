@@ -151,6 +151,9 @@ class ComplexTensor(object):
     def dim(self) -> int:
         return self.real.dim()
 
+    def as_real(self) -> th.Tensor:
+        return th.stack([self.real, self.imag], dim=-1)
+
     @property
     def shape(self) -> th.Size:
         return self.real.shape

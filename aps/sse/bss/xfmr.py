@@ -75,7 +75,7 @@ class FreqXfmr(SseBase):
             decoder = self.enh_transform.inverse_stft
             bss_stft = [stft * m for m in masks]
             packed = [
-                decoder((s.real, s.imag), input="complex") for s in bss_stft
+                decoder(s.as_real(), return_polar=False) for s in bss_stft
             ]
         else:
             packed = masks

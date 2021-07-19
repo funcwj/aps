@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Optional, Union, Tuple
+from typing import Optional, Tuple
 from aps.const import EPSILON
 from aps.sse.base import SseBase
 from aps.libs import ApsRegisters
@@ -270,17 +270,14 @@ class Phasen(SseBase):
         self.conv1x1_p = nn.Conv2d(channel_pha, 2, (1, 1))
         self.training_mode = training_mode
 
-    def _forward(
-            self,
-            mix: th.Tensor,
-            mode: str = "freq"
-    ) -> Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]:
+    def _forward(self, mix: th.Tensor, mode: str = "freq") -> th.Tensor:
         """
         Args:
             mix (Tensor): N x S
         """
         # N x F x T
-        sr, si = self.forward_stft(mix, output="complex")
+        packed = self.forward_stft(mix, return_polar=False)
+        sr, si = packed[..., 0], packed[..., 1]
         # N x 2 x F x T
         inp = th.stack([sr, si], 1)
         # N x Ca x F x T
@@ -310,11 +307,11 @@ class Phasen(SseBase):
         sr = sr * mask
         si = si * mask
         pr, pi = pha[:, 0], pha[:, 1]
-        pack_cplx = (sr * pr - si * pi, sr * pi + si * pr)
+        pack_cplx = th.stack([sr * pr - si * pi, sr * pi + si * pr], -1)
         if mode == "freq":
             return pack_cplx
         else:
-            return self.inverse_stft(pack_cplx, input="complex")
+            return self.inverse_stft(pack_cplx, return_polar=False)
 
     def infer(self, mix: th.Tensor, mode="time") -> th.Tensor:
         """

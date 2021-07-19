@@ -353,7 +353,8 @@ class FreqSaTask(SepTask):
         """
         Compute reference magnitude for SA
         """
-        ref_mag, ref_pha = self.ctx(ref, output="polar")
+        in_polar = self.ctx(ref, return_polar=True)
+        ref_mag, ref_pha = in_polar[..., 0], in_polar[..., 1]
         # use phase-sensitive
         if self.phase_sensitive:
             # non-negative
@@ -377,8 +378,9 @@ class FreqSaTask(SepTask):
         mask = self.nnet(mix)
 
         # if multi-channel, use ch0 as reference
-        mix_mag, mix_pha = self.ctx(mix[:, 0] if mix.dim() == 3 else mix,
-                                    output="polar")
+        in_polar = self.ctx(mix[:, 0] if mix.dim() == 3 else mix,
+                            return_polar=True)
+        mix_mag, mix_pha = in_polar[..., 0], in_polar[..., 1]
 
         if isinstance(mask, th.Tensor):
             # F x T
@@ -586,8 +588,8 @@ class TimeSaTask(SepTask):
         # for ASR (do pre-emphasis)
         if self.pre_emphasis > 0:
             wav[:, 1:] = wav[:, 1:] - self.pre_emphasis * wav[:, :-1]
-        mag, _ = self.ctx(wav, output="polar")
-        return mag
+        in_polar = self.ctx(wav, return_polar=True)
+        return in_polar[..., 0]
 
     def forward(self, egs: Dict) -> Dict:
         """
@@ -794,22 +796,22 @@ class ComplexMappingTask(SepTask):
         self.num_spks = num_spks
         self.objf_ptr = tf.l1_loss if objf == "L1" else tf.mse_loss
 
-    def _build_ref(self, wav: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
+    def _build_ref(self, wav: th.Tensor) -> th.Tensor:
         """
         Return real/imag part of the STFT
         """
-        return self.ctx(wav, output="complex")
+        return self.ctx(wav, return_polar=False)
 
-    def objf(self, out: Tuple[th.Tensor, th.Tensor],
-             ref: Tuple[th.Tensor, th.Tensor]) -> th.Tensor:
+    def objf(self, out: th.Tensor, ref: th.Tensor) -> th.Tensor:
         """
         Return loss for each mini-batch
         """
-        out_mag = th.sqrt(out[0]**2 + out[1]**2)
-        ref_mag = th.sqrt(ref[0]**2 + ref[1]**2)
-        loss = self.objf_ptr(out[0], ref[0], reduction="none") + self.objf_ptr(
-            out[1], ref[1], reduction="none") + self.objf_ptr(
-                out_mag, ref_mag, reduction="none")
+        out_mag = th.sqrt(out[..., 0]**2 + out[..., 1]**2)
+        ref_mag = th.sqrt(ref[..., 0]**2 + ref[..., 1]**2)
+        real_loss = self.objf_ptr(out[..., 0], ref[..., 0], reduction="none")
+        imag_loss = self.objf_ptr(out[..., 1], ref[..., 1], reduction="none")
+        loss = real_loss + imag_loss + self.objf_ptr(
+            out_mag, ref_mag, reduction="none")
         loss = th.sum(loss.mean(-1), -1)
         return loss
 
@@ -822,7 +824,7 @@ class ComplexMappingTask(SepTask):
         """
         mix = egs["mix"]
         # do separation or enhancement
-        # out (real & imag parts): [Tensor, ...]
+        # out: Tensor ([real, imag])
         out = self.nnet(mix)
 
         if isinstance(out, tuple):
