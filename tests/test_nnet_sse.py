@@ -122,7 +122,7 @@ def test_dense_unet(num_spks, non_linear):
                           rnn_resize=384,
                           rnn_bidir=False,
                           rnn_dropout=0.2,
-                          num_dense_blocks=5,
+                          num_dense_blocks=3,
                           enh_transform=transform,
                           non_linear=non_linear,
                           inp_cplx=True,

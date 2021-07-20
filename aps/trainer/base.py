@@ -51,6 +51,36 @@ class WeightNoiseAdder(object):
                                     device=p.data.device)
 
 
+class ParameterAverager(object):
+    """
+    Average the parameters across the checkpoints
+    """
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.count = 0
+        self.averaged = OrderedDict()
+
+    def add(self, state_dict):
+        for key in state_dict.keys():
+            param = state_dict[key]
+            if key not in self.averaged:
+                self.averaged[key] = param.clone()
+            else:
+                self.averaged[key] += param
+        self.count += 1
+
+    def state_dict(self):
+        for key in self.averaged:
+            if self.averaged[key].is_floating_point():
+                self.averaged[key].div_(self.count)
+            else:
+                self.averaged[key] //= (self.count)
+        return self.averaged
+
+
 class ProgressReporter(object):
     """
     A simple training progress reporter used in Trainer class
@@ -635,32 +665,23 @@ class Trainer(object):
         if self.rank not in [0, None]:
             return
         self.reporter.log("Average checkpoints ...")
-        averaged = OrderedDict()
-        for i in range(self.cur_epoch - self.average_checkpoint + 1,
-                       self.cur_epoch + 1):
+        averager = ParameterAverager()
+        beg_epoch = self.cur_epoch - self.average_checkpoint + 1
+        for i in range(beg_epoch, self.cur_epoch + 1):
             self.reporter.log(f"Loading epoch.{i}.pt.tar ...")
             cpt = th.load(self.checkpoint / f"epoch.{i}.pt.tar",
                           map_location="cpu")
-            param = cpt["model_state"]
-            for key in param.keys():
-                p = param[key]
-                if key not in averaged:
-                    averaged[key] = p.clone()
-                else:
-                    averaged[key] += p
-        for key in averaged:
-            if averaged[key].is_floating_point():
-                averaged[key].div_(self.average_checkpoint)
-            else:
-                averaged[key] //= (self.average_checkpoint)
+            averager.add(cpt["model_state"])
 
         final = {
             "step": self.cur_step,
             "epoch": self.cur_epoch,
-            "model_state": averaged,
+            "model_state": averager.state_dict(),
             "num_parameters": self.num_params
         }
-        self.save_checkpoint(final, tag="avg", enable_subroutine=False)
+        self.save_checkpoint(final,
+                             tag=f"avg.epoch{beg_epoch}-{self.cur_epoch + 1}",
+                             enable_subroutine=False)
 
     def train_one_step(self, egs: Dict) -> bool:
         """

@@ -15,7 +15,9 @@ from aps.transform import EnhTransform
 def toy_rnn(mode, num_spks):
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
-                             frame_hop=256)
+                             frame_hop=256,
+                             center=True,
+                             stft_mode="librosa")
     base_rnn_cls = aps_sse_nnet("sse@base_rnn")
     return base_rnn_cls(enh_transform=transform,
                         num_bins=257,
@@ -166,6 +168,39 @@ def test_mel_time_sa(num_branch, num_spks, permute):
     task = aps_task("sse@time_mel_sa", nnet, **kwargs)
     egs = gen_egs(num_branch)
     run_epochs(task, egs, 5)
+
+
+@pytest.mark.parametrize("num_spks", [1, 2])
+def test_complex_mapping(num_spks):
+    nnet_cls = aps_sse_nnet("sse@dense_unet")
+    transform = EnhTransform(feats="spectrogram-log-cmvn",
+                             frame_len=512,
+                             frame_hop=256,
+                             center=True)
+    # output complex spectrogram
+    nnet = nnet_cls(K="3,3;3,3;3,3;3,3;3,3;3,3;3,3;3,3",
+                    S="1,1;2,1;2,1;2,1;2,1;2,1;2,1;2,1",
+                    P="0,1;0,1;0,1;0,1;0,1;0,1;0,1;0,1;0,1",
+                    O="0,0,0,0,0,0,0,0",
+                    enc_channel="16,32,32,32,32,64,128,384",
+                    dec_channel="32,16,32,32,32,32,64,128",
+                    conv_dropout=0.3,
+                    num_spks=num_spks,
+                    rnn_hidden=512,
+                    rnn_layers=2,
+                    rnn_resize=384,
+                    rnn_bidir=False,
+                    rnn_dropout=0.2,
+                    num_dense_blocks=2,
+                    enh_transform=transform,
+                    non_linear="",
+                    inp_cplx=True,
+                    out_cplx=True,
+                    training_mode="freq")
+    kwargs = {"objf": "L1", "num_spks": num_spks}
+    task = aps_task("sse@complex_mapping", nnet, **kwargs)
+    egs = gen_egs(num_spks)
+    run_epochs(task, egs, 3)
 
 
 @pytest.mark.parametrize("num_channels", [3])

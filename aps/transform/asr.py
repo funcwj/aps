@@ -262,7 +262,8 @@ class SpectrogramTransform(STFT):
             mag (Tensor): magnitude, N x (C) x F x T
         """
         # N x (C) x F x T
-        in_polar = super().forward(wav)
+        in_polar = super().forward(wav, return_polar=True)
+        # return only magnitude
         return in_polar[..., 0]
 
 

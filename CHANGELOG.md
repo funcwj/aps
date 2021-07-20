@@ -5,6 +5,7 @@
 1. Update implementation of DPRNN
 2. Add SepFormer & DFSMN & json based online dataloader (for SSE tasks)
 3. Begin to add torchscript export testing (dccrn, dcunet, dfsmn, tcn, transformer ...)
+4. Change the output of the STFT transform
 
 ### 2021/06
 
