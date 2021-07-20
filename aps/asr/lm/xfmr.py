@@ -7,7 +7,7 @@ import torch.nn as nn
 from typing import Optional, Tuple, Dict
 from aps.asr.xfmr.pose import get_xfmr_pose
 from aps.asr.xfmr.impl import get_xfmr_encoder
-from aps.asr.xfmr.decoder import prep_sub_mask
+from aps.asr.xfmr.utils import prep_sub_mask
 from aps.asr.base.attention import padding_mask
 from aps.libs import ApsRegisters
 

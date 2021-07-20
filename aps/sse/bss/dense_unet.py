@@ -13,8 +13,7 @@ from aps.libs import ApsRegisters
 """
 UNet used in Wang's paper
 """
-ComplexPair = Tuple[th.Tensor, th.Tensor]
-DenseUnetRetType = Union[th.Tensor, List[th.Tensor], List[ComplexPair]]
+DenseUnetRetType = Union[th.Tensor, List[th.Tensor]]
 
 
 class EncoderBlock(nn.Module):
@@ -393,7 +392,7 @@ class DenseUnet(SseBase):
             m: th.Tensor,
             sr: th.Tensor,
             si: th.Tensor,
-            mode: str = "freq") -> Union[th.Tensor, ComplexPair]:
+            mode: str = "freq") -> th.Tensor:
         decoder = self.enh_transform.inverse_stft
         # m: N x 2 x F x T
         if self.out_cplx:
@@ -408,29 +407,31 @@ class DenseUnet(SseBase):
                     s = m_mag
                 else:
                     mr, mi = m_mag * mr / m_abs, m_mag * mi / m_abs
-                    s = decoder((sr * mr - si * mi, sr * mi + si * mr),
-                                input="complex")
+                    s = th.stack([sr * mr - si * mi, sr * mi + si * mr], -1)
+                    s = decoder(s, return_polar=False)
             # use mapping
             else:
+                s = th.stack([mr, mi], -1)
                 if mode == "freq":
-                    s = (mr, mi)
+                    return s
                 else:
-                    s = decoder((mr, mi), input="complex")
+                    return decoder(s, return_polar=False)
         else:
             if self.non_linear:
                 m = self.non_linear(m[:, 0])
                 if mode == "freq":
                     s = m
                 else:
-                    s = decoder((sr * m, si * m), input="complex")
+                    s = decoder(th.stack([sr * m, si * m], -1),
+                                return_polar=False)
             else:
                 m = m[:, 0]
                 if mode == "freq":
                     s = m
                 else:
                     s_abs = th.sqrt(sr**2 + si**2)
-                    s = decoder((m * sr / s_abs, m * si / s_abs),
-                                input="complex")
+                    s = th.stack([m * sr / s_abs, m * si / s_abs], -1)
+                    s = decoder(s, return_polar=False)
         return s
 
     def infer(self, mix: th.Tensor, mode: str = "time") -> DenseUnetRetType:
@@ -447,17 +448,14 @@ class DenseUnet(SseBase):
             if self.num_spks == 1:
                 return sep[0]
             else:
-                if isinstance(sep[0], th.Tensor):
-                    bss = [s[0] for s in sep]
-                else:
-                    bss = [(s[0][0], s[1][0]) for s in sep]
-                return bss
+                return [s[0] for s in sep]
 
     def _forward(self, mix: th.Tensor, mode: str = "freq") -> DenseUnetRetType:
         # NOTE: update real input!
         if self.inp_cplx:
             # N x F x T
-            sr, si = self.enh_transform.forward_stft(mix, output="complex")
+            packed = self.enh_transform.forward_stft(mix, return_polar=False)
+            sr, si = packed[..., 0], packed[..., 1]
             mag = th.sqrt(sr**2 + si**2)
             # N x 2 x F x T
             s = th.stack([sr, si, mag], 1)

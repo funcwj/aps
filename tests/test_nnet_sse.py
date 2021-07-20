@@ -47,7 +47,7 @@ def test_crn():
                              round_pow_of_two=False)
     crn = nnet_cls(161,
                    enh_transform=transform,
-                   mode="masking",
+                   masking=True,
                    training_mode="freq")
     inp = th.rand(4, 64000)
     x = crn(inp)
@@ -69,9 +69,8 @@ def test_phasen():
                       lstm_hidden=256,
                       linear_size=512)
     inp = th.rand(4, 64000)
-    x, y = phasen(inp)
-    assert x.shape == th.Size([4, 257, 249])
-    assert y.shape == th.Size([4, 257, 249])
+    x = phasen(inp)
+    assert x.shape == th.Size([4, 257, 249, 2])
     z = phasen.infer(inp[1])
     assert z.shape == th.Size([64000])
 
@@ -123,7 +122,7 @@ def test_dense_unet(num_spks, non_linear):
                           rnn_resize=384,
                           rnn_bidir=False,
                           rnn_dropout=0.2,
-                          num_dense_blocks=5,
+                          num_dense_blocks=3,
                           enh_transform=transform,
                           non_linear=non_linear,
                           inp_cplx=True,

@@ -15,10 +15,11 @@ from aps.task.base import Task
 from aps.task.objf import permu_invarint_objf, multiple_objf
 from aps.libs import ApsRegisters
 from aps.transform.utils import STFT, mel_filter
+from aps.const import EPSILON
 
 __all__ = [
     "SisnrTask", "SnrTask", "WaTask", "LinearFreqSaTask", "LinearTimeSaTask",
-    "MelFreqSaTask", "MelTimeSaTask", "ComplexMappingTask"
+    "MelFreqSaTask", "MelTimeSaTask", "ComplexMappingTask", "ComplexMaskingTask"
 ]
 
 
@@ -353,7 +354,8 @@ class FreqSaTask(SepTask):
         """
         Compute reference magnitude for SA
         """
-        ref_mag, ref_pha = self.ctx(ref, output="polar")
+        in_polar = self.ctx(ref, return_polar=True)
+        ref_mag, ref_pha = in_polar[..., 0], in_polar[..., 1]
         # use phase-sensitive
         if self.phase_sensitive:
             # non-negative
@@ -377,8 +379,9 @@ class FreqSaTask(SepTask):
         mask = self.nnet(mix)
 
         # if multi-channel, use ch0 as reference
-        mix_mag, mix_pha = self.ctx(mix[:, 0] if mix.dim() == 3 else mix,
-                                    output="polar")
+        in_polar = self.ctx(mix[:, 0] if mix.dim() == 3 else mix,
+                            return_polar=True)
+        mix_mag, mix_pha = in_polar[..., 0], in_polar[..., 1]
 
         if isinstance(mask, th.Tensor):
             # F x T
@@ -586,8 +589,8 @@ class TimeSaTask(SepTask):
         # for ASR (do pre-emphasis)
         if self.pre_emphasis > 0:
             wav[:, 1:] = wav[:, 1:] - self.pre_emphasis * wav[:, :-1]
-        mag, _ = self.ctx(wav, output="polar")
-        return mag
+        in_polar = self.ctx(wav, return_polar=True)
+        return in_polar[..., 0]
 
     def forward(self, egs: Dict) -> Dict:
         """
@@ -794,22 +797,16 @@ class ComplexMappingTask(SepTask):
         self.num_spks = num_spks
         self.objf_ptr = tf.l1_loss if objf == "L1" else tf.mse_loss
 
-    def _build_ref(self, wav: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
-        """
-        Return real/imag part of the STFT
-        """
-        return self.ctx(wav, output="complex")
-
-    def objf(self, out: Tuple[th.Tensor, th.Tensor],
-             ref: Tuple[th.Tensor, th.Tensor]) -> th.Tensor:
+    def objf(self, out: th.Tensor, ref: th.Tensor) -> th.Tensor:
         """
         Return loss for each mini-batch
         """
-        out_mag = th.sqrt(out[0]**2 + out[1]**2)
-        ref_mag = th.sqrt(ref[0]**2 + ref[1]**2)
-        loss = self.objf_ptr(out[0], ref[0], reduction="none") + self.objf_ptr(
-            out[1], ref[1], reduction="none") + self.objf_ptr(
-                out_mag, ref_mag, reduction="none")
+        out_mag = th.sqrt(out[..., 0]**2 + out[..., 1]**2)
+        ref_mag = th.sqrt(ref[..., 0]**2 + ref[..., 1]**2)
+        real_loss = self.objf_ptr(out[..., 0], ref[..., 0], reduction="none")
+        imag_loss = self.objf_ptr(out[..., 1], ref[..., 1], reduction="none")
+        loss = real_loss + imag_loss + self.objf_ptr(
+            out_mag, ref_mag, reduction="none")
         loss = th.sum(loss.mean(-1), -1)
         return loss
 
@@ -822,17 +819,98 @@ class ComplexMappingTask(SepTask):
         """
         mix = egs["mix"]
         # do separation or enhancement
-        # out (real & imag parts): [Tensor, ...]
+        # out: Tensor ([real, imag])
         out = self.nnet(mix)
 
-        if isinstance(out, tuple):
+        if isinstance(out, th.Tensor):
             # F x T
-            ref = self._build_ref(egs["ref"])
+            ref = self.ctx(egs["ref"], return_polar=False)
             # loss
             loss = self.objf(out, ref)
         else:
             # for each reference
-            ref = [self._build_ref(r) for r in egs["ref"]]
+            ref = [self.ctx(r, return_polar=False) for r in egs["ref"]]
+            loss = hybrid_objf(out,
+                               ref,
+                               self.objf,
+                               weight=self.weight,
+                               permute=self.permute,
+                               permu_num_spks=self.num_spks)
+        return {"loss": th.mean(loss)}
+
+
+@ApsRegisters.task.register("sse@complex_masking")
+class ComplexMaskingTask(ComplexMappingTask):
+    """
+    Frequency domain complex mask loss function
+    Args:
+        nnet: network instance
+        num_spks: number of speakers (output branch in nnet)
+        weight: weight on each output branch if needed
+        permute: use permutation invariant loss or not
+        objf: use L1 or L2 distance
+        compress_param: cirm compression parameters
+    """
+
+    def __init__(self,
+                 nnet: nn.Module,
+                 num_spks: int = 2,
+                 weight: Optional[str] = None,
+                 permute: bool = True,
+                 compress_param: Tuple[float] = [10, 0.1, -100],
+                 objf: str = "L2") -> None:
+        super(ComplexMaskingTask, self).__init__(nnet,
+                                                 num_spks=num_spks,
+                                                 weight=weight,
+                                                 permute=permute,
+                                                 objf=objf)
+        self.k, self.c, self.lower_bound = compress_param
+
+    def _compress_mask(self, mix: th.Tensor, ref: th.Tensor) -> th.Tensor:
+        """
+        Return compressed version of complex mask, ranges [-k, k]
+        """
+        mix_stft = self.ctx(mix, return_polar=False)
+        ref_stft = self.ctx(ref, return_polar=False)
+        denominator = th.sum(mix_stft**2, -1) + EPSILON
+        real = (mix_stft[..., 0] * ref_stft[..., 0] +
+                mix_stft[..., 1] * ref_stft[..., 1])
+        imag = (mix_stft[..., 0] * ref_stft[..., 1] -
+                mix_stft[..., 1] * ref_stft[..., 0])
+        crm = th.stack([real, imag], -1) / denominator
+        exp = th.exp(-self.c * th.clamp_min(crm, self.lower_bound))
+        return self.k * (1 - exp) / (1 + exp)
+
+    def objf(self, out: th.Tensor, ref: th.Tensor) -> th.Tensor:
+        """
+        Return loss for each mini-batch
+        """
+        real_loss = self.objf_ptr(out[..., 0], ref[..., 0], reduction="none")
+        imag_loss = self.objf_ptr(out[..., 1], ref[..., 1], reduction="none")
+        loss = real_loss + imag_loss
+        loss = th.sum(loss.mean(-1), -1)
+        return loss
+
+    def forward(self, egs: Dict) -> Dict:
+        """
+        Return chunk-level loss
+        egs contains:
+            mix (Tensor): N x (C) x S
+            ref (Tensor or [Tensor, ...]): N x S
+        """
+        mix = egs["mix"]
+        # do separation or enhancement
+        # out: Tensor ([real, imag])
+        out = self.nnet(mix)
+
+        if isinstance(out, th.Tensor):
+            # F x T
+            ref = self._compress_mask(mix, egs["ref"])
+            # loss
+            loss = self.objf(out, ref)
+        else:
+            # for each reference
+            ref = [self._compress_mask(mix, r) for r in egs["ref"]]
             loss = hybrid_objf(out,
                                ref,
                                self.objf,

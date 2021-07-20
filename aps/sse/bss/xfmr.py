@@ -24,6 +24,7 @@ class FreqXfmr(SseBase):
                  input_size: int = 257,
                  num_spks: int = 2,
                  num_bins: int = 257,
+                 casual: bool = False,
                  arch: str = "xfmr",
                  pose: str = "rel",
                  arch_kwargs: Dict = {},
@@ -39,6 +40,7 @@ class FreqXfmr(SseBase):
         self.xfmr = TransformerEncoder(arch,
                                        input_size,
                                        num_layers=num_layers,
+                                       casual=casual,
                                        proj="linear",
                                        proj_kwargs=proj_kwargs,
                                        pose=pose,
@@ -73,7 +75,7 @@ class FreqXfmr(SseBase):
             decoder = self.enh_transform.inverse_stft
             bss_stft = [stft * m for m in masks]
             packed = [
-                decoder((s.real, s.imag), input="complex") for s in bss_stft
+                decoder(s.as_real(), return_polar=False) for s in bss_stft
             ]
         else:
             packed = masks
