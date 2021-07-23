@@ -71,10 +71,10 @@ def test_with_librosa_stft(wav, frame_len, frame_hop, window, center):
                                 center=center)
     librosa_real = th.tensor(librosa_stft.real, dtype=th.float32)
     librosa_imag = th.tensor(librosa_stft.imag, dtype=th.float32)
-    th.testing.assert_allclose(pack1[..., 0], librosa_real)
-    th.testing.assert_allclose(pack1[..., 1], librosa_imag)
-    th.testing.assert_allclose(pack2[..., 0], librosa_real)
-    th.testing.assert_allclose(pack2[..., 1], librosa_imag)
+    th.testing.assert_allclose(pack1[0, ..., 0], librosa_real)
+    th.testing.assert_allclose(pack1[0, ..., 1], librosa_imag)
+    th.testing.assert_allclose(pack2[0, ..., 0], librosa_real)
+    th.testing.assert_allclose(pack2[0, ..., 1], librosa_imag)
 
 
 @pytest.mark.parametrize("wav", [egs1_wav])

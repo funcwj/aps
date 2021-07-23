@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Optional, Tuple, Union
-from aps.asr.base.layer import OneHotEmbedding, PyTorchRNN
+from aps.asr.base.component import OneHotEmbedding, PyTorchRNN
 
 HiddenType = Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]
 

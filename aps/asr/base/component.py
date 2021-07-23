@@ -93,8 +93,7 @@ class Normalize1d(nn.Module):
         if name == "BN":
             self.norm = nn.BatchNorm1d(inp_features)
         else:
-            self.norm = nn.LayerNorm(inp_features)
-        self.name = name
+            self.norm = nn.GroupNorm(1, inp_features)
 
     def __repr__(self) -> str:
         return str(self.norm)
@@ -106,13 +105,10 @@ class Normalize1d(nn.Module):
         Return:
             out (Tensor): N x T x F
         """
-        if self.name == "BN":
-            # N x T x F => N x F x T
-            inp = inp.transpose(1, 2)
-            out = self.norm(inp)
-            out = out.transpose(1, 2)
-        else:
-            out = self.norm(inp)
+        # N x T x F => N x F x T
+        inp = inp.transpose(1, 2)
+        out = self.norm(inp)
+        out = out.transpose(1, 2)
         return out
 
 

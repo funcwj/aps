@@ -49,6 +49,55 @@ class RefChannelTransform(nn.Module):
             return inp[:, self.ref_channel]
 
 
+class AngleTransform(nn.Module):
+    """
+    Transform tensor [real, imag] to angle tensor
+    """
+
+    def __init__(self, dim: int = -1):
+        super(AngleTransform, self).__init__()
+        self.dim = dim
+
+    def extra_repr(self) -> str:
+        return f"dim={self.dim}"
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp (Tensor): N x ... x 2 x ...
+        Return:
+            out (Tensor): N x ...
+        """
+        real = th.select(inp, self.dim, 0)
+        imag = th.select(inp, self.dim, 1)
+        return th.atan2(imag, real)
+
+
+class MagnitudeTransform(nn.Module):
+    """
+    Transform tensor [real, imag] to angle tensor
+    """
+
+    def __init__(self, dim: int = -1, eps: float = 0):
+        super(MagnitudeTransform, self).__init__()
+        self.dim = dim
+        self.eps = eps
+
+    def extra_repr(self) -> str:
+        return f"dim={self.dim}, eps={self.eps}"
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp (Tensor): N x ... x 2 x ...
+        Return:
+            out (Tensor): N x ...
+        """
+        real = th.select(inp, self.dim, 0)
+        imag = th.select(inp, self.dim, 1)
+        return th.sqrt(real**2 + imag**2 + self.eps)
+
+
 class IpdTransform(nn.Module):
     """
     Compute inter-channel phase difference (IPD) features
@@ -431,6 +480,7 @@ class FeatureTransform(nn.Module):
                 feats_dim = self.forward_stft.num_bins
             if tok == "spectrogram":
                 spectrogram = [
+                    MagnitudeTransform(),
                     RefChannelTransform(ref_channel=ref_channel, input_dim=4),
                     TFTransposeTransform()
                 ]
@@ -453,6 +503,7 @@ class FeatureTransform(nn.Module):
                                      mask_zero=aug_mask_zero))
             elif tok == "ipd":
                 self.ipd_transform = nn.Sequential(
+                    AngleTransform(),
                     IpdTransform(ipd_index=ipd_index, cos=cos_ipd, sin=sin_ipd),
                     TFTransposeTransform())
                 ipd_index = ipd_index.split(";")
@@ -498,21 +549,21 @@ class FeatureTransform(nn.Module):
             cplx (ComplexTensor): STFT coefficients, N x (C) x F x T
             num_frames (Tensor or None): number frames in each batch, N or None
         """
-        # magnitude & phase: N x C x F x T
-        in_polar = self.forward_stft(wav_pad, return_polar=True)
-        mag, pha = in_polar[..., 0], in_polar[..., 1]
+        # packed: N x C x F x T x 2
+        packed = self.forward_stft(wav_pad, return_polar=False)
+        real, imag = packed[..., 0], packed[..., 1]
         # STFT coefficients: N x C x F x T
-        cplx = ComplexTensor(mag, pha, polar=True)
+        cplx = ComplexTensor(real, imag, polar=False)
 
         feats = []
         # magnitude transform
         if self.mag_transform:
             # N x (C) x T x F => N x T x F
-            feats.append(self.mag_transform(mag))
+            feats.append(self.mag_transform(packed))
         # ipd transform
         if self.ipd_transform:
             # N x C x F x T => N x ... x T
-            feats.append(self.ipd_transform(pha))
+            feats.append(self.ipd_transform(packed))
         # concatenate: N x T x ...
         num_frames = self.num_frames(wav_len)
         if len(feats):

@@ -11,7 +11,7 @@ from aps.asr.xfmr.impl import get_xfmr_encoder
 from aps.asr.xfmr.pose import get_xfmr_pose
 from aps.asr.xfmr.utils import prep_sub_mask
 from aps.asr.base.attention import padding_mask
-from aps.asr.base.layer import OneHotEmbedding, PyTorchRNN
+from aps.asr.base.component import OneHotEmbedding, PyTorchRNN
 
 
 class LayerNormRNN(nn.Module):

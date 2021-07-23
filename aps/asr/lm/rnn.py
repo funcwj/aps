@@ -5,7 +5,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.init as init
 from typing import NoReturn, Union, Tuple, Optional
-from aps.asr.base.layer import OneHotEmbedding, PyTorchRNN
+from aps.asr.base.component import OneHotEmbedding, PyTorchRNN
 from aps.libs import ApsRegisters
 
 
