@@ -112,12 +112,41 @@ class Normalize1d(nn.Module):
         return out
 
 
+class Normalize2d(nn.Module):
+    """
+    Wrapper for BatchNorm2d & InstanceNorm2d
+    """
+
+    def __init__(self, name: str, inp_features: int):
+        super(Normalize2d, self).__init__()
+        name = name.upper()
+        if name not in ["BN", "IN"]:
+            raise ValueError(f"Unknown type of Normalize2d: {name}")
+        if name == "BN":
+            self.norm = nn.BatchNorm2d(inp_features)
+        else:
+            self.norm = nn.InstanceNorm2d(inp_features)
+
+    def __repr__(self) -> str:
+        return str(self.norm)
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp (Tensor): N x C x T x F
+        Return:
+            out (Tensor): N x C x T x F
+        """
+        return self.norm(inp)
+
+
 def PyTorchRNN(mode: str,
                input_size: int,
                hidden_size: int,
                num_layers: int = 1,
                bias: bool = True,
                dropout: float = 0.,
+               proj_size: int = -1,
                bidirectional: bool = False) -> nn.Module:
     """
     Wrapper for PyTorch RNNs (LSTM, GRU, RNN_TANH, RNN_RELU)
@@ -138,6 +167,9 @@ def PyTorchRNN(mode: str,
         "bidirectional": bidirectional
     }
     if mode in ["GRU", "LSTM"]:
+        # add proj_size if needed
+        if mode == "LSTM" and TORCH_VERSION >= 1.8 and proj_size > 0:
+            kwargs["proj_size"] = proj_size
         return supported_rnn[mode](input_size, hidden_size, num_layers,
                                    **kwargs)
     elif mode == "RNN_TANH":
@@ -156,7 +188,7 @@ def PyTorchRNN(mode: str,
 
 class Conv1d(nn.Module):
     """
-    Time delay neural network (TDNN) layer using conv1d operations
+    Time delay neural network (TDNN) layer using conv1d operations (... -> Conv1d -> Norm -> ReLU -> Dropout -> ...)
     """
 
     def __init__(self,
@@ -166,15 +198,20 @@ class Conv1d(nn.Module):
                  stride: int = 2,
                  dilation: int = 1,
                  norm: str = "BN",
-                 dropout: float = 0):
+                 dropout: float = 0,
+                 for_streaming: bool = False):
         super(Conv1d, self).__init__()
-        padding = (dilation * (kernel_size - 1)) // 2
+        # we padding 0 by hand
+        if for_streaming:
+            padding = 0
+        else:
+            padding = (dilation * (kernel_size - 1)) // 2
         self.conv = nn.Conv1d(inp_features,
                               out_features,
                               kernel_size,
                               stride=stride,
-                              dilation=dilation,
-                              padding=padding)
+                              padding=padding,
+                              dilation=dilation)
         self.norm = Normalize1d(norm, out_features)
         self.drop = nn.Dropout(p=dropout)
         self.stride = stride
@@ -208,36 +245,47 @@ class Conv1d(nn.Module):
 
 class Conv2d(nn.Module):
     """
-    A wrapper for conv2d layer, with batchnorm & ReLU
+    A simple Conv2d block (... -> Conv2d -> Norm -> ReLU -> ...)
     """
+    Conv2dParam = Union[int, Tuple[int, int]]
 
     def __init__(self,
                  in_channels: int,
                  out_channels: int,
-                 kernel_size: Union[int, Tuple[int]] = 3,
-                 stride: Union[int, Tuple[int]] = 2,
-                 padding: Union[int, Tuple[int]] = 0):
+                 kernel_size: Conv2dParam = 3,
+                 stride: Conv2dParam = 2,
+                 dilation: Conv2dParam = 1,
+                 norm: str = "BN",
+                 for_streaming: bool = False):
         super(Conv2d, self).__init__()
+
+        def int2tuple(inp):
+            return (inp, inp) if isinstance(inp, int) else inp
+
+        kernel_size = int2tuple(kernel_size)
+        dilation = int2tuple(dilation)
+
+        padding = ((d * (k - 1)) // 2 for d, k in zip(dilation, kernel_size))
+        # disable time axis
+        if for_streaming:
+            padding = (0, padding[-1])
         self.conv = nn.Conv2d(in_channels,
                               out_channels,
                               kernel_size,
                               stride=stride,
                               padding=padding,
-                              bias=True)
-        self.norm = nn.BatchNorm2d(out_channels)
-
-        def int2tuple(inp):
-            return (inp, inp) if isinstance(inp, int) else inp
-
-        self.kernel_size = int2tuple(kernel_size)
+                              dilation=dilation)
+        self.norm = BatchNorm2d(norm, out_channels)
+        self.kernel_size = kernel_size
+        self.padding = padding
+        self.dilation = dilation
         self.stride = int2tuple(stride)
-        self.padding = int2tuple(padding)
 
     def compute_outp_dim(self, dim: th.Tensor, axis: int) -> th.Tensor:
         """
         Compute output dimention
         """
-        return (dim + 2 * self.padding[axis] -
+        return (dim + 2 * self.padding[axis] - self.dilation[axis] *
                 self.kernel_size[axis]) // self.stride[axis] + 1
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
@@ -267,12 +315,11 @@ class FSMN(nn.Module):
                  dropout: float = 0.0):
         super(FSMN, self).__init__()
         self.inp_proj = nn.Linear(inp_features, proj_features, bias=False)
-        self.ctx_size = lctx + rctx + 1
         self.ctx_conv = nn.Sequential(
             nn.ConstantPad1d((lctx, rctx), 0.0),
             nn.Conv1d(proj_features,
                       proj_features,
-                      kernel_size=self.ctx_size,
+                      kernel_size=lctx + rctx + 1,
                       dilation=dilation,
                       groups=proj_features,
                       padding=0,

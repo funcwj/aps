@@ -93,9 +93,7 @@ class MagnitudeTransform(nn.Module):
         Return:
             out (Tensor): N x ...
         """
-        real = th.select(inp, self.dim, 0)
-        imag = th.select(inp, self.dim, 1)
-        return th.sqrt(real**2 + imag**2 + self.eps)
+        return th.sqrt(th.sum(inp**2, self.dim) + self.eps)
 
 
 class IpdTransform(nn.Module):

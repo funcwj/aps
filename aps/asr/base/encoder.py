@@ -56,14 +56,13 @@ def encoder_instance(enc_type: str, inp_features: int, out_features: int,
         return ConcatEncoder(enc_layers)
 
 
-class ConcatEncoder(nn.Module):
+class ConcatEncoder(nn.ModuleList):
     """
-    Concatenation of the encoders (similar to nn.Sequential)
+    Concatenation of the encoders (actually nn.ModuleList)
     """
 
     def __init__(self, enc_list: List[nn.Module]) -> None:
-        super(ConcatEncoder, self).__init__()
-        self.enc_list = nn.ModuleList(enc_list)
+        super(ConcatEncoder, self).__init__(enc_list)
 
     def forward(self, inp: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> EncRetType:
@@ -75,14 +74,14 @@ class ConcatEncoder(nn.Module):
             out_pad (Tensor): N x To x O
             out_len (Tensor or None): N
         """
-        for enc in self.enc_list:
+        for enc in self._modules:
             inp, inp_len = enc(inp, inp_len)
         return inp, inp_len
 
 
 class EncoderBase(nn.Module):
     """
-    Base class for the common encoders
+    Add inp_features/out_features attributions to the encoder objects
     """
 
     def __init__(self, inp_features, out_features):
