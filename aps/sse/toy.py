@@ -5,7 +5,7 @@
 
 import torch as th
 import torch.nn as nn
-import torch.nn.functional as tf 
+import torch.nn.functional as tf
 
 from typing import Optional, Union, List
 from aps.asr.base.encoder import PyTorchRNNEncoder, EncRetType
@@ -29,16 +29,16 @@ class RNN(PyTorchRNNEncoder):
                  dropout: int = 0.2,
                  bidirectional: bool = False,
                  non_linear: str = "none"):
-        super(RNN, PyTorchRNNEncoder).__init__(inp_features,
-                                               out_features,
-                                               input_proj=input_proj,
-                                               rnn=rnn,
-                                               num_layers=num_layers,
-                                               hidden=hidden,
-                                               hidden_proj=hidden_proj,
-                                               dropout=dropout,
-                                               bidirectional=bidirectional,
-                                               non_linear=non_linear)
+        super(RNN, self).__init__(inp_features,
+                                  out_features,
+                                  input_proj=input_proj,
+                                  rnn=rnn,
+                                  num_layers=num_layers,
+                                  hidden=hidden,
+                                  hidden_proj=hidden_proj,
+                                  dropout=dropout,
+                                  bidirectional=bidirectional,
+                                  non_linear=non_linear)
 
     def forward(self, inp: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> EncRetType:
@@ -68,7 +68,7 @@ class ToyRNN(SseBase):
 
     def __init__(self,
                  input_size: int = 257,
-                 input_proj: Optional[int] = None,
+                 input_proj: int = -1,
                  num_bins: int = 257,
                  num_spks: int = 2,
                  enh_transform: Optional[nn.Module] = None,

@@ -37,7 +37,8 @@ class DFSMN(SseBase):
         super(DFSMN, self).__init__(enh_transform, training_mode=training_mode)
         assert enh_transform is not None
         self.dfsmn = FSMNEncoder(num_bins,
-                                 dim,
+                                 num_bins * num_spks,
+                                 dim=dim,
                                  project=project,
                                  dropout=dropout,
                                  num_layers=num_layers,
@@ -46,8 +47,7 @@ class DFSMN(SseBase):
                                  rcontext=rcontext,
                                  norm=norm,
                                  dilation=dilation)
-        self.masks = nn.Sequential(nn.Linear(dim, num_bins * num_spks),
-                                   MaskNonLinear(non_linear, enable="common"),
+        self.masks = nn.Sequential(MaskNonLinear(non_linear, enable="common"),
                                    TFTransposeTransform())
         self.num_spks = num_spks
 

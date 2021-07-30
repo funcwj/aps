@@ -107,14 +107,13 @@ class PyTorchRNNEncoder(EncoderBase):
             self.proj = nn.Linear(inp_features, input_proj)
         else:
             self.proj = None
-        self.rnns = PyTorchRNN(
-            rnn,
-            inp_features if input_proj is None else input_proj,
-            hidden,
-            num_layers=num_layers,
-            dropout=dropout,
-            proj_size=hidden_proj,
-            bidirectional=bidirectional)
+        self.rnns = PyTorchRNN(rnn,
+                               input_proj if input_proj > 0 else inp_features,
+                               hidden,
+                               num_layers=num_layers,
+                               dropout=dropout,
+                               proj_size=hidden_proj,
+                               bidirectional=bidirectional)
         hidden_size = hidden_proj if hidden_proj > 0 else hidden
         factor = 2 if bidirectional else 1
         self.outp = nn.Linear(hidden_size * factor, out_features)
@@ -158,7 +157,7 @@ class JitLSTMEncoder(EncoderBase):
     def __init__(self,
                  inp_features: int,
                  out_features: int,
-                 input_proj: Optional[int] = None,
+                 input_proj: int = -1,
                  num_layers: int = 3,
                  hidden: int = 512,
                  hidden_proj: int = None,
@@ -170,18 +169,18 @@ class JitLSTMEncoder(EncoderBase):
         if non_linear not in rnn_output_nonlinear:
             raise ValueError(
                 f"Unsupported output non-linear function: {non_linear}")
-        if input_proj:
+        if input_proj > 0:
             self.proj = nn.Linear(inp_features, input_proj)
         else:
             self.proj = None
-        self.rnns = LSTM(inp_features if input_proj is None else input_proj,
+        self.rnns = LSTM(input_proj if input_proj > 0 else inp_features,
                          hidden,
                          dropout=dropout,
                          project=hidden_proj,
                          num_layers=num_layers,
                          layer_norm=layer_norm,
                          bidirectional=bidirectional)
-        rnn_out_size = hidden if hidden_proj is None else hidden_proj
+        rnn_out_size = hidden_proj if hidden_proj > 0 else hidden
         factor = 2 if bidirectional else 1
         self.outp = nn.Linear(rnn_out_size * factor, out_features)
         self.non_linear = rnn_output_nonlinear[non_linear]
@@ -222,7 +221,7 @@ class VariantRNNEncoder(EncoderBase):
                  bidirectional: bool = True,
                  dropout: float = 0.0,
                  dropout_input: bool = True,
-                 project: Optional[int] = None,
+                 project: int = -1,
                  non_linear: str = "tanh",
                  norm: str = "",
                  pyramid_stack: bool = False,
@@ -236,7 +235,7 @@ class VariantRNNEncoder(EncoderBase):
             if layer_idx == 0:
                 in_size = inp_features
             else:
-                if project:
+                if project > 0:
                     return project
                 else:
                     in_size = hidden
@@ -369,7 +368,6 @@ class Conv2dEncoder(EncoderBase):
                  num_layers: int = 3,
                  kernel: Conv2dParam = 3,
                  stride: Conv2dParam = 2,
-                 padding: Conv2dParam = 0,
                  for_streaming: bool = False):
         super(Conv2dEncoder, self).__init__(inp_features, out_features)
 
@@ -384,7 +382,6 @@ class Conv2dEncoder(EncoderBase):
 
         self.kernel = param2need(kernel, num_layers)
         self.stride = param2need(stride, num_layers)
-        self.padding = param2need(padding, num_layers)
         if isinstance(channel, int):
             channel = [channel] * num_layers
 
@@ -394,7 +391,6 @@ class Conv2dEncoder(EncoderBase):
                    kernel_size=self.kernel[i],
                    norm=norm,
                    stride=self.stride[i],
-                   padding=self.padding[i],
                    for_streaming=for_streaming) for i in range(num_layers)
         ])
 
@@ -440,6 +436,7 @@ class FSMNEncoder(EncoderBase):
     def __init__(self,
                  inp_features: int,
                  out_features: int,
+                 dim: int = 1024,
                  project: int = 512,
                  num_layers: int = 4,
                  residual: bool = True,
@@ -452,8 +449,8 @@ class FSMNEncoder(EncoderBase):
         if isinstance(dilation, int):
             dilation = [dilation] * num_layers
         self.enc_layers = nn.ModuleList([
-            FSMN(inp_features if i == 0 else out_features,
-                 out_features,
+            FSMN(inp_features if i == 0 else dim,
+                 dim if i != num_layers - 1 else out_features,
                  project,
                  lctx=lcontext,
                  rctx=rcontext,

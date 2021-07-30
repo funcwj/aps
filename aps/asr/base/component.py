@@ -265,7 +265,8 @@ class Conv2d(nn.Module):
         kernel_size = int2tuple(kernel_size)
         dilation = int2tuple(dilation)
 
-        padding = ((d * (k - 1)) // 2 for d, k in zip(dilation, kernel_size))
+        padding = tuple(
+            (d * (k - 1)) // 2 for d, k in zip(dilation, kernel_size))
         # disable time axis
         if for_streaming:
             padding = (0, padding[-1])
@@ -325,8 +326,8 @@ class FSMN(nn.Module):
                       padding=0,
                       bias=False))
         self.out_proj = nn.Linear(proj_features, out_features)
-        self.out_drop = nn.Dropout(p=dropout)
         self.norm = Normalize1d(norm, out_features) if norm else None
+        self.out_drop = nn.Dropout(p=dropout)
 
     def forward(
             self,
@@ -370,7 +371,7 @@ class VariantRNN(nn.Module):
                  hidden_size: int = 512,
                  rnn: str = "lstm",
                  norm: str = "",
-                 project: Optional[int] = None,
+                 project: int = -1,
                  non_linear: str = "relu",
                  dropout: float = 0.0,
                  bidirectional: bool = False,
@@ -388,9 +389,9 @@ class VariantRNN(nn.Module):
         self.add_forward_backward = add_forward_backward and bidirectional
         if bidirectional and not add_forward_backward:
             hidden_size *= 2
-        self.proj = nn.Linear(hidden_size, project) if project else None
+        self.proj = nn.Linear(hidden_size, project) if project > 0 else None
         self.norm = Normalize1d(
-            norm, project if project else hidden_size) if norm else None
+            norm, project if project > 0 else hidden_size) if norm else None
         self.drop = nn.Dropout(dropout) if dropout != 0 else None
 
     def forward(self, inp: th.Tensor,

@@ -79,7 +79,8 @@ conv1d_enc_kwargs = {
 }
 
 fsmn_enc_kwargs = {
-    "project": 512,
+    "dim": 512,
+    "project": 256,
     "num_layers": 4,
     "residual": True,
     "lcontext": 10,
@@ -94,8 +95,7 @@ conv2d_rnn_enc_kwargs = {
         "channel": 32,
         "num_layers": 2,
         "stride": 2,
-        "padding": 1,
-        "kernel_size": 3,
+        "kernel": 3,
     },
     "pytorch_rnn": {
         "rnn": "lstm",
@@ -263,15 +263,14 @@ def test_conv1d_encoder(inp_len, num_layers, dilation):
 
 @pytest.mark.parametrize("num_layers", [2, 3])
 @pytest.mark.parametrize("inp_len", [100, 102])
-@pytest.mark.parametrize("kernel_size", [3, 5])
-def test_conv2d_encoder(inp_len, num_layers, kernel_size):
+@pytest.mark.parametrize("kernel", [3, 5])
+def test_conv2d_encoder(inp_len, num_layers, kernel):
     conv1d_encoder = Conv2dEncoder(80,
                                    -1,
                                    channel=[32] * num_layers,
-                                   kernel_size=kernel_size,
+                                   kernel=kernel,
                                    stride=2,
-                                   num_layers=num_layers,
-                                   padding=(kernel_size - 1) // 2)
+                                   num_layers=num_layers)
     batch_size = 4
     inp = th.rand(batch_size, inp_len, 80)
     out, out_len = conv1d_encoder(inp, th.LongTensor([inp_len] * batch_size))

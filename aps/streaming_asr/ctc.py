@@ -30,7 +30,7 @@ class CtcASR(nn.Module):
                  enc_type: str = "pytorch_rnn",
                  enc_proj: int = -1,
                  enc_kwargs: Optional[Dict] = None) -> None:
-        super(StreamingASREncoderBase, self).__init__()
+        super(CtcASR, self).__init__()
         self.lctx = lctx
         self.rctx = rctx
         self.vocab_size = vocab_size
@@ -38,6 +38,7 @@ class CtcASR(nn.Module):
         self.encoder = encoder_instance(
             enc_type, input_size, enc_proj if enc_proj > 0 else vocab_size,
             enc_kwargs)
+        self.ctc = nn.Linear(enc_proj, vocab_size) if enc_proj > 0 else None
 
     def _decoding_prep(self,
                        x: th.Tensor,
@@ -90,7 +91,11 @@ class CtcASR(nn.Module):
             x_len += self.lctx + self.rctx
         # N x Ti x D
         enc_out, enc_len = self.encoder(x_pad, x_len)
-        return enc_out, enc_out, enc_len
+        # CTC branch
+        enc_ctc = enc_out
+        if self.ctc:
+            enc_ctc = self.ctc(enc_out)
+        return enc_out, enc_ctc, enc_len
 
     def forward(self, x_pad: th.Tensor, x_len: NoneOrTensor) -> AMForwardType:
         """
