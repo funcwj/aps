@@ -665,8 +665,11 @@ class Trainer(object):
         if self.rank not in [0, None]:
             return
         self.reporter.log("Average checkpoints ...")
+        beg_epoch = max(1, self.cur_epoch - self.average_checkpoint + 1)
+        if self.cur_epoch == beg_epoch:
+            self.reporter.log("Cancel as not found enough checkpoints")
+            return
         averager = ParameterAverager()
-        beg_epoch = self.cur_epoch - self.average_checkpoint + 1
         for i in range(beg_epoch, self.cur_epoch + 1):
             self.reporter.log(f"Loading epoch.{i}.pt.tar ...")
             cpt = th.load(self.checkpoint / f"epoch.{i}.pt.tar",

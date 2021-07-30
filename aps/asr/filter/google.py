@@ -226,7 +226,8 @@ class CLPFsBeamformer(nn.Module):
         if x.dim() == 3:
             x = x[None, ...]
         # N x P x T x F
-        b = self.beam(x, trans=True, cplx=True)
+        br, bi = self.beam(x.real, x.imag, trans=True)
+        b = ComplexTensor(br, bi)
         if self.spectra_complex:
             # N x P x T x G
             w = self.proj(b)

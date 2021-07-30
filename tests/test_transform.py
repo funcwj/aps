@@ -98,6 +98,41 @@ def test_asr_transform(wav, mode, feats, shape):
     assert feats.shape == th.Size(shape)
     assert th.sum(th.isnan(feats)) == 0
     assert transform.feats_dim == shape[-1]
+    transform.eval()
+    print(transform.export())
+    scripted_transform = th.jit.script(transform.export())
+    ref_out = transform(feats)[0]
+    jit_out = scripted_transform(feats)
+    th.testing.assert_allclose(ref_out, jit_out)
+
+
+@pytest.mark.parametrize("wav", [egs1_wav])
+@pytest.mark.parametrize("feats", ["fbank-log-cmvn", "perturb-mfcc-aug-delta"])
+def test_asr_transform_jit(wav, feats):
+    wav = th.from_numpy(wav[None, ...])
+    packed = forward_stft(wav,
+                          400,
+                          160,
+                          mode="librosa",
+                          window="hamm",
+                          pre_emphasis=0.96,
+                          center=False,
+                          return_polar=True)
+    transform = AsrTransform(feats=feats,
+                             stft_mode="librosa",
+                             window="hamm",
+                             frame_len=400,
+                             frame_hop=160,
+                             use_power=True,
+                             pre_emphasis=0.96,
+                             center=False,
+                             aug_prob=0.5,
+                             aug_mask_zero=False)
+    transform.eval()
+    scripted_transform = th.jit.script(transform.export())
+    ref_out = transform(wav, None)[0]
+    jit_out = scripted_transform(packed[..., 0])
+    th.testing.assert_allclose(ref_out, jit_out)
 
 
 @pytest.mark.parametrize("max_length", [160000])
@@ -199,5 +234,6 @@ def debug_speed_perturb():
 
 
 if __name__ == "__main__":
-    debug_speed_perturb()
+    # debug_speed_perturb()
     # debug_visualize_feature()
+    test_asr_transform_jit(egs1_wav, "fbank-log-cmvn")

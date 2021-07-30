@@ -36,6 +36,9 @@ class RefChannelTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"ref_channel={self.ref_channel}"
 
+    def jit_export(self) -> bool:
+        return True
+
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
@@ -61,6 +64,9 @@ class AngleTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"dim={self.dim}"
 
+    def jit_export(self) -> bool:
+        return True
+
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
@@ -85,6 +91,9 @@ class MagnitudeTransform(nn.Module):
 
     def extra_repr(self) -> str:
         return f"dim={self.dim}, eps={self.eps}"
+
+    def jit_export(self) -> bool:
+        return True
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
@@ -125,6 +134,9 @@ class IpdTransform(nn.Module):
 
     def extra_repr(self) -> str:
         return f"ipd_index={self.ipd_index}, cos={self.cos}, sin={self.sin}"
+
+    def jit_export(self) -> bool:
+        return True
 
     def forward(self, p: th.Tensor) -> th.Tensor:
         """
@@ -252,6 +264,9 @@ class DfTransform(nn.Module):
             f"sr={self.sr}, num_bins={self.num_bins}, velocity={self.velocity}, "
             + f"known_doa={self.num_doas == 1}")
 
+    def jit_export(self) -> bool:
+        return True
+
     def _compute_af(self, ipd: th.Tensor, doa: th.Tensor) -> th.Tensor:
         """
         Compute angle feature
@@ -355,23 +370,24 @@ class FixedBeamformer(nn.Module):
                 f"num_bins={F}, init_weight={self.init_weight}, " +
                 f"requires_grad={self.requires_grad}")
 
-    def forward(
-            self,
-            x: ComplexTensor,
-            beam: Optional[th.Tensor] = None,
-            squeeze: bool = False,
-            trans: bool = False,
-            cplx: bool = True
-    ) -> Union[ComplexTensor, Tuple[th.Tensor, th.Tensor]]:
+    def jit_export(self) -> bool:
+        return True
+
+    def forward(self,
+                real: th.Tensor,
+                imag: th.Tensor,
+                beam: Optional[th.Tensor] = None,
+                squeeze: bool = False,
+                trans: bool = False,
+                cplx: bool = True) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args:
-            x (Complex Tensor): N x C x F x T
+            real, imag (Tensor, Tensor): N x C x F x T
             beam (Tensor or None): N
         Return:
-            1) (Tensor, Tensor): N x (B) x F x T
-            2) (ComplexTensor): N x (B) x F x T
+            real, imag (Tensor, Tensor): N x (B) x F x T
         """
-        r, i = x.real, x.imag
+        r, i = real, imag
         if r.dim() != i.dim() and r.dim() != 4:
             raise RuntimeError(f"FixBeamformer accept 4D tensor, got {r.dim()}")
         if self.real.shape[1] != r.shape[1]:
@@ -393,10 +409,7 @@ class FixedBeamformer(nn.Module):
         if trans:
             br = br.transpose(-1, -2)
             bi = bi.transpose(-1, -2)
-        if cplx:
-            return ComplexTensor(br, bi)
-        else:
-            return br, bi
+        return br, bi
 
 
 @ApsRegisters.transform.register("enh")
