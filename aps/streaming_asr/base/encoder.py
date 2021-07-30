@@ -173,7 +173,6 @@ class StreamingConv1dEncoder(Conv1dEncoder):
                  num_layers: int = 3,
                  kernel: Conv1dParam = 3,
                  stride: Conv1dParam = 2,
-                 causal: Conv1dParam = 0,
                  dilation: Conv1dParam = 1,
                  dropout: float = 0):
         super(StreamingConv1dEncoder, self).__init__(inp_features,

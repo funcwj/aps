@@ -12,7 +12,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from typing import Optional, Dict, Tuple, List
 from aps.asr.base.encoder import encoder_instance
-from aps.asr.xfmr.encoder import TransformerEncoder
+from aps.asr.transformer.encoder import TransformerEncoder
 from aps.asr.beam_search.ctc import ctc_beam_search, ctc_viterbi_align
 from aps.libs import ApsRegisters
 
@@ -42,11 +42,9 @@ class ASREncoderBase(nn.Module):
                                               **enc_kwargs)
             self.is_xfmr_encoder = True
         else:
-            if enc_proj <= 0:
-                raise ValueError(
-                    "For non-transformer encoder, enc_proj must be assigned")
-            self.encoder = encoder_instance(enc_type, input_size, enc_proj,
-                                            enc_kwargs)
+            self.encoder = encoder_instance(
+                enc_type, input_size, enc_proj if enc_proj > 0 else vocab_size,
+                enc_kwargs)
             self.is_xfmr_encoder = False
         self.ctc = nn.Linear(enc_proj, vocab_size) if ctc else None
 
@@ -123,7 +121,7 @@ class ASREncoderBase(nn.Module):
         # N x Ti x D
         enc_out, enc_len = self.encoder(x_pad, x_len)
         # CTC branch
-        enc_ctc = None
+        enc_ctc = enc_out
         if self.ctc:
             enc_ctc = self.ctc(enc_out)
         return enc_out, enc_ctc, enc_len

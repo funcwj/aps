@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from aps.transform.asr import TFTransposeTransform
-from aps.asr.xfmr.encoder import TransformerEncoder
+from aps.asr.transformer.encoder import TransformerEncoder
 from aps.sse.base import SseBase, MaskNonLinear
 from aps.sse.bss.tcn import normalize_layer
 from aps.libs import ApsRegisters

@@ -229,7 +229,7 @@ class Conv1d(nn.Module):
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
-            inp (Tensor): (N) x T x F
+            inp (Tensor): N x T x F
         Return:
             out (Tensor): N x T x O, output of the layer
         """
@@ -296,8 +296,7 @@ class Conv2d(nn.Module):
         Return:
             out (Tensor): N x C' x T' x F'
         """
-        out = self.norm(self.conv(inp[:, None] if inp.dim() == 3 else inp))
-        return tf.relu(out)
+        return tf.relu(self.norm(self.conv(inp)))
 
 
 class FSMN(nn.Module):
@@ -311,7 +310,7 @@ class FSMN(nn.Module):
                  proj_features: int,
                  lctx: int = 3,
                  rctx: int = 3,
-                 norm: int = "BN",
+                 norm: str = "BN",
                  dilation: int = 0,
                  dropout: float = 0.0):
         super(FSMN, self).__init__()
@@ -326,8 +325,11 @@ class FSMN(nn.Module):
                       padding=0,
                       bias=False))
         self.out_proj = nn.Linear(proj_features, out_features)
-        self.norm = Normalize1d(norm, out_features) if norm else None
-        self.out_drop = nn.Dropout(p=dropout)
+        if norm == "none":
+            self.out_norm = None
+        else:
+            self.out_norm = nn.Sequential(Normalize1d(norm, out_features),
+                                          nn.ReLU(), nn.Dropout(p=dropout))
 
     def forward(
             self,
@@ -353,10 +355,8 @@ class FSMN(nn.Module):
             proj = proj + memory
         # N x T x O
         out = self.out_proj(proj)
-        if self.norm is not None:
-            out = self.out_drop(tf.relu(self.norm(out)))
-        else:
-            out = self.out_drop(tf.relu(out))
+        if self.out_norm is not None:
+            out = self.out_norm(out)
         # N x T x O
         return out, proj
 

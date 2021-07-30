@@ -23,7 +23,6 @@ from aps.transform.utils import STFT, mel_filter, splice_feature, speed_perturb_
 from aps.transform.augment import tf_mask, perturb_speed
 from aps.const import EPSILON, MAX_INT16
 from aps.libs import ApsRegisters
-from aps.cplx import ComplexTensor
 
 from scipy.fftpack import dct as scipy_dct
 from kaldi_python_io.functional import read_kaldi_mat

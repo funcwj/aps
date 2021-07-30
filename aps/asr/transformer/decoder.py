@@ -8,8 +8,8 @@ import torch.nn as nn
 
 from torch.nn import MultiheadAttention, TransformerDecoder
 from typing import Tuple, Optional, Dict
-from aps.asr.xfmr.pose import get_xfmr_pose
-from aps.asr.xfmr.utils import get_activation_fn, prep_sub_mask
+from aps.asr.transformer.pose import get_xfmr_pose
+from aps.asr.transformer.utils import get_activation_fn, prep_sub_mask
 from aps.asr.base.attention import padding_mask
 
 

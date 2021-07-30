@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 
 from typing import Optional, List, Union, Dict
-from aps.asr.xfmr.encoder import TransformerEncoder
+from aps.asr.transformer.encoder import TransformerEncoder
 from aps.sse.base import SseBase, MaskNonLinear
 from aps.transform.asr import TFTransposeTransform
 from aps.libs import ApsRegisters

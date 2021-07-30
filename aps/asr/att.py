@@ -8,12 +8,12 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 import aps.asr.beam_search.att as att_api
-import aps.asr.beam_search.xfmr as xfmr_api
+import aps.asr.beam_search.transformer as xfmr_api
 
 from typing import Optional, Dict, List
 from aps.asr.ctc import CtcASR, NoneOrTensor, AMForwardType
 from aps.asr.base.decoder import PyTorchRNNDecoder
-from aps.asr.xfmr.decoder import TorchTransformerDecoder
+from aps.asr.transformer.decoder import TorchTransformerDecoder
 from aps.asr.base.attention import att_instance
 from aps.asr.beam_search.ctc import ctc_beam_search
 from aps.libs import ApsRegisters

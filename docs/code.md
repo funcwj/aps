@@ -104,7 +104,7 @@ The submodule for language model & acoustic model. Currently the implemented AM 
 * `TransducerASR`: RNNT AM with RNN decoders
 * `XfmrTransducerASR`: RNNT AM with Transformer decoders
 
-The transformer implementation is kept similar style with `torch.nn` package and I put them under `aps.asr.xfmr` package. Now the `TransformerEncoder` supports the vanilla Transformer and [Conformer](https://arxiv.org/abs/2005.08100) with the following multi-head self-attention (MHSA):
+The transformer implementation is kept similar style with `torch.nn` package and I put them under `aps.asr.transformer` package. Now the `TransformerEncoder` supports the vanilla Transformer and [Conformer](https://arxiv.org/abs/2005.08100) with the following multi-head self-attention (MHSA):
 
 * `ApsMultiheadAttention`: original MHSA proposed in "Attention is All You Need" ([paper](https://arxiv.org/abs/1706.03762))
 * `RelMultiheadAttention`: MHSA using relative position representations proposed in "Self-Attention with Relative Position Representations" ([paper](https://arxiv.org/abs/1803.02155))
@@ -128,7 +128,7 @@ and attention type:
 
 The decoders are much simple than encoders, now APS provides RNN and Transformer decoders for attention and transducer based AM, respectively:
 * `aps.asr.base.decoder.PyTorchRNNDecoder`
-* `aps.asr.xfmr.decoder.TorchTransformerDecoder`
+* `aps.asr.transformer.decoder.TorchTransformerDecoder`
 * `aps.asr.transducer.decoder.PyTorchRNNDecoder`
 * `aps.asr.transducer.decoder.TorchTransformerDecoder`
 

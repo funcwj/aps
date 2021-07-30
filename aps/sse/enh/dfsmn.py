@@ -10,6 +10,7 @@ from aps.asr.base.encoder import FSMNEncoder
 from aps.transform.asr import TFTransposeTransform
 from aps.sse.base import SseBase, MaskNonLinear
 from aps.libs import ApsRegisters
+from aps.cplx import ComplexTensor
 from typing import Optional, Union, List
 
 
@@ -23,7 +24,7 @@ class DFSMN(SseBase):
                  enh_transform: Optional[nn.Module] = None,
                  dim: int = 1024,
                  num_bins: int = 257,
-                 num_spks: int = 1,
+                 num_branchs: int = 1,
                  num_layers: int = 4,
                  project: int = 512,
                  dropout: float = 0.0,
@@ -32,26 +33,34 @@ class DFSMN(SseBase):
                  rcontext: int = 3,
                  norm: str = "BN",
                  dilation: Union[List[int], int] = 1,
+                 cplx_mask: bool = True,
                  non_linear: str = "relu",
                  training_mode: str = "freq"):
         super(DFSMN, self).__init__(enh_transform, training_mode=training_mode)
         assert enh_transform is not None
         self.dfsmn = FSMNEncoder(num_bins,
-                                 num_bins * num_spks,
+                                 num_bins * num_branchs *
+                                 (2 if cplx_mask else 1),
                                  dim=dim,
+                                 norm=norm,
                                  project=project,
                                  dropout=dropout,
                                  num_layers=num_layers,
                                  residual=residual,
                                  lcontext=lcontext,
                                  rcontext=rcontext,
-                                 norm=norm,
                                  dilation=dilation)
-        self.masks = nn.Sequential(MaskNonLinear(non_linear, enable="common"),
-                                   TFTransposeTransform())
-        self.num_spks = num_spks
+        if cplx_mask:
+            # no activation for complex mask
+            self.masks = TFTransposeTransform()
+        else:
+            self.masks = nn.Sequential(
+                MaskNonLinear(non_linear, enable="common"),
+                TFTransposeTransform())
+        self.num_branchs = num_branchs
+        self.cplx_mask = cplx_mask
 
-    def _tf_mask(self, feats: th.Tensor, num_spks: int) -> List[th.Tensor]:
+    def _tf_mask(self, feats: th.Tensor, num_branchs: int) -> List[th.Tensor]:
         """
         TF mask estimation from given features
         """
@@ -59,7 +68,7 @@ class DFSMN(SseBase):
         # N x S*F x T
         masks = self.masks(proj)
         # [N x F x T, ...]
-        return th.chunk(masks, self.num_spks, 1)
+        return th.chunk(masks, self.num_branchs, 1)
 
     def _infer(self, mix: th.Tensor,
                mode: str) -> Union[th.Tensor, List[th.Tensor]]:
@@ -69,17 +78,20 @@ class DFSMN(SseBase):
         # mix_stft: N x F x T
         feats, mix_stft, _ = self.enh_transform(mix, None)
         # [N x F x T, ...]
-        masks = self._tf_mask(feats, self.num_spks)
+        masks = self._tf_mask(feats, self.num_branchs)
         # post processing
         if mode == "time":
             decoder = self.enh_transform.inverse_stft
+            if self.cplx_mask:
+                masks = [th.chunk(m, 2, 1) for m in masks]
+                masks = [ComplexTensor(c[0], c[1]) for c in masks]
             bss_stft = [mix_stft * m for m in masks]
             packed = [
                 decoder(s.as_real(), return_polar=False) for s in bss_stft
             ]
         else:
             packed = masks
-        return packed[0] if self.num_spks == 1 else packed
+        return packed[0] if self.num_branchs == 1 else packed
 
     def infer(self,
               mix: th.Tensor,
@@ -94,7 +106,7 @@ class DFSMN(SseBase):
         with th.no_grad():
             mix = mix[None, :]
             ret = self._infer(mix, mode=mode)
-            return ret[0] if self.num_spks == 1 else [r[0] for r in ret]
+            return ret[0] if self.num_branchs == 1 else [r[0] for r in ret]
 
     @th.jit.ignore
     def forward(self, mix: th.Tensor) -> Union[th.Tensor, List[th.Tensor]]:
@@ -115,7 +127,7 @@ class DFSMN(SseBase):
         Return:
             masks (Tensor): masks of each speaker, N x T x F
         """
-        masks = self._tf_mask(feats, self.num_spks)
+        masks = self._tf_mask(feats, self.num_branchs)
         # S x N x F x T
         masks = th.stack(masks)
-        return masks[0] if self.num_spks == 1 else masks
+        return masks[0] if self.num_branchs == 1 else masks

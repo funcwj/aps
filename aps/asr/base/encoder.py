@@ -327,8 +327,8 @@ class Conv1dEncoder(EncoderBase):
         self.enc_layers = nn.ModuleList([
             Conv1d(inp_features if i == 0 else dim,
                    dim if i != num_layers - 1 else out_features,
-                   kernel_size=self.kernel[i],
                    norm=norm,
+                   kernel_size=self.kernel[i],
                    stride=self.stride[i],
                    dilation=self.dilation[i],
                    dropout=dropout,
@@ -454,7 +454,7 @@ class FSMNEncoder(EncoderBase):
                  project,
                  lctx=lcontext,
                  rctx=rcontext,
-                 norm=norm,
+                 norm=norm if i != num_layers - 1 else "none",
                  dilation=dilation[i],
                  dropout=dropout) for i in range(num_layers)
         ])
