@@ -17,7 +17,7 @@ from aps.asr.beam_search.ctc import ctc_beam_search, ctc_viterbi_align
 from aps.libs import ApsRegisters
 
 NoneOrTensor = Optional[th.Tensor]
-AMForwardOut = Tuple[th.Tensor, NoneOrTensor, NoneOrTensor]
+AMForwardType = Tuple[th.Tensor, NoneOrTensor, NoneOrTensor]
 
 
 class ASREncoderBase(nn.Module):
@@ -31,7 +31,7 @@ class ASREncoderBase(nn.Module):
                  ctc: bool = False,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "pytorch_rnn",
-                 enc_proj: Optional[int] = None,
+                 enc_proj: int = -1,
                  enc_kwargs: Optional[Dict] = None) -> None:
         super(ASREncoderBase, self).__init__()
         self.vocab_size = vocab_size
@@ -42,9 +42,9 @@ class ASREncoderBase(nn.Module):
                                               **enc_kwargs)
             self.is_xfmr_encoder = True
         else:
-            if enc_proj is None:
+            if enc_proj <= 0:
                 raise ValueError(
-                    "For non-transformer encoder, enc_proj can not be None")
+                    "For non-transformer encoder, enc_proj must be assigned")
             self.encoder = encoder_instance(enc_type, input_size, enc_proj,
                                             enc_kwargs)
             self.is_xfmr_encoder = False
@@ -106,7 +106,7 @@ class ASREncoderBase(nn.Module):
         return enc_out if batch_first else enc_out.transpose(0, 1)
 
     def _training_prep(self, x_pad: th.Tensor,
-                       x_len: NoneOrTensor) -> AMForwardOut:
+                       x_len: NoneOrTensor) -> AMForwardType:
         """
         Get encoder output for AM training
         Args:
@@ -141,7 +141,7 @@ class CtcASR(ASREncoderBase):
                  ctc: bool = True,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "pytorch_rnn",
-                 enc_proj: Optional[int] = None,
+                 enc_proj: int = -1,
                  enc_kwargs: Optional[Dict] = None) -> None:
         super(CtcASR, self).__init__(input_size,
                                      vocab_size,
@@ -151,7 +151,7 @@ class CtcASR(ASREncoderBase):
                                      enc_proj=enc_proj,
                                      enc_kwargs=enc_kwargs)
 
-    def forward(self, x_pad: th.Tensor, x_len: NoneOrTensor) -> AMForwardOut:
+    def forward(self, x_pad: th.Tensor, x_len: NoneOrTensor) -> AMForwardType:
         """
         Args:
             x_pad: N x Ti x D or N x S

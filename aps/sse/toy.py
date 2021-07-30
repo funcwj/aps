@@ -5,11 +5,59 @@
 
 import torch as th
 import torch.nn as nn
+import torch.nn.functional as tf 
 
 from typing import Optional, Union, List
-from aps.asr.base.encoder import PyTorchRNNEncoder
+from aps.asr.base.encoder import PyTorchRNNEncoder, EncRetType
 from aps.sse.base import SseBase, MaskNonLinear
 from aps.libs import ApsRegisters
+
+
+class RNN(PyTorchRNNEncoder):
+    """
+    PyTorch's RNN structure
+    """
+
+    def __init__(self,
+                 inp_features: int,
+                 out_features: int,
+                 input_proj: int = -1,
+                 rnn: str = "lstm",
+                 num_layers: int = 3,
+                 hidden: int = 512,
+                 hidden_proj: int = -1,
+                 dropout: int = 0.2,
+                 bidirectional: bool = False,
+                 non_linear: str = "none"):
+        super(RNN, PyTorchRNNEncoder).__init__(inp_features,
+                                               out_features,
+                                               input_proj=input_proj,
+                                               rnn=rnn,
+                                               num_layers=num_layers,
+                                               hidden=hidden,
+                                               hidden_proj=hidden_proj,
+                                               dropout=dropout,
+                                               bidirectional=bidirectional,
+                                               non_linear=non_linear)
+
+    def forward(self, inp: th.Tensor,
+                inp_len: Optional[th.Tensor]) -> EncRetType:
+        """
+        Args:
+            inp (Tensor): N x T x F
+            inp_len (Tensor): N x T
+        Return:
+            out (Tensor): N x T x F
+            inp_len (Tensor): N x T
+        """
+        if self.proj is not None:
+            inp = tf.relu(self.proj(inp))
+        out = self.rnns(inp)[0]
+        out = self.outp(out)
+        # pass through non-linear
+        if self.non_linear is not None:
+            out = self.non_linear(out)
+        return out, inp_len
 
 
 @ApsRegisters.sse.register("sse@base_rnn")
@@ -27,6 +75,7 @@ class ToyRNN(SseBase):
                  rnn: str = "lstm",
                  num_layers: int = 3,
                  hidden: int = 512,
+                 hidden_proj: int = -1,
                  dropout: float = 0.2,
                  bidirectional: bool = False,
                  output_nonlinear: str = "sigmoid",
@@ -36,15 +85,16 @@ class ToyRNN(SseBase):
         if num_spks == 1 and output_nonlinear == "softmax":
             raise ValueError(
                 "output_nonlinear can not be softmax when num_spks == 1")
-        self.base_rnn = PyTorchRNNEncoder(input_size,
-                                          num_bins * num_spks,
-                                          input_project=input_proj,
-                                          rnn=rnn,
-                                          num_layers=num_layers,
-                                          hidden=hidden,
-                                          dropout=dropout,
-                                          bidirectional=bidirectional,
-                                          non_linear="none")
+        self.base_rnn = RNN(input_size,
+                            num_bins * num_spks,
+                            input_proj=input_proj,
+                            rnn=rnn,
+                            num_layers=num_layers,
+                            hidden=hidden,
+                            hidden_proj=hidden_proj,
+                            dropout=dropout,
+                            bidirectional=bidirectional,
+                            non_linear="none")
         self.non_linear = MaskNonLinear(output_nonlinear, enable="positive")
         self.num_spks = num_spks
 

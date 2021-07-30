@@ -11,7 +11,7 @@ import aps.asr.beam_search.att as att_api
 import aps.asr.beam_search.xfmr as xfmr_api
 
 from typing import Optional, Dict, List
-from aps.asr.ctc import CtcASR, NoneOrTensor, AMForwardOut
+from aps.asr.ctc import CtcASR, NoneOrTensor, AMForwardType
 from aps.asr.base.decoder import PyTorchRNNDecoder
 from aps.asr.xfmr.decoder import TorchTransformerDecoder
 from aps.asr.base.attention import att_instance
@@ -32,7 +32,7 @@ class ASREncoderDecoderBase(CtcASR):
                  ctc: bool = False,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "pytorch_rnn",
-                 enc_proj: Optional[int] = None,
+                 enc_proj: int = -1,
                  enc_kwargs: Optional[Dict] = None) -> None:
         super(ASREncoderDecoderBase, self).__init__(input_size,
                                                     vocab_size,
@@ -64,7 +64,7 @@ class AttASR(ASREncoderDecoderBase):
                  att_kwargs: Dict = {},
                  enc_type: str = "common",
                  dec_type: str = "rnn",
-                 enc_proj: Optional[int] = None,
+                 enc_proj: int = -1,
                  enc_kwargs: Dict = {},
                  dec_dim: int = 512,
                  dec_kwargs: Dict = {}) -> None:
@@ -92,7 +92,7 @@ class AttASR(ASREncoderDecoderBase):
                 x_len: NoneOrTensor,
                 y_pad: th.Tensor,
                 y_len: NoneOrTensor,
-                ssr: float = 0) -> AMForwardOut:
+                ssr: float = 0) -> AMForwardType:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -201,7 +201,7 @@ class XfmrASR(ASREncoderDecoderBase):
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "xfmr",
                  dec_type: str = "xfmr",
-                 enc_proj: Optional[int] = None,
+                 enc_proj: int = -1,
                  enc_kwargs: Dict = {},
                  dec_kwargs: Dict = {}) -> None:
         super(XfmrASR, self).__init__(input_size,
@@ -226,7 +226,7 @@ class XfmrASR(ASREncoderDecoderBase):
                 x_len: NoneOrTensor,
                 y_pad: th.Tensor,
                 y_len: NoneOrTensor,
-                ssr: float = 0) -> AMForwardOut:
+                ssr: float = 0) -> AMForwardType:
         """
         Args:
             x_pad: N x Ti x D or N x S

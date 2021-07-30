@@ -105,7 +105,7 @@ class RNNEnhML(SseBase):
         self.base_rnn = PyTorchRNNEncoder(input_size,
                                           num_bins,
                                           rnn=rnn,
-                                          input_project=input_proj,
+                                          input_proj=input_proj,
                                           num_layers=num_layers,
                                           hidden=hidden,
                                           dropout=dropout,

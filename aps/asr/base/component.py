@@ -275,7 +275,7 @@ class Conv2d(nn.Module):
                               stride=stride,
                               padding=padding,
                               dilation=dilation)
-        self.norm = BatchNorm2d(norm, out_channels)
+        self.norm = Normalize2d(norm, out_channels)
         self.kernel_size = kernel_size
         self.padding = padding
         self.dilation = dilation

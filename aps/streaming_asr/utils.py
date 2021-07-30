@@ -33,7 +33,7 @@ class ConvParam(object):
 
 
 def compute_conv_context(kernel: List[int], stride: List[int],
-                         causal: List[bool],
+                         causal: List[int],
                          dilation: List[int]) -> Tuple[int, int, int]:
     """
     Return the left context & right context & stride size of the convolutions on time axis

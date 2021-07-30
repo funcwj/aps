@@ -70,7 +70,7 @@ class ApsModules(object):
     Maintain modules in aps package
     """
     asr_submodules = [
-        "att", "enh_att", "transducers", "lm.rnn", "lm.xfmr", "filter.mvdr",
+        "ctc", "att", "enh_att", "transducers", "lm.rnn", "lm.xfmr", "filter.mvdr",
         "filter.conv", "filter.google"
     ]
     sse_submodules = [
@@ -83,6 +83,7 @@ class ApsModules(object):
         "se.config", "lm.utt", "lm.bptt"
     ]
     asr = Module("aps.asr", asr_submodules)
+    streaming_asr = Module("aps.streaming_asr", ["ctc"])
     sse = Module("aps.sse", sse_submodules)
     task = Module("aps.task", ["asr", "sse", "ml", "kd"])
     loader = Module("aps.loader", loader_submodules)
@@ -158,6 +159,7 @@ def aps_asr_nnet(nnet: str) -> nn.Module:
     Return ASR networks supported by aps
     """
     ApsModules.asr.import_all()
+    ApsModules.streaming_asr.import_all()
     return aps_specific_nnet(nnet, ApsRegisters.asr)
 
 
