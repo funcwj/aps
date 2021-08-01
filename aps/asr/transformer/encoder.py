@@ -12,7 +12,7 @@ from aps.asr.base.encoder import EncRetType
 from aps.asr.transformer.impl import get_xfmr_encoder
 from aps.asr.transformer.pose import get_xfmr_pose
 from aps.asr.transformer.proj import get_xfmr_proj
-from aps.asr.transformer.utils import prep_sub_mask
+from aps.asr.transformer.utils import prep_context_mask
 
 
 class TransformerEncoder(nn.Module):
@@ -24,7 +24,9 @@ class TransformerEncoder(nn.Module):
                  arch: str,
                  input_size: int,
                  num_layers: int = 6,
-                 casual: bool = False,
+                 lctx: int = -1,
+                 rctx: int = -1,
+                 chunk_size: int = 1,
                  proj: str = "conv2d",
                  proj_kwargs: Dict = {},
                  pose: str = "abs",
@@ -43,7 +45,8 @@ class TransformerEncoder(nn.Module):
         self.pose_type = "abs" if pose == "conv1d" else pose
         self.encoder = get_xfmr_encoder(arch, self.pose_type, num_layers,
                                         arch_kwargs)
-        self.casual = casual
+        self.lctx, self.rctx = lctx, rctx
+        self.chunk_size = chunk_size
 
     def forward(self, inp_pad: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> EncRetType:
@@ -82,8 +85,12 @@ class TransformerEncoder(nn.Module):
                 inj_pose = self.pose(
                     th.arange(0, 2 * nframes - 1, 1.0, device=enc_inp.device))
         # src_mask: Ti x Ti
-        if self.casual:
-            src_mask = prep_sub_mask(nframes, device=enc_inp.device)
+        if self.lctx != -1 or self.rctx != -1:
+            src_mask = prep_context_mask(nframes,
+                                         self.chunk_size,
+                                         lctx=self.lctx,
+                                         rctx=self.rctx,
+                                         device=enc_inp.device)
         else:
             src_mask = None
         # Ti x N x D

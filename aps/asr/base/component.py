@@ -296,8 +296,8 @@ class Conv2d(nn.Module):
         Return:
             out (Tensor): N x C' x T' x F'
         """
-        return tf.relu(self.norm(self.conv(inp)))
-
+        out = self.norm(self.conv(inp[:, None] if inp.dim() == 3 else inp))
+        return tf.relu(out)
 
 class FSMN(nn.Module):
     """

@@ -98,12 +98,6 @@ def test_asr_transform(wav, mode, feats, shape):
     assert feats.shape == th.Size(shape)
     assert th.sum(th.isnan(feats)) == 0
     assert transform.feats_dim == shape[-1]
-    transform.eval()
-    print(transform.export())
-    scripted_transform = th.jit.script(transform.export())
-    ref_out = transform(feats)[0]
-    jit_out = scripted_transform(feats)
-    th.testing.assert_allclose(ref_out, jit_out)
 
 
 @pytest.mark.parametrize("wav", [egs1_wav])
@@ -171,12 +165,11 @@ def test_fixed_beamformer(batch_size, num_channels, num_bins, num_directions):
     num_frames = th.randint(50, 100, (1,)).item()
     inp_r = th.rand(batch_size, num_channels, num_bins, num_frames)
     inp_i = th.rand(batch_size, num_channels, num_bins, num_frames)
-    inp_c = ComplexTensor(inp_r, inp_i)
-    out_b = beamformer(inp_c)
-    assert out_b.shape == th.Size(
+    out_r, out_i = beamformer(inp_r, inp_i)
+    assert out_r.shape == th.Size(
         [batch_size, num_directions, num_bins, num_frames])
-    out_b = beamformer(inp_c, beam=0)
-    assert out_b.shape == th.Size([batch_size, num_bins, num_frames])
+    out_r, out_i = beamformer(inp_r, inp_i, beam=0)
+    assert out_r.shape == th.Size([batch_size, num_bins, num_frames])
 
 
 @pytest.mark.parametrize("num_bins", [257, 513])

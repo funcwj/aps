@@ -282,7 +282,7 @@ def test_dfsmn(num_spks):
     dfsmn = nnet_cls(enh_transform=transform,
                      num_layers=3,
                      dim=512,
-                     num_spks=num_spks,
+                     num_branchs=num_spks,
                      project=256,
                      lcontext=11,
                      rcontext=5,
