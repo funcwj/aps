@@ -7,52 +7,14 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from aps.asr.base.encoder import PyTorchRNNEncoder, Conv1dEncoder, Conv2dEncoder, ConcatEncoder
+from aps.asr.base.encoder import PyTorchRNNEncoder, Conv1dEncoder, Conv2dEncoder
 from aps.asr.base.encoder import EncoderBase, EncRetType, rnn_output_nonlinear
 from aps.streaming_asr.base.component import PyTorchNormLSTM
 from aps.libs import Register
 
-from typing import Dict, Union, List, Tuple, Optional
+from typing import Union, List, Tuple, Optional
 
 StreamingEncoder = Register("streaming_encoder")
-
-
-def encoder_instance(enc_type: str, inp_features: int, out_features: int,
-                     enc_kwargs: Dict) -> nn.Module:
-    """
-    Return streaming encoder instance
-    """
-
-    def encoder(enc_type, inp_features, **kwargs):
-        if enc_type not in StreamingEncoder:
-            raise RuntimeError(f"Unknown encoder type: {enc_type}")
-        enc_cls = StreamingEncoder[enc_type]
-        return enc_cls(inp_features, **kwargs)
-
-    if enc_type != "concat":
-        return encoder(enc_type,
-                       inp_features,
-                       out_features=out_features,
-                       **enc_kwargs)
-    else:
-        enc_layers = []
-        num_enc_layers = len(enc_kwargs)
-        if num_enc_layers <= 1:
-            raise ValueError(
-                "Please use >=2 encoders for \'concat\' type encoder")
-        for i, (name, kwargs) in enumerate(enc_kwargs.items()):
-            if i != num_enc_layers - 1:
-                enc_layer = encoder(
-                    name,
-                    inp_features if i == 0 else enc_layers[-1].out_features,
-                    **kwargs)
-            else:
-                enc_layer = encoder(name,
-                                    enc_layers[-1].out_features,
-                                    out_features=out_features,
-                                    **kwargs)
-            enc_layers.append(enc_layer)
-        return ConcatEncoder(enc_layers)
 
 
 @StreamingEncoder.register("pytorch_rnn")

@@ -557,14 +557,14 @@ class FeatureTransform(nn.Module):
             wav_len (Tensor or None): number samples in wav_pad, N or None
         Return:
             feats (Tensor): spatial + spectral features, N x T x ...
-            cplx (ComplexTensor): STFT coefficients, N x (C) x F x T
+            cstft (ComplexTensor): STFT coefficients, N x (C) x F x T
             num_frames (Tensor or None): number frames in each batch, N or None
         """
         # packed: N x C x F x T x 2
         packed = self.forward_stft(wav_pad, return_polar=False)
         real, imag = packed[..., 0], packed[..., 1]
         # STFT coefficients: N x C x F x T
-        cplx = ComplexTensor(real, imag, polar=False)
+        cstft = ComplexTensor(real, imag, polar=False)
 
         feats = []
         # magnitude transform
@@ -581,4 +581,4 @@ class FeatureTransform(nn.Module):
             feats = check_valid(th.cat(feats, -1), num_frames)[0]
         else:
             feats = None
-        return feats, cplx, num_frames
+        return feats, cstft, num_frames

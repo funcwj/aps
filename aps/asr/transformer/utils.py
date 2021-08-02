@@ -80,17 +80,18 @@ def prep_context_mask(num_frames: int,
         lctx = num_frames
     if rctx < 0:
         rctx = num_frames
-    zeros = th.zeros(num_frames, device=device)
     index = th.arange(0, num_frames, device=device)
     index_seqs = th.repeat_interleave(index[None, ...], num_frames, 0)
     # limit right context
     right = (index // chunk_size + rctx) * chunk_size
     right_mask = index_seqs > right[..., None]
-    mask = zeros.masked_fill(right_mask, float("-inf"))
     # limit left context
     left = th.clamp_min((index // chunk_size - lctx) * chunk_size, 0)
     left_mask = index_seqs < left[..., None]
-    mask = mask.masked_fill(left_mask, float("-inf"))
+    # generate masks
+    zeros = th.zeros(num_frames, device=device)
+    ctx_mask = th.logical_or(left_mask, right_mask)
+    mask = zeros.masked_fill(ctx_mask, float("-inf"))
     return mask
 
 

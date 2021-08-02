@@ -7,7 +7,8 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from aps.streaming_asr.base.encoder import encoder_instance
+from aps.asr.base.encoder import encoder_instance
+from aps.streaming_asr.base.encoder import StreamingEncoder
 from aps.asr.ctc import AMForwardType, NoneOrTensor
 from aps.asr.beam_search.ctc import ctc_beam_search
 from aps.libs import ApsRegisters
@@ -37,7 +38,7 @@ class CtcASR(nn.Module):
         self.asr_transform = asr_transform
         self.encoder = encoder_instance(
             enc_type, input_size, enc_proj if enc_proj > 0 else vocab_size,
-            enc_kwargs)
+            enc_kwargs, StreamingEncoder)
         self.ctc = nn.Linear(enc_proj, vocab_size) if enc_proj > 0 else None
 
     def _decoding_prep(self,

@@ -19,15 +19,15 @@ EncRetType = Tuple[th.Tensor, Optional[th.Tensor]]
 
 
 def encoder_instance(enc_type: str, inp_features: int, out_features: int,
-                     enc_kwargs: Dict) -> nn.Module:
+                     enc_kwargs: Dict, enc_class: Dict) -> nn.Module:
     """
     Return encoder instance
     """
 
     def encoder(enc_type, inp_features, **kwargs):
-        if enc_type not in BaseEncoder:
+        if enc_type not in enc_class:
             raise RuntimeError(f"Unknown encoder type: {enc_type}")
-        enc_cls = BaseEncoder[enc_type]
+        enc_cls = enc_class[enc_type]
         return enc_cls(inp_features, **kwargs)
 
     if enc_type != "concat":
