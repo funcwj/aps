@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Optional, Union, List
-from aps.sse.base import SseBase, MaskNonLinear
+from aps.sse.base import SseBase, MaskNonLinear, tf_masking
 from aps.transform.enh import TFTransposeTransform
 from aps.libs import ApsRegisters
 
@@ -418,18 +418,14 @@ class FreqConvTasNet(SseBase):
         """
         Return time signals or frequency TF masks
         """
-        # mix_feat: N x T x F
-        # mix_stft: N x (C) x F x T
-        mix_feat, mix_stft, _ = self.enh_transform(mix, None)
-        # N x F x T
-        if mix_stft.dim() == 4:
-            mix_stft = mix_stft[:, 0]
+        # stft: N x (C) x F x T
+        stft, _ = self.enh_transform.encode(mix, None)
+        feats = self.enh_transform(stft)
         # [N x F x T, ...]
-        masks = self._tf_mask(mix_feat, self.num_spks)
+        masks = self._tf_mask(feats, self.num_spks)
         if mode == "time":
-            decoder = self.enh_transform.inverse_stft
-            bss_stft = [mix_stft * m for m in masks]
-            bss = [decoder(s.as_real(), return_polar=False) for s in bss_stft]
+            bss_stft = [tf_masking(stft, m) for m in masks]
+            bss = self.enh_transform.decode(bss_stft)
         else:
             bss = masks
         return bss[0] if self.num_spks == 1 else bss

@@ -144,7 +144,6 @@ The submodule for speech enhancement/separation model. The provided model are sh
 * `DCCRN`: Deep Complexed Convolutional Recurrent Network ([paper](https://arxiv.org/pdf/2008.00264.pdf))
 * `DenseUnet`: A Unet structure network boosted with DenseBlock ([paper](https://arxiv.org/abs/2010.01703))
 * `Phasen`: Phase and Harmonics Aware Speech Enhancement Network ([paper](https://arxiv.org/abs/1911.04697))
-* `CRNet`: Convolutional Recurrent Neural Network for Real-Time Speech Enhancement
 * `TimeDPRNN`: Time domain Dual-path RNN ([paper](https://arxiv.org/abs/1910.06379))
 * `FreqDPRNN`: Frequency domain DPRNN
 * `ToyRNN`: Basic RNN model

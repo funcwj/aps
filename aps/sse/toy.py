@@ -9,7 +9,7 @@ import torch.nn.functional as tf
 
 from typing import Optional, Union, List
 from aps.asr.base.encoder import PyTorchRNNEncoder, EncRetType
-from aps.sse.base import SseBase, MaskNonLinear
+from aps.sse.base import SseBase, MaskNonLinear, tf_masking
 from aps.libs import ApsRegisters
 
 
@@ -116,12 +116,10 @@ class ToyRNN(SseBase):
         """
         Running in time or frequency mode and return time signals or frequency TF masks
         """
+        # N x F x T x 2
+        stft, _ = self.enh_transform.encode(mix, None)
         # feats: N x T x F
-        feats, stft, _ = self.enh_transform(mix, None)
-        N, T, _ = feats.shape
-        if stft.dim() == 4:
-            # N x F x T
-            stft = stft[:, 0]
+        feats = self.enh_transform(stft)
         # S x N x F x T
         masks = self._tf_mask(feats, self.num_spks)
         masks = th.chunk(masks, self.num_spks, 0)
@@ -130,11 +128,8 @@ class ToyRNN(SseBase):
         if mode == "freq":
             packed = masks
         else:
-            decoder = self.enh_transform.inverse_stft
-            bss_stft = [stft * m for m in masks]
-            packed = [
-                decoder(s.as_real(), return_polar=False) for s in bss_stft
-            ]
+            bss_stft = [tf_masking(stft, m) for m in masks]
+            packed = self.enh_transform.decode(bss_stft)
         return packed[0] if self.num_spks == 1 else packed
 
     def infer(self,

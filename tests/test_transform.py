@@ -140,7 +140,7 @@ def test_speed_perturb(max_length):
 
 @pytest.mark.parametrize("wav", [egs2_wav])
 @pytest.mark.parametrize("feats,shape",
-                         [("spectrogram-log-cmvn-aug-ipd", [1, 366, 257 * 5]),
+                         [("spectrogram-cmvn-aug-ipd", [1, 366, 257 * 5]),
                           ("ipd", [1, 366, 257 * 4])])
 def test_enh_transform(wav, feats, shape):
     transform = EnhTransform(feats=feats,
@@ -148,10 +148,11 @@ def test_enh_transform(wav, feats, shape):
                              frame_hop=256,
                              ipd_index="0,1;0,2;0,3;0,4",
                              aug_prob=0.2)
-    feats, stft, _ = transform(th.from_numpy(wav[None, ...]), None)
+    packed, _ = transform.encode(th.from_numpy(wav[None, ...]), None)
+    feats = transform(packed)
     assert feats.shape == th.Size(shape)
     assert th.sum(th.isnan(feats)) == 0
-    assert stft.shape == th.Size([1, 5, 257, 366])
+    assert packed.shape == th.Size([1, 5, 257, 366, 2])
     assert transform.feats_dim == shape[-1]
 
 

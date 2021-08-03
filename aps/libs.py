@@ -70,13 +70,13 @@ class ApsModules(object):
     Maintain modules in aps package
     """
     asr_submodules = [
-        "ctc", "att", "enh_att", "transducers", "lm.rnn", "lm.transformer", "filter.mvdr",
-        "filter.conv", "filter.google"
+        "ctc", "att", "enh_att", "transducers", "lm.rnn", "lm.transformer",
+        "filter.mvdr", "filter.conv", "filter.google"
     ]
     sse_submodules = [
-        "toy", "unsuper.rnn", "enh.crn", "enh.phasen", "enh.dcunet",
-        "enh.demucs", "enh.dfsmn", "bss.dccrn", "bss.dprnn", "bss.tcn",
-        "bss.transformer", "bss.dense_unet", "bss.sepformer"
+        "toy", "unsuper.rnn", "enh.phasen", "enh.dcunet", "enh.demucs",
+        "enh.dfsmn", "bss.dccrn", "bss.dprnn", "bss.tcn", "bss.transformer",
+        "bss.dense_unet", "bss.sepformer"
     ]
     loader_submodules = [
         "am.kaldi", "am.raw", "am.command", "se.chunk", "se.command",

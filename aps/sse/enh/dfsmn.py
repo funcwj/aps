@@ -8,9 +8,8 @@ import torch.nn as nn
 
 from aps.asr.base.encoder import FSMNEncoder
 from aps.transform.asr import TFTransposeTransform
-from aps.sse.base import SseBase, MaskNonLinear
+from aps.sse.base import SseBase, MaskNonLinear, tf_masking
 from aps.libs import ApsRegisters
-from aps.cplx import ComplexTensor
 from typing import Optional, Union, List
 
 
@@ -75,20 +74,17 @@ class DFSMN(SseBase):
         """
         Return time signals or frequency TF masks
         """
-        # mix_stft: N x F x T
-        feats, mix_stft, _ = self.enh_transform(mix, None)
+        # stft: N x F x T x 2
+        stft, _ = self.enh_transform.encode(mix, None)
+        feats = self.enh_transform(stft)
         # [N x F x T, ...]
         masks = self._tf_mask(feats, self.num_branchs)
         # post processing
         if mode == "time":
-            decoder = self.enh_transform.inverse_stft
-            if self.cplx_mask:
-                masks = [th.chunk(m, 2, 1) for m in masks]
-                masks = [ComplexTensor(c[0], c[1]) for c in masks]
-            bss_stft = [mix_stft * m for m in masks]
-            packed = [
-                decoder(s.as_real(), return_polar=False) for s in bss_stft
+            bss_stft = [
+                tf_masking(stft, m, complex_mask=self.cplx_mask) for m in masks
             ]
+            packed = self.enh_transform.decode(bss_stft)
         else:
             packed = masks
         return packed[0] if self.num_branchs == 1 else packed
