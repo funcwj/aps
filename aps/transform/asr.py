@@ -53,6 +53,15 @@ def check_valid(feature: th.Tensor,
     return feature, num_frames
 
 
+def export_jit(transform: nn.Module) -> nn.Module:
+    """
+    Export transform module for inference 
+    """
+    eval_transform = [
+        module for module in transform if module.jit_export()
+    ]
+    return nn.Sequential(*eval_transform)
+
 class RescaleTransform(nn.Module):
     """
     Rescale audio samples (e.g., [-1, 1] to MAX_INT16 scale)
@@ -962,15 +971,6 @@ class FeatureTransform(nn.Module):
         self.transform = nn.Sequential(*transform)
         self.feats_dim = feats_dim
         self.subsampling_factor = subsampling_factor
-
-    def export(self) -> nn.Module:
-        """
-        Export transform module for inference 
-        """
-        eval_transform = [
-            module for module in self.transform if module.jit_export()
-        ]
-        return nn.Sequential(*eval_transform)
 
     def num_frames(self, inp_len: th.Tensor) -> th.Tensor:
         """

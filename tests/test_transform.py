@@ -9,9 +9,10 @@ import librosa
 import torch as th
 
 from aps.transform.utils import forward_stft, inverse_stft
+from aps.transform.utils import STFT, StreamingSTFT, iSTFT, StreamingiSTFT
 from aps.loader import read_audio
 from aps.transform import AsrTransform, EnhTransform, FixedBeamformer, DfTransform
-from aps.transform.asr import SpeedPerturbTransform
+from aps.transform.asr import SpeedPerturbTransform, export_jit
 
 egs1_wav = read_audio("data/transform/egs1.wav", sr=16000)
 egs2_wav = read_audio("data/transform/egs2.wav", sr=16000)
@@ -40,6 +41,31 @@ def test_forward_inverse_stft(wav, frame_len, frame_hop, window, mode):
                        return_polar=False)
     trunc = min(out.shape[-1], wav.shape[-1])
     th.testing.assert_allclose(out[..., :trunc], wav[..., :trunc])
+
+
+@pytest.mark.parametrize("wav", [egs1_wav])
+@pytest.mark.parametrize("frame_len, frame_hop", [(512, 256), (256, 128)])
+@pytest.mark.parametrize("window", ["hamm", "sqrthann"])
+def test_streaming_stft(wav, frame_len, frame_hop, window):
+    wav = th.from_numpy(wav)[None, ...]
+    cfg = {
+        "frame_len": frame_len,
+        "frame_hop": frame_hop,
+        "window": window,
+        "center": False,
+        "round_pow_of_two": True,
+        "mode": "librosa"
+    }
+    stft = STFT(**cfg)
+    streaming_stft = StreamingSTFT(**cfg)
+    packed = stft(wav, return_polar=False)
+    streaming_packed = streaming_stft(wav, return_polar=False)
+    th.testing.assert_allclose(packed, streaming_packed)
+    istft = iSTFT(**cfg)
+    streaming_istft = StreamingiSTFT(**cfg)
+    wav = istft(packed, return_polar=False)
+    streaming_wav = streaming_istft(packed, return_polar=False)
+    th.testing.assert_allclose(wav, streaming_wav)
 
 
 @pytest.mark.parametrize("wav", [egs1_wav, egs2_wav[0].copy()])
@@ -111,20 +137,20 @@ def test_asr_transform_jit(wav, feats):
                           pre_emphasis=0.96,
                           center=False,
                           return_polar=True)
-    transform = AsrTransform(feats=feats,
-                             stft_mode="librosa",
-                             window="hamm",
-                             frame_len=400,
-                             frame_hop=160,
-                             use_power=True,
-                             pre_emphasis=0.96,
-                             center=False,
-                             aug_prob=0.5,
-                             aug_mask_zero=False)
-    transform.eval()
-    scripted_transform = th.jit.script(transform.export())
-    ref_out = transform(wav, None)[0]
-    jit_out = scripted_transform(packed[..., 0])
+    trans = AsrTransform(feats=feats,
+                         stft_mode="librosa",
+                         window="hamm",
+                         frame_len=400,
+                         frame_hop=160,
+                         use_power=True,
+                         pre_emphasis=0.96,
+                         center=False,
+                         aug_prob=0.5,
+                         aug_mask_zero=False)
+    trans.eval()
+    scripted_trans = th.jit.script(export_jit(trans.transform))
+    ref_out = trans(wav, None)[0]
+    jit_out = scripted_trans(packed[..., 0])
     th.testing.assert_allclose(ref_out, jit_out)
 
 
@@ -229,4 +255,6 @@ def debug_speed_perturb():
 if __name__ == "__main__":
     # debug_speed_perturb()
     # debug_visualize_feature()
-    test_asr_transform_jit(egs1_wav, "fbank-log-cmvn")
+    # test_asr_transform_jit(egs1_wav, "fbank-log-cmvn")
+    test_streaming_stft(egs1_wav, 512, 256, "hann")
+    # test_forward_inverse_stft(egs1_wav, 512, 256, "hann", "librosa")
