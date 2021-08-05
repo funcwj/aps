@@ -9,6 +9,7 @@ import torch.nn as nn
 from typing import Optional, Dict, List
 from aps.asr.att import AttASR, XfmrASR, NoneOrTensor, AMForwardType
 from aps.asr.filter.conv import EnhFrontEnds
+from aps.cplx import ComplexTensor
 from aps.libs import ApsRegisters
 
 
@@ -80,8 +81,10 @@ class EnhASRBase(nn.Module):
             enc_len: N or None
         """
         # feature for enhancement
-        feats, cstft, x_len = self.enh_transform(x_pad, x_len)
+        packed, x_len = self.enh_transform.encode(x_pad, x_len)
+        cstft = ComplexTensor(packed[..., 0], packed[..., 1])
         if self.enh_type[-4:] == "mvdr":
+            feats = self.enh_transform(packed)
             x_enh = self.enh_net(feats, cstft, inp_len=x_len)
         else:
             x_enh = self.enh_net(cstft)

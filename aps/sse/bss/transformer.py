@@ -37,9 +37,9 @@ class FreqXfmr(SseBase):
         super(FreqXfmr, self).__init__(enh_transform,
                                        training_mode=training_mode)
         assert enh_transform is not None
-        att_dim = arch_kwargs["att_dim"]
         self.xfmr = TransformerEncoder(arch,
                                        input_size,
+                                       output_proj=num_bins * num_spks,
                                        num_layers=num_layers,
                                        chunk_size=1,
                                        lctx=lctx,
@@ -49,8 +49,7 @@ class FreqXfmr(SseBase):
                                        pose=pose,
                                        pose_kwargs=pose_kwargs,
                                        arch_kwargs=arch_kwargs)
-        self.mask = nn.Sequential(nn.Linear(att_dim, num_bins * num_spks),
-                                  MaskNonLinear(non_linear, enable="common"),
+        self.mask = nn.Sequential(MaskNonLinear(non_linear, enable="common"),
                                   TFTransposeTransform())
         self.num_spks = num_spks
 

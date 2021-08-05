@@ -23,6 +23,7 @@ class TransformerEncoder(nn.Module):
     def __init__(self,
                  arch: str,
                  input_size: int,
+                 output_proj: int = -1,
                  num_layers: int = 6,
                  lctx: int = -1,
                  rctx: int = -1,
@@ -33,20 +34,23 @@ class TransformerEncoder(nn.Module):
                  pose_kwargs: Dict = {},
                  arch_kwargs: Dict = {}):
         super(TransformerEncoder, self).__init__()
+        att_dim = arch_kwargs["att_dim"]
         if proj == "none":
             self.proj = None
         else:
-            self.proj = get_xfmr_proj(proj, input_size, arch_kwargs["att_dim"],
-                                      **proj_kwargs)
+            self.proj = get_xfmr_proj(proj, input_size, att_dim, **proj_kwargs)
         self.pose = get_xfmr_pose(
-            pose, arch_kwargs["att_dim"] //
-            arch_kwargs["nhead"] if pose == "rel" else arch_kwargs["att_dim"],
+            pose, att_dim // arch_kwargs["nhead"] if pose == "rel" else att_dim,
             **pose_kwargs)
         self.pose_type = "abs" if pose == "conv1d" else pose
         self.encoder = get_xfmr_encoder(arch, self.pose_type, num_layers,
                                         arch_kwargs)
         self.lctx, self.rctx = lctx, rctx
         self.chunk_size = chunk_size
+        if output_proj > 0:
+            self.outp = nn.Linear(att_dim, output_proj)
+        else:
+            self.outp = None
 
     def forward(self, inp_pad: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> EncRetType:
@@ -98,5 +102,7 @@ class TransformerEncoder(nn.Module):
                                inj_pose=inj_pose,
                                src_mask=src_mask,
                                src_key_padding_mask=src_pad_mask)
+        if self.outp:
+            enc_out = self.outp(enc_out)
         # N x Ti x D
         return enc_out.transpose(0, 1), inp_len

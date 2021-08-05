@@ -28,7 +28,7 @@ class LayerNormRNN(nn.Module):
                  dropout: float = 0.,
                  bidirectional: bool = False) -> None:
         super(LayerNormRNN, self).__init__()
-        self.rn = nn.ModuleList([
+        self.rnns = nn.ModuleList([
             PyTorchRNN(mode,
                        input_size,
                        hidden_size,
@@ -38,7 +38,7 @@ class LayerNormRNN(nn.Module):
         ])
         self.dropout = nn.ModuleList(
             nn.Dropout(p=dropout) for _ in range(num_layers - 1))
-        self.ln = nn.ModuleList(
+        self.norm = nn.ModuleList(
             nn.LayerNorm(hidden_size * 2 if bidirectional else hidden_size)
             for _ in range(num_layers))
 
@@ -52,12 +52,12 @@ class LayerNormRNN(nn.Module):
             hidden (list(Tensor)): [N x ..., ]
         """
         ret_hidden = []
-        for i, rnn in enumerate(self.rn):
+        for i, rnn in enumerate(self.rnns):
             inp, hid = rnn(inp, None if hidden is None else hidden[i])
             ret_hidden.append(hid)
-            if i != len(self.rn) - 1:
+            if i != len(self.rnns) - 1:
                 inp = self.dropout[i](inp)
-            inp = self.ln[i](inp)
+            inp = self.norm[i](inp)
         return inp, ret_hidden
 
 
@@ -126,14 +126,14 @@ class PyTorchRNNDecoder(DecoderBase):
                                                 onehot_embed=onehot_embed)
         # uni-dir RNNs
         if add_ln:
-            self.decoder = LayerNormRNN(dec_rnn,
+            self.decoder = LayerNormRNN(rnn,
                                         embed_size,
                                         hidden,
                                         num_layers,
                                         dropout=dropout,
                                         bidirectional=False)
         else:
-            self.decoder = PyTorchRNN(dec_rnn,
+            self.decoder = PyTorchRNN(rnn,
                                       embed_size,
                                       hidden,
                                       num_layers,

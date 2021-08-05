@@ -352,7 +352,7 @@ class FSMN(nn.Module):
         # N x T x P => N x P x T => N x T x P
         proj = proj.transpose(1, 2)
         # pad context
-        if self.lctx + self.rctx == 0:
+        if self.lctx + self.rctx > 0:
             proj_pad = tf.pad(proj, (self.lctx, self.rctx), "constant", 0.0)
             ctx = self.ctx_conv(proj_pad)
         else:
@@ -373,14 +373,14 @@ class FSMN(nn.Module):
 
 class VariantRNN(nn.Module):
     """
-    A custom rnn layer to support other features
+    A custom rnn layer to support other features: -> RNN -> (Linear) -> (Norm) -> (NonLinear) -> (Dropout) ->
     """
 
     def __init__(self,
                  input_size: int,
-                 hidden_size: int = 512,
                  rnn: str = "lstm",
                  norm: str = "",
+                 hidden: int = 512,
                  project: int = -1,
                  non_linear: str = "relu",
                  dropout: float = 0.0,
@@ -389,19 +389,19 @@ class VariantRNN(nn.Module):
         super(VariantRNN, self).__init__()
         if non_linear not in rnn_output_nonlinear:
             raise ValueError(f"Unsupported non_linear: {non_linear}")
-        self.nonlinear = rnn_output_nonlinear[non_linear]
+        self.non_linear = rnn_output_nonlinear[non_linear]
         self.rnn = PyTorchRNN(rnn,
                               input_size,
-                              hidden_size,
+                              hidden,
                               num_layers=1,
                               dropout=0,
                               bidirectional=bidirectional)
         self.add_forward_backward = add_forward_backward and bidirectional
         if bidirectional and not add_forward_backward:
-            hidden_size *= 2
-        self.proj = nn.Linear(hidden_size, project) if project > 0 else None
+            hidden *= 2
+        self.proj = nn.Linear(hidden, project) if project > 0 else None
         self.norm = Normalize1d(
-            norm, project if project > 0 else hidden_size) if norm else None
+            norm, project if project > 0 else hidden) if norm else None
         self.drop = nn.Dropout(dropout) if dropout != 0 else None
 
     def forward(self, inp: th.Tensor,
@@ -426,8 +426,8 @@ class VariantRNN(nn.Module):
         if self.norm:
             out = self.norm(out)
         # nonlinear
-        if self.nonlinear:
-            out = self.nonlinear(out)
+        if self.non_linear:
+            out = self.non_linear(out)
         # dropout
         if self.drop:
             out = self.drop(out)

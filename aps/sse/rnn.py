@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Optional, Union, List, Tuple
-from aps.asr.base.encoder import PyTorchRNNEncoder, EncRetType
+from aps.asr.base.encoder import PyTorchRNNEncoder
 from aps.sse.base import SseBase, MaskNonLinear, tf_masking
 from aps.libs import ApsRegisters
 

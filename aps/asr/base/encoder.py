@@ -24,17 +24,14 @@ def encoder_instance(enc_type: str, inp_features: int, out_features: int,
     Return encoder instance
     """
 
-    def encoder(enc_type, inp_features, **kwargs):
+    def encoder(enc_type, inp_features, out_features: int, **kwargs):
         if enc_type not in enc_class:
             raise RuntimeError(f"Unknown encoder type: {enc_type}")
         enc_cls = enc_class[enc_type]
-        return enc_cls(inp_features, **kwargs)
+        return enc_cls(inp_features, out_features, **kwargs)
 
     if enc_type != "concat":
-        return encoder(enc_type,
-                       inp_features,
-                       out_features=out_features,
-                       **enc_kwargs)
+        return encoder(enc_type, inp_features, out_features, **enc_kwargs)
     else:
         enc_layers = []
         num_enc_layers = len(enc_kwargs)
@@ -45,13 +42,11 @@ def encoder_instance(enc_type: str, inp_features: int, out_features: int,
             if i != num_enc_layers - 1:
                 enc_layer = encoder(
                     name,
-                    inp_features if i == 0 else enc_layers[-1].out_features,
+                    inp_features if i == 0 else enc_layers[-1].out_features, -1,
                     **kwargs)
             else:
-                enc_layer = encoder(name,
-                                    enc_layers[-1].out_features,
-                                    out_features=out_features,
-                                    **kwargs)
+                enc_layer = encoder(name, enc_layers[-1].out_features,
+                                    out_features, **kwargs)
             enc_layers.append(enc_layer)
         return ConcatEncoder(enc_layers)
 
@@ -76,8 +71,9 @@ class EncoderBase(nn.Module):
     Add inp_features/out_features attributions to the encoder objects
     """
 
-    def __init__(self, inp_features, out_features):
+    def __init__(self, inp_features: int, out_features: int):
         super(EncoderBase, self).__init__()
+        # NOTE: for out_features == -1, we will workout it automatically
         self.inp_features = inp_features
         self.out_features = out_features
 
@@ -85,7 +81,7 @@ class EncoderBase(nn.Module):
 @BaseEncoder.register("pytorch_rnn")
 class PyTorchRNNEncoder(EncoderBase):
     """
-    PyTorch's RNN encoder
+    PyTorch's RNN encoder: (Linear) -> RNN -> (Linear) -> (NonLinear)
     """
 
     def __init__(self,
@@ -116,8 +112,13 @@ class PyTorchRNNEncoder(EncoderBase):
                                bidirectional=bidirectional)
         hidden_size = hidden_proj if hidden_proj > 0 else hidden
         factor = 2 if bidirectional else 1
-        self.outp = nn.Linear(hidden_size * factor, out_features)
-        self.non_linear = rnn_output_nonlinear[non_linear]
+        if out_features > 0:
+            self.outp = nn.Linear(hidden_size * factor, out_features)
+            self.non_linear = rnn_output_nonlinear[non_linear]
+        else:
+            self.outp = None
+            self.non_linear = None
+            self.out_features = hidden_size * factor
 
     def flat(self):
         self.rnns.flatten_parameters()
@@ -139,8 +140,8 @@ class PyTorchRNNEncoder(EncoderBase):
                                   inp_len=inp_len,
                                   enforce_sorted=False,
                                   add_forward_backward=False)
-        out = self.outp(out)
-        # pass through non-linear
+        if self.outp is not None:
+            out = self.outp(out)
         if self.non_linear is not None:
             out = self.non_linear(out)
         return out, inp_len
@@ -149,7 +150,7 @@ class PyTorchRNNEncoder(EncoderBase):
 @BaseEncoder.register("jit_lstm")
 class JitLSTMEncoder(EncoderBase):
     """
-    LSTM encoder (see aps.asr.base.jit)
+    LSTM encoder (see aps.asr.base.jit): (Linear) -> JitLSTM -> (Linear) -> (NonLinear)
     """
 
     def __init__(self,
@@ -178,10 +179,15 @@ class JitLSTMEncoder(EncoderBase):
                          num_layers=num_layers,
                          layer_norm=layer_norm,
                          bidirectional=bidirectional)
-        rnn_out_size = hidden_proj if hidden_proj > 0 else hidden
+        hidden_size = hidden_proj if hidden_proj > 0 else hidden
         factor = 2 if bidirectional else 1
-        self.outp = nn.Linear(rnn_out_size * factor, out_features)
-        self.non_linear = rnn_output_nonlinear[non_linear]
+        if out_features > 0:
+            self.outp = nn.Linear(hidden_size * factor, out_features)
+            self.non_linear = rnn_output_nonlinear[non_linear]
+        else:
+            self.outp = None
+            self.non_linear = None
+            self.out_features = hidden_size * factor
 
     def forward(self, inp: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> EncRetType:
@@ -196,9 +202,8 @@ class JitLSTMEncoder(EncoderBase):
         if self.proj is not None:
             inp = tf.relu(self.proj(inp))
         out = self.rnns(inp)[0]
-        # out: N x T x D
-        out = self.outp(out)
-        # pass through non-linear
+        if self.outp is not None:
+            out = self.outp(out)
         if self.non_linear is not None:
             out = self.non_linear(out)
         return out, inp_len
@@ -207,7 +212,7 @@ class JitLSTMEncoder(EncoderBase):
 @BaseEncoder.register("variant_rnn")
 class VariantRNNEncoder(EncoderBase):
     """
-    Variant RNN layer (e.g., with pyramid style, layer normalization, projection, .etc)
+    Stack of variant RNN layer: [ ... -> VariantRNN -> ... ]
     """
 
     def __init__(self,
@@ -243,30 +248,25 @@ class VariantRNNEncoder(EncoderBase):
                     in_size = in_size * 2
             return in_size
 
-        def derive_dropout(layer_idx: int) -> float:
-            """
-            Use dropout on layer-i
-            """
-            if layer_idx == 0:
-                return dropout if dropout_input else 0
-            elif layer_idx == num_layers - 1:
-                return 0
-            else:
-                return dropout
-
+        self.pyramid = pyramid_stack
+        if bidirectional and not add_forward_backward:
+            factor = 2
+        else:
+            factor = 1
+        self.out_features = out_features if out_features > 0 else hidden * factor
         self.enc_layers = nn.ModuleList([
-            VariantRNN(derive_inp_size(i),
-                       hidden_size=hidden,
-                       rnn=rnn,
-                       norm=norm if i != num_layers - 1 else "",
-                       project=project if i != num_layers - 1 else out_features,
-                       dropout=derive_dropout(i),
-                       bidirectional=bidirectional,
-                       non_linear=non_linear if i != num_layers - 1 else "none",
-                       add_forward_backward=add_forward_backward)
+            VariantRNN(
+                derive_inp_size(i),
+                rnn=rnn,
+                norm=norm if i != num_layers - 1 else "",
+                hidden=hidden,
+                project=project if i != num_layers - 1 else self.out_features,
+                dropout=dropout if i != num_layers - 1 else 0,
+                bidirectional=bidirectional,
+                non_linear=non_linear if i != num_layers - 1 else "none",
+                add_forward_backward=add_forward_backward)
             for i in range(num_layers)
         ])
-        self.pyramid_stack = pyramid_stack
 
     def _subsample_concat(self, inp: th.Tensor,
                           inp_len: Optional[th.Tensor]) -> EncRetType:
@@ -290,7 +290,7 @@ class VariantRNNEncoder(EncoderBase):
             out_len (Tensor or None): (N) x To
         """
         for i, layer in enumerate(self.enc_layers):
-            if i != 0 and self.pyramid_stack:
+            if i != 0 and self.pyramid:
                 inp, inp_len = self._subsample_concat(inp, inp_len)
             inp = layer(inp, inp_len)
         return inp, inp_len
@@ -322,9 +322,10 @@ class Conv1dEncoder(EncoderBase):
         self.kernel = int2list(kernel, num_layers)
         self.stride = int2list(stride, num_layers)
         self.dilation = int2list(dilation, num_layers)
+        self.out_features = out_features if out_features > 0 else dim
         self.enc_layers = nn.ModuleList([
             Conv1d(inp_features if i == 0 else dim,
-                   dim if i != num_layers - 1 else out_features,
+                   dim if i != num_layers - 1 else self.out_features,
                    norm=norm,
                    kernel_size=self.kernel[i],
                    stride=self.stride[i],
@@ -332,6 +333,7 @@ class Conv1dEncoder(EncoderBase):
                    dropout=dropout,
                    for_streaming=for_streaming) for i in range(num_layers)
         ])
+        self.out_features = dim
 
     def forward(self, inp: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> EncRetType:
@@ -391,12 +393,17 @@ class Conv2dEncoder(EncoderBase):
                    stride=self.stride[i],
                    for_streaming=for_streaming) for i in range(num_layers)
         ])
-
         # freq axis
         freq_dim = inp_features
         for conv2d in self.enc_layers:
             freq_dim = conv2d.compute_outp_dim(freq_dim, 1)
-        self.out_features = freq_dim * channel[-1]
+        freq_x_channel = freq_dim * channel[-1]
+        if out_features > 0:
+            self.out_features = out_features
+            self.outp = nn.Linear(freq_x_channel, out_features)
+        else:
+            self.out_features = freq_x_channel
+            self.outp = None
 
     def forward(self, inp: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> EncRetType:
@@ -421,8 +428,10 @@ class Conv2dEncoder(EncoderBase):
                 f"= {self.out_features} ")
         # N x T x C x F
         inp = inp.transpose(1, 2).contiguous()
-        inp = inp.view(N, T, -1)
-        return inp, inp_len
+        out = inp.view(N, T, -1)
+        if self.outp is not None:
+            out = self.outp(out)
+        return out, inp_len
 
 
 @BaseEncoder.register("fsmn")
@@ -455,7 +464,7 @@ class FSMNEncoder(EncoderBase):
                  rctx=rctx,
                  norm=norm if i != num_layers - 1 else "none",
                  dilation=dilation[i],
-                 dropout=dropout, 
+                 dropout=dropout,
                  for_streaming=for_streaming) for i in range(num_layers)
         ])
         self.residual = residual

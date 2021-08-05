@@ -632,7 +632,7 @@ class STFTBase(nn.Module):
         """
         Compute number of the frames
         """
-        assert th.sum(wav_len <= self.win_length)
+        assert th.sum(wav_len <= self.win_length) == 0
         if self.center:
             wav_len += self.win_length
         return (wav_len - self.win_length) // self.frame_hop + 1

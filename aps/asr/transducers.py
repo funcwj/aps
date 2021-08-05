@@ -30,6 +30,7 @@ class ASRTransducerBase(ASREncoderBase):
         super(ASRTransducerBase, self).__init__(input_size,
                                                 vocab_size,
                                                 ctc=False,
+                                                ead=True,
                                                 asr_transform=asr_transform,
                                                 enc_type=enc_type,
                                                 enc_proj=enc_proj,

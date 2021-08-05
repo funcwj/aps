@@ -53,9 +53,9 @@ class StreamingRNNEncoder(PyTorchRNNEncoder):
         Process one chunk (for online processing)
         """
         if self.proj is not None:
-            inp = tf.relu(self.proj(inp))
-        out, self.hx = self.rnns(inp, self.hx)
-        out = self.outp(out)
+            chunk = tf.relu(self.proj(chunk))
+        chunk, self.hx = self.rnns(chunk, self.hx)
+        out = self.outp(chunk)
         if self.non_linear is not None:
             out = self.non_linear(out)
         return out
@@ -146,15 +146,15 @@ class StreamingLSTMNormEncoder(EncoderBase):
         Process one chunk (for online processing)
         """
         if self.proj is not None:
-            inp = tf.relu(self.proj(inp))
+            chunk = tf.relu(self.proj(chunk))
 
         hx = []
         for i, layer in enumerate(self.lstm):
-            inp, h = layer(inp, hx=self.hx[i])
+            chunk, h = layer(chunk, hx=self.hx[i])
             hx.append(h)
         self.hx = hx
 
-        out = self.outp(out)
+        out = self.outp(chunk)
         if self.non_linear is not None:
             out = self.non_linear(out)
         return out

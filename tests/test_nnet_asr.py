@@ -11,10 +11,10 @@ from aps.transform import AsrTransform, EnhTransform
 from aps.asr.base.encoder import Conv1dEncoder, Conv2dEncoder
 
 default_rnn_dec_kwargs = {
-    "dec_rnn": "lstm",
-    "rnn_layers": 2,
-    "rnn_hidden": 512,
-    "rnn_dropout": 0.1,
+    "rnn": "lstm",
+    "num_layers": 2,
+    "hidden": 512,
+    "dropout": 0.1,
     "input_feeding": True,
     "onehot_embed": False
 }
@@ -91,7 +91,6 @@ fsmn_enc_kwargs = {
 
 conv2d_rnn_enc_kwargs = {
     "conv2d": {
-        "out_features": -1,
         "channel": 32,
         "num_layers": 2,
         "stride": 2,
@@ -108,7 +107,6 @@ conv2d_rnn_enc_kwargs = {
 
 conv1d_rnn_enc_kwargs = {
     "conv1d": {
-        "out_features": 512,
         "dim": 512,
         "num_layers": 3,
         "stride": [2, 2, 2],
@@ -125,7 +123,6 @@ conv1d_rnn_enc_kwargs = {
 
 conv1d_fsmn_enc_kwargs = {
     "conv1d": {
-        "out_features": 512,
         "dim": 512,
         "num_layers": 3,
         "stride": [2, 2, 2],
@@ -541,10 +538,10 @@ def test_common_transducer(enc_type, enc_kwargs):
         "enc_dim": 512,
         "jot_dim": 512,
         "add_ln": True,
-        "dec_rnn": "lstm",
-        "dec_layers": 2,
-        "dec_hidden": 512,
-        "dec_dropout": 0.1
+        "rnn": "lstm",
+        "num_layers": 2,
+        "hidden": 512,
+        "dropout": 0.1
     }
     asr_transform = AsrTransform(feats="fbank-log-cmvn",
                                  frame_len=400,

@@ -37,6 +37,7 @@ class ASREncoderDecoderBase(CtcASR):
         super(ASREncoderDecoderBase, self).__init__(input_size,
                                                     vocab_size,
                                                     ctc=ctc,
+                                                    ead=True,
                                                     asr_transform=asr_transform,
                                                     enc_type=enc_type,
                                                     enc_proj=enc_proj,

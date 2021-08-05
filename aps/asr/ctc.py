@@ -17,36 +17,43 @@ from aps.asr.beam_search.ctc import ctc_beam_search, ctc_viterbi_align
 from aps.libs import ApsRegisters
 
 NoneOrTensor = Optional[th.Tensor]
-AMForwardType = Tuple[th.Tensor, NoneOrTensor, NoneOrTensor]
+AMForwardType = Tuple[th.Tensor, th.Tensor, NoneOrTensor]
 
 
 class ASREncoderBase(nn.Module):
     """
     ASR encoder class
+        ctc: whether we use CTC branch
+        ead: whether we use encoder & decoder structure
     """
 
     def __init__(self,
                  input_size: int,
                  vocab_size: int,
                  ctc: bool = False,
+                 ead: bool = False,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "pytorch_rnn",
                  enc_proj: int = -1,
                  enc_kwargs: Optional[Dict] = None) -> None:
         super(ASREncoderBase, self).__init__()
+        assert ctc or ead
+        ctc_only = ctc and not ead
         self.vocab_size = vocab_size
         self.asr_transform = asr_transform
         if enc_type in ["xfmr", "cfmr"]:
             enc_proj = enc_kwargs["arch_kwargs"]["att_dim"]
+            enc_kwargs["output_proj"] = vocab_size if ctc_only else -1
             self.encoder = TransformerEncoder(enc_type, input_size,
                                               **enc_kwargs)
             self.is_xfmr_encoder = True
         else:
             self.encoder = encoder_instance(
-                enc_type, input_size, enc_proj if enc_proj > 0 else vocab_size,
+                enc_type, input_size, vocab_size if ctc_only else enc_proj,
                 enc_kwargs, BaseEncoder)
             self.is_xfmr_encoder = False
-        self.ctc = nn.Linear(enc_proj, vocab_size) if ctc else None
+        # for hybrid ctc/aed, we add CTC branch
+        self.ctc = nn.Linear(enc_proj, vocab_size) if ead and ctc else None
 
     def _batch_decoding_prep(self,
                              batch: List[th.Tensor],
@@ -137,6 +144,7 @@ class CtcASR(ASREncoderBase):
                  input_size: int = 80,
                  vocab_size: int = 30,
                  ctc: bool = True,
+                 ead: bool = False,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "pytorch_rnn",
                  enc_proj: int = -1,
@@ -144,6 +152,7 @@ class CtcASR(ASREncoderBase):
         super(CtcASR, self).__init__(input_size,
                                      vocab_size,
                                      ctc=ctc,
+                                     ead=ead,
                                      asr_transform=asr_transform,
                                      enc_type=enc_type,
                                      enc_proj=enc_proj,

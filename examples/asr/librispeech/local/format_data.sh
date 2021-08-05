@@ -15,7 +15,7 @@ dataset=`basename $data_dir`
 
 mkdir -p $data_dir/{train,dev}
 
-for f in wav.scp utt2spk spk2utt text spk2gender; do
+for f in wav.scp utt2spk text spk2gender; do
   cat $data_dir/{train_clean_100,train_clean_360,train_other_500}/$f | sort -k1 > $data_dir/train/$f
   cat $data_dir/{dev_clean,dev_other}/$f | sort -k1 > $data_dir/dev/$f
 done

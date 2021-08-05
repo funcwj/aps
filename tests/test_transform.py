@@ -234,7 +234,10 @@ def debug_visualize_feature():
                              aug_time_args=(100, 1),
                              aug_mask_zero=False,
                              delta_as_channel=True)
-    feats, _ = transform(th.from_numpy(egs1_wav[None, ...]), None)
+    egs1_wav = read_audio("data/transform/egs1.wav", sr=16000)
+    egs1_wav = th.from_numpy(egs1_wav)
+    egs1_len = th.tensor([egs1_wav.shape[-1]])
+    feats, feats_len = transform(egs1_wav[None, ...], egs1_len[None, ...])
     print(transform)
     from aps.plot import plot_feature
     plot_feature(feats[0].numpy(), "egs")
@@ -258,7 +261,7 @@ def debug_speed_perturb():
 
 if __name__ == "__main__":
     # debug_speed_perturb()
-    # debug_visualize_feature()
+    debug_visualize_feature()
     # test_asr_transform_jit(egs1_wav, "fbank-log-cmvn")
-    test_streaming_stft(egs1_wav, 512, 256, "hann")
+    # test_streaming_stft(egs1_wav, 512, 256, "hann")
     # test_forward_inverse_stft(egs1_wav, 512, 256, "hann", "librosa")
