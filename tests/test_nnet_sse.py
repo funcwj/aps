@@ -267,8 +267,8 @@ def test_dfsmn(num_spks):
                      dim=512,
                      num_branchs=num_spks,
                      project=256,
-                     lcontext=11,
-                     rcontext=5,
+                     lctx=11,
+                     rctx=5,
                      training_mode="time")
     inp = th.rand(4, 64000)
     x = dfsmn(inp)

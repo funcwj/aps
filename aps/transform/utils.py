@@ -321,7 +321,7 @@ def _inverse_stft(transform: th.Tensor,
     # pack: N x 2B x T
     packed = th.cat([real, imag], dim=1)
     # N x 1 x T
-    s = tf.conv_transpose1d(packed, kernel, stride=frame_hop, padding=0)
+    wav = tf.conv_transpose1d(packed, kernel, stride=frame_hop, padding=0)
     # normalized audio samples
     # refer: https://github.com/pytorch/audio/blob/2ebbbf511fb1e6c47b59fd32ad7e66023fa0dff1/torchaudio/functional.py#L171
     if norm:
@@ -339,12 +339,11 @@ def _inverse_stft(transform: th.Tensor,
                          stride=frame_hop)[..., 0]
         if center:
             pad = kernel.shape[-1] // 2
-            s = s[..., pad:-pad]
+            wav = wav[..., pad:-pad]
             denorm = denorm[..., pad:-pad]
-        s = s / (denorm + eps)
+        wav = wav / (denorm + eps)
     # N x S
-    s = s.squeeze(1)
-    return s
+    return wav.squeeze(1)
 
 
 def _pytorch_stft(wav: th.Tensor,
@@ -633,9 +632,7 @@ class STFTBase(nn.Module):
         """
         Compute number of the frames
         """
-        if th.sum(wav_len <= self.frame_len):
-            raise RuntimeError(
-                f"Audio samples less than frame_len ({self.frame_len})")
+        assert th.sum(wav_len <= self.win_length)
         if self.center:
             wav_len += self.win_length
         return (wav_len - self.win_length) // self.frame_hop + 1
@@ -725,7 +722,8 @@ class iSTFT(STFTBase):
                                  return_polar=return_polar,
                                  frame_hop=self.frame_hop,
                                  onesided=self.onesided,
-                                 center=self.center)
+                                 center=self.center,
+                                 norm=True)
 
 
 class StreamingSTFT(STFTBase):
@@ -733,27 +731,21 @@ class StreamingSTFT(STFTBase):
     To mimic streaming (frame by frame processing) STFT
     """
 
-    def __init__(self,
-                 frame_len: int,
-                 frame_hop: int,
-                 window: str = "sqrthann",
-                 round_pow_of_two: bool = True,
-                 normalized: bool = False,
-                 pre_emphasis: float = 0,
-                 onesided: bool = True,
-                 center: bool = False,
-                 mode: str = "librosa"):
-        super(StreamingSTFT, self).__init__(frame_len,
-                                            frame_hop,
-                                            window=window,
-                                            round_pow_of_two=round_pow_of_two,
-                                            normalized=normalized,
-                                            pre_emphasis=pre_emphasis,
-                                            onesided=onesided,
-                                            inverse=False,
-                                            center=False,
-                                            mode=mode)
-        assert mode != "torch"
+    def __init__(self, *args, **kwargs):
+        super(StreamingSTFT, self).__init__(*args, inverse=False, **kwargs)
+        assert self.mode != "torch"
+
+    def process(self, frame: th.Tensor, return_polar: bool = True) -> th.Tensor:
+        """
+        Process one frame
+        """
+        return _forward_stft(frame,
+                             self.K,
+                             return_polar=return_polar,
+                             frame_hop=self.frame_hop,
+                             pre_emphasis=self.pre_emphasis,
+                             onesided=self.onesided,
+                             center=False)
 
     def forward(self, wav: th.Tensor, return_polar: bool = True) -> th.Tensor:
         """
@@ -763,20 +755,11 @@ class StreamingSTFT(STFTBase):
         Return
             transform (Tensor): N x (C) x F x T x 2
         """
-        num_samples = wav.shape[-1]
         frames = []
-        if self.center:
-            pad = self.K.shape[-1] // 2
-            wav = tf.pad(wav, (pad, pad), mode="reflect")
+        num_samples = wav.shape[-1]
         for t in range(0, num_samples - self.win_length + 1, self.frame_hop):
-            # N x F x 1 x 2
-            frame = _forward_stft(wav[..., t:t + self.win_length],
-                                  self.K,
-                                  return_polar=return_polar,
-                                  frame_hop=self.frame_hop,
-                                  pre_emphasis=self.pre_emphasis,
-                                  onesided=self.onesided,
-                                  center=False)
+            frame = self.process(wav[..., t:t + self.win_length],
+                                 return_polar=return_polar)
             frames.append(frame)
         return th.cat(frames, -2)
 
@@ -786,27 +769,36 @@ class StreamingiSTFT(STFTBase):
     To mimic streaming (frame by frame processing) iSTFT
     """
 
-    def __init__(self,
-                 frame_len: int,
-                 frame_hop: int,
-                 window: str = "sqrthann",
-                 round_pow_of_two: bool = True,
-                 normalized: bool = False,
-                 pre_emphasis: float = 0,
-                 onesided: bool = True,
-                 center: bool = False,
-                 mode: str = "librosa"):
-        super(StreamingiSTFT, self).__init__(frame_len,
-                                             frame_hop,
-                                             window=window,
-                                             round_pow_of_two=round_pow_of_two,
-                                             normalized=normalized,
-                                             pre_emphasis=pre_emphasis,
-                                             onesided=onesided,
-                                             inverse=True,
-                                             center=False,
-                                             mode=mode)
-        assert mode != "torch"
+    def __init__(self, *args, **kwargs):
+        super(StreamingiSTFT, self).__init__(*args, inverse=True, **kwargs)
+        assert self.mode != "torch"
+        self.overlap = self.win_length - self.frame_hop
+        self.reset()
+
+    def reset(self):
+        self.wav_cache = None
+        self.win_cache = None
+
+    def process(self, frame: th.Tensor, return_polar: bool = True) -> th.Tensor:
+        """
+        Process one frame
+        """
+        frame = _inverse_stft(frame,
+                              self.K,
+                              self.w,
+                              return_polar=return_polar,
+                              frame_hop=self.frame_hop,
+                              onesided=self.onesided,
+                              center=False,
+                              norm=False)
+        window = (self.w**2).clone()
+        if self.win_cache is not None:
+            frame[:, :self.overlap] += self.wav_cache
+            window[:self.overlap] += self.win_cache
+        self.win_cache = window[self.frame_hop:]
+        self.wav_cache = frame[:, self.frame_hop:]
+        frame = frame / (window + EPSILON)
+        return frame[:, :self.frame_hop]
 
     def forward(self,
                 transform: th.Tensor,
@@ -816,34 +808,15 @@ class StreamingiSTFT(STFTBase):
         Args
             transform (Tensor): STFT output, N x F x T x 2
         Return
-            s (Tensor): N x S
+            wav (Tensor): N x S
         """
-        num_frames = transform.shape[-2]
+        self.reset()
         frames = []
+        num_frames = transform.shape[-2]
         for t in range(num_frames):
-            frame = _inverse_stft(transform[..., t:t + 1, :],
-                                  self.K,
-                                  self.w,
-                                  return_polar=return_polar,
-                                  frame_hop=self.frame_hop,
-                                  onesided=self.onesided,
-                                  center=False,
-                                  norm=False)
-            frames.append(frame[..., None])
-        # N x W x T
-        frames = th.cat(frames, -1)
-        num_samples = (num_frames - 1) * self.frame_hop + self.win_length
-        # OLA: N x W x T => N x 1 x S
-        s = tf.fold(frames, (num_samples, 1), (self.win_length, 1),
-                    stride=self.frame_hop)[..., 0]
-        # W x T
-        win = th.repeat_interleave(self.w[..., None]**2, num_frames, dim=-1)
-        # OLA: 1 x W x T => 1 x 1 x S
-        denorm = tf.fold(win[None, ...], (num_samples, 1), (self.win_length, 1),
-                         stride=self.frame_hop)[..., 0]
-        if self.center:
-            pad = self.K.shape[-1] // 2
-            s = s[..., pad:-pad]
-            denorm = denorm[..., pad:-pad]
-        s = s / (denorm + EPSILON)
-        return s.squeeze(1)
+            frame = self.process(transform[..., t:t + 1, :],
+                                 return_polar=return_polar)
+            frames.append(frame)
+        cache = self.wav_cache / (self.win_cache + EPSILON)
+        wav = th.cat(frames + [cache], -1)
+        return wav

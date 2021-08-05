@@ -299,6 +299,7 @@ class Conv2d(nn.Module):
         out = self.norm(self.conv(inp[:, None] if inp.dim() == 3 else inp))
         return tf.relu(out)
 
+
 class FSMN(nn.Module):
     """
     Implement layer of feedforward sequential memory networks (FSMN)
@@ -312,24 +313,27 @@ class FSMN(nn.Module):
                  rctx: int = 3,
                  norm: str = "BN",
                  dilation: int = 0,
-                 dropout: float = 0.0):
+                 dropout: float = 0.0,
+                 for_streaming: bool = False):
         super(FSMN, self).__init__()
         self.inp_proj = nn.Linear(inp_features, proj_features, bias=False)
-        self.ctx_conv = nn.Sequential(
-            nn.ConstantPad1d((lctx, rctx), 0.0),
-            nn.Conv1d(proj_features,
-                      proj_features,
-                      kernel_size=lctx + rctx + 1,
-                      dilation=dilation,
-                      groups=proj_features,
-                      padding=0,
-                      bias=False))
+        self.ctx_conv = nn.Conv1d(proj_features,
+                                  proj_features,
+                                  kernel_size=lctx + rctx + 1,
+                                  dilation=dilation,
+                                  groups=proj_features,
+                                  padding=0,
+                                  bias=False)
         self.out_proj = nn.Linear(proj_features, out_features)
         if norm == "none":
             self.out_norm = None
         else:
             self.out_norm = nn.Sequential(Normalize1d(norm, out_features),
                                           nn.ReLU(), nn.Dropout(p=dropout))
+        if for_streaming:
+            self.lctx, self.rctx = 0, 0
+        else:
+            self.lctx, self.rctx = lctx, rctx
 
     def forward(
             self,
@@ -347,8 +351,14 @@ class FSMN(nn.Module):
         proj = self.inp_proj(inp[None, ...] if inp.dim() == 2 else inp)
         # N x T x P => N x P x T => N x T x P
         proj = proj.transpose(1, 2)
+        # pad context
+        if self.lctx + self.rctx == 0:
+            proj_pad = tf.pad(proj, (self.lctx, self.rctx), "constant", 0.0)
+            ctx = self.ctx_conv(proj_pad)
+        else:
+            ctx = self.ctx_conv(proj)
         # add context
-        proj = proj + self.ctx_conv(proj)
+        proj = proj + ctx
         proj = proj.transpose(1, 2)
         # add memory block
         if memory is not None:

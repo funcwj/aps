@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Tuple
 from aps.asr.base.encoder import PyTorchRNNEncoder, EncRetType
 from aps.sse.base import SseBase, MaskNonLinear, tf_masking
 from aps.libs import ApsRegisters
@@ -15,49 +15,58 @@ from aps.libs import ApsRegisters
 
 class RNN(PyTorchRNNEncoder):
     """
-    PyTorch's RNN structure
+    PyTorch's RNN/GRU structure (for jit export)
     """
 
-    def __init__(self,
-                 inp_features: int,
-                 out_features: int,
-                 input_proj: int = -1,
-                 rnn: str = "lstm",
-                 num_layers: int = 3,
-                 hidden: int = 512,
-                 hidden_proj: int = -1,
-                 dropout: int = 0.2,
-                 bidirectional: bool = False,
-                 non_linear: str = "none"):
-        super(RNN, self).__init__(inp_features,
-                                  out_features,
-                                  input_proj=input_proj,
-                                  rnn=rnn,
-                                  num_layers=num_layers,
-                                  hidden=hidden,
-                                  hidden_proj=hidden_proj,
-                                  dropout=dropout,
-                                  bidirectional=bidirectional,
-                                  non_linear=non_linear)
+    def __init__(self, *args, **kwargs):
+        super(RNN, self).__init__(*args, **kwargs)
 
-    def forward(self, inp: th.Tensor,
-                inp_len: Optional[th.Tensor]) -> EncRetType:
+    def forward(self,
+                inp: th.Tensor,
+                hx: Optional[th.Tensor] = None) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args:
             inp (Tensor): N x T x F
-            inp_len (Tensor): N x T
         Return:
             out (Tensor): N x T x F
-            inp_len (Tensor): N x T
         """
         if self.proj is not None:
             inp = tf.relu(self.proj(inp))
-        out = self.rnns(inp)[0]
+        out, hx = self.rnns(inp, hx=hx)
         out = self.outp(out)
         # pass through non-linear
         if self.non_linear is not None:
             out = self.non_linear(out)
-        return out, inp_len
+        return out, hx
+
+
+class LSTM(PyTorchRNNEncoder):
+    """
+    PyTorch's LSTM structure (for jit export)
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(LSTM, self).__init__(*args, **kwargs)
+
+    def forward(
+        self,
+        inp: th.Tensor,
+        hx: Optional[Tuple[th.Tensor, th.Tensor]] = None
+    ) -> Tuple[th.Tensor, Tuple[th.Tensor, th.Tensor]]:
+        """
+        Args:
+            inp (Tensor): N x T x F
+        Return:
+            out (Tensor): N x T x F
+        """
+        if self.proj is not None:
+            inp = tf.relu(self.proj(inp))
+        out, hx = self.rnns(inp, hx=hx)
+        out = self.outp(out)
+        # pass through non-linear
+        if self.non_linear is not None:
+            out = self.non_linear(out)
+        return out, hx
 
 
 @ApsRegisters.sse.register("sse@base_rnn")
@@ -85,16 +94,17 @@ class ToyRNN(SseBase):
         if num_spks == 1 and output_nonlinear == "softmax":
             raise ValueError(
                 "output_nonlinear can not be softmax when num_spks == 1")
-        self.base_rnn = RNN(input_size,
-                            num_bins * num_spks,
-                            input_proj=input_proj,
-                            rnn=rnn,
-                            num_layers=num_layers,
-                            hidden=hidden,
-                            hidden_proj=hidden_proj,
-                            dropout=dropout,
-                            bidirectional=bidirectional,
-                            non_linear="none")
+        rnn_cls = LSTM if rnn == "lstm" else RNN
+        self.base_rnn = rnn_cls(input_size,
+                                num_bins * num_spks,
+                                input_proj=input_proj,
+                                rnn=rnn,
+                                num_layers=num_layers,
+                                hidden=hidden,
+                                hidden_proj=hidden_proj,
+                                dropout=dropout,
+                                bidirectional=bidirectional,
+                                non_linear="none")
         self.non_linear = MaskNonLinear(output_nonlinear, enable="positive")
         self.num_spks = num_spks
 
@@ -103,7 +113,7 @@ class ToyRNN(SseBase):
         TF mask estimation from given features
         """
         # N x T x S*F
-        masks, _ = self.base_rnn(feats, None)
+        masks = self.base_rnn(feats)[0]
         # N x S*F x T
         masks = masks.transpose(1, 2)
         # [N x F x T, ]

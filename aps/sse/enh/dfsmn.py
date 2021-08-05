@@ -28,8 +28,8 @@ class DFSMN(SseBase):
                  project: int = 512,
                  dropout: float = 0.0,
                  residual: bool = True,
-                 lcontext: int = 3,
-                 rcontext: int = 3,
+                 lctx: int = 3,
+                 rctx: int = 3,
                  norm: str = "BN",
                  dilation: Union[List[int], int] = 1,
                  cplx_mask: bool = True,
@@ -46,8 +46,8 @@ class DFSMN(SseBase):
                                  dropout=dropout,
                                  num_layers=num_layers,
                                  residual=residual,
-                                 lcontext=lcontext,
-                                 rcontext=rcontext,
+                                 lctx=lctx,
+                                 rctx=rctx,
                                  dilation=dilation)
         if cplx_mask:
             # no activation for complex mask

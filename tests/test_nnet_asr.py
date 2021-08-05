@@ -83,8 +83,8 @@ fsmn_enc_kwargs = {
     "project": 256,
     "num_layers": 4,
     "residual": True,
-    "lcontext": 10,
-    "rcontext": 10,
+    "lctx": 10,
+    "rctx": 10,
     "norm": "BN",
     "dropout": 0.2
 }
@@ -133,8 +133,8 @@ conv1d_fsmn_enc_kwargs = {
     },
     "fsmn": {
         "num_layers": 3,
-        "lcontext": 10,
-        "rcontext": 10,
+        "lctx": 10,
+        "rctx": 10,
         "norm": "LN",
         "residual": False,
         "dilation": 1,

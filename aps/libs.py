@@ -74,7 +74,7 @@ class ApsModules(object):
         "filter.mvdr", "filter.conv", "filter.google"
     ]
     sse_submodules = [
-        "toy", "unsuper.rnn", "enh.phasen", "enh.dcunet", "enh.demucs",
+        "rnn", "unsuper.rnn", "enh.phasen", "enh.dcunet", "enh.demucs",
         "enh.dfsmn", "bss.dccrn", "bss.dprnn", "bss.tcn", "bss.transformer",
         "bss.dense_unet", "bss.sepformer"
     ]

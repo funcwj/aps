@@ -30,15 +30,16 @@ class PyTorchNormLSTM(nn.Module):
                                dropout=0,
                                proj_size=proj_size,
                                bidirectional=False)
-        self.norm = Normalize1d("ln", proj_size if proj_size > 0 else hidden_size)
+        self.norm = Normalize1d("ln",
+                                proj_size if proj_size > 0 else hidden_size)
         self.non_linear = rnn_output_nonlinear[non_linear]
         self.drop = nn.Dropout(p=dropout)
 
     def forward(self,
-                x: th.Tensor,
-                h: LSTMHiddenType = None) -> Tuple[th.Tensor, LSTMHiddenType]:
-        x, h = self.lstm(x, h)
-        x = self.norm(x)
+                inp: th.Tensor,
+                hx: LSTMHiddenType = None) -> Tuple[th.Tensor, LSTMHiddenType]:
+        out, hx = self.lstm(inp, hx)
+        out = self.norm(out)
         if self.non_linear is not None:
-            x = self.non_linear(x)
-        return self.drop(x), h
+            out = self.non_linear(out)
+        return self.drop(out), hx

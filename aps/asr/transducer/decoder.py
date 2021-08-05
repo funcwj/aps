@@ -113,31 +113,31 @@ class PyTorchRNNDecoder(DecoderBase):
                  enc_dim: int = 512,
                  jot_dim: int = 512,
                  add_ln: bool = False,
-                 dec_rnn: str = "lstm",
-                 dec_layers: int = 3,
-                 dec_hidden: int = 512,
-                 dec_dropout: float = 0.0,
+                 rnn: str = "lstm",
+                 num_layers: int = 3,
+                 hidden: int = 512,
+                 dropout: float = 0.0,
                  onehot_embed: bool = False) -> None:
         super(PyTorchRNNDecoder, self).__init__(vocab_size,
                                                 embed_size=embed_size,
                                                 enc_dim=enc_dim,
-                                                dec_dim=dec_hidden,
+                                                dec_dim=hidden,
                                                 jot_dim=jot_dim,
                                                 onehot_embed=onehot_embed)
         # uni-dir RNNs
         if add_ln:
             self.decoder = LayerNormRNN(dec_rnn,
                                         embed_size,
-                                        dec_hidden,
-                                        dec_layers,
-                                        dropout=dec_dropout,
+                                        hidden,
+                                        num_layers,
+                                        dropout=dropout,
                                         bidirectional=False)
         else:
             self.decoder = PyTorchRNN(dec_rnn,
                                       embed_size,
-                                      dec_hidden,
-                                      dec_layers,
-                                      dropout=dec_dropout,
+                                      hidden,
+                                      num_layers,
+                                      dropout=dropout,
                                       bidirectional=False)
 
     def forward(self, enc_out: th.Tensor, tgt_pad: th.Tensor) -> th.Tensor:

@@ -44,7 +44,8 @@ def test_forward_inverse_stft(wav, frame_len, frame_hop, window, mode):
 
 
 @pytest.mark.parametrize("wav", [egs1_wav])
-@pytest.mark.parametrize("frame_len, frame_hop", [(512, 256), (256, 128)])
+@pytest.mark.parametrize("frame_len, frame_hop", [(512, 256), (256, 128),
+                                                  (400, 160)])
 @pytest.mark.parametrize("window", ["hamm", "sqrthann"])
 def test_streaming_stft(wav, frame_len, frame_hop, window):
     wav = th.from_numpy(wav)[None, ...]
@@ -64,7 +65,9 @@ def test_streaming_stft(wav, frame_len, frame_hop, window):
     istft = iSTFT(**cfg)
     streaming_istft = StreamingiSTFT(**cfg)
     wav = istft(packed, return_polar=False)
+    print(wav)
     streaming_wav = streaming_istft(packed, return_polar=False)
+    print(streaming_wav)
     th.testing.assert_allclose(wav, streaming_wav)
 
 
@@ -217,7 +220,8 @@ def test_df_transform(num_bins, num_doas):
 
 
 def debug_visualize_feature():
-    transform = AsrTransform(feats="fbank-log-cmvn-delta",
+    # fbank-log-cmvn-delta
+    transform = AsrTransform(feats="spectrogram-log",
                              frame_len=400,
                              frame_hop=160,
                              use_power=True,
@@ -233,7 +237,7 @@ def debug_visualize_feature():
     feats, _ = transform(th.from_numpy(egs1_wav[None, ...]), None)
     print(transform)
     from aps.plot import plot_feature
-    plot_feature(feats[0, 1].numpy(), "egs")
+    plot_feature(feats[0].numpy(), "egs")
 
 
 def debug_speed_perturb():

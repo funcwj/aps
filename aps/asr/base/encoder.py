@@ -134,8 +134,6 @@ class PyTorchRNNEncoder(EncoderBase):
         """
         if self.proj is not None:
             inp = tf.relu(self.proj(inp))
-        # NOTE: for torch.jit.script, use #145
-        # out = self.rnns(inp)[0]
         out = var_len_rnn_forward(self.rnns,
                                   inp,
                                   inp_len=inp_len,
@@ -345,10 +343,10 @@ class Conv1dEncoder(EncoderBase):
             out (Tensor): N x To x O
             out_len (Tensor or None)
         """
-        for enc_layer in self.enc_layers:
-            inp = enc_layer(inp)
+        for conv1d in self.enc_layers:
+            inp = conv1d(inp)
             if inp_len is not None:
-                inp_len = enc_layer.compute_outp_dim(inp_len)
+                inp_len = conv1d.compute_outp_dim(inp_len)
         return inp, inp_len
 
 
@@ -396,8 +394,8 @@ class Conv2dEncoder(EncoderBase):
 
         # freq axis
         freq_dim = inp_features
-        for enc_layer in self.enc_layers:
-            freq_dim = enc_layer.compute_outp_dim(freq_dim, 1)
+        for conv2d in self.enc_layers:
+            freq_dim = conv2d.compute_outp_dim(freq_dim, 1)
         self.out_features = freq_dim * channel[-1]
 
     def forward(self, inp: th.Tensor,
@@ -410,12 +408,12 @@ class Conv2dEncoder(EncoderBase):
             out (Tensor): N x F x O
             out_len (Tensor or None)
         """
-        for enc_layer in self.enc_layers:
+        for conv2d in self.enc_layers:
             # N x C x T x F
-            inp = enc_layer(inp)
+            inp = conv2d(inp)
             if inp_len is not None:
                 # time axis
-                inp_len = enc_layer.compute_outp_dim(inp_len, 0)
+                inp_len = conv2d.compute_outp_dim(inp_len, 0)
         N, C, T, F = inp.shape
         if C * F != self.out_features:
             raise ValueError(
@@ -440,11 +438,12 @@ class FSMNEncoder(EncoderBase):
                  project: int = 512,
                  num_layers: int = 4,
                  residual: bool = True,
-                 lcontext: int = 3,
-                 rcontext: int = 3,
+                 lctx: int = 3,
+                 rctx: int = 3,
                  norm: str = "BN",
                  dilation: Union[List[int], int] = 1,
-                 dropout: float = 0):
+                 dropout: float = 0.0,
+                 for_streaming: bool = False):
         super(FSMNEncoder, self).__init__(inp_features, out_features)
         if isinstance(dilation, int):
             dilation = [dilation] * num_layers
@@ -452,11 +451,12 @@ class FSMNEncoder(EncoderBase):
             FSMN(inp_features if i == 0 else dim,
                  dim if i != num_layers - 1 else out_features,
                  project,
-                 lctx=lcontext,
-                 rctx=rcontext,
+                 lctx=lctx,
+                 rctx=rctx,
                  norm=norm if i != num_layers - 1 else "none",
                  dilation=dilation[i],
-                 dropout=dropout) for i in range(num_layers)
+                 dropout=dropout, 
+                 for_streaming=for_streaming) for i in range(num_layers)
         ])
         self.residual = residual
 

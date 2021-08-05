@@ -139,4 +139,6 @@ def test_freq_dccrn(num_spks, cplx):
 
 
 if __name__ == "__main__":
-    test_freq_xfmr("xfmr", "abs")
+    # test_freq_xfmr("xfmr", "abs")
+    # test_freq_rnn("gru", "sigmoid")
+    test_freq_dfsmn(1)
