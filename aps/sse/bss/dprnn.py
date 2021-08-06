@@ -11,7 +11,7 @@ from typing import Optional, List, Union
 
 from aps.transform.asr import TFTransposeTransform
 from aps.sse.bss.tcn import normalize_layer
-from aps.sse.base import SseBase, MaskNonLinear, tf_masking
+from aps.sse.base import SSEBase, MaskNonLinear, tf_masking
 from aps.libs import ApsRegisters
 
 
@@ -116,7 +116,7 @@ class DPRNN(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@time_dprnn")
-class TimeDPRNN(SseBase):
+class TimeDPRNN(SSEBase):
     """
     Time domain DP (dual-path) RNN
     """
@@ -192,7 +192,7 @@ class TimeDPRNN(SseBase):
 
 
 @ApsRegisters.sse.register("sse@freq_dprnn")
-class FreqDPRNN(SseBase):
+class FreqDPRNN(SSEBase):
     """
     Frequency domain DP (dual-path) RNN
     """

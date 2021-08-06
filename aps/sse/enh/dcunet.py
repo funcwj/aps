@@ -8,7 +8,7 @@ import torch as th
 import torch.nn as nn
 
 from typing import Tuple, List, Union, Optional
-from aps.sse.base import SseBase, MaskNonLinear
+from aps.sse.base import SSEBase, MaskNonLinear
 from aps.libs import ApsRegisters
 from aps.const import EPSILON
 
@@ -275,7 +275,7 @@ class Decoder(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@dcunet")
-class DCUNet(SseBase):
+class DCUNet(SSEBase):
     """
     Real or Complex UNet for Speech Enhancement
 

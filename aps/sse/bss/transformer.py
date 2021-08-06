@@ -8,13 +8,13 @@ import torch.nn as nn
 
 from typing import Optional, List, Union, Dict
 from aps.asr.transformer.encoder import TransformerEncoder
-from aps.sse.base import SseBase, MaskNonLinear, tf_masking
+from aps.sse.base import SSEBase, MaskNonLinear, tf_masking
 from aps.transform.asr import TFTransposeTransform
 from aps.libs import ApsRegisters
 
 
 @ApsRegisters.sse.register("sse@freq_xfmr")
-class FreqXfmr(SseBase):
+class FreqXfmr(SSEBase):
     """
     Frequency domain Transformer based model
     """

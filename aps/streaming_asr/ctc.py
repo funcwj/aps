@@ -130,6 +130,14 @@ class CtcASR(StreamingASREncoder):
                                                   enc_proj=-1,
                                                   enc_kwargs=enc_kwargs)
 
+    @th.jit.export
+    def step(self, chunk: th.Tensor) -> th.Tensor:
+        """
+        Make one processing step
+        """
+        return self.encoder.step(chunk)
+
+    @th.jit.ignore
     def forward(self, x_pad: th.Tensor, x_len: NoneOrTensor) -> AMForwardType:
         """
         Args:

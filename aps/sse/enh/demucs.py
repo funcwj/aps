@@ -11,7 +11,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from aps.sse.base import SseBase
+from aps.sse.base import SSEBase
 from aps.libs import ApsRegisters
 from aps.const import TORCH_VERSION, EPSILON
 
@@ -153,7 +153,7 @@ class Decoder(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@demucs")
-class DEMUCS(SseBase):
+class DEMUCS(SSEBase):
     """
     Reference:
         Defossez A, Synnaeve G, Adi Y. Real time speech enhancement in the waveform domain[J].

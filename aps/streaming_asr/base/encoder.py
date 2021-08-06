@@ -4,7 +4,6 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import torch as th
-import torch.nn as nn
 import torch.nn.functional as tf
 
 from aps.asr.base.encoder import PyTorchRNNEncoder, Conv1dEncoder, Conv2dEncoder, FSMNEncoder

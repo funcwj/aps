@@ -8,7 +8,7 @@ import torch.nn as nn
 
 from typing import Optional, List, Union, Tuple
 from aps.sse.bss.dccrn import LSTMWrapper, parse_1dstr, parse_2dstr
-from aps.sse.base import SseBase, MaskNonLinear
+from aps.sse.base import SSEBase, MaskNonLinear
 from aps.libs import ApsRegisters
 """
 UNet used in Wang's paper
@@ -318,7 +318,7 @@ class Decoder(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@dense_unet")
-class DenseUnet(SseBase):
+class DenseUnet(SSEBase):
     """
     Boosted Unet proposed by Wang
     """

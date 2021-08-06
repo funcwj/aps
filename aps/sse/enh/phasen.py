@@ -9,7 +9,7 @@ import torch.nn.functional as tf
 
 from typing import Optional, Tuple
 from aps.const import EPSILON
-from aps.sse.base import SseBase
+from aps.sse.base import SSEBase
 from aps.libs import ApsRegisters
 
 batchnorm_non_linear = {
@@ -217,7 +217,7 @@ class TSBlock(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@phasen")
-class Phasen(SseBase):
+class Phasen(SSEBase):
     """
     PHASEN: A Phase-and-Harmonics-Aware Speech Enhancement Network
     """

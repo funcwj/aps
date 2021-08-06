@@ -5,19 +5,22 @@
 
 import torch as th
 import torch.nn as nn
+import torch.nn.functional as tf
 
-from aps.asr.base.encoder import FSMNEncoder
+from typing import Union, List, Optional
+from aps.rt_sse.base import RealTimeSSEBase
+from aps.sse.base import tf_masking, MaskNonLinear
 from aps.transform.asr import TFTransposeTransform
-from aps.sse.base import SSEBase, MaskNonLinear, tf_masking
+from aps.streaming_asr.base.encoder import StreamingFSMNEncoder
 from aps.libs import ApsRegisters
-from typing import Optional, Union, List
 
 
-@ApsRegisters.sse.register("sse@dfsmn")
-class DFSMN(SSEBase):
+@ApsRegisters.sse.register("rt_sse@dfsmn")
+class DFSMN(RealTimeSSEBase):
     """
     Uses Deep FSMN for speech enhancement/separation
     """
+    FSMNParam = Union[List[int], int]
 
     def __init__(self,
                  enh_transform: Optional[nn.Module] = None,
@@ -28,29 +31,26 @@ class DFSMN(SSEBase):
                  project: int = 512,
                  dropout: float = 0.0,
                  residual: bool = True,
-                 lctx: int = 3,
-                 rctx: int = 3,
+                 lctx: FSMNParam = 3,
+                 rctx: FSMNParam = 3,
                  norm: str = "BN",
-                 dilation: Union[List[int], int] = 1,
                  cplx_mask: bool = True,
                  non_linear: str = "relu",
                  training_mode: str = "freq"):
         super(DFSMN, self).__init__(enh_transform, training_mode=training_mode)
         assert enh_transform is not None
-        self.dfsmn = FSMNEncoder(num_bins,
-                                 num_bins * num_branchs *
-                                 (2 if cplx_mask else 1),
-                                 dim=dim,
-                                 norm=norm,
-                                 project=project,
-                                 dropout=dropout,
-                                 num_layers=num_layers,
-                                 residual=residual,
-                                 lctx=lctx,
-                                 rctx=rctx,
-                                 dilation=dilation)
+        self.dfsmn = StreamingFSMNEncoder(num_bins,
+                                          num_bins * num_branchs *
+                                          (2 if cplx_mask else 1),
+                                          dim=dim,
+                                          norm=norm,
+                                          project=project,
+                                          dropout=dropout,
+                                          num_layers=num_layers,
+                                          residual=residual,
+                                          lctx=lctx,
+                                          rctx=rctx)
         if cplx_mask:
-            # no activation for complex mask
             self.masks = TFTransposeTransform()
         else:
             self.masks = nn.Sequential(
@@ -59,11 +59,17 @@ class DFSMN(SSEBase):
         self.num_branchs = num_branchs
         self.cplx_mask = cplx_mask
 
+        def context(num_layers, ctx):
+            return num_layers * ctx if isinstance(ctx, int) else sum(ctx)
+
+        self.lctx = context(num_layers, lctx)
+        self.rctx = context(num_layers, rctx)
+
     def _tf_mask(self, feats: th.Tensor, num_branchs: int) -> List[th.Tensor]:
         """
         TF mask estimation from given features
         """
-        proj, _ = self.dfsmn(feats, None)
+        proj = self.dfsmn(feats, None)[0]
         # N x S*F x T
         masks = self.masks(proj)
         # [N x F x T, ...]
@@ -76,7 +82,10 @@ class DFSMN(SSEBase):
         """
         # stft: N x F x T x 2
         stft, _ = self.enh_transform.encode(mix, None)
+        # N x T x F
         feats = self.enh_transform(stft)
+        # N x (T+L+R) x F
+        feats = tf.pad(feats, (0, 0, self.lctx, self.rctx), "constant", 0)
         # [N x F x T, ...]
         masks = self._tf_mask(feats, self.num_branchs)
         # post processing
@@ -116,14 +125,14 @@ class DFSMN(SSEBase):
         return self._infer(mix, self.training_mode)
 
     @th.jit.export
-    def mask_predict(self, feats: th.Tensor) -> th.Tensor:
+    def step(self, chunk: th.Tensor) -> th.Tensor:
         """
-        Args:
-            feats (Tensor): noisy feature, N x T x F
-        Return:
-            masks (Tensor): masks of each speaker, N x T x F
+        Processing one step
         """
-        masks = self._tf_mask(feats, self.num_branchs)
+        # N x S*F x T
+        masks = self.masks(self.dfsmn.step(chunk))
+        # [N x F x T, ...]
+        masks = th.chunk(masks, self.num_branchs, 1)
         # S x N x F x T
         masks = th.stack(masks)
         return masks[0] if self.num_branchs == 1 else masks

@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Optional, Union, List
-from aps.sse.base import SseBase, MaskNonLinear, tf_masking
+from aps.sse.base import SSEBase, MaskNonLinear, tf_masking
 from aps.transform.enh import TFTransposeTransform
 from aps.libs import ApsRegisters
 
@@ -227,7 +227,7 @@ class Conv1dRepeat(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@time_tcn")
-class TimeConvTasNet(SseBase):
+class TimeConvTasNet(SSEBase):
     """
     Reference:
         1) Y. Luo, N. Mesgarani. Conv-tasnet: Surpassing Ideal Time–frequency Magnitude
@@ -359,7 +359,7 @@ class TimeConvTasNet(SseBase):
 
 
 @ApsRegisters.sse.register("sse@freq_tcn")
-class FreqConvTasNet(SseBase):
+class FreqConvTasNet(SSEBase):
     """
     Frequency domain ConvTasNet
     """

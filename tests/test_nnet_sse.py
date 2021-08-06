@@ -10,12 +10,12 @@ from aps.libs import aps_sse_nnet
 from aps.transform import EnhTransform
 
 
-@pytest.mark.parametrize("num_spks,nonlinear", [
+@pytest.mark.parametrize("num_spks,non_linear", [
     pytest.param(1, "sigmoid"),
     pytest.param(2, "softmax"),
     pytest.param(2, "relu")
 ])
-def test_base_rnn(num_spks, nonlinear):
+def test_base_rnn(num_spks, non_linear):
     nnet_cls = aps_sse_nnet("sse@base_rnn")
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
@@ -27,7 +27,7 @@ def test_base_rnn(num_spks, nonlinear):
                         num_layers=2,
                         hidden=512,
                         num_spks=num_spks,
-                        output_nonlinear=nonlinear)
+                        mask_non_linear=non_linear)
     inp = th.rand(2, 64000)
     x = base_rnn(inp)
     if num_spks > 1:

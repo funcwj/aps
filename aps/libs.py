@@ -83,12 +83,13 @@ class ApsModules(object):
         "se.config", "lm.utt", "lm.bptt"
     ]
     asr = Module("aps.asr", asr_submodules)
-    streaming_asr = Module("aps.streaming_asr", ["ctc"])
     sse = Module("aps.sse", sse_submodules)
     task = Module("aps.task", ["asr", "sse", "ml", "kd"])
     loader = Module("aps.loader", loader_submodules)
     trainer = Module("aps.trainer", ["ddp", "hvd", "apex"])
     transform = Module("aps.transform", ["asr", "enh"])
+    streaming_asr = Module("aps.streaming_asr", ["ctc"])
+    rt_sse = Module("aps.rt_sse", ["enh.dfsmn"])
 
 
 def dynamic_importlib(sstr: str) -> Any:
@@ -168,6 +169,7 @@ def aps_sse_nnet(nnet: str) -> nn.Module:
     Return SSE networks supported by aps
     """
     ApsModules.sse.import_all()
+    ApsModules.rt_sse.import_all()
     return aps_specific_nnet(nnet, ApsRegisters.sse)
 
 

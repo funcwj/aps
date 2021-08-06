@@ -102,7 +102,7 @@ class TransformerEncoder(nn.Module):
                                inj_pose=inj_pose,
                                src_mask=src_mask,
                                src_key_padding_mask=src_pad_mask)
-        if self.outp:
+        if self.outp is not None:
             enc_out = self.outp(enc_out)
         # N x Ti x D
         return enc_out.transpose(0, 1), inp_len

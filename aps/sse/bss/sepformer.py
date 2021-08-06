@@ -7,7 +7,7 @@ import torch.nn.functional as tf
 
 from aps.transform.asr import TFTransposeTransform
 from aps.asr.transformer.encoder import TransformerEncoder
-from aps.sse.base import SseBase, MaskNonLinear, tf_masking
+from aps.sse.base import SSEBase, MaskNonLinear, tf_masking
 from aps.sse.bss.tcn import normalize_layer
 from aps.libs import ApsRegisters
 
@@ -112,7 +112,7 @@ class SepFormer(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@time_sepformer")
-class TimeSeqFormer(SseBase):
+class TimeSeqFormer(SSEBase):
     """
     SeqFormer network in time domain
     """
@@ -185,7 +185,7 @@ class TimeSeqFormer(SseBase):
 
 
 @ApsRegisters.sse.register("sse@freq_sepformer")
-class FreqSeqFormer(SseBase):
+class FreqSeqFormer(SSEBase):
     """
     SeqFormer network in frequency domain
     """

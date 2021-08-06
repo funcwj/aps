@@ -59,6 +59,12 @@ class ConcatEncoder(nn.ModuleList):
     def __init__(self, enc_list: List[nn.Module]) -> None:
         super(ConcatEncoder, self).__init__(enc_list)
 
+    @th.jit.export
+    def step(self, chunk: th.Tensor) -> th.Tensor:
+        for encoder in self._modules.values():
+            chunk = encoder.step(chunk)
+        return chunk
+
     def forward(self, inp: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> EncRetType:
         for encoder in self._modules.values():

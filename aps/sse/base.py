@@ -60,7 +60,7 @@ supported_nonlinear = {
 }
 
 
-class SseBase(nn.Module):
+class SSEBase(nn.Module):
     """
     The base class for speech separation & enhancement models
 
@@ -72,7 +72,7 @@ class SseBase(nn.Module):
     def __init__(self,
                  transform: Optional[nn.Module],
                  training_mode: str = "freq"):
-        super(SseBase, self).__init__()
+        super(SSEBase, self).__init__()
         assert training_mode in ["freq", "time"]
         self.enh_transform = transform
         self.training_mode = training_mode
@@ -101,7 +101,7 @@ class SseBase(nn.Module):
         Return:
             Tensor: S
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
 
 class MaskNonLinear(nn.Module):

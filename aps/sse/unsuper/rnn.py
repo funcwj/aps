@@ -9,7 +9,7 @@ import torch.nn as nn
 
 from typing import Union, Optional
 from aps.asr.base.encoder import PyTorchRNNEncoder
-from aps.sse.base import SseBase
+from aps.sse.base import SSEBase
 from aps.const import EPSILON
 from aps.libs import ApsRegisters
 from aps.cplx import ComplexTensor
@@ -85,7 +85,7 @@ def permu_aligner(masks: np.ndarray, transpose: bool = False) -> np.ndarray:
 
 
 @ApsRegisters.sse.register("sse@rnn_enh_ml")
-class RNNEnhML(SseBase):
+class RNNEnhML(SSEBase):
     """
     A recurrent network example for unsupervised training
     """

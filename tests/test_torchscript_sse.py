@@ -42,7 +42,7 @@ def test_freq_rnn(rnn, non_linear):
                            num_layers=2,
                            hidden=256,
                            bidirectional=True,
-                           output_nonlinear=non_linear)
+                           mask_non_linear=non_linear)
     scriped_and_check(export_nnet)
 
 
@@ -139,6 +139,6 @@ def test_freq_dccrn(num_spks, cplx):
 
 
 if __name__ == "__main__":
-    # test_freq_xfmr("xfmr", "abs")
+    test_freq_xfmr("xfmr", "abs")
     # test_freq_rnn("gru", "sigmoid")
-    test_freq_dfsmn(1)
+    # test_freq_dfsmn(1)
