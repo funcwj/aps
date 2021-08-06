@@ -330,10 +330,8 @@ class FSMN(nn.Module):
         else:
             self.out_norm = nn.Sequential(Normalize1d(norm, out_features),
                                           nn.ReLU(), nn.Dropout(p=dropout))
-        if for_streaming:
-            self.lctx, self.rctx = 0, 0
-        else:
-            self.lctx, self.rctx = lctx, rctx
+        self.lctx, self.rctx = lctx, rctx
+        self.streaming = for_streaming
 
     def forward(
             self,
@@ -352,11 +350,21 @@ class FSMN(nn.Module):
         # N x T x P => N x P x T => N x T x P
         proj = proj.transpose(1, 2)
         # pad context
-        if self.lctx + self.rctx > 0:
+        if not self.streaming:
+            # NOTE: ctx.shape[1] == proj.shape[1]
             proj_pad = tf.pad(proj, (self.lctx, self.rctx), "constant", 0.0)
             ctx = self.ctx_conv(proj_pad)
         else:
+            # NOTE: ctx.shape[1] != proj.shape[1]
             ctx = self.ctx_conv(proj)
+            if self.rctx > 0:
+                proj = proj[..., self.lctx:-self.rctx]
+                if memory is not None:
+                    memory = memory[:, self.lctx:-self.rctx]
+            else:
+                proj = proj[..., self.lctx:]
+                if memory is not None:
+                    memory = memory[:, self.lctx:]
         # add context
         proj = proj + ctx
         proj = proj.transpose(1, 2)

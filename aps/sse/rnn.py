@@ -33,8 +33,8 @@ class RNN(PyTorchRNNEncoder):
         if self.proj is not None:
             inp = tf.relu(self.proj(inp))
         out, hx = self.rnns(inp, hx=hx)
-        out = self.outp(out)
-        # pass through non-linear
+        if self.outp is not None:
+            out = self.outp(out)
         if self.non_linear is not None:
             out = self.non_linear(out)
         return out, hx
@@ -62,8 +62,8 @@ class LSTM(PyTorchRNNEncoder):
         if self.proj is not None:
             inp = tf.relu(self.proj(inp))
         out, hx = self.rnns(inp, hx=hx)
-        out = self.outp(out)
-        # pass through non-linear
+        if self.outp is not None:
+            out = self.outp(out)
         if self.non_linear is not None:
             out = self.non_linear(out)
         return out, hx

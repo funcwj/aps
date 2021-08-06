@@ -162,9 +162,10 @@ class DdpTrainer(Trainer):
             self.reporter.update(stats)
             # schedule lr if needed
             self.lr_scheduler_step(None, end_at="step")
+            return True
         else:
             self.reporter.log(f"Invalid gradient norm {norm:.3f}, skip...")
-        return True
+            return False
 
     def model_states(self) -> Dict:
         """

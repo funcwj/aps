@@ -147,7 +147,6 @@ class CtcASR(ASREncoderBase):
                  ead: bool = False,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "pytorch_rnn",
-                 enc_proj: int = -1,
                  enc_kwargs: Optional[Dict] = None) -> None:
         super(CtcASR, self).__init__(input_size,
                                      vocab_size,
@@ -155,7 +154,7 @@ class CtcASR(ASREncoderBase):
                                      ead=ead,
                                      asr_transform=asr_transform,
                                      enc_type=enc_type,
-                                     enc_proj=enc_proj,
+                                     enc_proj=-1,
                                      enc_kwargs=enc_kwargs)
 
     def forward(self, x_pad: th.Tensor, x_len: NoneOrTensor) -> AMForwardType:

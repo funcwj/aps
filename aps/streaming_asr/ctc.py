@@ -16,30 +16,34 @@ from aps.libs import ApsRegisters
 from typing import Optional, Dict, List
 
 
-@ApsRegisters.asr.register("streaming_asr@ctc")
-class CtcASR(nn.Module):
+class StreamingASREncoder(nn.Module):
     """
-    Streaming ASR encoder trained with CTC loss
+    Streaming ASR encoder class
     """
 
     def __init__(self,
                  input_size: int,
                  vocab_size: int,
+                 ctc: bool = False,
+                 ead: bool = False,
                  lctx: int = -1,
                  rctx: int = -1,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "pytorch_rnn",
                  enc_proj: int = -1,
                  enc_kwargs: Optional[Dict] = None) -> None:
-        super(CtcASR, self).__init__()
+        super(StreamingASREncoder, self).__init__()
+        assert ctc or ead
+        ctc_only = ctc and not ead
         self.lctx = lctx
         self.rctx = rctx
         self.vocab_size = vocab_size
         self.asr_transform = asr_transform
-        self.encoder = encoder_instance(
-            enc_type, input_size, enc_proj if enc_proj > 0 else vocab_size,
-            enc_kwargs, StreamingEncoder)
-        self.ctc = nn.Linear(enc_proj, vocab_size) if enc_proj > 0 else None
+        self.encoder = encoder_instance(enc_type, input_size,
+                                        vocab_size if ctc_only else enc_proj,
+                                        enc_kwargs, StreamingEncoder)
+        # for hybrid ctc/aed, we add CTC branch
+        self.ctc = nn.Linear(enc_proj, vocab_size) if ead and ctc else None
 
     def _decoding_prep(self,
                        x: th.Tensor,
@@ -97,6 +101,34 @@ class CtcASR(nn.Module):
         if self.ctc:
             enc_ctc = self.ctc(enc_out)
         return enc_out, enc_ctc, enc_len
+
+
+@ApsRegisters.asr.register("streaming_asr@ctc")
+class CtcASR(StreamingASREncoder):
+    """
+    Streaming ASR (encoder + CTC)
+    """
+
+    def __init__(self,
+                 input_size: int,
+                 vocab_size: int,
+                 ctc: bool = False,
+                 ead: bool = False,
+                 lctx: int = -1,
+                 rctx: int = -1,
+                 asr_transform: Optional[nn.Module] = None,
+                 enc_type: str = "pytorch_rnn",
+                 enc_kwargs: Optional[Dict] = None) -> None:
+        super(StreamingASREncoder, self).__init__(input_size,
+                                                  vocab_size,
+                                                  ctc=True,
+                                                  ead=False,
+                                                  lctx=lctx,
+                                                  rctx=rctx,
+                                                  asr_transform=asr_transform,
+                                                  enc_type=enc_type,
+                                                  enc_proj=-1,
+                                                  enc_kwargs=enc_kwargs)
 
     def forward(self, x_pad: th.Tensor, x_len: NoneOrTensor) -> AMForwardType:
         """

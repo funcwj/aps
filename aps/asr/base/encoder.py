@@ -78,8 +78,63 @@ class EncoderBase(nn.Module):
         self.out_features = out_features
 
 
+class RNNEncoderBase(EncoderBase):
+    """
+    Base class for RNN based encoder
+    """
+
+    def __init__(self,
+                 inp_features: int,
+                 out_features: int,
+                 rnns: nn.Module,
+                 input_proj: int = -1,
+                 hidden: int = -1,
+                 bidirectional: bool = False,
+                 non_linear: str = "none") -> None:
+        super(RNNEncoderBase, self).__init__(inp_features, out_features)
+        if non_linear not in rnn_output_nonlinear:
+            raise ValueError(
+                f"Unsupported output non-linear function: {non_linear}")
+        if input_proj > 0:
+            self.proj = nn.Linear(inp_features, input_proj)
+        else:
+            self.proj = None
+        self.rnns = rnns
+        factor = 2 if bidirectional else 1
+        if out_features > 0:
+            self.outp = nn.Linear(hidden * factor, out_features)
+            self.non_linear = rnn_output_nonlinear[non_linear]
+        else:
+            self.outp = None
+            self.non_linear = None
+            self.out_features = hidden * factor
+
+    def _forward(self, inp: th.Tensor,
+                 inp_len: Optional[th.Tensor]) -> th.Tensor:
+        raise NotImplementedError()
+
+    def forward(self, inp: th.Tensor,
+                inp_len: Optional[th.Tensor]) -> EncRetType:
+        """
+        Args:
+            inp (Tensor): N x T x F
+            inp_len (Tensor): N x T
+        Return:
+            out (Tensor): N x T x F
+            inp_len (Tensor): N x T
+        """
+        if self.proj is not None:
+            inp = tf.relu(self.proj(inp))
+        out = self._forward(inp, inp_len)
+        if self.outp is not None:
+            out = self.outp(out)
+        if self.non_linear is not None:
+            out = self.non_linear(out)
+        return out, inp_len
+
+
 @BaseEncoder.register("pytorch_rnn")
-class PyTorchRNNEncoder(EncoderBase):
+class PyTorchRNNEncoder(RNNEncoderBase):
     """
     PyTorch's RNN encoder: (Linear) -> RNN -> (Linear) -> (NonLinear)
     """
@@ -92,63 +147,39 @@ class PyTorchRNNEncoder(EncoderBase):
                  num_layers: int = 3,
                  hidden: int = 512,
                  hidden_proj: int = -1,
-                 dropout: int = 0.2,
+                 dropout: float = 0.2,
                  bidirectional: bool = False,
                  non_linear: str = "none"):
-        super(PyTorchRNNEncoder, self).__init__(inp_features, out_features)
-        if non_linear not in rnn_output_nonlinear:
-            raise ValueError(
-                f"Unsupported output non-linear function: {non_linear}")
-        if input_proj > 0:
-            self.proj = nn.Linear(inp_features, input_proj)
-        else:
-            self.proj = None
-        self.rnns = PyTorchRNN(rnn,
+        torch_rnn = PyTorchRNN(rnn,
                                input_proj if input_proj > 0 else inp_features,
                                hidden,
                                num_layers=num_layers,
                                dropout=dropout,
                                proj_size=hidden_proj,
                                bidirectional=bidirectional)
-        hidden_size = hidden_proj if hidden_proj > 0 else hidden
-        factor = 2 if bidirectional else 1
-        if out_features > 0:
-            self.outp = nn.Linear(hidden_size * factor, out_features)
-            self.non_linear = rnn_output_nonlinear[non_linear]
-        else:
-            self.outp = None
-            self.non_linear = None
-            self.out_features = hidden_size * factor
+        super(PyTorchRNNEncoder,
+              self).__init__(inp_features,
+                             out_features,
+                             torch_rnn,
+                             input_proj=input_proj,
+                             hidden=hidden_proj if hidden_proj > 0 else hidden,
+                             bidirectional=bidirectional,
+                             non_linear=non_linear)
 
     def flat(self):
         self.rnns.flatten_parameters()
 
-    def forward(self, inp: th.Tensor,
-                inp_len: Optional[th.Tensor]) -> EncRetType:
-        """
-        Args:
-            inp (Tensor): N x T x F
-            inp_len (Tensor): N x T
-        Return:
-            out (Tensor): N x T x F
-            inp_len (Tensor): N x T
-        """
-        if self.proj is not None:
-            inp = tf.relu(self.proj(inp))
-        out = var_len_rnn_forward(self.rnns,
-                                  inp,
-                                  inp_len=inp_len,
-                                  enforce_sorted=False,
-                                  add_forward_backward=False)
-        if self.outp is not None:
-            out = self.outp(out)
-        if self.non_linear is not None:
-            out = self.non_linear(out)
-        return out, inp_len
+    def _forward(self, inp: th.Tensor,
+                 inp_len: Optional[th.Tensor]) -> th.Tensor:
+        return var_len_rnn_forward(self.rnns,
+                                   inp,
+                                   inp_len=inp_len,
+                                   enforce_sorted=False,
+                                   add_forward_backward=False)
 
 
 @BaseEncoder.register("jit_lstm")
-class JitLSTMEncoder(EncoderBase):
+class JitLSTMEncoder(RNNEncoderBase):
     """
     LSTM encoder (see aps.asr.base.jit): (Linear) -> JitLSTM -> (Linear) -> (NonLinear)
     """
@@ -160,53 +191,29 @@ class JitLSTMEncoder(EncoderBase):
                  num_layers: int = 3,
                  hidden: int = 512,
                  hidden_proj: int = None,
-                 dropout: int = 0.2,
+                 dropout: float = 0.2,
                  bidirectional: bool = False,
-                 layer_norm: bool = False,
+                 use_ln: bool = False,
                  non_linear: str = "none"):
-        super(JitLSTMEncoder, self).__init__(inp_features, out_features)
-        if non_linear not in rnn_output_nonlinear:
-            raise ValueError(
-                f"Unsupported output non-linear function: {non_linear}")
-        if input_proj > 0:
-            self.proj = nn.Linear(inp_features, input_proj)
-        else:
-            self.proj = None
-        self.rnns = LSTM(input_proj if input_proj > 0 else inp_features,
-                         hidden,
-                         dropout=dropout,
-                         project=hidden_proj,
-                         num_layers=num_layers,
-                         layer_norm=layer_norm,
-                         bidirectional=bidirectional)
-        hidden_size = hidden_proj if hidden_proj > 0 else hidden
-        factor = 2 if bidirectional else 1
-        if out_features > 0:
-            self.outp = nn.Linear(hidden_size * factor, out_features)
-            self.non_linear = rnn_output_nonlinear[non_linear]
-        else:
-            self.outp = None
-            self.non_linear = None
-            self.out_features = hidden_size * factor
+        jit_lstm = LSTM(input_proj if input_proj > 0 else inp_features,
+                        hidden,
+                        dropout=dropout,
+                        project=hidden_proj,
+                        num_layers=num_layers,
+                        layer_norm=use_ln,
+                        bidirectional=bidirectional)
+        super(JitLSTMEncoder,
+              self).__init__(inp_features,
+                             out_features,
+                             jit_lstm,
+                             input_proj=input_proj,
+                             hidden=hidden_proj if hidden_proj > 0 else hidden,
+                             bidirectional=bidirectional,
+                             non_linear=non_linear)
 
-    def forward(self, inp: th.Tensor,
-                inp_len: Optional[th.Tensor]) -> EncRetType:
-        """
-        Args:
-            inp (Tensor): N x T x F
-            inp_len (Tensor): N x T
-        Return:
-            out (Tensor): N x T x F
-            inp_len (Tensor): N x T
-        """
-        if self.proj is not None:
-            inp = tf.relu(self.proj(inp))
-        out = self.rnns(inp)[0]
-        if self.outp is not None:
-            out = self.outp(out)
-        if self.non_linear is not None:
-            out = self.non_linear(out)
-        return out, inp_len
+    def _forward(self, inp: th.Tensor,
+                 inp_len: Optional[th.Tensor]) -> th.Tensor:
+        return self.rnns(inp)[0]
 
 
 @BaseEncoder.register("variant_rnn")
@@ -268,14 +275,13 @@ class VariantRNNEncoder(EncoderBase):
             for i in range(num_layers)
         ])
 
-    def _subsample_concat(self, inp: th.Tensor,
-                          inp_len: Optional[th.Tensor]) -> EncRetType:
+    def _subsampling(self, inp: th.Tensor,
+                     inp_len: Optional[th.Tensor]) -> EncRetType:
         """
         Do subsampling for RNN output
         """
         if inp.shape[1] % 2:
             inp = inp[:, :-1]
-        # concat
         inp = th.cat([inp[:, ::2], inp[:, 1::2]], -1)
         return inp, None if inp_len is None else inp_len // 2
 
@@ -283,15 +289,15 @@ class VariantRNNEncoder(EncoderBase):
                 inp_len: Optional[th.Tensor]) -> EncRetType:
         """
         Args:
-            inp (Tensor): (N) x Ti x F
-            inp_len (Tensor or None): (N) x Ti
+            inp (Tensor): N x Ti x F
+            inp_len (Tensor or None): N x Ti
         Return:
-            out_pad (Tensor): (N) x To x F
-            out_len (Tensor or None): (N) x To
+            out_pad (Tensor): N x To x F
+            out_len (Tensor or None): N x To
         """
         for i, layer in enumerate(self.enc_layers):
             if i != 0 and self.pyramid:
-                inp, inp_len = self._subsample_concat(inp, inp_len)
+                inp, inp_len = self._subsampling(inp, inp_len)
             inp = layer(inp, inp_len)
         return inp, inp_len
 
@@ -419,13 +425,8 @@ class Conv2dEncoder(EncoderBase):
             # N x C x T x F
             inp = conv2d(inp)
             if inp_len is not None:
-                # time axis
                 inp_len = conv2d.compute_outp_dim(inp_len, 0)
-        N, C, T, F = inp.shape
-        if C * F != self.out_features:
-            raise ValueError(
-                f"Got out_features = {C * F}, but self.out_features " +
-                f"= {self.out_features} ")
+        N, _, T, _ = inp.shape
         # N x T x C x F
         inp = inp.transpose(1, 2).contiguous()
         out = inp.view(N, T, -1)
@@ -439,6 +440,7 @@ class FSMNEncoder(EncoderBase):
     """
     Stack of FSMN layers, with optional residual connection
     """
+    FSMNParam = Union[List[int], int]
 
     def __init__(self,
                  inp_features: int,
@@ -447,27 +449,34 @@ class FSMNEncoder(EncoderBase):
                  project: int = 512,
                  num_layers: int = 4,
                  residual: bool = True,
-                 lctx: int = 3,
-                 rctx: int = 3,
+                 lctx: FSMNParam = 3,
+                 rctx: FSMNParam = 3,
                  norm: str = "BN",
-                 dilation: Union[List[int], int] = 1,
+                 dilation: FSMNParam = 1,
                  dropout: float = 0.0,
                  for_streaming: bool = False):
         super(FSMNEncoder, self).__init__(inp_features, out_features)
-        if isinstance(dilation, int):
-            dilation = [dilation] * num_layers
+
+        def int2list(param, repeat):
+            return [param] * repeat if isinstance(param, int) else param
+
+        lctx = int2list(lctx, num_layers)
+        rctx = int2list(rctx, num_layers)
+        dilation = int2list(dilation, num_layers)
+
         self.enc_layers = nn.ModuleList([
             FSMN(inp_features if i == 0 else dim,
                  dim if i != num_layers - 1 else out_features,
                  project,
-                 lctx=lctx,
-                 rctx=rctx,
+                 lctx=lctx[i],
+                 rctx=rctx[i],
                  norm=norm if i != num_layers - 1 else "none",
                  dilation=dilation[i],
                  dropout=dropout,
                  for_streaming=for_streaming) for i in range(num_layers)
         ])
-        self.residual = residual
+        self.res = residual
+        self.ctx = [l + r for l, r in zip(lctx, rctx)]
 
     def forward(self, inp: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> EncRetType:
@@ -481,7 +490,7 @@ class FSMNEncoder(EncoderBase):
         """
         memory = th.jit.annotate(Optional[th.Tensor], None)
         for fsmn in self.enc_layers:
-            if self.residual:
+            if self.res:
                 inp, memory = fsmn(inp, memory=memory)
             else:
                 inp, _ = fsmn(inp, memory=memory)

@@ -6,7 +6,9 @@
 import torch as th
 import torch.nn as nn
 
-from typing import List, Tuple
+from typing import List, Union, Tuple
+
+ConvParam = Union[int, List[int]]
 
 
 class ConvParam(object):
@@ -32,13 +34,23 @@ class ConvParam(object):
         return (self.lctx * self.stride_factor, self.rctx * self.stride_factor)
 
 
-def compute_conv_context(kernel: List[int], stride: List[int],
-                         causal: List[int],
-                         dilation: List[int]) -> Tuple[int, int, int]:
+def compute_conv_context(num_layers: int,
+                         kernel: ConvParam,
+                         stride: ConvParam,
+                         causal: ConvParam = 0,
+                         dilation: ConvParam = 1) -> Tuple[int, int, int]:
     """
     Return the left context & right context & stride size of the convolutions on time axis
     """
-    num_layers = len(kernel)
+
+    def int2list(param, repeat):
+        return [param] * repeat if isinstance(param, int) else param
+
+    kernel = int2list(kernel, num_layers)
+    stride = int2list(stride, num_layers)
+    causal = int2list(causal, num_layers)
+    dilation = int2list(dilation, num_layers)
+
     conv_param = []
     stride_factor = 1
     for i in range(num_layers):

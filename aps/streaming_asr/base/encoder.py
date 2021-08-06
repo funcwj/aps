@@ -8,8 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from aps.asr.base.encoder import PyTorchRNNEncoder, Conv1dEncoder, Conv2dEncoder, FSMNEncoder
-from aps.asr.base.encoder import EncoderBase, EncRetType, rnn_output_nonlinear
-from aps.streaming_asr.base.component import PyTorchNormLSTM
+from aps.asr.base.encoder import EncRetType
 from aps.libs import Register
 
 from typing import Union, List, Tuple, Optional
@@ -22,6 +21,8 @@ class StreamingRNNEncoder(PyTorchRNNEncoder):
     """
     A streaming version of RNN encoder
     """
+    # NOTE: for LSTM only. Change to Optional[th.Tensor] for RNN/GRU
+    hx: Optional[Tuple[th.Tensor, th.Tensor]]
 
     def __init__(self,
                  inp_features: int,
@@ -31,7 +32,7 @@ class StreamingRNNEncoder(PyTorchRNNEncoder):
                  num_layers: int = 3,
                  hidden: int = 512,
                  hidden_proj: int = -1,
-                 dropout: int = 0.2,
+                 dropout: float = 0.0,
                  non_linear: str = "none"):
         super(StreamingRNNEncoder, self).__init__(inp_features,
                                                   out_features,
@@ -45,17 +46,27 @@ class StreamingRNNEncoder(PyTorchRNNEncoder):
                                                   non_linear=non_linear)
         self.reset()
 
+    @th.jit.export
     def reset(self):
         self.hx = None
 
-    def process(self, chunk: th.Tensor) -> th.Tensor:
+    @th.jit.export
+    def step(self, chunk: th.Tensor) -> th.Tensor:
         """
-        Process one chunk (for online processing)
+        Process one chunk per step (for online processing)
+        Args:
+            chunk (Tensor): N x (T) x D
+        Return:
+            chunk (Tensor): N x (T) x D
         """
+        if chunk.dim() == 2:
+            chunk = chunk[:, None]
         if self.proj is not None:
             chunk = tf.relu(self.proj(chunk))
-        chunk, self.hx = self.rnns(chunk, self.hx)
-        out = self.outp(chunk)
+        out, hx = self.rnns(chunk, self.hx)
+        self.hx = hx
+        if self.outp is not None:
+            out = self.outp(out)
         if self.non_linear is not None:
             out = self.non_linear(out)
         return out
@@ -66,15 +77,18 @@ class StreamingRNNEncoder(PyTorchRNNEncoder):
         Used for training and offline evaluation
         """
         self.reset()
-        out = self.process(inp)
+        out = self.step(inp)
         return out, inp_len
 
 
 @StreamingEncoder.register("fsmn")
 class StreamingFSMNEncoder(FSMNEncoder):
     """
-    A streaming version of FSMN encoder
+    A streaming version of FSMN encoder (stride = 1)
     """
+    FSMNParam = Union[List[int], int]
+    hc: List[th.Tensor]
+    hm: List[th.Tensor]
 
     def __init__(self,
                  inp_features: int,
@@ -82,12 +96,11 @@ class StreamingFSMNEncoder(FSMNEncoder):
                  dim: int = 1024,
                  project: int = 512,
                  num_layers: int = 4,
-                 residual: bool = True,
-                 lctx: int = 3,
-                 rctx: int = 3,
+                 lctx: FSMNParam = 3,
+                 rctx: FSMNParam = 3,
+                 residual: bool = False,
                  norm: str = "BN",
-                 dilation: Union[List[int], int] = 1,
-                 dropout: float = 0):
+                 dropout: float = 0.0):
         super(StreamingFSMNEncoder, self).__init__(inp_features,
                                                    out_features,
                                                    dim=dim,
@@ -97,82 +110,56 @@ class StreamingFSMNEncoder(FSMNEncoder):
                                                    lctx=lctx,
                                                    rctx=rctx,
                                                    norm=norm,
-                                                   dilation=dilation,
-                                                   dropout=dropout)
-
-
-@StreamingEncoder.register("pytorch_lstm_ln")
-class StreamingLSTMNormEncoder(EncoderBase):
-    """
-    A streaming version of LSTM + layer normalization encoder 
-    """
-
-    def __init__(self,
-                 inp_features: int,
-                 out_features: int,
-                 input_proj: int = -1,
-                 num_layers: int = 3,
-                 hidden: int = 512,
-                 hidden_proj: int = -1,
-                 dropout: int = 0.2,
-                 non_linear: str = "none"):
-        super(StreamingLSTMNormEncoder, self).__init__(inp_features,
-                                                       out_features)
-        if non_linear not in rnn_output_nonlinear:
-            raise ValueError(
-                f"Unsupported output non-linear function: {non_linear}")
-        if input_proj > 0:
-            self.proj = nn.Linear(inp_features, input_proj)
-            inp_features = input_proj
-        else:
-            self.proj = None
-        self.lstm = nn.ModuleList([
-            PyTorchNormLSTM(inp_features,
-                            hidden_size=hidden,
-                            proj_size=hidden_proj,
-                            non_linear="relu",
-                            dropout=dropout) for _ in range(num_layers)
-        ])
-        self.outp = nn.Linear(hidden_proj if hidden_proj > 0 else hidden,
-                              out_features)
-        self.non_linear = rnn_output_nonlinear[non_linear]
+                                                   dilation=1,
+                                                   dropout=dropout,
+                                                   for_streaming=True)
         self.reset()
 
+    @th.jit.export
     def reset(self):
-        self.hx = [None] * len(self.lstm)
+        self.hc = [th.tensor(0)]
+        self.hm = [th.tensor(0)]
+        self.init = True
 
-    def process(self, chunk: th.Tensor) -> th.Tensor:
+    @th.jit.export
+    def step(self, chunk: th.Tensor) -> th.Tensor:
         """
         Process one chunk (for online processing)
+        Args:
+            chunk (Tensor): N x (T) x D
+        Return:
+            chunk (Tensor): N x (T) x D
         """
-        if self.proj is not None:
-            chunk = tf.relu(self.proj(chunk))
+        hc, hm = [], []
+        if not self.init:
+            chunk = chunk[:, None]
 
-        hx = []
-        for i, layer in enumerate(self.lstm):
-            chunk, h = layer(chunk, hx=self.hx[i])
-            hx.append(h)
-        self.hx = hx
+        mem = th.tensor(0)
+        for i, fsmn in enumerate(self.enc_layers):
+            if not self.init:
+                chunk = th.cat([self.hc[i], chunk], 1)
+            hc.append(chunk[:, -self.ctx[i]:])
+            if self.res:
+                if i == 0:
+                    chunk, mem = fsmn(chunk)
+                else:
+                    if not self.init:
+                        mem = th.cat([self.hm[i - 1], mem], 1)
+                    hm.append(mem[:, -self.ctx[i]:])
+                    chunk, mem = fsmn(chunk, memory=mem)
+            else:
+                chunk = fsmn(chunk)[0]
 
-        out = self.outp(chunk)
-        if self.non_linear is not None:
-            out = self.non_linear(out)
-        return out
-
-    def forward(self, inp: th.Tensor,
-                inp_len: Optional[th.Tensor]) -> EncRetType:
-        """
-        Used for training and offline evaluation
-        """
-        self.reset()
-        out = self.process(inp)
-        return out, inp_len
+        self.hc = hc
+        self.hm = hm
+        self.init = False
+        return chunk
 
 
 @StreamingEncoder.register("conv1d")
 class StreamingConv1dEncoder(Conv1dEncoder):
     """
-    A streaming version of conv1d encoder
+    A streaming version of conv1d encoder (prefer stride != 1)
     """
     Conv1dParam = Union[List[int], int]
 
@@ -197,9 +184,14 @@ class StreamingConv1dEncoder(Conv1dEncoder):
                                                      dropout=dropout,
                                                      for_streaming=True)
 
-    def process(self, chunk: th.Tensor) -> th.Tensor:
+    @th.jit.export
+    def step(self, chunk: th.Tensor) -> th.Tensor:
         """
         Process one chunk (for online processing)
+        Args:
+            chunk (Tensor): N x T x D
+        Return:
+            chunk (Tensor): N x T x D
         """
         for conv1d in self.enc_layers:
             chunk = conv1d(chunk)
@@ -209,7 +201,7 @@ class StreamingConv1dEncoder(Conv1dEncoder):
 @StreamingEncoder.register("conv2d")
 class StreamingConv2dEncoder(Conv2dEncoder):
     """
-    A streaming version of conv2d encoder
+    A streaming version of conv2d encoder (prefer stride != 1)
     """
     Conv2dParam = Union[List[int], int, List[Tuple[int]]]
 
@@ -232,14 +224,21 @@ class StreamingConv2dEncoder(Conv2dEncoder):
                                                      stride=stride,
                                                      for_streaming=True)
 
-    def process(self, chunk: th.Tensor) -> th.Tensor:
+    @th.jit.export
+    def step(self, chunk: th.Tensor) -> th.Tensor:
         """
         Process one chunk (for online processing)
+        Args:
+            chunk (Tensor): N x T x D
+        Return:
+            chunk (Tensor): N x T x D
         """
         for conv2d in self.enc_layers:
             chunk = conv2d(chunk)
-        N, C, T, F = chunk.shape
-        assert C * F == self.out_features
+        N, _, T, _ = chunk.shape
         # N x C x T x F => N x T x C x F
         out = chunk.transpose(1, 2).contiguous()
-        return out.view(N, T, -1)
+        out = out.view(N, T, -1)
+        if self.outp is not None:
+            out = self.outp(out)
+        return out
