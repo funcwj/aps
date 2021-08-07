@@ -112,23 +112,23 @@ class CtcASR(StreamingASREncoder):
     def __init__(self,
                  input_size: int,
                  vocab_size: int,
-                 ctc: bool = False,
+                 ctc: bool = True,
                  ead: bool = False,
                  lctx: int = -1,
                  rctx: int = -1,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "pytorch_rnn",
                  enc_kwargs: Optional[Dict] = None) -> None:
-        super(StreamingASREncoder, self).__init__(input_size,
-                                                  vocab_size,
-                                                  ctc=True,
-                                                  ead=False,
-                                                  lctx=lctx,
-                                                  rctx=rctx,
-                                                  asr_transform=asr_transform,
-                                                  enc_type=enc_type,
-                                                  enc_proj=-1,
-                                                  enc_kwargs=enc_kwargs)
+        super(CtcASR, self).__init__(input_size,
+                                     vocab_size,
+                                     ctc=ctc,
+                                     ead=ead,
+                                     lctx=lctx,
+                                     rctx=rctx,
+                                     asr_transform=asr_transform,
+                                     enc_type=enc_type,
+                                     enc_proj=-1,
+                                     enc_kwargs=enc_kwargs)
 
     @th.jit.export
     def step(self, chunk: th.Tensor) -> th.Tensor:

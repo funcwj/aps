@@ -9,7 +9,8 @@ import librosa
 import torch as th
 
 from aps.transform.utils import forward_stft, inverse_stft
-from aps.transform.utils import STFT, StreamingSTFT, iSTFT, StreamingiSTFT
+from aps.transform.utils import STFT, iSTFT
+from aps.transform.streaming import StreamingSTFT, StreamingiSTFT
 from aps.loader import read_audio
 from aps.transform import AsrTransform, EnhTransform, FixedBeamformer, DfTransform
 from aps.transform.asr import SpeedPerturbTransform, export_jit
@@ -261,7 +262,7 @@ def debug_speed_perturb():
 
 if __name__ == "__main__":
     # debug_speed_perturb()
-    debug_visualize_feature()
+    # debug_visualize_feature()
     # test_asr_transform_jit(egs1_wav, "fbank-log-cmvn")
-    # test_streaming_stft(egs1_wav, 512, 256, "hann")
+    test_streaming_stft(egs1_wav, 512, 256, "hann")
     # test_forward_inverse_stft(egs1_wav, 512, 256, "hann", "librosa")
