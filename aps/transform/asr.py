@@ -552,26 +552,25 @@ class CmvnTransform(nn.Module):
     def jit_export(self) -> bool:
         return True
 
-    def _cmvn_per_band(self, feats: th.Tensor, axis: int = -1) -> th.Tensor:
+    def _cmvn_per_band(self, feats: th.Tensor) -> th.Tensor:
         if self.norm_mean:
-            feats = feats - th.mean(feats, axis, keepdim=True)
+            feats = feats - th.mean(feats, -1, keepdim=True)
         if self.norm_var:
             if self.norm_mean:
-                var = th.mean(feats**2, axis, keepdim=True)
+                var = th.mean(feats**2, -1, keepdim=True)
             else:
-                var = th.var(feats, axis, unbiased=False, keepdim=True)
+                var = th.var(feats, -1, unbiased=False, keepdim=True)
             feats = feats / th.sqrt(var + self.eps)
         return feats
 
-    def _cmvn_all_band(
-        self, feats: th.Tensor, axis: Tuple[int, int] = (-1, -2)) -> th.Tensor:
+    def _cmvn_all_band(self, feats: th.Tensor) -> th.Tensor:
         if self.norm_mean:
-            feats = feats - th.mean(feats, axis, keepdim=True)
+            feats = feats - th.mean(feats, (-1, -2), keepdim=True)
         if self.norm_var:
             if self.norm_mean:
-                var = th.mean(feats**2, axis, keepdim=True)
+                var = th.mean(feats**2, (-1, -2), keepdim=True)
             else:
-                var = th.var(feats, axis, unbiased=False, keepdim=True)
+                var = th.var(feats, (-1, -2), unbiased=False, keepdim=True)
             feats = feats / th.sqrt(var + self.eps)
         return feats
 
@@ -592,9 +591,9 @@ class CmvnTransform(nn.Module):
         else:
             # for th.jit.export, we have two similar function
             if self.per_band:
-                feats = self._cmvn_per_band(feats, axis=-2)
+                feats = self._cmvn_per_band(feats)
             else:
-                feats = self._cmvn_all_band(feats, axis=(-1, -2))
+                feats = self._cmvn_all_band(feats)
         return feats
 
 
