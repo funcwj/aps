@@ -197,7 +197,7 @@ class RNNMaskMvdr(nn.Module):
         self.mask_net = PyTorchRNNEncoder(enh_input_size,
                                           num_bins *
                                           2 if mask_net_noise else num_bins,
-                                          input_project=rnn_inp_proj,
+                                          input_proj=rnn_inp_proj,
                                           rnn=rnn,
                                           num_layers=num_layers,
                                           hidden=hidden_size,

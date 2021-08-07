@@ -7,11 +7,11 @@ import torch as th
 import torch.nn as nn
 
 from typing import Optional, Tuple, Dict
-from aps.asr.xfmr.impl import get_xfmr_encoder
-from aps.asr.xfmr.pose import get_xfmr_pose
-from aps.asr.xfmr.utils import prep_sub_mask
+from aps.asr.transformer.impl import get_xfmr_encoder
+from aps.asr.transformer.pose import get_xfmr_pose
+from aps.asr.transformer.utils import prep_sub_mask
 from aps.asr.base.attention import padding_mask
-from aps.asr.base.layer import OneHotEmbedding, PyTorchRNN
+from aps.asr.base.component import OneHotEmbedding, PyTorchRNN
 
 
 class LayerNormRNN(nn.Module):
@@ -28,7 +28,7 @@ class LayerNormRNN(nn.Module):
                  dropout: float = 0.,
                  bidirectional: bool = False) -> None:
         super(LayerNormRNN, self).__init__()
-        self.rn = nn.ModuleList([
+        self.rnns = nn.ModuleList([
             PyTorchRNN(mode,
                        input_size,
                        hidden_size,
@@ -38,7 +38,7 @@ class LayerNormRNN(nn.Module):
         ])
         self.dropout = nn.ModuleList(
             nn.Dropout(p=dropout) for _ in range(num_layers - 1))
-        self.ln = nn.ModuleList(
+        self.norm = nn.ModuleList(
             nn.LayerNorm(hidden_size * 2 if bidirectional else hidden_size)
             for _ in range(num_layers))
 
@@ -52,12 +52,12 @@ class LayerNormRNN(nn.Module):
             hidden (list(Tensor)): [N x ..., ]
         """
         ret_hidden = []
-        for i, rnn in enumerate(self.rn):
+        for i, rnn in enumerate(self.rnns):
             inp, hid = rnn(inp, None if hidden is None else hidden[i])
             ret_hidden.append(hid)
-            if i != len(self.rn) - 1:
+            if i != len(self.rnns) - 1:
                 inp = self.dropout[i](inp)
-            inp = self.ln[i](inp)
+            inp = self.norm[i](inp)
         return inp, ret_hidden
 
 
@@ -113,31 +113,31 @@ class PyTorchRNNDecoder(DecoderBase):
                  enc_dim: int = 512,
                  jot_dim: int = 512,
                  add_ln: bool = False,
-                 dec_rnn: str = "lstm",
-                 dec_layers: int = 3,
-                 dec_hidden: int = 512,
-                 dec_dropout: float = 0.0,
+                 rnn: str = "lstm",
+                 num_layers: int = 3,
+                 hidden: int = 512,
+                 dropout: float = 0.0,
                  onehot_embed: bool = False) -> None:
         super(PyTorchRNNDecoder, self).__init__(vocab_size,
                                                 embed_size=embed_size,
                                                 enc_dim=enc_dim,
-                                                dec_dim=dec_hidden,
+                                                dec_dim=hidden,
                                                 jot_dim=jot_dim,
                                                 onehot_embed=onehot_embed)
         # uni-dir RNNs
         if add_ln:
-            self.decoder = LayerNormRNN(dec_rnn,
+            self.decoder = LayerNormRNN(rnn,
                                         embed_size,
-                                        dec_hidden,
-                                        dec_layers,
-                                        dropout=dec_dropout,
+                                        hidden,
+                                        num_layers,
+                                        dropout=dropout,
                                         bidirectional=False)
         else:
-            self.decoder = PyTorchRNN(dec_rnn,
+            self.decoder = PyTorchRNN(rnn,
                                       embed_size,
-                                      dec_hidden,
-                                      dec_layers,
-                                      dropout=dec_dropout,
+                                      hidden,
+                                      num_layers,
+                                      dropout=dropout,
                                       bidirectional=False)
 
     def forward(self, enc_out: th.Tensor, tgt_pad: th.Tensor) -> th.Tensor:

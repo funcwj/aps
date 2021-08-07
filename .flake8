@@ -5,6 +5,7 @@ exclude =
     .git,
     # local mantained directory
     local/
+    cache/
 per-file-ignores =
     # imported but unused
     # unable to detect undefined names

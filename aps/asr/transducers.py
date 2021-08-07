@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Optional, Dict, List
-from aps.asr.ctc import ASREncoderBase, NoneOrTensor, AMForwardOut
+from aps.asr.ctc import ASREncoderBase, NoneOrTensor, AMForwardType
 from aps.asr.transducer.decoder import TorchTransformerDecoder, PyTorchRNNDecoder
 from aps.asr.beam_search.transducer import greedy_search, beam_search
 from aps.libs import ApsRegisters
@@ -25,11 +25,12 @@ class ASRTransducerBase(ASREncoderBase):
                  blank: int = -1,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "xfmr",
-                 enc_proj: Optional[int] = None,
+                 enc_proj: int = -1,
                  enc_kwargs: Dict = {}) -> None:
         super(ASRTransducerBase, self).__init__(input_size,
                                                 vocab_size,
                                                 ctc=False,
+                                                ead=True,
                                                 asr_transform=asr_transform,
                                                 enc_type=enc_type,
                                                 enc_proj=enc_proj,
@@ -82,7 +83,7 @@ class TransducerASR(ASRTransducerBase):
                  vocab_size: int = 40,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "xfmr",
-                 enc_proj: Optional[int] = None,
+                 enc_proj: int = -1,
                  dec_type: str = "rnn",
                  enc_kwargs: Dict = None,
                  dec_kwargs: Dict = None) -> None:
@@ -102,7 +103,7 @@ class TransducerASR(ASRTransducerBase):
         self.decoder = PyTorchRNNDecoder(vocab_size, **dec_kwargs)
 
     def forward(self, x_pad: th.Tensor, x_len: NoneOrTensor, y_pad: th.Tensor,
-                y_len: NoneOrTensor) -> AMForwardOut:
+                y_len: NoneOrTensor) -> AMForwardType:
         """
         Args:
             x_pad: N x Ti x D or N x S
@@ -153,7 +154,7 @@ class XfmrTransducerASR(ASRTransducerBase):
         self.decoder = TorchTransformerDecoder(vocab_size, **dec_kwargs)
 
     def forward(self, x_pad: th.Tensor, x_len: NoneOrTensor, y_pad: th.Tensor,
-                y_len: NoneOrTensor) -> AMForwardOut:
+                y_len: NoneOrTensor) -> AMForwardType:
         """
         Args:
             x_pad: N x Ti x D or N x S

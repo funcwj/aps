@@ -10,12 +10,12 @@ from aps.libs import aps_sse_nnet
 from aps.transform import EnhTransform
 
 
-@pytest.mark.parametrize("num_spks,nonlinear", [
+@pytest.mark.parametrize("num_spks,non_linear", [
     pytest.param(1, "sigmoid"),
     pytest.param(2, "softmax"),
     pytest.param(2, "relu")
 ])
-def test_base_rnn(num_spks, nonlinear):
+def test_base_rnn(num_spks, non_linear):
     nnet_cls = aps_sse_nnet("sse@base_rnn")
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
@@ -27,7 +27,7 @@ def test_base_rnn(num_spks, nonlinear):
                         num_layers=2,
                         hidden=512,
                         num_spks=num_spks,
-                        output_nonlinear=nonlinear)
+                        mask_non_linear=non_linear)
     inp = th.rand(2, 64000)
     x = base_rnn(inp)
     if num_spks > 1:
@@ -36,23 +36,6 @@ def test_base_rnn(num_spks, nonlinear):
     z = base_rnn.infer(inp[0])
     if num_spks > 1:
         z = z[0]
-    assert z.shape == th.Size([64000])
-
-
-def test_crn():
-    nnet_cls = aps_sse_nnet("sse@crn")
-    transform = EnhTransform(feats="spectrogram-log-cmvn",
-                             frame_len=320,
-                             frame_hop=160,
-                             round_pow_of_two=False)
-    crn = nnet_cls(161,
-                   enh_transform=transform,
-                   masking=True,
-                   training_mode="freq")
-    inp = th.rand(4, 64000)
-    x = crn(inp)
-    assert x.shape == th.Size([4, 161, 399])
-    z = crn.infer(inp[1])
     assert z.shape == th.Size([64000])
 
 
@@ -282,10 +265,10 @@ def test_dfsmn(num_spks):
     dfsmn = nnet_cls(enh_transform=transform,
                      num_layers=3,
                      dim=512,
-                     num_spks=num_spks,
+                     num_branchs=num_spks,
                      project=256,
-                     lcontext=11,
-                     rcontext=5,
+                     lctx=11,
+                     rctx=5,
                      training_mode="time")
     inp = th.rand(4, 64000)
     x = dfsmn(inp)

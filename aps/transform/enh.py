@@ -12,14 +12,10 @@ import torch.nn as nn
 
 from typing import Union, List, Optional, Tuple
 from aps.transform.utils import STFT, iSTFT
-from aps.transform.asr import (TFTransposeTransform, LogTransform,
-                               CmvnTransform, SpecAugTransform)
-from aps.transform.asr import check_valid
+from aps.transform.asr import TFTransposeTransform, AsrReturnType, check_valid
+from aps.transform.asr import FeatureTransform as AsrTransform
 from aps.const import MATH_PI, EPSILON
 from aps.libs import ApsRegisters
-from aps.cplx import ComplexTensor
-
-EnhReturnType = Tuple[th.Tensor, ComplexTensor, Optional[th.Tensor]]
 
 
 class RefChannelTransform(nn.Module):
@@ -36,6 +32,9 @@ class RefChannelTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"ref_channel={self.ref_channel}"
 
+    def jit_export(self) -> bool:
+        return True
+
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
@@ -47,6 +46,59 @@ class RefChannelTransform(nn.Module):
             return inp
         else:
             return inp[:, self.ref_channel]
+
+
+class AngleTransform(nn.Module):
+    """
+    Transform tensor [real, imag] to angle tensor
+    """
+
+    def __init__(self, dim: int = -1):
+        super(AngleTransform, self).__init__()
+        self.dim = dim
+
+    def extra_repr(self) -> str:
+        return f"dim={self.dim}"
+
+    def jit_export(self) -> bool:
+        return True
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp (Tensor): N x ... x 2 x ...
+        Return:
+            out (Tensor): N x ...
+        """
+        real = th.select(inp, self.dim, 0)
+        imag = th.select(inp, self.dim, 1)
+        return th.atan2(imag, real)
+
+
+class MagnitudeTransform(nn.Module):
+    """
+    Transform tensor [real, imag] to angle tensor
+    """
+
+    def __init__(self, dim: int = -1, eps: float = 0):
+        super(MagnitudeTransform, self).__init__()
+        self.dim = dim
+        self.eps = eps
+
+    def extra_repr(self) -> str:
+        return f"dim={self.dim}, eps={self.eps}"
+
+    def jit_export(self) -> bool:
+        return True
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp (Tensor): N x ... x 2 x ...
+        Return:
+            out (Tensor): N x ...
+        """
+        return th.sqrt(th.sum(inp**2, self.dim) + self.eps)
 
 
 class IpdTransform(nn.Module):
@@ -78,6 +130,9 @@ class IpdTransform(nn.Module):
 
     def extra_repr(self) -> str:
         return f"ipd_index={self.ipd_index}, cos={self.cos}, sin={self.sin}"
+
+    def jit_export(self) -> bool:
+        return True
 
     def forward(self, p: th.Tensor) -> th.Tensor:
         """
@@ -205,6 +260,9 @@ class DfTransform(nn.Module):
             f"sr={self.sr}, num_bins={self.num_bins}, velocity={self.velocity}, "
             + f"known_doa={self.num_doas == 1}")
 
+    def jit_export(self) -> bool:
+        return True
+
     def _compute_af(self, ipd: th.Tensor, doa: th.Tensor) -> th.Tensor:
         """
         Compute angle feature
@@ -308,23 +366,24 @@ class FixedBeamformer(nn.Module):
                 f"num_bins={F}, init_weight={self.init_weight}, " +
                 f"requires_grad={self.requires_grad}")
 
-    def forward(
-            self,
-            x: ComplexTensor,
-            beam: Optional[th.Tensor] = None,
-            squeeze: bool = False,
-            trans: bool = False,
-            cplx: bool = True
-    ) -> Union[ComplexTensor, Tuple[th.Tensor, th.Tensor]]:
+    def jit_export(self) -> bool:
+        return True
+
+    def forward(self,
+                real: th.Tensor,
+                imag: th.Tensor,
+                beam: Optional[th.Tensor] = None,
+                squeeze: bool = False,
+                trans: bool = False,
+                cplx: bool = True) -> Tuple[th.Tensor, th.Tensor]:
         """
         Args:
-            x (Complex Tensor): N x C x F x T
+            real, imag (Tensor, Tensor): N x C x F x T
             beam (Tensor or None): N
         Return:
-            1) (Tensor, Tensor): N x (B) x F x T
-            2) (ComplexTensor): N x (B) x F x T
+            real, imag (Tensor, Tensor): N x (B) x F x T
         """
-        r, i = x.real, x.imag
+        r, i = real, imag
         if r.dim() != i.dim() and r.dim() != 4:
             raise RuntimeError(f"FixBeamformer accept 4D tensor, got {r.dim()}")
         if self.real.shape[1] != r.shape[1]:
@@ -346,17 +405,13 @@ class FixedBeamformer(nn.Module):
         if trans:
             br = br.transpose(-1, -2)
             bi = bi.transpose(-1, -2)
-        if cplx:
-            return ComplexTensor(br, bi)
-        else:
-            return br, bi
+        return br, bi
 
 
 @ApsRegisters.transform.register("enh")
 class FeatureTransform(nn.Module):
     """
     Feature transform for Enhancement/Separation tasks
-    Spectrogram - LogTransform - CmvnTransform + IpdTransform + DfTransform
 
     Args:
         feats: string that shows the way to extract features
@@ -364,19 +419,32 @@ class FeatureTransform(nn.Module):
         frame_hop: hop size between frames
         window: window name
         center: center flag (similar with that in librosa.stft)
-        round_pow_of_two: if true, choose round(#pow_of_two) as the FFT size
+        round_pow_of_two: if true, choose round(#power_of_two) as the FFT size
         stft_normalized: use normalized DFT kernel
+        audio_norm: use audio samples normalized between [-1, 1] or [-MAX-INT16, MAX-INT16]
         stft_mode: "kaldi"|"librosa", slight difference on windowing
-        ref_channel: choose one channel
+        pre_emphasis: factor of preemphasis
+        use_power: use power spectrogram or not
         sr: sample rate of the audio
-        norm_mean|norm_var: normalize mean/var or not (cmvn)
-        norm_per_band: do cmvn per-band or not (cmvn)
-        gcmvn: global cmvn statistics (cmvn)
+        speed_perturb: speed perturb factors (perturb)
+        log_lower_bound: lower_bound when we apply log (log)
+        num_mels: number of the mel bands (for fbank|mfcc)
+        num_ceps: number of the cepstrum coefficients (mfcc)
+        min_freq|max_freq: frequency boundry
+        lifter: lifter factor (mfcc)
         aug_prob: probability to do spec-augment
         aug_maxp_time: p in SpecAugment paper
         aug_mask_zero: use zero value or mean in the masked region
         aug_time_args: (T, m_T) in the SpecAugment paper
         aug_freq_args: (F, m_F) in the SpecAugment paper
+        norm_mean|norm_var: normalize mean/var or not (cmvn)
+        norm_per_band: do cmvn per-band or not (cmvn)
+        gcmvn: global cmvn statistics (cmvn)
+        subsampling_factor: subsampling factor
+        lctx|rctx: left/right context for splicing (splice)
+        delta_ctx|delta_order: context|order used in delta feature (delta)
+        requires_grad: make mel matrice trainable
+        ref_channel: choose one channel for spectral feature reference
         ipd_index: index pairs to compute IPD feature (ipd)
         cos_ipd|sin_ipd: using cos or sin IPDs
         eps: floor number
@@ -391,17 +459,33 @@ class FeatureTransform(nn.Module):
                  stft_normalized: bool = False,
                  stft_mode: str = "librosa",
                  center: bool = False,
-                 sr: int = 16000,
                  ref_channel: int = 0,
-                 gcmvn: str = "",
-                 norm_mean: bool = True,
-                 norm_var: bool = True,
-                 norm_per_band: bool = True,
+                 use_power: bool = False,
+                 sr: int = 16000,
+                 log_lower_bound: float = 0,
+                 num_mels: int = 80,
+                 mel_matrix: str = "",
+                 mel_coeff_norm: bool = False,
+                 min_freq: int = 0,
+                 max_freq: Optional[int] = None,
+                 num_ceps: int = 13,
+                 lifter: float = 0,
                  aug_prob: float = 0,
-                 aug_maxp_time: float = 1.0,
+                 aug_maxp_time: float = 0.5,
                  aug_mask_zero: bool = True,
                  aug_time_args: Tuple[int] = (40, 1),
                  aug_freq_args: Tuple[int] = (30, 1),
+                 norm_mean: bool = True,
+                 norm_var: bool = True,
+                 norm_per_band: bool = True,
+                 gcmvn: str = "",
+                 subsampling_factor: int = 1,
+                 lctx: int = 1,
+                 rctx: int = 1,
+                 delta_ctx: int = 2,
+                 delta_order: int = 2,
+                 delta_as_channel: bool = False,
+                 requires_grad: bool = False,
                  ipd_index: str = "",
                  cos_ipd: bool = True,
                  sin_ipd: bool = False,
@@ -419,54 +503,71 @@ class FeatureTransform(nn.Module):
         self.forward_stft = self.ctx(name="forward_stft")
         self.inverse_stft = self.ctx(name="inverse_stft")
 
-        trans_tokens = feats.split("-") if feats else []
-        transform = []
         feats_dim = 0
-        self.ipd_transform = None
-        for i, tok in enumerate(trans_tokens):
-            if i == 0:
-                if tok != "spectrogram" and tok != "ipd":
-                    raise RuntimeError("Now only support spectrogram features "
-                                       "or IPD features")
-                feats_dim = self.forward_stft.num_bins
-            if tok == "spectrogram":
-                spectrogram = [
-                    RefChannelTransform(ref_channel=ref_channel, input_dim=4),
-                    TFTransposeTransform()
-                ]
-                transform += spectrogram
-            elif tok == "log":
-                transform.append(LogTransform(eps=EPSILON))
-            elif tok == "cmvn":
-                transform.append(
-                    CmvnTransform(norm_mean=norm_mean,
-                                  norm_var=norm_var,
-                                  per_band=norm_per_band,
-                                  gcmvn=gcmvn,
-                                  eps=eps))
-            elif tok == "aug":
-                transform.append(
-                    SpecAugTransform(p=aug_prob,
-                                     p_time=aug_maxp_time,
-                                     freq_args=aug_freq_args,
-                                     time_args=aug_time_args,
-                                     mask_zero=aug_mask_zero))
-            elif tok == "ipd":
-                self.ipd_transform = nn.Sequential(
-                    IpdTransform(ipd_index=ipd_index, cos=cos_ipd, sin=sin_ipd),
-                    TFTransposeTransform())
-                ipd_index = ipd_index.split(";")
-                base = 0 if i == 0 else 1
-                if cos_ipd and sin_ipd:
-                    feats_dim *= (len(ipd_index) * 2 + base)
-                else:
-                    feats_dim *= (len(ipd_index) + base)
-            else:
-                raise RuntimeError(f"Unknown token {tok} in {feats}")
-        if len(transform):
-            self.mag_transform = nn.Sequential(*transform)
+        feats_tok = feats.split("-")
+        feats_mag = "-".join([t for t in feats_tok if t != "ipd"])
+        if feats_mag:
+            asr_transform = AsrTransform(feats=feats_mag,
+                                         frame_len=frame_len,
+                                         frame_hop=frame_hop,
+                                         window=window,
+                                         round_pow_of_two=round_pow_of_two,
+                                         stft_normalized=stft_normalized,
+                                         stft_mode=stft_mode,
+                                         center=center,
+                                         use_power=use_power,
+                                         sr=sr,
+                                         log_lower_bound=log_lower_bound,
+                                         num_mels=num_mels,
+                                         mel_matrix=mel_matrix,
+                                         mel_coeff_norm=mel_coeff_norm,
+                                         min_freq=min_freq,
+                                         max_freq=max_freq,
+                                         num_ceps=num_ceps,
+                                         lifter=lifter,
+                                         aug_prob=aug_prob,
+                                         aug_maxp_time=aug_maxp_time,
+                                         aug_mask_zero=aug_mask_zero,
+                                         aug_time_args=aug_time_args,
+                                         aug_freq_args=aug_freq_args,
+                                         norm_mean=norm_mean,
+                                         norm_var=norm_var,
+                                         norm_per_band=norm_per_band,
+                                         gcmvn=gcmvn,
+                                         subsampling_factor=subsampling_factor,
+                                         lctx=lctx,
+                                         rctx=rctx,
+                                         delta_ctx=delta_ctx,
+                                         delta_order=delta_order,
+                                         delta_as_channel=delta_as_channel,
+                                         requires_grad=requires_grad)
+            # SpectrogramTransform() should in the first layer
+            if asr_transform.spectra_index == -1:
+                raise RuntimeError(
+                    "Now only support spectrogram/mfcc/fbank features")
+            feats_dim = asr_transform.feats_dim
+            # remove SpectrogramTransform()
+            mag_transform = [
+                MagnitudeTransform(dim=-1),
+                RefChannelTransform(ref_channel=ref_channel, input_dim=4),
+            ] + list(asr_transform.transform[1:])
+            self.mag_transform = nn.Sequential(*mag_transform)
         else:
             self.mag_transform = None
+
+        feats_spa = "-".join([t for t in feats_tok if t == "ipd"])
+        if feats_spa and ipd_index:
+            self.ipd_transform = nn.Sequential(
+                AngleTransform(dim=-1),
+                IpdTransform(ipd_index=ipd_index, cos=cos_ipd, sin=sin_ipd),
+                TFTransposeTransform())
+            ipd_index = ipd_index.split(";")
+            if cos_ipd and sin_ipd:
+                feats_dim += len(ipd_index) * 2 * self.forward_stft.num_bins
+            else:
+                feats_dim += len(ipd_index) * self.forward_stft.num_bins
+        else:
+            self.ipd_transform = None
         self.feats_dim = feats_dim
 
     def ctx(self, name: str = "forward_stft") -> nn.Module:
@@ -487,36 +588,46 @@ class FeatureTransform(nn.Module):
         # pass to forward_stft class
         return self.forward_stft.num_frames(wav_len)
 
-    def forward(self, wav_pad: th.Tensor,
-                wav_len: Optional[th.Tensor]) -> EnhReturnType:
+    def encode(self, wav_pad: th.Tensor,
+               wav_len: Optional[th.Tensor]) -> AsrReturnType:
         """
         Args:
             wav_pad (Tensor): raw waveform, N x C x S or N x S
-            wav_len (Tensor or None): number samples in wav_pad, N or None
+            wav_len (Tensor or None): number of samples in wav_pad, N or None
         Return:
-            feats (Tensor): spatial + spectral features, N x T x ...
-            cplx (ComplexTensor): STFT coefficients, N x (C) x F x T
+            packed (Tensor): STFT results in real format, N x C x F x T x 2
             num_frames (Tensor or None): number frames in each batch, N or None
         """
-        # magnitude & phase: N x C x F x T
-        in_polar = self.forward_stft(wav_pad, return_polar=True)
-        mag, pha = in_polar[..., 0], in_polar[..., 1]
-        # STFT coefficients: N x C x F x T
-        cplx = ComplexTensor(mag, pha, polar=True)
+        # packed: N x C x F x T x 2
+        packed = self.forward_stft(wav_pad, return_polar=False)
+        num_frames = self.num_frames(wav_len)
+        return packed, num_frames
 
+    def decode(self, packed: List[th.Tensor]) -> List[th.Tensor]:
+        """
+        Args:
+            packed (list(Tensor)): list of STFT results
+        Return:
+            wav (list(Tensor)): list of wave data
+        """
+        return [self.inverse_stft(p, return_polar=False) for p in packed]
+
+    def forward(self, packed: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            packed (Tensor): STFT results in real format, N x C x F x T x 2
+        Return:
+            feats (Tensor): spectral + spatial features, N x T x ...
+        """
         feats = []
         # magnitude transform
         if self.mag_transform:
             # N x (C) x T x F => N x T x F
-            feats.append(self.mag_transform(mag))
+            feats.append(self.mag_transform(packed))
         # ipd transform
         if self.ipd_transform:
             # N x C x F x T => N x ... x T
-            feats.append(self.ipd_transform(pha))
+            feats.append(self.ipd_transform(packed))
         # concatenate: N x T x ...
-        num_frames = self.num_frames(wav_len)
-        if len(feats):
-            feats = check_valid(th.cat(feats, -1), num_frames)[0]
-        else:
-            feats = None
-        return feats, cplx, num_frames
+        feats = check_valid(th.cat(feats, -1), None)[0]
+        return feats

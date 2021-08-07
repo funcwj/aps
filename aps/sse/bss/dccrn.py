@@ -8,7 +8,7 @@ import torch.nn as nn
 
 from typing import Optional, Tuple, List
 from aps.sse.enh.dcunet import Encoder, Decoder, parse_1dstr, parse_2dstr
-from aps.sse.base import SseBase, MaskNonLinear
+from aps.sse.base import SSEBase, MaskNonLinear
 from aps.const import EPSILON
 from aps.libs import ApsRegisters
 
@@ -137,7 +137,7 @@ class LSTMWrapper(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@dccrn")
-class DCCRN(SseBase):
+class DCCRN(SSEBase):
     """
     Deep Complex Convolutional-RNN networks
 

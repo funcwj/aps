@@ -6,8 +6,8 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from aps.transform.asr import TFTransposeTransform
-from aps.asr.xfmr.encoder import TransformerEncoder
-from aps.sse.base import SseBase, MaskNonLinear
+from aps.asr.transformer.encoder import TransformerEncoder
+from aps.sse.base import SSEBase, MaskNonLinear, tf_masking
 from aps.sse.bss.tcn import normalize_layer
 from aps.libs import ApsRegisters
 
@@ -112,7 +112,7 @@ class SepFormer(nn.Module):
 
 
 @ApsRegisters.sse.register("sse@time_sepformer")
-class TimeSeqFormer(SseBase):
+class TimeSeqFormer(SSEBase):
     """
     SeqFormer network in time domain
     """
@@ -185,7 +185,7 @@ class TimeSeqFormer(SseBase):
 
 
 @ApsRegisters.sse.register("sse@freq_sepformer")
-class FreqSeqFormer(SseBase):
+class FreqSeqFormer(SSEBase):
     """
     SeqFormer network in frequency domain
     """
@@ -220,16 +220,15 @@ class FreqSeqFormer(SseBase):
         """
         Forward function in time|freq mode
         """
-        # mix_stft: N x F x T
-        feats, mix_stft, _ = self.enh_transform(mix, None)
+        stft, _ = self.enh_transform.encode(mix, None)
+        feats = self.enh_transform(stft)
         # N x S*F x T
         masks = self.mask(self.separator(self.swap(feats)))
         # [N x F x T, ...]
         masks = th.chunk(masks, self.num_spks, 1)
         if mode == "time":
-            decoder = self.enh_transform.inverse_stft
-            bss_stft = [mix_stft * m for m in masks]
-            bss = [decoder(s.as_real(), return_polar=False) for s in bss_stft]
+            bss_stft = [tf_masking(stft, m) for m in masks]
+            bss = self.enh_transform.decode(bss_stft)
         else:
             bss = masks
         return bss[0] if self.num_spks == 1 else bss

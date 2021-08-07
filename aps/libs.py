@@ -70,13 +70,13 @@ class ApsModules(object):
     Maintain modules in aps package
     """
     asr_submodules = [
-        "att", "enh_att", "transducers", "lm.rnn", "lm.xfmr", "filter.mvdr",
-        "filter.conv", "filter.google"
+        "ctc", "att", "enh_att", "transducers", "lm.rnn", "lm.transformer",
+        "filter.mvdr", "filter.conv", "filter.google"
     ]
     sse_submodules = [
-        "toy", "unsuper.rnn", "enh.crn", "enh.phasen", "enh.dcunet",
-        "enh.demucs", "enh.dfsmn", "bss.dccrn", "bss.dprnn", "bss.tcn",
-        "bss.xfmr", "bss.dense_unet", "bss.sepformer"
+        "rnn", "unsuper.rnn", "enh.phasen", "enh.dcunet", "enh.demucs",
+        "enh.dfsmn", "bss.dccrn", "bss.dprnn", "bss.tcn", "bss.transformer",
+        "bss.dense_unet", "bss.sepformer"
     ]
     loader_submodules = [
         "am.kaldi", "am.raw", "am.command", "se.chunk", "se.command",
@@ -88,6 +88,8 @@ class ApsModules(object):
     loader = Module("aps.loader", loader_submodules)
     trainer = Module("aps.trainer", ["ddp", "hvd", "apex"])
     transform = Module("aps.transform", ["asr", "enh"])
+    streaming_asr = Module("aps.streaming_asr", ["ctc"])
+    rt_sse = Module("aps.rt_sse", ["enh.dfsmn"])
 
 
 def dynamic_importlib(sstr: str) -> Any:
@@ -158,6 +160,7 @@ def aps_asr_nnet(nnet: str) -> nn.Module:
     Return ASR networks supported by aps
     """
     ApsModules.asr.import_all()
+    ApsModules.streaming_asr.import_all()
     return aps_specific_nnet(nnet, ApsRegisters.asr)
 
 
@@ -166,6 +169,7 @@ def aps_sse_nnet(nnet: str) -> nn.Module:
     Return SSE networks supported by aps
     """
     ApsModules.sse.import_all()
+    ApsModules.rt_sse.import_all()
     return aps_specific_nnet(nnet, ApsRegisters.sse)
 
 

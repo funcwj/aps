@@ -7,6 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from aps.cplx import ComplexTensor
 from typing import Optional, Union, List, NoReturn
 
 all_nonlinear = ["relu", "tanh", "softplus", "sigmoid", "softmax"]
@@ -17,6 +18,33 @@ positive_nonlinear_wo_softplus = ["relu", "sigmoid", "softmax"]
 common_nonlinear = ["relu", "sigmoid"]
 bounded_nonlinear = ["sigmoid", "softmax"]
 unbounded_nonlinear = ["relu", "tanh", "softplus"]
+
+
+def tf_masking(packed_stft: th.Tensor,
+               mask: th.Tensor,
+               complex_mask: bool = False,
+               channel: int = 0) -> th.Tensor:
+    """
+    Do time-frequency masking
+    Args:
+        packed_stft: packed version of STFT, N x (C) x F x T x 2
+        mask: TF masks, N x F x T or N x F*2 x T
+        complex_mask: mask is real or complex
+        channel: for channel selection in packed_stft
+    Return:
+        masked_stft: masked version of STFT, N x F x T x 2
+    """
+    stft_dim = packed_stft.dim()
+    assert stft_dim in [4, 5]
+    if stft_dim == 5:
+        packed_stft = packed_stft[:, channel]
+    real, imag = packed_stft[..., 0], packed_stft[..., 1]
+    cplx_stft = ComplexTensor(real, imag)
+    if complex_mask:
+        mask_real, mask_imag = th.chunk(mask, 2, dim=1)
+        mask = ComplexTensor(mask_real, mask_imag)
+    masked_stft = cplx_stft * mask
+    return masked_stft.as_real()
 
 
 def softmax(tensor: th.Tensor) -> th.Tensor:
@@ -32,7 +60,7 @@ supported_nonlinear = {
 }
 
 
-class SseBase(nn.Module):
+class SSEBase(nn.Module):
     """
     The base class for speech separation & enhancement models
 
@@ -44,7 +72,7 @@ class SseBase(nn.Module):
     def __init__(self,
                  transform: Optional[nn.Module],
                  training_mode: str = "freq"):
-        super(SseBase, self).__init__()
+        super(SSEBase, self).__init__()
         assert training_mode in ["freq", "time"]
         self.enh_transform = transform
         self.training_mode = training_mode
@@ -59,8 +87,8 @@ class SseBase(nn.Module):
         if mix.dim() not in valid_dim:
             supported_dim = "/".join([str(d) for d in valid_dim])
             raise RuntimeError(
-                f"{self.__class__.__name__} expects {supported_dim}D " +
-                f"tensor ({'training' if training else 'inference'}), " +
+                f"Expects {supported_dim}D tensor " +
+                f"({'training' if training else 'inference'}), " +
                 f"got {mix.dim()} instead")
 
     def infer(self,
@@ -73,7 +101,7 @@ class SseBase(nn.Module):
         Return:
             Tensor: S
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
 
 class MaskNonLinear(nn.Module):

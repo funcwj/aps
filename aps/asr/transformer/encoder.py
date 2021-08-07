@@ -9,10 +9,10 @@ import torch.nn as nn
 from typing import Optional, Dict
 from aps.asr.base.attention import padding_mask
 from aps.asr.base.encoder import EncRetType
-from aps.asr.xfmr.impl import get_xfmr_encoder
-from aps.asr.xfmr.pose import get_xfmr_pose
-from aps.asr.xfmr.proj import get_xfmr_proj
-from aps.asr.xfmr.utils import prep_sub_mask
+from aps.asr.transformer.impl import get_xfmr_encoder
+from aps.asr.transformer.pose import get_xfmr_pose
+from aps.asr.transformer.proj import get_xfmr_proj
+from aps.asr.transformer.utils import prep_context_mask
 
 
 class TransformerEncoder(nn.Module):
@@ -23,27 +23,34 @@ class TransformerEncoder(nn.Module):
     def __init__(self,
                  arch: str,
                  input_size: int,
+                 output_proj: int = -1,
                  num_layers: int = 6,
-                 casual: bool = False,
+                 lctx: int = -1,
+                 rctx: int = -1,
+                 chunk_size: int = 1,
                  proj: str = "conv2d",
                  proj_kwargs: Dict = {},
                  pose: str = "abs",
                  pose_kwargs: Dict = {},
                  arch_kwargs: Dict = {}):
         super(TransformerEncoder, self).__init__()
+        att_dim = arch_kwargs["att_dim"]
         if proj == "none":
             self.proj = None
         else:
-            self.proj = get_xfmr_proj(proj, input_size, arch_kwargs["att_dim"],
-                                      **proj_kwargs)
+            self.proj = get_xfmr_proj(proj, input_size, att_dim, **proj_kwargs)
         self.pose = get_xfmr_pose(
-            pose, arch_kwargs["att_dim"] //
-            arch_kwargs["nhead"] if pose == "rel" else arch_kwargs["att_dim"],
+            pose, att_dim // arch_kwargs["nhead"] if pose == "rel" else att_dim,
             **pose_kwargs)
         self.pose_type = "abs" if pose == "conv1d" else pose
         self.encoder = get_xfmr_encoder(arch, self.pose_type, num_layers,
                                         arch_kwargs)
-        self.casual = casual
+        self.lctx, self.rctx = lctx, rctx
+        self.chunk_size = chunk_size
+        if output_proj > 0:
+            self.outp = nn.Linear(att_dim, output_proj)
+        else:
+            self.outp = None
 
     def forward(self, inp_pad: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> EncRetType:
@@ -82,8 +89,12 @@ class TransformerEncoder(nn.Module):
                 inj_pose = self.pose(
                     th.arange(0, 2 * nframes - 1, 1.0, device=enc_inp.device))
         # src_mask: Ti x Ti
-        if self.casual:
-            src_mask = prep_sub_mask(nframes, device=enc_inp.device)
+        if self.lctx != -1 or self.rctx != -1:
+            src_mask = prep_context_mask(nframes,
+                                         self.chunk_size,
+                                         lctx=self.lctx,
+                                         rctx=self.rctx,
+                                         device=enc_inp.device)
         else:
             src_mask = None
         # Ti x N x D
@@ -91,5 +102,7 @@ class TransformerEncoder(nn.Module):
                                inj_pose=inj_pose,
                                src_mask=src_mask,
                                src_key_padding_mask=src_pad_mask)
+        if self.outp is not None:
+            enc_out = self.outp(enc_out)
         # N x Ti x D
         return enc_out.transpose(0, 1), inp_len

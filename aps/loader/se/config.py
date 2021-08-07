@@ -52,6 +52,10 @@ def DataLoader(train: bool = True,
         distributed: in distributed mode or not
         num_workers: number of workers used in dataloader
     """
+
+    def prob_cfg(prob):
+        return prob if train else (1 if prob > 0 else 0)
+
     dataset = ConfigSimulationDataset(
         simu_cfg,
         single_channel=single_channel,
@@ -60,9 +64,9 @@ def DataLoader(train: bool = True,
         sr=sr,
         early_reverb=early_reverb,
         noise_reference=noise_reference,
-        rir_prob=rir_prob if train else 0,
-        isotropic_noise_prob=isotropic_noise_prob if train else 1,
-        directional_noise_prob=directional_noise_prob if train else 1)
+        rir_prob=prob_cfg(rir_prob),
+        isotropic_noise_prob=prob_cfg(isotropic_noise_prob),
+        directional_noise_prob=prob_cfg(directional_noise_prob))
     return WaveChunkDataLoader(dataset,
                                train=train,
                                chunk_size=chunk_size,

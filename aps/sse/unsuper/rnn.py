@@ -9,7 +9,7 @@ import torch.nn as nn
 
 from typing import Union, Optional
 from aps.asr.base.encoder import PyTorchRNNEncoder
-from aps.sse.base import SseBase
+from aps.sse.base import SSEBase
 from aps.const import EPSILON
 from aps.libs import ApsRegisters
 from aps.cplx import ComplexTensor
@@ -85,7 +85,7 @@ def permu_aligner(masks: np.ndarray, transpose: bool = False) -> np.ndarray:
 
 
 @ApsRegisters.sse.register("sse@rnn_enh_ml")
-class RNNEnhML(SseBase):
+class RNNEnhML(SSEBase):
     """
     A recurrent network example for unsupervised training
     """
@@ -105,7 +105,7 @@ class RNNEnhML(SseBase):
         self.base_rnn = PyTorchRNNEncoder(input_size,
                                           num_bins,
                                           rnn=rnn,
-                                          input_project=input_proj,
+                                          input_proj=input_proj,
                                           num_layers=num_layers,
                                           hidden=hidden,
                                           dropout=dropout,
@@ -125,11 +125,12 @@ class RNNEnhML(SseBase):
             _, masks = self.forward(noisy)
             return masks[0]
 
-    def _norm_abs(self, obs: ComplexTensor) -> ComplexTensor:
+    def _norm_abs(self, obs: th.Tensor) -> ComplexTensor:
         """
         Normalize complex-valued STFTs
         """
-        mag = obs.abs()
+        mag = th.sum(obs**2, -1)**0.5
+        obs = ComplexTensor(obs[..., 0], obs[..., 1])
         mag_norm = th.norm(mag, p=2, dim=1, keepdim=True)
         mag = mag / th.clamp(mag_norm, min=EPSILON)
         obs = ComplexTensor(mag, obs.angle(), polar=True)
@@ -144,9 +145,11 @@ class RNNEnhML(SseBase):
             masks (Tensor): N x T x F
         """
         self.check_args(noisy, training=True, valid_dim=[3])
+        # cstft: N x C x F x T x 2
+        cstft, _ = self.enh_transform.encode(noisy, None)
         # feats: N x T x F
-        # cspec: N x C x F x T
-        feats, cstft, _ = self.enh_transform(noisy, None)
-        cstft = self._norm_abs(cstft)
+        feats = self.enh_transform(cstft)
+
         masks, _ = self.base_rnn(feats, None)
+        cstft = self._norm_abs(cstft)
         return cstft, masks

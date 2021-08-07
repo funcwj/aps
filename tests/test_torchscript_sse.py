@@ -42,7 +42,7 @@ def test_freq_rnn(rnn, non_linear):
                            num_layers=2,
                            hidden=256,
                            bidirectional=True,
-                           output_nonlinear=non_linear)
+                           mask_non_linear=non_linear)
     scriped_and_check(export_nnet)
 
 
@@ -60,15 +60,15 @@ def test_freq_tcn(causal):
     scriped_and_check(export_nnet)
 
 
-@pytest.mark.parametrize("num_spks", [1, 2])
-def test_freq_dfsmn(num_spks):
+@pytest.mark.parametrize("num_branchs", [1, 2])
+def test_freq_dfsmn(num_branchs):
     nnet_cls = aps_sse_nnet("sse@dfsmn")
     export_nnet = nnet_cls(dim=256,
                            enh_transform=transform,
                            num_layers=3,
                            project=256,
                            num_bins=num_bins,
-                           num_spks=2,
+                           num_branchs=2,
                            dropout=0.1)
     scriped_and_check(export_nnet)
 
@@ -140,3 +140,5 @@ def test_freq_dccrn(num_spks, cplx):
 
 if __name__ == "__main__":
     test_freq_xfmr("xfmr", "abs")
+    # test_freq_rnn("gru", "sigmoid")
+    # test_freq_dfsmn(1)

@@ -8,44 +8,59 @@ import torch.nn as nn
 
 from typing import Optional, Union, List
 from aps.asr.base.encoder import PyTorchRNNEncoder
-from aps.sse.base import SseBase, MaskNonLinear
+from aps.sse.base import SSEBase, MaskNonLinear, tf_masking
 from aps.libs import ApsRegisters
 
 
+class RNN(PyTorchRNNEncoder):
+    """
+    PyTorch's RNN/GRU structure (for jit export)
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(RNN, self).__init__(*args, **kwargs)
+
+    def _forward(self, inp: th.Tensor,
+                 inp_len: Optional[th.Tensor]) -> th.Tensor:
+        return self.rnns(inp)[0]
+
+
 @ApsRegisters.sse.register("sse@base_rnn")
-class ToyRNN(SseBase):
+class ToyRNN(SSEBase):
     """
     Toy RNN structure for separation & enhancement
     """
 
     def __init__(self,
                  input_size: int = 257,
-                 input_proj: Optional[int] = None,
+                 input_proj: int = -1,
                  num_bins: int = 257,
                  num_spks: int = 2,
                  enh_transform: Optional[nn.Module] = None,
                  rnn: str = "lstm",
                  num_layers: int = 3,
                  hidden: int = 512,
+                 hidden_proj: int = -1,
                  dropout: float = 0.2,
                  bidirectional: bool = False,
-                 output_nonlinear: str = "sigmoid",
+                 mask_non_linear: str = "sigmoid",
                  training_mode: str = "freq") -> None:
         super(ToyRNN, self).__init__(enh_transform, training_mode=training_mode)
         assert enh_transform is not None
-        if num_spks == 1 and output_nonlinear == "softmax":
+        if num_spks == 1 and mask_non_linear == "softmax":
             raise ValueError(
-                "output_nonlinear can not be softmax when num_spks == 1")
-        self.base_rnn = PyTorchRNNEncoder(input_size,
-                                          num_bins * num_spks,
-                                          input_project=input_proj,
-                                          rnn=rnn,
-                                          num_layers=num_layers,
-                                          hidden=hidden,
-                                          dropout=dropout,
-                                          bidirectional=bidirectional,
-                                          non_linear="none")
-        self.non_linear = MaskNonLinear(output_nonlinear, enable="positive")
+                "mask_non_linear can not be softmax when num_spks == 1")
+        self.base_rnn = RNN(input_size,
+                            num_bins * num_spks,
+                            input_proj=input_proj,
+                            rnn=rnn,
+                            num_layers=num_layers,
+                            hidden=hidden,
+                            hidden_proj=hidden_proj,
+                            dropout=dropout,
+                            bidirectional=bidirectional,
+                            non_linear="none")
+        self.non_linear = MaskNonLinear(mask_non_linear, enable="positive")
         self.num_spks = num_spks
 
     def _tf_mask(self, feats: th.Tensor, num_spks: int) -> th.Tensor:
@@ -53,7 +68,7 @@ class ToyRNN(SseBase):
         TF mask estimation from given features
         """
         # N x T x S*F
-        masks, _ = self.base_rnn(feats, None)
+        masks = self.base_rnn(feats, None)[0]
         # N x S*F x T
         masks = masks.transpose(1, 2)
         # [N x F x T, ]
@@ -66,12 +81,10 @@ class ToyRNN(SseBase):
         """
         Running in time or frequency mode and return time signals or frequency TF masks
         """
+        # N x F x T x 2
+        stft, _ = self.enh_transform.encode(mix, None)
         # feats: N x T x F
-        feats, stft, _ = self.enh_transform(mix, None)
-        N, T, _ = feats.shape
-        if stft.dim() == 4:
-            # N x F x T
-            stft = stft[:, 0]
+        feats = self.enh_transform(stft)
         # S x N x F x T
         masks = self._tf_mask(feats, self.num_spks)
         masks = th.chunk(masks, self.num_spks, 0)
@@ -80,11 +93,8 @@ class ToyRNN(SseBase):
         if mode == "freq":
             packed = masks
         else:
-            decoder = self.enh_transform.inverse_stft
-            bss_stft = [stft * m for m in masks]
-            packed = [
-                decoder(s.as_real(), return_polar=False) for s in bss_stft
-            ]
+            bss_stft = [tf_masking(stft, m) for m in masks]
+            packed = self.enh_transform.decode(bss_stft)
         return packed[0] if self.num_spks == 1 else packed
 
     def infer(self,

@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Optional, Tuple, Union
-from aps.asr.base.layer import OneHotEmbedding, PyTorchRNN
+from aps.asr.base.component import OneHotEmbedding, PyTorchRNN
 
 HiddenType = Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]
 
@@ -23,29 +23,27 @@ class PyTorchRNNDecoder(nn.Module):
     def __init__(self,
                  enc_proj: int,
                  vocab_size: int,
-                 dec_rnn: str = "lstm",
-                 rnn_layers: int = 3,
-                 rnn_hidden: int = 512,
-                 rnn_dropout: float = 0.0,
-                 emb_dropout: float = 0.0,
+                 rnn: str = "lstm",
+                 num_layers: int = 3,
+                 hidden: int = 512,
+                 dropout: float = 0.0,
                  input_feeding: bool = False,
                  onehot_embed: bool = False) -> None:
         super(PyTorchRNNDecoder, self).__init__()
         if not onehot_embed:
-            self.vocab_embed = nn.Sequential(
-                nn.Embedding(vocab_size, rnn_hidden), nn.Dropout(p=emb_dropout))
-            input_size = enc_proj + rnn_hidden
+            self.vocab_embed = nn.Embedding(vocab_size, hidden)
+            input_size = enc_proj + hidden
         else:
             self.vocab_embed = OneHotEmbedding(vocab_size)
             input_size = enc_proj + vocab_size
-        self.decoder = PyTorchRNN(dec_rnn,
+        self.decoder = PyTorchRNN(rnn,
                                   input_size,
-                                  rnn_hidden,
-                                  rnn_layers,
-                                  dropout=rnn_dropout,
+                                  hidden,
+                                  num_layers,
+                                  dropout=dropout,
                                   bidirectional=False)
-        self.proj = nn.Linear(rnn_hidden + enc_proj, enc_proj)
-        self.drop = nn.Dropout(p=rnn_dropout)
+        self.proj = nn.Linear(hidden + enc_proj, enc_proj)
+        self.drop = nn.Dropout(p=dropout)
         self.pred = nn.Linear(enc_proj, vocab_size)
         self.input_feeding = input_feeding
         self.vocab_size = vocab_size

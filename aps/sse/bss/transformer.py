@@ -7,14 +7,14 @@ import torch as th
 import torch.nn as nn
 
 from typing import Optional, List, Union, Dict
-from aps.asr.xfmr.encoder import TransformerEncoder
-from aps.sse.base import SseBase, MaskNonLinear
+from aps.asr.transformer.encoder import TransformerEncoder
+from aps.sse.base import SSEBase, MaskNonLinear, tf_masking
 from aps.transform.asr import TFTransposeTransform
 from aps.libs import ApsRegisters
 
 
 @ApsRegisters.sse.register("sse@freq_xfmr")
-class FreqXfmr(SseBase):
+class FreqXfmr(SSEBase):
     """
     Frequency domain Transformer based model
     """
@@ -24,7 +24,8 @@ class FreqXfmr(SseBase):
                  input_size: int = 257,
                  num_spks: int = 2,
                  num_bins: int = 257,
-                 casual: bool = False,
+                 rctx: int = -1,
+                 lctx: int = -1,
                  arch: str = "xfmr",
                  pose: str = "rel",
                  arch_kwargs: Dict = {},
@@ -36,18 +37,19 @@ class FreqXfmr(SseBase):
         super(FreqXfmr, self).__init__(enh_transform,
                                        training_mode=training_mode)
         assert enh_transform is not None
-        att_dim = arch_kwargs["att_dim"]
         self.xfmr = TransformerEncoder(arch,
                                        input_size,
+                                       output_proj=num_bins * num_spks,
                                        num_layers=num_layers,
-                                       casual=casual,
+                                       chunk_size=1,
+                                       lctx=lctx,
+                                       rctx=rctx,
                                        proj="linear",
                                        proj_kwargs=proj_kwargs,
                                        pose=pose,
                                        pose_kwargs=pose_kwargs,
                                        arch_kwargs=arch_kwargs)
-        self.mask = nn.Sequential(nn.Linear(att_dim, num_bins * num_spks),
-                                  MaskNonLinear(non_linear, enable="common"),
+        self.mask = nn.Sequential(MaskNonLinear(non_linear, enable="common"),
                                   TFTransposeTransform())
         self.num_spks = num_spks
 
@@ -68,15 +70,13 @@ class FreqXfmr(SseBase):
         """
         Running in time or frequency mode and return time signals or frequency TF masks
         """
-        feats, stft, _ = self.enh_transform(mix, None)
+        stft, _ = self.enh_transform.encode(mix, None)
+        feats = self.enh_transform(stft)
         masks = self._tf_mask(feats, self.num_spks)
         # post processing
         if mode == "time":
-            decoder = self.enh_transform.inverse_stft
-            bss_stft = [stft * m for m in masks]
-            packed = [
-                decoder(s.as_real(), return_polar=False) for s in bss_stft
-            ]
+            bss_stft = [tf_masking(stft, m) for m in masks]
+            packed = self.enh_transform.decode(bss_stft)
         else:
             packed = masks
         return packed[0] if self.num_spks == 1 else packed

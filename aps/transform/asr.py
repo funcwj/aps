@@ -23,7 +23,6 @@ from aps.transform.utils import STFT, mel_filter, splice_feature, speed_perturb_
 from aps.transform.augment import tf_mask, perturb_speed
 from aps.const import EPSILON, MAX_INT16
 from aps.libs import ApsRegisters
-from aps.cplx import ComplexTensor
 
 from scipy.fftpack import dct as scipy_dct
 from kaldi_python_io.functional import read_kaldi_mat
@@ -54,6 +53,14 @@ def check_valid(feature: th.Tensor,
     return feature, num_frames
 
 
+def export_jit(transform: nn.Module) -> nn.Module:
+    """
+    Export transform module for inference
+    """
+    eval_transform = [module for module in transform if module.jit_export()]
+    return nn.Sequential(*eval_transform)
+
+
 class RescaleTransform(nn.Module):
     """
     Rescale audio samples (e.g., [-1, 1] to MAX_INT16 scale)
@@ -71,6 +78,9 @@ class RescaleTransform(nn.Module):
 
     def extra_repr(self) -> str:
         return f"rescale={self.rescale}"
+
+    def jit_export(self) -> bool:
+        return False
 
     def forward(self, wav: th.Tensor) -> th.Tensor:
         """
@@ -95,6 +105,9 @@ class PreEmphasisTransform(nn.Module):
 
     def extra_repr(self) -> str:
         return f"pre_emphasis={self.pre_emphasis}"
+
+    def jit_export(self) -> bool:
+        return False
 
     def forward(self, wav: th.Tensor) -> th.Tensor:
         """
@@ -141,6 +154,9 @@ class SpeedPerturbTransform(nn.Module):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(sr={self.sr}, factor={self.factor_str})"
+
+    def jit_export(self) -> bool:
+        return False
 
     def output_length(self,
                       inp_len: Optional[th.Tensor]) -> Optional[th.Tensor]:
@@ -201,6 +217,9 @@ class TFTransposeTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"axis1={self.axis1}, axis2={self.axis2}"
 
+    def jit_export(self) -> bool:
+        return True
+
     def forward(self, tensor: th.Tensor) -> th.Tensor:
         """
         Args:
@@ -248,11 +267,14 @@ class SpectrogramTransform(STFT):
                              onesided=onesided,
                              mode=mode)
 
-    def dim(self):
+    def dim(self) -> int:
         return self.num_bins
 
     def len(self, xlen: th.Tensor) -> th.Tensor:
         return self.num_frames(xlen)
+
+    def jit_export(self) -> bool:
+        return False
 
     def forward(self, wav: th.Tensor) -> th.Tensor:
         """
@@ -281,7 +303,10 @@ class AbsTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"eps={self.eps:.3e}"
 
-    def forward(self, tensor: Union[th.Tensor, ComplexTensor]) -> th.Tensor:
+    def jit_export(self) -> bool:
+        return True
+
+    def forward(self, tensor: th.Tensor) -> th.Tensor:
         """
         Args:
             tensor (Tensor or ComplexTensor): N x T x F
@@ -304,6 +329,9 @@ class PowerTransform(nn.Module):
 
     def extra_repr(self) -> str:
         return f"power={self.power}"
+
+    def jit_export(self) -> bool:
+        return True
 
     def forward(self, tensor: th.Tensor) -> th.Tensor:
         """
@@ -363,6 +391,9 @@ class MelTransform(nn.Module):
     def dim(self) -> int:
         return self.num_mels
 
+    def jit_export(self) -> bool:
+        return True
+
     def extra_repr(self) -> str:
         shape = self.filters.shape
         return (f"fmin={self.fmin}, fmax={self.fmax}, " +
@@ -391,13 +422,16 @@ class LogTransform(nn.Module):
         lower_bound: lower bound value
     """
 
-    def __init__(self, eps: float = 1e-5, lower_bound: float = 0) -> None:
+    def __init__(self, eps: float = 1e-5, lower_bound: float = 0.0) -> None:
         super(LogTransform, self).__init__()
         self.eps = eps
         self.lower_bound = lower_bound
 
     def dim_scale(self) -> int:
         return 1
+
+    def jit_export(self) -> bool:
+        return True
 
     def extra_repr(self) -> str:
         return f"eps={self.eps:.3e}, lower_bound={self.lower_bound}"
@@ -448,6 +482,9 @@ class DiscreteCosineTransform(nn.Module):
 
     def dim(self) -> int:
         return self.num_ceps
+
+    def jit_export(self) -> bool:
+        return True
 
     def extra_repr(self) -> str:
         return "cepstral_lifter={0}, dct={1[0]}x{1[1]}".format(
@@ -512,6 +549,31 @@ class CmvnTransform(nn.Module):
     def dim_scale(self) -> int:
         return 1
 
+    def jit_export(self) -> bool:
+        return True
+
+    def _cmvn_per_band(self, feats: th.Tensor) -> th.Tensor:
+        if self.norm_mean:
+            feats = feats - th.mean(feats, -1, keepdim=True)
+        if self.norm_var:
+            if self.norm_mean:
+                var = th.mean(feats**2, -1, keepdim=True)
+            else:
+                var = th.var(feats, -1, unbiased=False, keepdim=True)
+            feats = feats / th.sqrt(var + self.eps)
+        return feats
+
+    def _cmvn_all_band(self, feats: th.Tensor) -> th.Tensor:
+        if self.norm_mean:
+            feats = feats - th.mean(feats, (-1, -2), keepdim=True)
+        if self.norm_var:
+            if self.norm_mean:
+                var = th.mean(feats**2, (-1, -2), keepdim=True)
+            else:
+                var = th.var(feats, (-1, -2), unbiased=False, keepdim=True)
+            feats = feats / th.sqrt(var + self.eps)
+        return feats
+
     def forward(self, feats: th.Tensor) -> th.Tensor:
         """
         Args:
@@ -527,15 +589,11 @@ class CmvnTransform(nn.Module):
             if self.norm_var:
                 feats = feats / self.gstd
         else:
-            axis = -2 if self.per_band else (-1, -2)
-            if self.norm_mean:
-                feats = feats - th.mean(feats, axis, keepdim=True)
-            if self.norm_var:
-                if self.norm_mean:
-                    var = th.mean(feats**2, axis, keepdim=True)
-                else:
-                    var = th.var(feats, axis, unbiased=False, keepdim=True)
-                feats = feats / th.sqrt(var + self.eps)
+            # for th.jit.export, we have two similar function
+            if self.per_band:
+                feats = self._cmvn_per_band(feats)
+            else:
+                feats = self._cmvn_all_band(feats)
         return feats
 
 
@@ -571,6 +629,9 @@ class SpecAugTransform(nn.Module):
             f"max_bands={self.F}, max_frame={self.T}, " +
             f"p={self.p}, p_time={self.p_time}, mask_zero={self.mask_zero}, "
             f"num_freq_masks={self.fnum}, num_time_masks={self.tnum}")
+
+    def jit_export(self) -> bool:
+        return False
 
     def forward(self, x: th.Tensor) -> th.Tensor:
         """
@@ -627,6 +688,9 @@ class SpliceTransform(nn.Module):
     def dim_scale(self) -> int:
         return (1 + self.rctx + self.lctx)
 
+    def jit_export(self) -> bool:
+        return True
+
     def forward(self, feats: th.Tensor) -> th.Tensor:
         """
         args:
@@ -669,6 +733,9 @@ class DeltaTransform(nn.Module):
 
     def dim_scale(self) -> int:
         return self.order
+
+    def jit_export(self) -> bool:
+        return True
 
     def forward(self, feats: th.Tensor) -> th.Tensor:
         """

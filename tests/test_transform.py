@@ -9,10 +9,11 @@ import librosa
 import torch as th
 
 from aps.transform.utils import forward_stft, inverse_stft
-from aps.cplx import ComplexTensor
+from aps.transform.utils import STFT, iSTFT
+from aps.transform.streaming import StreamingSTFT, StreamingiSTFT
 from aps.loader import read_audio
 from aps.transform import AsrTransform, EnhTransform, FixedBeamformer, DfTransform
-from aps.transform.asr import SpeedPerturbTransform
+from aps.transform.asr import SpeedPerturbTransform, export_jit
 
 egs1_wav = read_audio("data/transform/egs1.wav", sr=16000)
 egs2_wav = read_audio("data/transform/egs2.wav", sr=16000)
@@ -43,6 +44,34 @@ def test_forward_inverse_stft(wav, frame_len, frame_hop, window, mode):
     th.testing.assert_allclose(out[..., :trunc], wav[..., :trunc])
 
 
+@pytest.mark.parametrize("wav", [egs1_wav])
+@pytest.mark.parametrize("frame_len, frame_hop", [(512, 256), (256, 128),
+                                                  (400, 160)])
+@pytest.mark.parametrize("window", ["hamm", "sqrthann"])
+def test_streaming_stft(wav, frame_len, frame_hop, window):
+    wav = th.from_numpy(wav)[None, ...]
+    cfg = {
+        "frame_len": frame_len,
+        "frame_hop": frame_hop,
+        "window": window,
+        "center": False,
+        "round_pow_of_two": True,
+        "mode": "librosa"
+    }
+    stft = STFT(**cfg)
+    streaming_stft = StreamingSTFT(**cfg)
+    packed = stft(wav, return_polar=False)
+    streaming_packed = streaming_stft(wav, return_polar=False)
+    th.testing.assert_allclose(packed, streaming_packed)
+    istft = iSTFT(**cfg)
+    streaming_istft = StreamingiSTFT(**cfg)
+    wav = istft(packed, return_polar=False)
+    print(wav)
+    streaming_wav = streaming_istft(packed, return_polar=False)
+    print(streaming_wav)
+    th.testing.assert_allclose(wav, streaming_wav)
+
+
 @pytest.mark.parametrize("wav", [egs1_wav, egs2_wav[0].copy()])
 @pytest.mark.parametrize("frame_len, frame_hop", [(512, 256), (1024, 256),
                                                   (400, 160)])
@@ -71,10 +100,10 @@ def test_with_librosa_stft(wav, frame_len, frame_hop, window, center):
                                 center=center)
     librosa_real = th.tensor(librosa_stft.real, dtype=th.float32)
     librosa_imag = th.tensor(librosa_stft.imag, dtype=th.float32)
-    th.testing.assert_allclose(pack1[..., 0], librosa_real)
-    th.testing.assert_allclose(pack1[..., 1], librosa_imag)
-    th.testing.assert_allclose(pack2[..., 0], librosa_real)
-    th.testing.assert_allclose(pack2[..., 1], librosa_imag)
+    th.testing.assert_allclose(pack1[0, ..., 0], librosa_real)
+    th.testing.assert_allclose(pack1[0, ..., 1], librosa_imag)
+    th.testing.assert_allclose(pack2[0, ..., 0], librosa_real)
+    th.testing.assert_allclose(pack2[0, ..., 1], librosa_imag)
 
 
 @pytest.mark.parametrize("wav", [egs1_wav])
@@ -100,6 +129,35 @@ def test_asr_transform(wav, mode, feats, shape):
     assert transform.feats_dim == shape[-1]
 
 
+@pytest.mark.parametrize("wav", [egs1_wav])
+@pytest.mark.parametrize("feats", ["fbank-log-cmvn", "perturb-mfcc-aug-delta"])
+def test_asr_transform_jit(wav, feats):
+    wav = th.from_numpy(wav[None, ...])
+    packed = forward_stft(wav,
+                          400,
+                          160,
+                          mode="librosa",
+                          window="hamm",
+                          pre_emphasis=0.96,
+                          center=False,
+                          return_polar=True)
+    trans = AsrTransform(feats=feats,
+                         stft_mode="librosa",
+                         window="hamm",
+                         frame_len=400,
+                         frame_hop=160,
+                         use_power=True,
+                         pre_emphasis=0.96,
+                         center=False,
+                         aug_prob=0.5,
+                         aug_mask_zero=False)
+    trans.eval()
+    scripted_trans = th.jit.script(export_jit(trans.transform))
+    ref_out = trans(wav, None)[0]
+    jit_out = scripted_trans(packed[..., 0])
+    th.testing.assert_allclose(ref_out, jit_out)
+
+
 @pytest.mark.parametrize("max_length", [160000])
 def test_speed_perturb(max_length):
     for _ in range(4):
@@ -112,7 +170,7 @@ def test_speed_perturb(max_length):
 
 @pytest.mark.parametrize("wav", [egs2_wav])
 @pytest.mark.parametrize("feats,shape",
-                         [("spectrogram-log-cmvn-aug-ipd", [1, 366, 257 * 5]),
+                         [("spectrogram-cmvn-aug-ipd", [1, 366, 257 * 5]),
                           ("ipd", [1, 366, 257 * 4])])
 def test_enh_transform(wav, feats, shape):
     transform = EnhTransform(feats=feats,
@@ -120,10 +178,11 @@ def test_enh_transform(wav, feats, shape):
                              frame_hop=256,
                              ipd_index="0,1;0,2;0,3;0,4",
                              aug_prob=0.2)
-    feats, stft, _ = transform(th.from_numpy(wav[None, ...]), None)
+    packed, _ = transform.encode(th.from_numpy(wav[None, ...]), None)
+    feats = transform(packed)
     assert feats.shape == th.Size(shape)
     assert th.sum(th.isnan(feats)) == 0
-    assert stft.shape == th.Size([1, 5, 257, 366])
+    assert packed.shape == th.Size([1, 5, 257, 366, 2])
     assert transform.feats_dim == shape[-1]
 
 
@@ -136,12 +195,11 @@ def test_fixed_beamformer(batch_size, num_channels, num_bins, num_directions):
     num_frames = th.randint(50, 100, (1,)).item()
     inp_r = th.rand(batch_size, num_channels, num_bins, num_frames)
     inp_i = th.rand(batch_size, num_channels, num_bins, num_frames)
-    inp_c = ComplexTensor(inp_r, inp_i)
-    out_b = beamformer(inp_c)
-    assert out_b.shape == th.Size(
+    out_r, out_i = beamformer(inp_r, inp_i)
+    assert out_r.shape == th.Size(
         [batch_size, num_directions, num_bins, num_frames])
-    out_b = beamformer(inp_c, beam=0)
-    assert out_b.shape == th.Size([batch_size, num_bins, num_frames])
+    out_r, out_i = beamformer(inp_r, inp_i, beam=0)
+    assert out_r.shape == th.Size([batch_size, num_bins, num_frames])
 
 
 @pytest.mark.parametrize("num_bins", [257, 513])
@@ -163,7 +221,8 @@ def test_df_transform(num_bins, num_doas):
 
 
 def debug_visualize_feature():
-    transform = AsrTransform(feats="fbank-log-cmvn-delta",
+    # fbank-log-cmvn-delta
+    transform = AsrTransform(feats="spectrogram-log",
                              frame_len=400,
                              frame_hop=160,
                              use_power=True,
@@ -176,10 +235,13 @@ def debug_visualize_feature():
                              aug_time_args=(100, 1),
                              aug_mask_zero=False,
                              delta_as_channel=True)
-    feats, _ = transform(th.from_numpy(egs1_wav[None, ...]), None)
+    egs1_wav = read_audio("data/transform/egs1.wav", sr=16000)
+    egs1_wav = th.from_numpy(egs1_wav)
+    egs1_len = th.tensor([egs1_wav.shape[-1]])
+    feats, feats_len = transform(egs1_wav[None, ...], egs1_len[None, ...])
     print(transform)
     from aps.plot import plot_feature
-    plot_feature(feats[0, 1].numpy(), "egs")
+    plot_feature(feats[0].numpy(), "egs")
 
 
 def debug_speed_perturb():
@@ -199,5 +261,8 @@ def debug_speed_perturb():
 
 
 if __name__ == "__main__":
-    debug_speed_perturb()
+    # debug_speed_perturb()
     # debug_visualize_feature()
+    # test_asr_transform_jit(egs1_wav, "fbank-log-cmvn")
+    test_streaming_stft(egs1_wav, 512, 256, "hann")
+    # test_forward_inverse_stft(egs1_wav, 512, 256, "hann", "librosa")

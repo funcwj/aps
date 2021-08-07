@@ -93,8 +93,7 @@ class Normalize1d(nn.Module):
         if name == "BN":
             self.norm = nn.BatchNorm1d(inp_features)
         else:
-            self.norm = nn.LayerNorm(inp_features)
-        self.name = name
+            self.norm = nn.GroupNorm(1, inp_features)
 
     def __repr__(self) -> str:
         return str(self.norm)
@@ -106,14 +105,39 @@ class Normalize1d(nn.Module):
         Return:
             out (Tensor): N x T x F
         """
-        if self.name == "BN":
-            # N x T x F => N x F x T
-            inp = inp.transpose(1, 2)
-            out = self.norm(inp)
-            out = out.transpose(1, 2)
-        else:
-            out = self.norm(inp)
+        # N x T x F => N x F x T
+        inp = inp.transpose(1, 2)
+        out = self.norm(inp)
+        out = out.transpose(1, 2)
         return out
+
+
+class Normalize2d(nn.Module):
+    """
+    Wrapper for BatchNorm2d & InstanceNorm2d
+    """
+
+    def __init__(self, name: str, inp_features: int):
+        super(Normalize2d, self).__init__()
+        name = name.upper()
+        if name not in ["BN", "IN"]:
+            raise ValueError(f"Unknown type of Normalize2d: {name}")
+        if name == "BN":
+            self.norm = nn.BatchNorm2d(inp_features)
+        else:
+            self.norm = nn.InstanceNorm2d(inp_features)
+
+    def __repr__(self) -> str:
+        return str(self.norm)
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp (Tensor): N x C x T x F
+        Return:
+            out (Tensor): N x C x T x F
+        """
+        return self.norm(inp)
 
 
 def PyTorchRNN(mode: str,
@@ -122,6 +146,7 @@ def PyTorchRNN(mode: str,
                num_layers: int = 1,
                bias: bool = True,
                dropout: float = 0.,
+               proj_size: int = -1,
                bidirectional: bool = False) -> nn.Module:
     """
     Wrapper for PyTorch RNNs (LSTM, GRU, RNN_TANH, RNN_RELU)
@@ -142,6 +167,9 @@ def PyTorchRNN(mode: str,
         "bidirectional": bidirectional
     }
     if mode in ["GRU", "LSTM"]:
+        # add proj_size if needed
+        if mode == "LSTM" and TORCH_VERSION >= 1.8 and proj_size > 0:
+            kwargs["proj_size"] = proj_size
         return supported_rnn[mode](input_size, hidden_size, num_layers,
                                    **kwargs)
     elif mode == "RNN_TANH":
@@ -160,7 +188,7 @@ def PyTorchRNN(mode: str,
 
 class Conv1d(nn.Module):
     """
-    Time delay neural network (TDNN) layer using conv1d operations
+    Time delay neural network (TDNN) layer using conv1d operations (... -> Conv1d -> Norm -> ReLU -> Dropout -> ...)
     """
 
     def __init__(self,
@@ -170,15 +198,20 @@ class Conv1d(nn.Module):
                  stride: int = 2,
                  dilation: int = 1,
                  norm: str = "BN",
-                 dropout: float = 0):
+                 dropout: float = 0,
+                 for_streaming: bool = False):
         super(Conv1d, self).__init__()
-        padding = (dilation * (kernel_size - 1)) // 2
+        # we padding 0 by hand
+        if for_streaming:
+            padding = 0
+        else:
+            padding = (dilation * (kernel_size - 1)) // 2
         self.conv = nn.Conv1d(inp_features,
                               out_features,
                               kernel_size,
                               stride=stride,
-                              dilation=dilation,
-                              padding=padding)
+                              padding=padding,
+                              dilation=dilation)
         self.norm = Normalize1d(norm, out_features)
         self.drop = nn.Dropout(p=dropout)
         self.stride = stride
@@ -196,7 +229,7 @@ class Conv1d(nn.Module):
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
         Args:
-            inp (Tensor): (N) x T x F
+            inp (Tensor): N x T x F
         Return:
             out (Tensor): N x T x O, output of the layer
         """
@@ -212,36 +245,48 @@ class Conv1d(nn.Module):
 
 class Conv2d(nn.Module):
     """
-    A wrapper for conv2d layer, with batchnorm & ReLU
+    A simple Conv2d block (... -> Conv2d -> Norm -> ReLU -> ...)
     """
+    Conv2dParam = Union[int, Tuple[int, int]]
 
     def __init__(self,
                  in_channels: int,
                  out_channels: int,
-                 kernel_size: Union[int, Tuple[int]] = 3,
-                 stride: Union[int, Tuple[int]] = 2,
-                 padding: Union[int, Tuple[int]] = 0):
+                 kernel_size: Conv2dParam = 3,
+                 stride: Conv2dParam = 2,
+                 dilation: Conv2dParam = 1,
+                 norm: str = "BN",
+                 for_streaming: bool = False):
         super(Conv2d, self).__init__()
+
+        def int2tuple(inp):
+            return (inp, inp) if isinstance(inp, int) else inp
+
+        kernel_size = int2tuple(kernel_size)
+        dilation = int2tuple(dilation)
+
+        padding = tuple(
+            (d * (k - 1)) // 2 for d, k in zip(dilation, kernel_size))
+        # disable time axis
+        if for_streaming:
+            padding = (0, padding[-1])
         self.conv = nn.Conv2d(in_channels,
                               out_channels,
                               kernel_size,
                               stride=stride,
                               padding=padding,
-                              bias=True)
-        self.norm = nn.BatchNorm2d(out_channels)
-
-        def int2tuple(inp):
-            return (inp, inp) if isinstance(inp, int) else inp
-
-        self.kernel_size = int2tuple(kernel_size)
+                              dilation=dilation)
+        self.norm = Normalize2d(norm, out_channels)
+        self.kernel_size = kernel_size
+        self.padding = padding
+        self.dilation = dilation
         self.stride = int2tuple(stride)
-        self.padding = int2tuple(padding)
 
     def compute_outp_dim(self, dim: th.Tensor, axis: int) -> th.Tensor:
         """
         Compute output dimention
         """
-        return (dim + 2 * self.padding[axis] -
+        return (dim + 2 * self.padding[axis] - self.dilation[axis] *
                 self.kernel_size[axis]) // self.stride[axis] + 1
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
@@ -266,24 +311,27 @@ class FSMN(nn.Module):
                  proj_features: int,
                  lctx: int = 3,
                  rctx: int = 3,
-                 norm: int = "BN",
+                 norm: str = "BN",
                  dilation: int = 0,
-                 dropout: float = 0.0):
+                 dropout: float = 0.0,
+                 for_streaming: bool = False):
         super(FSMN, self).__init__()
         self.inp_proj = nn.Linear(inp_features, proj_features, bias=False)
-        self.ctx_size = lctx + rctx + 1
-        self.ctx_conv = nn.Sequential(
-            nn.ConstantPad1d((lctx, rctx), 0.0),
-            nn.Conv1d(proj_features,
-                      proj_features,
-                      kernel_size=self.ctx_size,
-                      dilation=dilation,
-                      groups=proj_features,
-                      padding=0,
-                      bias=False))
+        self.ctx_conv = nn.Conv1d(proj_features,
+                                  proj_features,
+                                  kernel_size=lctx + rctx + 1,
+                                  dilation=dilation,
+                                  groups=proj_features,
+                                  padding=0,
+                                  bias=False)
         self.out_proj = nn.Linear(proj_features, out_features)
-        self.out_drop = nn.Dropout(p=dropout)
-        self.norm = Normalize1d(norm, out_features) if norm else None
+        if norm == "none":
+            self.out_norm = None
+        else:
+            self.out_norm = nn.Sequential(Normalize1d(norm, out_features),
+                                          nn.ReLU(), nn.Dropout(p=dropout))
+        self.lctx, self.rctx = lctx, rctx
+        self.streaming = for_streaming
 
     def forward(
             self,
@@ -301,33 +349,47 @@ class FSMN(nn.Module):
         proj = self.inp_proj(inp[None, ...] if inp.dim() == 2 else inp)
         # N x T x P => N x P x T => N x T x P
         proj = proj.transpose(1, 2)
+        # pad context
+        if not self.streaming:
+            # NOTE: ctx.shape[1] == proj.shape[1]
+            proj_pad = tf.pad(proj, (self.lctx, self.rctx), "constant", 0.0)
+            ctx = self.ctx_conv(proj_pad)
+        else:
+            # NOTE: ctx.shape[1] != proj.shape[1]
+            ctx = self.ctx_conv(proj)
+            if self.rctx > 0:
+                proj = proj[..., self.lctx:-self.rctx]
+                if memory is not None:
+                    memory = memory[:, self.lctx:-self.rctx]
+            else:
+                proj = proj[..., self.lctx:]
+                if memory is not None:
+                    memory = memory[:, self.lctx:]
         # add context
-        proj = proj + self.ctx_conv(proj)
+        proj = proj + ctx
         proj = proj.transpose(1, 2)
         # add memory block
         if memory is not None:
             proj = proj + memory
         # N x T x O
         out = self.out_proj(proj)
-        if self.norm is not None:
-            out = self.out_drop(tf.relu(self.norm(out)))
-        else:
-            out = self.out_drop(tf.relu(out))
+        if self.out_norm is not None:
+            out = self.out_norm(out)
         # N x T x O
         return out, proj
 
 
 class VariantRNN(nn.Module):
     """
-    A custom rnn layer to support other features
+    A custom rnn layer to support other features: -> RNN -> (Linear) -> (Norm) -> (NonLinear) -> (Dropout) ->
     """
 
     def __init__(self,
                  input_size: int,
-                 hidden_size: int = 512,
                  rnn: str = "lstm",
                  norm: str = "",
-                 project: Optional[int] = None,
+                 hidden: int = 512,
+                 project: int = -1,
                  non_linear: str = "relu",
                  dropout: float = 0.0,
                  bidirectional: bool = False,
@@ -335,19 +397,19 @@ class VariantRNN(nn.Module):
         super(VariantRNN, self).__init__()
         if non_linear not in rnn_output_nonlinear:
             raise ValueError(f"Unsupported non_linear: {non_linear}")
-        self.nonlinear = rnn_output_nonlinear[non_linear]
+        self.non_linear = rnn_output_nonlinear[non_linear]
         self.rnn = PyTorchRNN(rnn,
                               input_size,
-                              hidden_size,
+                              hidden,
                               num_layers=1,
                               dropout=0,
                               bidirectional=bidirectional)
         self.add_forward_backward = add_forward_backward and bidirectional
         if bidirectional and not add_forward_backward:
-            hidden_size *= 2
-        self.proj = nn.Linear(hidden_size, project) if project else None
+            hidden *= 2
+        self.proj = nn.Linear(hidden, project) if project > 0 else None
         self.norm = Normalize1d(
-            norm, project if project else hidden_size) if norm else None
+            norm, project if project > 0 else hidden) if norm else None
         self.drop = nn.Dropout(dropout) if dropout != 0 else None
 
     def forward(self, inp: th.Tensor,
@@ -372,8 +434,8 @@ class VariantRNN(nn.Module):
         if self.norm:
             out = self.norm(out)
         # nonlinear
-        if self.nonlinear:
-            out = self.nonlinear(out)
+        if self.non_linear:
+            out = self.non_linear(out)
         # dropout
         if self.drop:
             out = self.drop(out)

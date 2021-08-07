@@ -26,10 +26,10 @@ att_enc_kwargs = {
 }
 
 att_dec_kwargs = {
-    "dec_rnn": "lstm",
-    "rnn_layers": 2,
-    "rnn_hidden": 512,
-    "rnn_dropout": 0.1,
+    "rnn": "lstm",
+    "num_layers": 2,
+    "hidden": 512,
+    "dropout": 0.1,
     "input_feeding": True,
     "onehot_embed": False
 }
@@ -37,10 +37,10 @@ att_dec_kwargs = {
 rnnt_dec_kwargs = {
     "embed_size": 512,
     "jot_dim": 512,
-    "dec_rnn": "lstm",
-    "dec_layers": 2,
-    "dec_hidden": 512,
-    "dec_dropout": 0.2
+    "rnn": "lstm",
+    "num_layers": 2,
+    "hidden": 512,
+    "dropout": 0.2
 }
 
 
@@ -75,7 +75,6 @@ def test_ctc_only():
                        vocab_size=vocab_size,
                        asr_transform=asr_transform,
                        enc_type="pytorch_rnn",
-                       enc_proj=256,
                        enc_kwargs=att_enc_kwargs)
     task = aps_task("asr@ctc", ctc_asr, blank=vocab_size - 1)
     egs = gen_asr_egs(batch_size, vocab_size)

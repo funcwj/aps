@@ -166,7 +166,7 @@ class HvdTrainer(Trainer):
             self.lr_scheduler_step(None, end_at="step")
             return True
         else:
-            self.reporter.log(f"Invalid gradient {norm:.3f}, skip...")
+            self.reporter.log(f"Invalid gradient norm {norm:.3f}, skip...")
             return False
 
     def model_states(self) -> Dict:

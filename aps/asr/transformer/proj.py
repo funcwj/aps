@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from aps.asr.base.layer import Conv1d, Conv2d, Normalize1d
+from aps.asr.base.component import Conv1d, Conv2d, Normalize1d
 from aps.libs import Register
 from typing import Optional, NoReturn
 

@@ -3,28 +3,22 @@
 # Copyright 2021 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-import warnings
-
 import torch as th
 import torch.nn as nn
+import torch.nn.functional as tf
 
-from torch.nn.utils.rnn import pad_sequence
-
-from typing import Optional, Dict, Tuple, List
-from aps.asr.base.encoder import encoder_instance, BaseEncoder
-from aps.asr.transformer.encoder import TransformerEncoder
-from aps.asr.beam_search.ctc import ctc_beam_search, ctc_viterbi_align
+from aps.asr.base.encoder import encoder_instance
+from aps.streaming_asr.base.encoder import StreamingEncoder
+from aps.asr.ctc import AMForwardType, NoneOrTensor
+from aps.asr.beam_search.ctc import ctc_beam_search
 from aps.libs import ApsRegisters
 
-NoneOrTensor = Optional[th.Tensor]
-AMForwardType = Tuple[th.Tensor, th.Tensor, NoneOrTensor]
+from typing import Optional, Dict, List
 
 
-class ASREncoderBase(nn.Module):
+class StreamingASREncoder(nn.Module):
     """
-    ASR encoder class
-        ctc: whether we use CTC branch
-        ead: whether we use encoder & decoder structure
+    Streaming ASR encoder class
     """
 
     def __init__(self,
@@ -32,56 +26,24 @@ class ASREncoderBase(nn.Module):
                  vocab_size: int,
                  ctc: bool = False,
                  ead: bool = False,
+                 lctx: int = -1,
+                 rctx: int = -1,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "pytorch_rnn",
                  enc_proj: int = -1,
                  enc_kwargs: Optional[Dict] = None) -> None:
-        super(ASREncoderBase, self).__init__()
+        super(StreamingASREncoder, self).__init__()
         assert ctc or ead
         ctc_only = ctc and not ead
+        self.lctx = lctx
+        self.rctx = rctx
         self.vocab_size = vocab_size
         self.asr_transform = asr_transform
-        if enc_type in ["xfmr", "cfmr"]:
-            enc_proj = enc_kwargs["arch_kwargs"]["att_dim"]
-            enc_kwargs["output_proj"] = vocab_size if ctc_only else -1
-            self.encoder = TransformerEncoder(enc_type, input_size,
-                                              **enc_kwargs)
-            self.is_xfmr_encoder = True
-        else:
-            self.encoder = encoder_instance(
-                enc_type, input_size, vocab_size if ctc_only else enc_proj,
-                enc_kwargs, BaseEncoder)
-            self.is_xfmr_encoder = False
+        self.encoder = encoder_instance(enc_type, input_size,
+                                        vocab_size if ctc_only else enc_proj,
+                                        enc_kwargs, StreamingEncoder)
         # for hybrid ctc/aed, we add CTC branch
         self.ctc = nn.Linear(enc_proj, vocab_size) if ead and ctc else None
-
-    def _batch_decoding_prep(self,
-                             batch: List[th.Tensor],
-                             batch_first: bool = True) -> Tuple[th.Tensor]:
-        """
-        Get encoder output for the batch decoding
-        """
-        # raw wave
-        if len(batch) == 1:
-            warnings.warn("Got one utterance, use beam_search (...) instead")
-        # NOTE: If we do zero padding on the input features/signals and form them as a batch,
-        #       the output may slightly differ with the non-padding version. Thus we use for loop here
-        outs = []
-        for inp in batch:
-            if self.asr_transform:
-                inp, _ = self.asr_transform(inp[None, ...], None)
-            else:
-                inp = inp[None, ...]
-            # N x Ti x D
-            enc_out, _ = self.encoder(inp, None)
-            outs.append(enc_out[0])
-
-        lens = [out.shape[0] for out in outs]
-        # T x N x D
-        enc_out = pad_sequence(outs, batch_first=False)
-        enc_len = th.tensor(lens, device=enc_out.device)
-        # enc_out: N x T x D or T x N x D
-        return enc_out.transpose(0, 1) if batch_first else enc_out, enc_len
 
     def _decoding_prep(self,
                        x: th.Tensor,
@@ -105,6 +67,9 @@ class ASREncoderBase(nn.Module):
                     "Expect 2/3D (single or multi-channel waveform) " +
                     f"tensor, but got {x_dim}")
             x = x[None, ...]
+        # pad context
+        if self.lctx + self.rctx > 0:
+            x = tf.pad(x, (0, 0, self.lctx, self.rctx), "constant", 0)
         # N x Ti x D
         enc_out, _ = self.encoder(x, None)
         # N x Ti x D or Ti x N x D (for xfmr)
@@ -125,6 +90,10 @@ class ASREncoderBase(nn.Module):
         # asr feature transform
         if self.asr_transform:
             x_pad, x_len = self.asr_transform(x_pad, x_len)
+        # pad context
+        if self.lctx + self.rctx > 0:
+            x_pad = tf.pad(x_pad, (0, 0, self.lctx, self.rctx), "constant", 0)
+            x_len += self.lctx + self.rctx
         # N x Ti x D
         enc_out, enc_len = self.encoder(x_pad, x_len)
         # CTC branch
@@ -134,30 +103,41 @@ class ASREncoderBase(nn.Module):
         return enc_out, enc_ctc, enc_len
 
 
-@ApsRegisters.asr.register("asr@ctc")
-class CtcASR(ASREncoderBase):
+@ApsRegisters.asr.register("streaming_asr@ctc")
+class CtcASR(StreamingASREncoder):
     """
-    A simple ASR encoder structure trained with CTC loss
+    Streaming ASR (encoder + CTC)
     """
 
     def __init__(self,
-                 input_size: int = 80,
-                 vocab_size: int = 30,
+                 input_size: int,
+                 vocab_size: int,
                  ctc: bool = True,
                  ead: bool = False,
+                 lctx: int = -1,
+                 rctx: int = -1,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "pytorch_rnn",
-                 enc_proj: int = -1,
                  enc_kwargs: Optional[Dict] = None) -> None:
         super(CtcASR, self).__init__(input_size,
                                      vocab_size,
                                      ctc=ctc,
                                      ead=ead,
+                                     lctx=lctx,
+                                     rctx=rctx,
                                      asr_transform=asr_transform,
                                      enc_type=enc_type,
-                                     enc_proj=enc_proj,
+                                     enc_proj=-1,
                                      enc_kwargs=enc_kwargs)
 
+    @th.jit.export
+    def step(self, chunk: th.Tensor) -> th.Tensor:
+        """
+        Make one processing step
+        """
+        return self.encoder.step(chunk)
+
+    @th.jit.ignore
     def forward(self, x_pad: th.Tensor, x_len: NoneOrTensor) -> AMForwardType:
         """
         Args:
@@ -177,33 +157,11 @@ class CtcASR(ASREncoderBase):
         """
         with th.no_grad():
             # N x T x D or N x D x T
-            enc_out = self._decoding_prep(x,
-                                          batch_first=not self.is_xfmr_encoder)
+            enc_out = self._decoding_prep(x, batch_first=True)
             if self.ctc is None:
                 raise RuntimeError(
                     "Can't do CTC beam search as self.ctc is None")
             ctc_out = self.ctc(enc_out)
-            return ctc_beam_search(
-                ctc_out[:, 0] if self.is_xfmr_encoder else ctc_out[0],
-                blank=self.vocab_size - 1,
-                **kwargs)
-
-    def ctc_align(self, x: th.Tensor, y: th.Tensor) -> Dict:
-        """
-        Do CTC viterbi align if has CTC branch
-        Args:
-            x (Tensor): audio samples or acoustic features, S or Ti x F
-            y (Tensor): reference sequence, U
-        """
-        with th.no_grad():
-            # N x T x D or N x D x T
-            enc_out = self._decoding_prep(x,
-                                          batch_first=not self.is_xfmr_encoder)
-            if self.ctc is None:
-                raise RuntimeError(
-                    "Can't do CTC beam search as self.ctc is None")
-            ctc_out = self.ctc(enc_out)
-            return ctc_viterbi_align(
-                ctc_out[:, 0] if self.is_xfmr_encoder else ctc_out[0],
-                y,
-                blank=self.vocab_size - 1)
+            return ctc_beam_search(ctc_out[0],
+                                   blank=self.vocab_size - 1,
+                                   **kwargs)

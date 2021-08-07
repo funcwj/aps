@@ -12,7 +12,7 @@ import torch.nn.functional as tf
 
 from typing import Optional, Tuple, Dict, List
 from aps.libs import Register
-from aps.asr.xfmr.utils import digit_shift, get_activation_fn, get_relative_uv
+from aps.asr.transformer.utils import digit_shift, get_activation_fn, get_relative_uv
 
 TransformerEncoderLayers = Register("xfmr_encoder_layer")
 MHSAReturnType = List[th.Tensor]

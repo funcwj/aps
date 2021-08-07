@@ -94,7 +94,7 @@ def init_kernel(frame_len: int,
         # to make K^H * K = I
         K = K / B
     # 2 x B x W
-    K = th.transpose(K, 0, 2) * window
+    K = th.transpose(K, 0, 2)
     # 2B x 1 x W
     K = th.reshape(K, (B * 2, 1, K.shape[-1]))
     return K.to(window.device), window
@@ -217,11 +217,13 @@ def splice_feature(feats: th.Tensor,
 
 def _forward_stft(wav: th.Tensor,
                   kernel: th.Tensor,
+                  window: th.Tensor,
                   return_polar: bool = False,
                   pre_emphasis: float = 0,
                   frame_hop: int = 256,
                   onesided: bool = False,
-                  center: bool = False) -> th.Tensor:
+                  center: bool = False,
+                  eps: float = EPSILON) -> th.Tensor:
     """
     STFT function implemented by conv1d
     Args:
@@ -255,9 +257,9 @@ def _forward_stft(wav: th.Tensor,
                            padding=0)
         frames[:, 1:] = frames[:, 1:] - pre_emphasis * frames[:, :-1]
         # 1 x 2B x W, NC x W x T,  NC x 2B x T
-        packed = th.matmul(kernel[:, 0][None, ...], frames)
+        packed = th.matmul(kernel[:, 0][None, ...] * window, frames)
     else:
-        packed = tf.conv1d(wav, kernel, stride=frame_hop, padding=0)
+        packed = tf.conv1d(wav, kernel * window, stride=frame_hop, padding=0)
     # NC x 2B x T => N x C x 2B x T
     if wav_dim == 3:
         packed = packed.view(N, -1, packed.shape[-2], packed.shape[-1])
@@ -269,7 +271,7 @@ def _forward_stft(wav: th.Tensor,
         real = real[..., :num_bins, :]
         imag = imag[..., :num_bins, :]
     if return_polar:
-        mag = (real**2 + imag**2 + EPSILON)**0.5
+        mag = (real**2 + imag**2 + eps)**0.5
         pha = th.atan2(imag, real)
         return th.stack([mag, pha], dim=-1)
     else:
@@ -282,7 +284,8 @@ def _inverse_stft(transform: th.Tensor,
                   return_polar: bool = False,
                   frame_hop: int = 256,
                   onesided: bool = False,
-                  center: bool = False) -> th.Tensor:
+                  center: bool = False,
+                  eps: float = EPSILON) -> th.Tensor:
     """
     iSTFT function implemented by conv1d
     Args:
@@ -318,25 +321,31 @@ def _inverse_stft(transform: th.Tensor,
     # pack: N x 2B x T
     packed = th.cat([real, imag], dim=1)
     # N x 1 x T
-    s = tf.conv_transpose1d(packed, kernel, stride=frame_hop, padding=0)
+    wav = tf.conv_transpose1d(packed,
+                              kernel * window,
+                              stride=frame_hop,
+                              padding=0)
     # normalized audio samples
     # refer: https://github.com/pytorch/audio/blob/2ebbbf511fb1e6c47b59fd32ad7e66023fa0dff1/torchaudio/functional.py#L171
-    # 1 x W x T
-    win = th.repeat_interleave(window[None, ..., None],
-                               packed.shape[-1],
-                               dim=-1)
-    # W x 1 x W
-    I = th.eye(window.shape[0], device=win.device)[:, None]
-    # 1 x 1 x T
-    norm = tf.conv_transpose1d(win**2, I, stride=frame_hop, padding=0)
+    num_frames = packed.shape[-1]
+    win_length = window.shape[0]
+    # W x T
+    win = th.repeat_interleave(window[..., None]**2, num_frames, dim=-1)
+    # Do OLA on windows
+    # v1)
+    I = th.eye(win_length, device=win.device)[:, None]
+    denorm = tf.conv_transpose1d(win[None, ...], I, stride=frame_hop, padding=0)
+    # v2)
+    # num_samples = (num_frames - 1) * frame_hop + win_length
+    # denorm = tf.fold(win[None, ...], (num_samples, 1), (win_length, 1),
+    #                  stride=frame_hop)[..., 0]
     if center:
         pad = kernel.shape[-1] // 2
-        s = s[..., pad:-pad]
-        norm = norm[..., pad:-pad]
-    s = s / (norm + EPSILON)
+        wav = wav[..., pad:-pad]
+        denorm = denorm[..., pad:-pad]
+    wav = wav / (denorm + eps)
     # N x S
-    s = s.squeeze(1)
-    return s
+    return wav.squeeze(1)
 
 
 def _pytorch_stft(wav: th.Tensor,
@@ -347,7 +356,8 @@ def _pytorch_stft(wav: th.Tensor,
                   window: str = "sqrthann",
                   normalized: bool = False,
                   onesided: bool = True,
-                  center: bool = False) -> th.Tensor:
+                  center: bool = False,
+                  eps: float = EPSILON) -> th.Tensor:
     """
     Wrapper of PyTorch STFT function
     Args:
@@ -388,7 +398,7 @@ def _pytorch_stft(wav: th.Tensor,
         return stft
     # N x (C) x F x T
     real, imag = stft[..., 0], stft[..., 1]
-    mag = (real**2 + imag**2 + EPSILON)**0.5
+    mag = (real**2 + imag**2 + eps)**0.5
     pha = th.atan2(imag, real)
     return th.stack([mag, pha], dim=-1)
 
@@ -489,15 +499,16 @@ def forward_stft(wav: th.Tensor,
                              onesided=onesided,
                              center=center)
     else:
-        kernel, _ = init_kernel(frame_len,
-                                frame_hop,
-                                window=window,
-                                round_pow_of_two=round_pow_of_two,
-                                normalized=normalized,
-                                inverse=False,
-                                mode=mode)
+        kernel, window = init_kernel(frame_len,
+                                     frame_hop,
+                                     window=window,
+                                     round_pow_of_two=round_pow_of_two,
+                                     normalized=normalized,
+                                     inverse=False,
+                                     mode=mode)
         return _forward_stft(wav,
                              kernel,
+                             window,
                              return_polar=return_polar,
                              frame_hop=frame_hop,
                              pre_emphasis=pre_emphasis,
@@ -588,7 +599,7 @@ class STFTBase(nn.Module):
                  onesided: bool = True,
                  inverse: bool = False,
                  center: bool = False,
-                 mode="librosa") -> None:
+                 mode: str = "librosa") -> None:
         super(STFTBase, self).__init__()
         if mode != "torch":
             K, w = init_kernel(frame_len,
@@ -624,9 +635,7 @@ class STFTBase(nn.Module):
         """
         Compute number of the frames
         """
-        if th.sum(wav_len <= self.frame_len):
-            raise RuntimeError(
-                f"Audio samples less than frame_len ({self.frame_len})")
+        assert th.sum(wav_len <= self.win_length) == 0
         if self.center:
             wav_len += self.win_length
         return (wav_len - self.win_length) // self.frame_hop + 1
@@ -653,13 +662,13 @@ class STFT(STFTBase):
     def __init__(self, *args, **kwargs):
         super(STFT, self).__init__(*args, inverse=False, **kwargs)
 
-    def forward(self, wav: th.Tensor, return_polar: bool = True) -> th.Tensor:
+    def forward(self, wav: th.Tensor, return_polar: bool = False) -> th.Tensor:
         """
         Accept (single or multiple channel) raw waveform and output magnitude and phase
         Args
             wav (Tensor) input signal, N x (C) x S
         Return
-            transform (Tensor), N x (C) x F x T
+            transform (Tensor), N x (C) x F x T x 2
         """
         if self.mode == "torch":
             return _pytorch_stft(wav,
@@ -674,6 +683,7 @@ class STFT(STFTBase):
         else:
             return _forward_stft(wav,
                                  self.K,
+                                 self.w,
                                  return_polar=return_polar,
                                  frame_hop=self.frame_hop,
                                  pre_emphasis=self.pre_emphasis,
@@ -691,13 +701,13 @@ class iSTFT(STFTBase):
 
     def forward(self,
                 transform: th.Tensor,
-                return_polar: bool = True) -> th.Tensor:
+                return_polar: bool = False) -> th.Tensor:
         """
         Accept phase & magnitude and output raw waveform
         Args
-            transform (Tensor), STFT output
+            transform (Tensor): STFT output, N x F x T x 2
         Return
-            s (Tensor), N x S
+            s (Tensor): N x S
         """
         if self.mode == "torch":
             return _pytorch_istft(transform,

@@ -172,7 +172,7 @@ class CtcTask(Task):
                                      blank=self.ctc_blank)
         # ignore length of eos
         assert den == egs["#tok"] - ctc_enc.shape[0]
-        return {"loss": ctc_loss, "accu": accu}
+        return {"loss": ctc_loss}
 
 
 @ApsRegisters.task.register("asr@ctc_xent")

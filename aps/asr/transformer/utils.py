@@ -38,10 +38,10 @@ def digit_shift(term: th.Tensor) -> th.Tensor:
     return term.transpose(1, -1)
 
 
-def prep_sub_mask(T: int, device: th.device = "cpu") -> th.Tensor:
+def prep_sub_mask(num_frames: int, device: th.device = "cpu") -> th.Tensor:
     """
-    Prepare a square sub-sequence masks (-inf/0)
-    egs: for N = 8, output
+    Prepare the square sub-sequence masks (-inf/0)
+    e.g., for num_frames = 8:
     tensor([[0., -inf, -inf, -inf, -inf, -inf, -inf, -inf],
         [0., 0., -inf, -inf, -inf, -inf, -inf, -inf],
         [0., 0., 0., -inf, -inf, -inf, -inf, -inf],
@@ -51,8 +51,47 @@ def prep_sub_mask(T: int, device: th.device = "cpu") -> th.Tensor:
         [0., 0., 0., 0., 0., 0., 0., -inf],
         [0., 0., 0., 0., 0., 0., 0., 0.]])
     """
-    mask = (th.triu(th.ones(T, T, device=device), diagonal=1) == 1).float()
+    ones = th.ones(num_frames, num_frames, device=device)
+    mask = (th.triu(ones, diagonal=1) == 1).float()
     mask = mask.masked_fill(mask == 1, float("-inf"))
+    return mask
+
+
+def prep_context_mask(num_frames: int,
+                      chunk_size: int = 1,
+                      lctx: int = 0,
+                      rctx: int = 0,
+                      device: th.device = "cpu") -> th.Tensor:
+    """
+    Prepare the square masks (-inf/0) for context masking
+    for chunk_size = 1, lctx = -1, rctx = 0, it equals to prep_sub_mask(...)
+    e.g., for chunk_size = 1, num_frames = 8, rctx = 2, lctx = 1:
+    tensor([[0., 0., 0., -inf, -inf, -inf, -inf, -inf],
+            [0., 0., 0., 0., -inf, -inf, -inf, -inf],
+            [-inf, 0., 0., 0., 0., -inf, -inf, -inf],
+            [-inf, -inf, 0., 0., 0., 0., -inf, -inf],
+            [-inf, -inf, -inf, 0., 0., 0., 0., -inf],
+            [-inf, -inf, -inf, -inf, 0., 0., 0., 0.],
+            [-inf, -inf, -inf, -inf, -inf, 0., 0., 0.],
+            [-inf, -inf, -inf, -inf, -inf, -inf, 0., 0.]])
+    """
+    # -1 means inf
+    if lctx < 0:
+        lctx = num_frames
+    if rctx < 0:
+        rctx = num_frames
+    index = th.arange(0, num_frames, device=device)
+    index_seqs = th.repeat_interleave(index[None, ...], num_frames, 0)
+    # limit right context
+    right = (index // chunk_size + rctx) * chunk_size
+    right_mask = index_seqs > right[..., None]
+    # limit left context
+    left = th.clamp_min((index // chunk_size - lctx) * chunk_size, 0)
+    left_mask = index_seqs < left[..., None]
+    # generate masks
+    zeros = th.zeros(num_frames, device=device)
+    ctx_mask = th.logical_or(left_mask, right_mask)
+    mask = zeros.masked_fill(ctx_mask, float("-inf"))
     return mask
 
 
