@@ -33,7 +33,7 @@ class StreamingSTFT(STFTBase):
         # N x C x F x 2
         frame = th.view_as_real(frame)
         if return_polar:
-            mag = (th.sum(frame**2, -1) + eps)**0.5
+            mag = (th.sum(frame**2, -1) + EPSILON)**0.5
             pha = th.atan2(frame[..., 1], frame[..., 0])
             frame = th.stack([mag, pha], dim=-1)
         return frame

@@ -75,7 +75,6 @@ def test_ctc_only():
                        vocab_size=vocab_size,
                        asr_transform=asr_transform,
                        enc_type="pytorch_rnn",
-                       enc_proj=256,
                        enc_kwargs=att_enc_kwargs)
     task = aps_task("asr@ctc", ctc_asr, blank=vocab_size - 1)
     egs = gen_asr_egs(batch_size, vocab_size)

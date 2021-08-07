@@ -1,5 +1,11 @@
 ## Overview of the Monthly Update
 
+### 2021/08
+
+1. Kick off streaming ASR and real-time SSE
+2. Add streaming features: (i)STFT, fsmn|rnn|conv1d|conv2d ASR encoders
+3. Add encode/decode function in EnhTransform class
+
 ### 2021/07
 
 1. Update implementation of DPRNN
