@@ -10,6 +10,7 @@ import torch.nn.functional as tf
 import aps.streaming_asr.base.encoder as encoder
 from aps.streaming_asr.utils import compute_conv_context
 
+
 def test_streaming_lstm():
     streaming_lstm = encoder.StreamingRNNEncoder(80,
                                                  80,
@@ -56,6 +57,7 @@ def test_streaming_conv1d(K, S, L):
     out_jit = th.cat(out_jit, 1)
     th.testing.assert_allclose(out_ref, out_jit)
 
+
 @pytest.mark.parametrize("K, S, L, C", [(3, 2, 3, 64)])
 def test_streaming_conv2d(K, S, L, C):
     streaming_conv2d = encoder.StreamingConv2dEncoder(80,
@@ -79,6 +81,7 @@ def test_streaming_conv2d(K, S, L, C):
         out_jit.append(scripted_nnet.step(egs_pad[:, t:t + ctx]))
     out_jit = th.cat(out_jit, 1)
     th.testing.assert_allclose(out_ref, out_jit)
+
 
 @pytest.mark.parametrize("L, R, N", [(3, 1, 3), (3, 0, 3)])
 def test_streaming_fsmn(L, R, N):

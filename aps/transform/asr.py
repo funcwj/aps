@@ -55,12 +55,11 @@ def check_valid(feature: th.Tensor,
 
 def export_jit(transform: nn.Module) -> nn.Module:
     """
-    Export transform module for inference 
+    Export transform module for inference
     """
-    eval_transform = [
-        module for module in transform if module.jit_export()
-    ]
+    eval_transform = [module for module in transform if module.jit_export()]
     return nn.Sequential(*eval_transform)
+
 
 class RescaleTransform(nn.Module):
     """
