@@ -270,9 +270,6 @@ class SpectrogramTransform(STFT):
     def dim(self) -> int:
         return self.num_bins
 
-    def len(self, xlen: th.Tensor) -> th.Tensor:
-        return self.num_frames(xlen)
-
     def jit_export(self) -> bool:
         return False
 
@@ -982,7 +979,7 @@ class FeatureTransform(nn.Module):
             return inp_len
         if self.perturb_index != -1:
             inp_len = self.transform[self.perturb_index].output_length(inp_len)
-        num_frames = self.transform[self.spectra_index].len(inp_len)
+        num_frames = self.transform[self.spectra_index].num_frames(inp_len)
         return num_frames // self.subsampling_factor
 
     def forward(self, inp_pad: th.Tensor,

@@ -211,13 +211,13 @@ def test_df_transform(num_bins, num_doas):
                             num_doas=num_doas,
                             af_index="1,0;2,0;3,0;4,0;5,0;6,0")
     num_frames = th.randint(50, 100, (1,)).item()
-    phase = th.rand(batch_size, num_channels, num_bins, num_frames)
+    phase = th.rand(batch_size, num_channels, num_frames, num_bins)
     doa = th.rand(batch_size)
     df = transform(phase, doa)
     if num_doas == 1:
-        assert df.shape == th.Size([batch_size, num_bins, num_frames])
+        assert df.shape == th.Size([batch_size, num_frames, num_bins])
     else:
-        assert df.shape == th.Size([batch_size, num_doas, num_bins, num_frames])
+        assert df.shape == th.Size([batch_size, num_doas, num_frames, num_bins])
 
 
 def debug_visualize_feature():

@@ -48,13 +48,13 @@ class RefChannelTransform(nn.Module):
             return inp[:, self.ref_channel]
 
 
-class AngleTransform(nn.Module):
+class PhaseTransform(nn.Module):
     """
-    Transform tensor [real, imag] to angle tensor
+    Transform tensor [real, imag] to phase tensor
     """
 
     def __init__(self, dim: int = -1):
-        super(AngleTransform, self).__init__()
+        super(PhaseTransform, self).__init__()
         self.dim = dim
 
     def extra_repr(self) -> str:
@@ -138,33 +138,34 @@ class IpdTransform(nn.Module):
         """
         Accept multi-channel phase and output inter-channel phase difference
         Args
-            p (Tensor): phase matrix, N x C x F x T
+            p (Tensor): phase matrix, N x C x T x F
         Return
-            ipd (Tensor): IPD features,  N x MF x T
+            ipd (Tensor): IPD features,  N x T x MF
         """
         if p.dim() not in [3, 4]:
             raise RuntimeError(
                 "{} expect 3/4D tensor, but got {:d} instead".format(
                     self.__class__.__name__, p.dim()))
-        # C x F x T => 1 x C x F x T
+        # C x T x F => 1 x C x T x F
         if p.dim() == 3:
             p = p.unsqueeze(0)
-        N, _, _, T = p.shape
-        pha_dif = p[:, self.index_l] - p[:, self.index_r]
+        N, C, T, _ = p.shape
+        assert C != 1
+        # N x T x C x F
+        p = p.transpose(1, 2).contiguous()
+        pha_dif = p[..., self.index_l, :] - p[..., self.index_r, :]
         if self.cos:
-            # N x M x F x T
+            # N x T x M x F
             ipd = th.cos(pha_dif)
             if self.sin:
-                # N x M x 2F x T, along frequency axis
+                # N x T x M x F, along frequency axis
                 ipd = th.cat([ipd, th.sin(pha_dif)], 2)
         else:
             # ipd = th.fmod(pha_dif + math.pi, 2 * math.pi) - math.pi
             ipd = th.where(ipd > MATH_PI, ipd - MATH_PI * 2, ipd)
             ipd = th.where(ipd <= -MATH_PI, ipd + MATH_PI * 2, ipd)
-        # N x MF x T
-        ipd = ipd.view(N, -1, T)
-        # N x MF x T
-        return ipd
+        # N x T x MF
+        return ipd.view(N, T, -1)
 
 
 class DfTransform(nn.Module):
@@ -267,27 +268,27 @@ class DfTransform(nn.Module):
         """
         Compute angle feature
         Args
-            ipd (Tensor): N x C x F x T
+            ipd (Tensor): N x C x T x F
             doa (Tensor): DoA of the target speaker (if we known that), N
                  or N x D (we do not known that, sampling D DoAs instead)
         Return
-            af (Tensor): N x (D) x F x T
+            af (Tensor): N x (D) x T x F
         """
         # N x C x F or N x D x C x F
         d = self._oracle_phase_delay(doa)
-        d = d.unsqueeze(-1)
         if self.num_doas == 1:
+            # N x C x F
             dif = d[:, self.index_l] - d[:, self.index_r]
-            # N x C x F x T
-            af = th.cos(ipd - dif)
+            # N x C x T x F
+            af = th.cos(ipd - dif[..., None, :])
             # on channel dimention (mean or sum)
             af = th.mean(af, dim=1)
         else:
-            # N x D x C x F x 1
+            # N x D x C x F
             dif = d[:, :, self.index_l] - d[:, :, self.index_r]
-            # N x D x C x F x T
-            af = th.cos(ipd.unsqueeze(1) - dif)
-            # N x D x F x T
+            # N x D x C x T x F
+            af = th.cos(ipd[:, None] - dif[..., None, :])
+            # N x D x T x F
             af = th.mean(af, dim=2)
         return af
 
@@ -297,15 +298,15 @@ class DfTransform(nn.Module):
         Accept doa of the speaker & multi-channel phase, output angle feature
         Args
             doa (Tensor or list[Tensor]): DoA of target/each speaker, N or [N, ...]
-            p (Tensor): phase matrix, N x C x F x T
+            p (Tensor): phase matrix, N x C x T x F
         Return
-            af (Tensor): angle feature, N x F* x T or N x D x F x T (known_doa=False)
+            af (Tensor): angle feature, N x T x F* or N x D x T x F (known_doa=False)
         """
         if p.dim() not in [3, 4]:
             raise RuntimeError(
                 "{} expect 3/4D tensor, but got {:d} instead".format(
                     self.__class__.__name__, p.dim()))
-        # C x F x T => 1 x C x F x T
+        # C x T x F => 1 x C x T x F
         if p.dim() == 3:
             p = p.unsqueeze(0)
         ipd = p[:, self.index_l] - p[:, self.index_r]
@@ -314,12 +315,12 @@ class DfTransform(nn.Module):
             if self.num_doas != 1:
                 raise RuntimeError("known_doa=False, no need to pass "
                                    "doa as a Sequence object")
-            # [N x F x T or N x D x F x T, ...]
+            # [N x T x F or N x D x T x F, ...]
             af = [self._compute_af(ipd, spk_doa) for spk_doa in doa]
-            # N x F x T => N x F* x T
-            af = th.cat(af, 1)
+            # N x T x F => N x T x F*
+            af = th.cat(af, -1)
         else:
-            # N x F x T or N x D x F x T
+            # N x T x F or N x D x T x F
             af = self._compute_af(ipd, doa)
         return af
 
@@ -558,9 +559,8 @@ class FeatureTransform(nn.Module):
         feats_spa = "-".join([t for t in feats_tok if t == "ipd"])
         if feats_spa and ipd_index:
             self.ipd_transform = nn.Sequential(
-                AngleTransform(dim=-1),
-                IpdTransform(ipd_index=ipd_index, cos=cos_ipd, sin=sin_ipd),
-                TFTransposeTransform())
+                PhaseTransform(dim=-1), TFTransposeTransform(),
+                IpdTransform(ipd_index=ipd_index, cos=cos_ipd, sin=sin_ipd))
             ipd_index = ipd_index.split(";")
             if cos_ipd and sin_ipd:
                 feats_dim += len(ipd_index) * 2 * self.forward_stft.num_bins
