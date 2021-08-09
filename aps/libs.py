@@ -178,9 +178,9 @@ def aps_nnet(nnet: str) -> nn.Module:
     Return network class supported by aps (wraps aps_xxx_nnet(...) functions)
     """
     nnet_cls, _ = nnet.split("@")
-    if nnet_cls == "sse":
+    if nnet_cls in ["rt_sse", "sse"]:
         return aps_sse_nnet(nnet)
-    elif nnet_cls == "asr":
+    elif nnet_cls == ["streaming_asr", "asr"]:
         return aps_asr_nnet(nnet)
     else:
         raise RuntimeError(f"Unknown type of the network: {nnet_cls}")

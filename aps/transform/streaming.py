@@ -18,7 +18,10 @@ class StreamingSTFT(STFTBase):
     def __init__(self, *args, **kwargs):
         super(StreamingSTFT, self).__init__(*args, inverse=False, **kwargs)
 
-    def step(self, frame: th.Tensor, return_polar: bool = False) -> th.Tensor:
+    def step(self,
+             frame: th.Tensor,
+             return_polar: bool = False,
+             eps: float = EPSILON) -> th.Tensor:
         """
         Process one frame
         Args:
@@ -33,12 +36,15 @@ class StreamingSTFT(STFTBase):
         # N x C x F x 2
         frame = th.view_as_real(frame)
         if return_polar:
-            mag = (th.sum(frame**2, -1) + EPSILON)**0.5
+            mag = (th.sum(frame**2, -1) + eps)**0.5
             pha = th.atan2(frame[..., 1], frame[..., 0])
             frame = th.stack([mag, pha], dim=-1)
         return frame
 
-    def forward(self, wav: th.Tensor, return_polar: bool = False) -> th.Tensor:
+    def forward(self,
+                wav: th.Tensor,
+                return_polar: bool = False,
+                eps: float = EPSILON) -> th.Tensor:
         """
         Accept (single or multiple channel) raw waveform and output magnitude and phase
         Args
@@ -50,7 +56,8 @@ class StreamingSTFT(STFTBase):
         num_samples = wav.shape[-1]
         for t in range(0, num_samples - self.win_length + 1, self.frame_hop):
             frame = self.step(wav[..., t:t + self.win_length],
-                              return_polar=return_polar)
+                              return_polar=return_polar,
+                              eps=eps)
             frames.append(frame)
         return th.stack(frames, -2)
 
@@ -87,7 +94,7 @@ class StreamingiSTFT(STFTBase):
                              norm="ortho" if self.normalized else "backward")
         return frame * self.w
 
-    def norm(self, frame: th.Tensor) -> th.Tensor:
+    def norm(self, frame: th.Tensor, eps: float = EPSILON) -> th.Tensor:
         """
         Normalize the frame
         """
@@ -97,12 +104,13 @@ class StreamingiSTFT(STFTBase):
         window[:overlap_len] += self.win_cache
         self.win_cache = window[self.frame_hop:]
         self.wav_cache = frame[:, self.frame_hop:]
-        frame = frame / (window + EPSILON)
+        frame = frame / (window + eps)
         return frame[:, :self.frame_hop]
 
     def forward(self,
                 transform: th.Tensor,
-                return_polar: bool = False) -> th.Tensor:
+                return_polar: bool = False,
+                eps: float = EPSILON) -> th.Tensor:
         """
         Accept phase & magnitude and output raw waveform
         Args
@@ -115,7 +123,7 @@ class StreamingiSTFT(STFTBase):
         num_frames = transform.shape[-2]
         for t in range(num_frames):
             frame = self.step(transform[..., t, :], return_polar=return_polar)
-            frames.append(self.norm(frame))
-        cache = self.wav_cache / (self.win_cache + EPSILON)
+            frames.append(self.norm(frame, eps=eps))
+        cache = self.wav_cache / (self.win_cache + eps)
         wav = th.cat(frames + [cache], -1)
         return wav

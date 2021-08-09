@@ -6,6 +6,7 @@
 import io
 import os
 import subprocess
+import warnings
 
 import numpy as np
 import soundfile as sf
@@ -168,7 +169,7 @@ class AudioReader(BaseReader):
         fname = self.index_dict[key]
         samps = None
         # return C x N or N
-        if ":" in fname:
+        if ":" in fname and fname[1] != ":":
             tokens = fname.split(":")
             if len(tokens) != 2:
                 raise RuntimeError(f"Value format error: {fname}")
@@ -183,8 +184,7 @@ class AudioReader(BaseReader):
             try:
                 samps = read_audio(wav_ark, norm=self.norm, sr=self.sr)
             except RuntimeError:
-                print(f"Read audio {key} {fname}:{offset} failed...",
-                      flush=True)
+                warnings.warn(f"Read audio {key} {fname}:{offset} failed ...")
         else:
             if fname[-1] == "|":
                 shell, _ = run_command(fname[:-1], wait=True)
@@ -192,7 +192,7 @@ class AudioReader(BaseReader):
             try:
                 samps = read_audio(fname, norm=self.norm, sr=self.sr)
             except RuntimeError:
-                print(f"Load audio {key} {fname} failed...", flush=True)
+                warnings.warn(f"Load audio {key} {fname} failed ...")
         if samps is None:
             raise RuntimeError("Audio IO failed ...")
         if self.ch >= 0 and samps.ndim == 2:

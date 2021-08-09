@@ -158,10 +158,8 @@ class CtcASR(StreamingASREncoder):
         with th.no_grad():
             # N x T x D or N x D x T
             enc_out = self._decoding_prep(x, batch_first=True)
-            if self.ctc is None:
-                raise RuntimeError(
-                    "Can't do CTC beam search as self.ctc is None")
-            ctc_out = self.ctc(enc_out)
-            return ctc_beam_search(ctc_out[0],
+            if self.ctc is not None:
+                enc_out = self.ctc(enc_out)
+            return ctc_beam_search(enc_out[0],
                                    blank=self.vocab_size - 1,
                                    **kwargs)

@@ -51,7 +51,10 @@ class DFSMN(RealTimeSSEBase):
                                           lctx=lctx,
                                           rctx=rctx)
         if cplx_mask:
-            self.masks = TFTransposeTransform()
+            # constraint in [-100, 100]
+            self.masks = nn.Sequential(
+                MaskNonLinear("none", vmax=100, vmin=-100),
+                TFTransposeTransform())
         else:
             self.masks = nn.Sequential(
                 MaskNonLinear(non_linear, enable="common"),
