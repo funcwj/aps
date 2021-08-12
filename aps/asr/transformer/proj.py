@@ -70,7 +70,8 @@ class Conv1dProj(nn.Module):
                  norm: str = "BN",
                  dropout: float = 0.0,
                  dim: int = 256,
-                 num_layers: int = 2) -> None:
+                 num_layers: int = 2,
+                 for_streaming: bool = False) -> None:
         super(Conv1dProj, self).__init__()
         # generally num_layers should not be too large
         assert num_layers in [2, 3, 4]
@@ -78,7 +79,8 @@ class Conv1dProj(nn.Module):
             Conv1d(input_size if i == 0 else dim,
                    embed_dim if i == num_layers - 1 else dim,
                    dropout=dropout,
-                   norm=norm) for i in range(num_layers)
+                   norm=norm,
+                   for_streaming=for_streaming) for i in range(num_layers)
         ]
         self.conv = nn.Sequential(*conv_inst)
 
@@ -88,7 +90,7 @@ class Conv1dProj(nn.Module):
         """
         if inp.dim() not in [3, 4]:
             raise RuntimeError(
-                f"Conv1dEmbedding expect 3/4D tensor, got {inp.dim()} instead")
+                f"Conv1dProj expect 3/4D tensor, got {inp.dim()} instead")
 
     def num_frames(self, inp_len: Optional[th.Tensor]) -> Optional[th.Tensor]:
         """
@@ -130,14 +132,16 @@ class Conv2dProj(nn.Module):
                  embed_dim: int = 512,
                  in_channels: int = 1,
                  conv_channels: int = 256,
-                 num_layers: int = 2) -> None:
+                 num_layers: int = 2,
+                 for_streaming: bool = True) -> None:
         super(Conv2dProj, self).__init__()
         # generally num_layers should not be too large
         assert num_layers in [2, 3, 4]
         # kernel size = 3, stride = 2
         conv_inst = [
-            Conv2d(conv_channels if i else in_channels, conv_channels)
-            for i in range(num_layers)
+            Conv2d(conv_channels if i else in_channels,
+                   conv_channels,
+                   for_streaming=for_streaming) for i in range(num_layers)
         ]
         self.conv = nn.Sequential(*conv_inst)
         for conv_layer in conv_inst:
@@ -150,7 +154,7 @@ class Conv2dProj(nn.Module):
         """
         if inp.dim() not in [3, 4]:
             raise RuntimeError(
-                f"Conv2dEmbedding expect 3/4D tensor, got {inp.dim()} instead")
+                f"Conv2dProj expect 3/4D tensor, got {inp.dim()} instead")
 
     def num_frames(self, inp_len: Optional[th.Tensor]) -> Optional[th.Tensor]:
         """

@@ -344,7 +344,7 @@ class DenseUnet(SSEBase):
                  enh_transform: Optional[nn.Module] = None,
                  non_linear: str = "sigmoid",
                  non_linear_scale: int = 1,
-                 non_linear_clip: Optional[float] = None,
+                 non_linear_vmax: Optional[float] = None,
                  training_mode: str = "freq") -> None:
         super(DenseUnet, self).__init__(enh_transform,
                                         training_mode=training_mode)
@@ -353,7 +353,7 @@ class DenseUnet(SSEBase):
             self.non_linear = MaskNonLinear(non_linear,
                                             enable="all_wo_softmax",
                                             scale=non_linear_scale,
-                                            value_clip=non_linear_clip)
+                                            vmax=non_linear_vmax)
         else:
             # complex mapping
             self.non_linear = None

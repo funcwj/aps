@@ -8,7 +8,10 @@ import torch as th
 import torch.nn.functional as tf
 
 import aps.streaming_asr.base.encoder as encoder
+from aps.asr.transformer.utils import prep_context_mask
+from aps.asr.transformer.pose import RelPosEncoding
 from aps.streaming_asr.utils import compute_conv_context
+from aps.streaming_asr.transformer.impl import StreamingRelMultiheadAttention
 
 
 def test_streaming_lstm():
@@ -107,18 +110,60 @@ def test_streaming_fsmn(L, R, N):
     out_jit = []
     scripted_nnet.reset()
     for t in range(T):
-        if t == 0:
-            c = egs_pad[:, :lctx + rctx + 1]
-        else:
-            c = egs_pad[:, t + lctx + rctx]
+        c = egs_pad[:, t:t + lctx + rctx + 1]
         c = scripted_nnet.step(c)
         out_jit.append(c)
     out_jit = th.cat(out_jit, 1)
     th.testing.assert_allclose(out_ref, out_jit)
 
 
+@pytest.mark.parametrize("lctx, rctx, chunk", [(3, 1, 1), (3, 3, 1), (3, 0, 1)])
+def test_streaming_self_attn(lctx, rctx, chunk):
+    N, T, E, H = 2, 5 * chunk, 32, 4
+    rel_att = StreamingRelMultiheadAttention(E,
+                                             H,
+                                             dropout=0.1,
+                                             chunk=chunk,
+                                             lctx=lctx,
+                                             rctx=rctx)
+    rel_att.eval()
+    lctx_frames, rctx_frames = lctx * chunk, rctx * chunk
+    rel_pos = RelPosEncoding(E // H,
+                             lradius=lctx_frames,
+                             rradius=rctx_frames + (chunk - 1),
+                             dropout=0)
+    rel_pos.eval()
+
+    chunk_egs = th.rand(T, N, E)
+    chunk_pad = tf.pad(chunk_egs, (0, 0, 0, 0, lctx_frames, rctx_frames),
+                       "constant", 0)
+    TC = T + lctx_frames + rctx_frames
+    masks = prep_context_mask(TC, chunk_size=chunk, lctx=lctx, rctx=rctx)
+    seq = th.arange(-TC + 1, TC)
+    key_rel_pose = rel_pos(seq)
+    out_ref = rel_att(chunk_pad,
+                      chunk_pad,
+                      chunk_pad,
+                      key_rel_pose=key_rel_pose,
+                      attn_mask=masks)[0]
+    if rctx_frames > 0:
+        out_ref = out_ref[lctx_frames:-rctx_frames]
+    else:
+        out_ref = out_ref[lctx_frames:]
+    out_jit = []
+    seq = th.arange(-lctx_frames, rctx_frames + chunk)
+    key_rel_pose = rel_pos(seq)
+    for t in range(0, T, chunk):
+        c = chunk_pad[t:t + lctx_frames + rctx_frames + chunk]
+        c = rel_att.step(c, key_rel_pose)
+        out_jit.append(c)
+    out_jit = th.cat(out_jit, 0)
+    th.testing.assert_allclose(out_ref, out_jit)
+
+
 if __name__ == "__main__":
     # test_streaming_conv1d(3, 2, 3)
     # test_streaming_conv2d(3, 2, 3, 32)
-    test_streaming_fsmn(4, 1, 3)
+    # test_streaming_fsmn(4, 1, 3)
     # test_streaming_lstm()
+    test_streaming_self_attn(2, 0, 1)

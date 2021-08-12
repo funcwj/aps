@@ -128,7 +128,7 @@ def test_freq_xfmr(num_spks):
     transform = EnhTransform(feats="spectrogram-log-cmvn",
                              frame_len=512,
                              frame_hop=256)
-    pose_kwargs = {"radius": 256, "dropout": 0.1}
+    pose_kwargs = {"lradius": 256, "rradius": 256, "dropout": 0.1}
     arch_kwargs = {
         "att_dropout": 0.1,
         "feedforward_dim": 512,
