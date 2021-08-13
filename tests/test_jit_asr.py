@@ -117,12 +117,13 @@ def test_streaming_fsmn(L, R, N):
     th.testing.assert_allclose(out_ref, out_jit)
 
 
-@pytest.mark.parametrize("lctx, rctx, chunk", [(3, 1, 1), (3, 3, 1), (3, 0, 1)])
-def test_streaming_self_attn(lctx, rctx, chunk):
-    N, T, E, H = 2, 5 * chunk, 32, 4
+@pytest.mark.parametrize("lctx, rctx", [(3, 1), (3, 3), (3, 0)])
+def test_streaming_mhsa(lctx, rctx):
+    N, T, E, H = 2, 10, 32, 4
+    chunk = 1
     rel_att = StreamingRelMultiheadAttention(E,
                                              H,
-                                             dropout=0.1,
+                                             dropout=0,
                                              chunk=chunk,
                                              lctx=lctx,
                                              rctx=rctx)
@@ -135,30 +136,74 @@ def test_streaming_self_attn(lctx, rctx, chunk):
     rel_pos.eval()
 
     chunk_egs = th.rand(T, N, E)
+    masks = prep_context_mask(T, chunk_size=chunk, lctx=lctx, rctx=rctx)
+    seq = th.arange(-T + 1, T)
+    key_rel_pose = rel_pos(seq)
+    out_ref = rel_att(chunk_egs,
+                      chunk_egs,
+                      chunk_egs,
+                      key_rel_pose=key_rel_pose,
+                      attn_mask=masks)[0]
+    if rctx_frames > 0:
+        out_ref = out_ref[:-rctx_frames]
+    seq = th.arange(-lctx_frames, rctx_frames + chunk)
+    key_rel_pose = rel_pos(seq)
+    rel_att.reset()
+    for t in range(0, T - rctx_frames, chunk):
+        end = t + rctx_frames + chunk
+        c = rel_att.step(chunk_egs[t:end], key_rel_pose)
+        th.testing.assert_allclose(c, out_ref[t:t + chunk])
+
+
+@pytest.mark.parametrize("lctx, rctx, chunk", [(3, 1, 1), (3, 3, 1), (3, 0, 1)])
+def test_streaming_mhsa_pad(lctx, rctx, chunk):
+    N, T, E, H = 2, 10 * chunk, 32, 4
+    rel_att = StreamingRelMultiheadAttention(E,
+                                             H,
+                                             dropout=0,
+                                             chunk=chunk,
+                                             lctx=lctx,
+                                             rctx=rctx)
+    rel_att.eval()
+    lctx_frames, rctx_frames = lctx * chunk, rctx * chunk
+    rel_pos = RelPosEncoding(E // H,
+                             lradius=lctx_frames,
+                             rradius=rctx_frames + (chunk - 1),
+                             dropout=0)
+    rel_pos.eval()
+
+    chunk_egs = th.rand(T, N, E)
+    masks = prep_context_mask(T, chunk_size=chunk, lctx=lctx, rctx=rctx)
+    seq = th.arange(-T + 1, T)
+    key_rel_pose = rel_pos(seq)
+    out_egs = rel_att(chunk_egs,
+                      chunk_egs,
+                      chunk_egs,
+                      key_rel_pose=key_rel_pose,
+                      attn_mask=masks)[0]
+
     chunk_pad = tf.pad(chunk_egs, (0, 0, 0, 0, lctx_frames, rctx_frames),
                        "constant", 0)
-    TC = T + lctx_frames + rctx_frames
-    masks = prep_context_mask(TC, chunk_size=chunk, lctx=lctx, rctx=rctx)
-    seq = th.arange(-TC + 1, TC)
+    T = T + lctx_frames + rctx_frames
+    masks = prep_context_mask(T, chunk_size=chunk, lctx=lctx, rctx=rctx)
+    if lctx_frames > 0:
+        masks[:lctx_frames, :] = float("-inf")
+        masks[:, :lctx_frames] = float("-inf")
+    if rctx_frames > 0:
+        masks[-rctx_frames:, :] = float("-inf")
+        masks[:, -rctx_frames:] = float("-inf")
+    seq = th.arange(-T + 1, T)
     key_rel_pose = rel_pos(seq)
-    out_ref = rel_att(chunk_pad,
+    out_pad = rel_att(chunk_pad,
                       chunk_pad,
                       chunk_pad,
                       key_rel_pose=key_rel_pose,
                       attn_mask=masks)[0]
     if rctx_frames > 0:
-        out_ref = out_ref[lctx_frames:-rctx_frames]
+        out_pad = out_pad[lctx_frames:-rctx_frames]
     else:
-        out_ref = out_ref[lctx_frames:]
-    out_jit = []
-    seq = th.arange(-lctx_frames, rctx_frames + chunk)
-    key_rel_pose = rel_pos(seq)
-    for t in range(0, T, chunk):
-        c = chunk_pad[t:t + lctx_frames + rctx_frames + chunk]
-        c = rel_att.step(c, key_rel_pose)
-        out_jit.append(c)
-    out_jit = th.cat(out_jit, 0)
-    th.testing.assert_allclose(out_ref, out_jit)
+        out_pad = out_pad[lctx_frames:]
+    th.testing.assert_allclose(out_egs, out_pad)
 
 
 if __name__ == "__main__":
@@ -166,4 +211,5 @@ if __name__ == "__main__":
     # test_streaming_conv2d(3, 2, 3, 32)
     # test_streaming_fsmn(4, 1, 3)
     # test_streaming_lstm()
-    test_streaming_self_attn(2, 0, 1)
+    test_streaming_mhsa(2, 2)
+    # test_streaming_mhsa_pad(3, 1, 2)

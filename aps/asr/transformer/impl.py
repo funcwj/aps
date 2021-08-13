@@ -256,8 +256,9 @@ class RelMultiheadAttention(ApsMultiheadAttention):
         # 2) key_rel_pose is 2L-1 x D
         # L x N x H x 2L-1
         term_b = th.matmul(query, key_rel_pose.transpose(0, 1))
+        term_b = digit_shift(term_b)
         # L x N x H x S
-        return term_a + digit_shift(term_b)
+        return term_a + term_b
 
     def forward(self,
                 query: th.Tensor,
