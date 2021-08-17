@@ -359,8 +359,7 @@ class Conv1dEncoder(EncoderBase):
         """
         for conv1d in self.enc_layers:
             inp = conv1d(inp)
-        if inp_len is not None:
-            for conv1d in self.enc_layers:
+            if inp_len is not None:
                 inp_len = conv1d.compute_outp_dim(inp_len)
         return inp, inp_len
 
@@ -431,8 +430,7 @@ class Conv2dEncoder(EncoderBase):
         # N x C x T x F
         for conv2d in self.enc_layers:
             inp = conv2d(inp)
-        if inp_len is not None:
-            for conv2d in self.enc_layers:
+            if inp_len is not None:
                 inp_len = conv2d.compute_outp_dim(inp_len, 0)
         N, _, T, _ = inp.shape
         # N x T x C x F

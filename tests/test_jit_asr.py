@@ -12,6 +12,7 @@ from aps.asr.transformer.utils import prep_context_mask
 from aps.asr.transformer.pose import RelPosEncoding
 from aps.streaming_asr.utils import compute_conv_context
 from aps.streaming_asr.transformer.impl import StreamingRelMultiheadAttention
+from aps.streaming_asr.transformer.encoder import StreamingTransformerEncoder
 
 
 def test_streaming_lstm():
@@ -117,21 +118,20 @@ def test_streaming_fsmn(L, R, N):
     th.testing.assert_allclose(out_ref, out_jit)
 
 
-@pytest.mark.parametrize("lctx, rctx", [(3, 1), (3, 3), (3, 0)])
-def test_streaming_mhsa(lctx, rctx):
+@pytest.mark.parametrize("lctx, chunk", [(0, 3), (3, 1), (2, 3)])
+def test_streaming_mhsa(lctx, chunk):
     N, T, E, H = 2, 10, 32, 4
-    chunk = 1
+    rctx = 0
     rel_att = StreamingRelMultiheadAttention(E,
                                              H,
                                              dropout=0,
                                              chunk=chunk,
-                                             lctx=lctx,
-                                             rctx=rctx)
+                                             lctx=lctx)
     rel_att.eval()
-    lctx_frames, rctx_frames = lctx * chunk, rctx * chunk
+    lctx_frames = lctx * chunk
     rel_pos = RelPosEncoding(E // H,
                              lradius=lctx_frames,
-                             rradius=rctx_frames + (chunk - 1),
+                             rradius=chunk - 1,
                              dropout=0)
     rel_pos.eval()
 
@@ -144,66 +144,54 @@ def test_streaming_mhsa(lctx, rctx):
                       chunk_egs,
                       key_rel_pose=key_rel_pose,
                       attn_mask=masks)[0]
-    if rctx_frames > 0:
-        out_ref = out_ref[:-rctx_frames]
-    seq = th.arange(-lctx_frames, rctx_frames + chunk)
+    seq = th.arange(lctx_frames + chunk)
+    seq = seq[None, :] - seq[:, None]
     key_rel_pose = rel_pos(seq)
     rel_att.reset()
-    for t in range(0, T - rctx_frames, chunk):
-        end = t + rctx_frames + chunk
+    idx = 0
+    for t in range(0, T, chunk):
+        end = t + chunk
+        # print(f"{t}: {end}")
         c = rel_att.step(chunk_egs[t:end], key_rel_pose)
-        th.testing.assert_allclose(c, out_ref[t:t + chunk])
+        th.testing.assert_allclose(c[:chunk], out_ref[t:t + chunk])
 
 
-@pytest.mark.parametrize("lctx, rctx, chunk", [(3, 1, 1), (3, 3, 1), (3, 0, 1)])
-def test_streaming_mhsa_pad(lctx, rctx, chunk):
-    N, T, E, H = 2, 10 * chunk, 32, 4
-    rel_att = StreamingRelMultiheadAttention(E,
-                                             H,
-                                             dropout=0,
-                                             chunk=chunk,
-                                             lctx=lctx,
-                                             rctx=rctx)
-    rel_att.eval()
-    lctx_frames, rctx_frames = lctx * chunk, rctx * chunk
-    rel_pos = RelPosEncoding(E // H,
-                             lradius=lctx_frames,
-                             rradius=rctx_frames + (chunk - 1),
-                             dropout=0)
-    rel_pos.eval()
+@pytest.mark.parametrize("lctx, chunk", [(0, 3), (3, 1), (2, 3)])
+def test_streaming_xfmr_linear(lctx, chunk):
+    rctx = 0
+    proj_kwargs = {"norm": "BN"}
+    pose_kwargs = {"lradius": lctx, "rradius": rctx}
+    arch_kwargs = {
+        "att_dim": 32,
+        "nhead": 4,
+        "feedforward_dim": 256,
+        "att_dropout": 0.1,
+        "ffn_dropout": 0.1,
+        "pre_norm": False
+    }
+    N, T, F = 2, 10, 80
+    xfmr = StreamingTransformerEncoder("xfmr",
+                                       F,
+                                       output_proj=F,
+                                       num_layers=4,
+                                       lctx=lctx,
+                                       chunk=chunk,
+                                       proj="linear",
+                                       proj_kwargs=proj_kwargs,
+                                       pose="rel",
+                                       pose_kwargs=pose_kwargs,
+                                       arch_kwargs=arch_kwargs)
+    xfmr.eval()
+    egs = th.rand(N, T, F)
+    egs_out = xfmr(egs, None)[0]
 
-    chunk_egs = th.rand(T, N, E)
-    masks = prep_context_mask(T, chunk_size=chunk, lctx=lctx, rctx=rctx)
-    seq = th.arange(-T + 1, T)
-    key_rel_pose = rel_pos(seq)
-    out_egs = rel_att(chunk_egs,
-                      chunk_egs,
-                      chunk_egs,
-                      key_rel_pose=key_rel_pose,
-                      attn_mask=masks)[0]
-
-    chunk_pad = tf.pad(chunk_egs, (0, 0, 0, 0, lctx_frames, rctx_frames),
-                       "constant", 0)
-    T = T + lctx_frames + rctx_frames
-    masks = prep_context_mask(T, chunk_size=chunk, lctx=lctx, rctx=rctx)
-    if lctx_frames > 0:
-        masks[:lctx_frames, :] = float("-inf")
-        masks[:, :lctx_frames] = float("-inf")
-    if rctx_frames > 0:
-        masks[-rctx_frames:, :] = float("-inf")
-        masks[:, -rctx_frames:] = float("-inf")
-    seq = th.arange(-T + 1, T)
-    key_rel_pose = rel_pos(seq)
-    out_pad = rel_att(chunk_pad,
-                      chunk_pad,
-                      chunk_pad,
-                      key_rel_pose=key_rel_pose,
-                      attn_mask=masks)[0]
-    if rctx_frames > 0:
-        out_pad = out_pad[lctx_frames:-rctx_frames]
-    else:
-        out_pad = out_pad[lctx_frames:]
-    th.testing.assert_allclose(out_egs, out_pad)
+    scripted_xfmr = th.jit.script(xfmr)
+    key_rel_pose = scripted_xfmr.step_pose()
+    xfmr.reset()
+    for t in range(0, T, chunk):
+        end = t + chunk
+        c = xfmr.step(egs[:, t:end], key_rel_pose)
+        th.testing.assert_allclose(c[:, :chunk], egs_out[:, t:t + chunk])
 
 
 if __name__ == "__main__":
@@ -211,5 +199,5 @@ if __name__ == "__main__":
     # test_streaming_conv2d(3, 2, 3, 32)
     # test_streaming_fsmn(4, 1, 3)
     # test_streaming_lstm()
-    test_streaming_mhsa(2, 2)
-    # test_streaming_mhsa_pad(3, 1, 2)
+    # test_streaming_mhsa(2, 2)
+    test_streaming_xfmr_linear(2, 2)

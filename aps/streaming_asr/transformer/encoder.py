@@ -26,8 +26,8 @@ class StreamingTransformerEncoder(nn.Module):
                  input_size: int,
                  output_proj: int = -1,
                  num_layers: int = 6,
-                 mhsa_lctx: int = 3,
-                 mhsa_rctx: int = 1,
+                 chunk: int = 1,
+                 lctx: int = 3,
                  proj: str = "conv2d",
                  proj_kwargs: Dict = {},
                  pose: str = "rel",
@@ -41,30 +41,41 @@ class StreamingTransformerEncoder(nn.Module):
             self.proj = get_xfmr_proj(proj, input_size, att_dim, **proj_kwargs)
         if pose != "rel":
             raise ValueError("Now only support rel position encodings")
-        if mhsa_rctx + mhsa_lctx == 0:
-            raise ValueError(
-                f"mhsa_rctx({mhsa_rctx}) + mhsa_lctx({mhsa_lctx}) is zero")
+        pose_kwargs["lradius"] = lctx
+        pose_kwargs["rradius"] = chunk - 1
         self.pose = get_xfmr_pose(pose, att_dim // arch_kwargs["nhead"],
                                   **pose_kwargs)
+        arch_kwargs["lctx"] = lctx
+        arch_kwargs["chunk"] = chunk
         self.encoder = get_xfmr_encoder(arch, "rel", num_layers, arch_kwargs)
         if output_proj > 0:
             self.outp = nn.Linear(att_dim, output_proj)
         else:
             self.outp = None
-        self.lctx, self.rctx = mhsa_lctx, mhsa_rctx
+        self.lctx = lctx
+        self.chunk = chunk
 
+    @th.jit.export
     def reset(self):
         self.encoder.reset()
 
-    def step(self,
-             chunk: th.Tensor,
-             inj_pose: Optional[th.Tensor] = None) -> th.Tensor:
+    @th.jit.export
+    def step_pose(self) -> th.Tensor:
+        """
+        Return the position encodings used in step functions
+        """
+        seq = th.arange((self.lctx + 1) * self.chunk)
+        seq = seq[None, :] - seq[:, None]
+        return self.pose(seq)
+
+    @th.jit.export
+    def step(self, chunk: th.Tensor, inj_pose: th.Tensor) -> th.Tensor:
         """
         Args:
-            chunk (Tensor): N x T+C x F
+            chunk (Tensor): N x T x F
             inj_pose (Tensor): T x D
         Return:
-            chunk (Tensor): N x 1 x F
+            chunk (Tensor): N x T x F
         """
         if self.proj is None:
             enc_inp = chunk
@@ -72,12 +83,12 @@ class StreamingTransformerEncoder(nn.Module):
             enc_inp = self.proj(chunk)
         # T x N x D
         enc_inp = enc_inp.transpose(0, 1)
-        # 1 x N x D
+        # T x N x D
         enc_out = self.encoder.step(enc_inp, inj_pose=inj_pose)
         # project back
         if self.outp is not None:
             enc_out = self.outp(enc_out)
-        # N x 1 x F
+        # N x T x F
         return enc_out.transpose(0, 1)
 
     def forward(self, inp_pad: th.Tensor,
@@ -104,9 +115,9 @@ class StreamingTransformerEncoder(nn.Module):
             th.arange(-nframes + 1, nframes, device=enc_inp.device))
         # src_mask: Ti x Ti
         src_mask = prep_context_mask(nframes,
-                                     1,
+                                     self.chunk,
                                      lctx=self.lctx,
-                                     rctx=self.rctx,
+                                     rctx=0,
                                      device=enc_inp.device)
         # enc_inp: N x Ti x D => Ti x N x D
         enc_inp = enc_inp.transpose(0, 1)

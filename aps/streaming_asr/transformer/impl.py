@@ -8,7 +8,9 @@ import torch.nn as nn
 
 from typing import Optional, Dict
 from aps.libs import Register
-from aps.asr.transformer.impl import RelMultiheadAttention, ApsTransformerEncoderLayer, ApsTransformerEncoder
+from aps.asr.transformer.utils import digit_shift
+from aps.asr.transformer.impl import RelMultiheadAttention
+from aps.asr.transformer.impl import ApsTransformerEncoderLayer, ApsTransformerEncoder, ApsConformerEncoderLayer
 
 StreamingTransformerEncoderLayers = Register("streaming_xfmr_encoder_layer")
 
@@ -23,23 +25,19 @@ class StreamingRelMultiheadAttention(RelMultiheadAttention):
                  num_heads: int,
                  dropout: float = 0,
                  bias: bool = True,
-                 chunk: int = 1,
                  lctx: int = 1,
-                 rctx: int = 1):
+                 chunk: int = 1):
         super(StreamingRelMultiheadAttention, self).__init__(embed_dim,
                                                              num_heads,
                                                              dropout=dropout,
                                                              bias=bias)
-        assert lctx + rctx != 0
-        # NOTE: now only supports chunk == 1
-        assert chunk == 1
+        assert chunk + lctx > 1
         self.lctx = lctx * chunk
         self.chunk = chunk
-        self.cache = (lctx + rctx) * chunk
         self.reset()
 
     def reset(self):
-        self.t = 0
+        self.init = True
         self.cache_q = th.tensor(0)
         self.cache_k = th.tensor(0)
         self.cache_v = th.tensor(0)
@@ -48,24 +46,25 @@ class StreamingRelMultiheadAttention(RelMultiheadAttention):
         """
         Args:
             chunk (Tensor): T x N x E
-            key_rel_pose (Tensor): T x D
+            key_rel_pose (Tensor): ... x D
         Return:
-            chunk (Tensor): C x N x E
+            chunk (Tensor): T x N x E
         """
-        if self.t:
+        num_frames = chunk.shape[0]
+        if not self.init:
             chunk = chunk[-self.chunk:]
         # C x N x H x D
         query, key, value = self.inp_proj(chunk, chunk, chunk)
         # T x N x H x D
-        if self.t:
+        if not self.init and self.lctx:
             query = th.cat([self.cache_q, query], 0)
             value = th.cat([self.cache_v, value], 0)
             key = th.cat([self.cache_k, key], 0)
-        num_frames = query.shape[0]
-        rel_pose = key_rel_pose[-num_frames:]
+        C = query.shape[0]
         # T x N x H x T
         term_a = th.einsum("lnhd,snhd->lnhs", query, key)
-        term_b = th.matmul(query, rel_pose.transpose(0, 1))
+        rel_pose = key_rel_pose[-C:, -C:]
+        term_b = th.matmul(query, rel_pose[:, None].transpose(-1, -2))
         # T x N x H x T
         logit = term_a + term_b
         # T x N x E
@@ -74,24 +73,25 @@ class StreamingRelMultiheadAttention(RelMultiheadAttention):
                                               attn_mask=None,
                                               key_padding_mask=None)
         context = self.wrap_out(context, weight)[0]
-        self.t = min(self.t, self.lctx) + self.chunk
-        self.cache_q = query[-self.cache:]
-        self.cache_v = value[-self.cache:]
-        self.cache_k = key[-self.cache:]
-        return context[self.t - self.chunk:self.t]
+        self.init = False
+        if self.lctx:
+            self.cache_q = query[-self.lctx:]
+            self.cache_v = value[-self.lctx:]
+            self.cache_k = key[-self.lctx:]
+        return context[-num_frames:]
 
 
 @StreamingTransformerEncoderLayers.register("xfmr_rel")
 class StreamingTransformerRelEncoderLayer(ApsTransformerEncoderLayer):
     """
-    Transformer encoder layer using relative position encodings
+    Streaming version of Transformer encoder layer using relative position encodings
     """
 
     def __init__(self,
                  att_dim: int,
                  nhead: int,
+                 chunk: int = 1,
                  lctx: int = 1,
-                 rctx: int = 1,
                  feedforward_dim: int = 2048,
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
@@ -100,8 +100,7 @@ class StreamingTransformerRelEncoderLayer(ApsTransformerEncoderLayer):
         self_attn = StreamingRelMultiheadAttention(att_dim,
                                                    nhead,
                                                    lctx=lctx,
-                                                   rctx=rctx,
-                                                   chunk=1,
+                                                   chunk=chunk,
                                                    dropout=att_dropout)
         super(StreamingTransformerRelEncoderLayer,
               self).__init__(att_dim,
@@ -135,6 +134,76 @@ class StreamingTransformerRelEncoderLayer(ApsTransformerEncoderLayer):
         return chunk
 
 
+@StreamingTransformerEncoderLayers.register("cfmr_rel")
+class StreamingConformerRelEncoderLayer(ApsConformerEncoderLayer):
+    """
+    Streaming version of Conformer encoder layer using relative position encodings
+    """
+
+    def __init__(self,
+                 att_dim: int,
+                 nhead: int,
+                 lctx: int = 1,
+                 chunk: int = 1,
+                 feedforward_dim: int = 2048,
+                 att_dropout: float = 0.1,
+                 ffn_dropout: float = 0.1,
+                 kernel_size: int = 16,
+                 activation: str = "swish") -> None:
+        self_attn = RelMultiheadAttention(att_dim,
+                                          nhead,
+                                          lctx=lctx,
+                                          chunk=chunk,
+                                          dropout=att_dropout)
+        super(StreamingConformerRelEncoderLayer,
+              self).__init__(att_dim,
+                             self_attn,
+                             feedforward_dim=feedforward_dim,
+                             dropout=ffn_dropout,
+                             activation=activation,
+                             kernel_size=kernel_size,
+                             casual_conv1d=True)
+
+    def reset(self):
+        self.self_attn.reset()
+
+    def conv_step(self, chunk: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp (Tensor): T x N x D
+        Return
+            out (Tensor): T x N x D
+        """
+        return chunk
+
+    def step(self, chunk: th.Tensor, inj_pose: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            chunk (Tensor): T x N x E
+            inj_pose (Tensor): T x D
+        Return:
+            chunk (Tensor): T x N x E
+        """
+        # NOTE: use pre-norm by default
+        # 1) FFN
+        if self.feedforward1 is not None:
+            chunk1 = self.feedforward1(chunk) * 0.5 + chunk
+        else:
+            chunk1 = chunk
+        # self-attention block
+        chunk2 = self.norm1(chunk1)
+        att = self.self_attn(chunk2, inj_pose)
+        chunk = chunk1 + self.dropout(att)
+        # conv
+        chunk = self.conv_step(self.norm2(chunk)) + chunk
+        # 2) FFN
+        if self.feedforward1 is not None:
+            out = self.feedforward2(chunk) * 0.5 + chunk
+        else:
+            out = self.feedforward2(chunk) + chunk
+        return out
+
+
 class ApsStreamingTransformerEncoder(ApsTransformerEncoder):
     """
     Wrapper for stack of N streaming Transformer encoder layers
@@ -152,9 +221,7 @@ class ApsStreamingTransformerEncoder(ApsTransformerEncoder):
         for layer in self.layers:
             layer.reset()
 
-    def step(self,
-             chunk: th.Tensor,
-             inj_pose: Optional[th.Tensor] = None) -> th.Tensor:
+    def step(self, chunk: th.Tensor, inj_pose: th.Tensor) -> th.Tensor:
         """
         Args:
             chunk (Tensor): T x N x E
@@ -169,7 +236,6 @@ class ApsStreamingTransformerEncoder(ApsTransformerEncoder):
 
         if self.norm is not None:
             out = self.norm(out)
-
         return out
 
 

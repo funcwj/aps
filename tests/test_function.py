@@ -10,7 +10,7 @@ import torch.nn as nn
 from aps.libs import dynamic_importlib, ApsRegisters, ApsModules
 from aps.conf import load_dict
 from aps.asr.transformer.impl import ApsMultiheadAttention
-from aps.asr.transformer.utils import digit_shift, prep_sub_mask
+from aps.asr.transformer.utils import digit_shift, prep_sub_mask, prep_context_mask
 from aps.asr.base.attention import padding_mask
 
 
@@ -28,7 +28,8 @@ def test_load_dict(str_dict):
 
 
 @pytest.mark.parametrize(
-    "package", ["asr", "streaming_asr", "sse", "task", "loader", "trainer", "transform"])
+    "package",
+    ["asr", "streaming_asr", "sse", "task", "loader", "trainer", "transform"])
 def test_register(package):
     attr = getattr(ApsModules, package)
     attr.import_all()
@@ -97,3 +98,11 @@ def test_aps_selfattn(index):
     assert my2.shape == th2.shape
     th.testing.assert_allclose(my2, th2)
     th.testing.assert_allclose(my1, th1)
+
+
+def test_context_mask(lctx, rctx, chunk):
+    print(prep_context_mask(10, chunk, lctx, rctx))
+
+
+if __name__ == "__main__":
+    test_context_mask(0, 0, 3)
