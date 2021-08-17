@@ -5,10 +5,10 @@
 
 import torch as th
 import torch.nn as nn
+import torch.nn.functional as tf
 
 from typing import Optional, Dict
 from aps.libs import Register
-from aps.asr.transformer.utils import digit_shift
 from aps.asr.transformer.impl import RelMultiheadAttention
 from aps.asr.transformer.impl import ApsTransformerEncoderLayer, ApsTransformerEncoder, ApsConformerEncoderLayer
 
@@ -109,6 +109,7 @@ class StreamingTransformerRelEncoderLayer(ApsTransformerEncoderLayer):
                              dropout=ffn_dropout,
                              activation=activation,
                              pre_norm=pre_norm)
+        self.reset()
 
     def reset(self):
         self.self_attn.reset()
@@ -148,13 +149,13 @@ class StreamingConformerRelEncoderLayer(ApsConformerEncoderLayer):
                  feedforward_dim: int = 2048,
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
-                 kernel_size: int = 16,
+                 kernel_size: int = 15,
                  activation: str = "swish") -> None:
-        self_attn = RelMultiheadAttention(att_dim,
-                                          nhead,
-                                          lctx=lctx,
-                                          chunk=chunk,
-                                          dropout=att_dropout)
+        self_attn = StreamingRelMultiheadAttention(att_dim,
+                                                   nhead,
+                                                   lctx=lctx,
+                                                   chunk=chunk,
+                                                   dropout=att_dropout)
         super(StreamingConformerRelEncoderLayer,
               self).__init__(att_dim,
                              self_attn,
@@ -163,9 +164,12 @@ class StreamingConformerRelEncoderLayer(ApsConformerEncoderLayer):
                              activation=activation,
                              kernel_size=kernel_size,
                              casual_conv1d=True)
+        self.reset()
 
     def reset(self):
         self.self_attn.reset()
+        self.cache_conv = th.tensor(0)
+        self.cache_frames = 0
 
     def conv_step(self, chunk: th.Tensor) -> th.Tensor:
         """
@@ -174,13 +178,27 @@ class StreamingConformerRelEncoderLayer(ApsConformerEncoderLayer):
         Return
             out (Tensor): T x N x D
         """
-        return chunk
+        num_frames = chunk.shape[0]
+        # T x N x F => N x F x T
+        chunk = th.einsum("tnf->nft", chunk)
+        # padding cache
+        if self.cache_frames > 0:
+            chunk = th.cat([self.cache_conv, chunk], -1)
+        # padding zeros
+        if self.padding - self.cache_frames > 0:
+            chunk = tf.pad(chunk, (self.padding - self.cache_frames, 0))
+        self.cache_frames = min(num_frames + self.cache_frames, self.padding)
+        self.cache_conv = chunk[..., -self.cache_frames:]
+        chunk = self.convolution(chunk)
+        # N x F x T => T x N x F
+        chunk = th.einsum("nft->tnf", chunk)
+        return chunk[-num_frames:]
 
     def step(self, chunk: th.Tensor, inj_pose: th.Tensor) -> th.Tensor:
         """
         Args:
             chunk (Tensor): T x N x E
-            inj_pose (Tensor): T x D
+            inj_pose (Tensor): ... x D
         Return:
             chunk (Tensor): T x N x E
         """
@@ -192,7 +210,7 @@ class StreamingConformerRelEncoderLayer(ApsConformerEncoderLayer):
             chunk1 = chunk
         # self-attention block
         chunk2 = self.norm1(chunk1)
-        att = self.self_attn(chunk2, inj_pose)
+        att = self.self_attn.step(chunk2, inj_pose)
         chunk = chunk1 + self.dropout(att)
         # conv
         chunk = self.conv_step(self.norm2(chunk)) + chunk
@@ -216,6 +234,7 @@ class ApsStreamingTransformerEncoder(ApsTransformerEncoder):
         super(ApsStreamingTransformerEncoder, self).__init__(encoder_layer,
                                                              num_layers,
                                                              norm=norm)
+        self.reset()
 
     def reset(self):
         for layer in self.layers:
@@ -232,7 +251,7 @@ class ApsStreamingTransformerEncoder(ApsTransformerEncoder):
         out = chunk
 
         for mod in self.layers:
-            out = mod.step(out, inj_pose=inj_pose)
+            out = mod.step(out, inj_pose)
 
         if self.norm is not None:
             out = self.norm(out)

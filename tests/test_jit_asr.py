@@ -148,7 +148,6 @@ def test_streaming_mhsa(lctx, chunk):
     seq = seq[None, :] - seq[:, None]
     key_rel_pose = rel_pos(seq)
     rel_att.reset()
-    idx = 0
     for t in range(0, T, chunk):
         end = t + chunk
         # print(f"{t}: {end}")
@@ -194,10 +193,50 @@ def test_streaming_xfmr_linear(lctx, chunk):
         th.testing.assert_allclose(c[:, :chunk], egs_out[:, t:t + chunk])
 
 
+@pytest.mark.parametrize("lctx, chunk", [(0, 3), (3, 1), (2, 3)])
+def test_streaming_cfmr_linear(lctx, chunk):
+    rctx = 0
+    proj_kwargs = {"norm": "BN"}
+    pose_kwargs = {"lradius": lctx, "rradius": rctx}
+    arch_kwargs = {
+        "att_dim": 32,
+        "nhead": 4,
+        "feedforward_dim": 256,
+        "kernel_size": 15,
+        "att_dropout": 0.1,
+        "ffn_dropout": 0.1
+    }
+    N, T, F = 2, 20, 80
+    cfmr = StreamingTransformerEncoder("cfmr",
+                                       F,
+                                       output_proj=F,
+                                       num_layers=1,
+                                       lctx=lctx,
+                                       chunk=chunk,
+                                       proj="linear",
+                                       proj_kwargs=proj_kwargs,
+                                       pose="rel",
+                                       pose_kwargs=pose_kwargs,
+                                       arch_kwargs=arch_kwargs)
+    cfmr.eval()
+    egs = th.rand(N, T, F)
+    egs_out = cfmr(egs, None)[0]
+
+    scripted_cfmr = th.jit.script(cfmr)
+    key_rel_pose = scripted_cfmr.step_pose()
+    cfmr.reset()
+    for t in range(0, T, chunk):
+        end = t + chunk
+        print(f"{t}:{end}")
+        c = cfmr.step(egs[:, t:end], key_rel_pose)
+        th.testing.assert_allclose(c[:, :chunk], egs_out[:, t:t + chunk])
+
+
 if __name__ == "__main__":
     # test_streaming_conv1d(3, 2, 3)
     # test_streaming_conv2d(3, 2, 3, 32)
     # test_streaming_fsmn(4, 1, 3)
     # test_streaming_lstm()
     # test_streaming_mhsa(2, 2)
-    test_streaming_xfmr_linear(2, 2)
+    # test_streaming_xfmr_linear(2, 2)
+    test_streaming_cfmr_linear(2, 2)

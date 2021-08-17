@@ -683,7 +683,7 @@ class Trainer(object):
             "num_parameters": self.num_params
         }
         self.save_checkpoint(final,
-                             tag=f"avg.epoch{beg_epoch}-{self.cur_epoch + 1}",
+                             tag=f"avg.epoch{beg_epoch}-{self.cur_epoch}",
                              enable_subroutine=False)
 
     def train_one_step(self, egs: Dict) -> bool:
