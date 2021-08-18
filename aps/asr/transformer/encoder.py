@@ -55,14 +55,13 @@ class TransformerEncoder(nn.Module):
     def forward(self, inp_pad: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> EncRetType:
         """
-        Go through projection layer
+        Go through projection & transformer layer
         Args:
             inp_pad: N x Ti x F
             inp_len: N or None
         Return:
             enc_inp: N x Ti x D
             inp_len: N or None
-            src_pad_mask: N x Ti or None
         """
         if self.proj is None:
             enc_inp = inp_pad
