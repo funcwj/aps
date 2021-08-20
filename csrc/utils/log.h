@@ -11,60 +11,50 @@
 #include <iostream>
 #include <sstream>
 
-class Logger
-{
-public:
+class Logger {
+ public:
   Logger(const std::string &type, const char *func, const char *file,
          size_t line)
       : type_(type), func_(func), file_(BaseName(file)), line_(line) {}
 
-  ~Logger()
-  {
+  ~Logger() {
     std::string msg = oss_.str();
-    while (true)
-    {
+    while (true) {
       std::string::iterator p = std::find(msg.begin(), msg.end(), '\n');
-      if (p == msg.end())
-        break;
+      if (p == msg.end()) break;
       msg.erase(p);
     }
     Log(msg);
   }
 
-  void Log(const std::string &msg)
-  {
+  void Log(const std::string &msg) {
     std::ostringstream prefix;
     prefix << Date() << " - " << type_ << " (" << func_ << "(...):" << file_
            << ":" << line_ << ")";
     std::cerr << prefix.str().c_str() << " " << msg.c_str() << std::endl;
-    if (type_ == "ASSERT" || type_ == "FAIL")
-      abort();
+    if (type_ == "ASSERT" || type_ == "FAIL") abort();
   }
 
   std::ostream &Stream() { return oss_; }
 
-private:
+ private:
   std::ostringstream oss_;
 
-  std::string type_; // FAIL, INFO, WARN, ASSERT
+  std::string type_;  // FAIL, INFO, WARN, ASSERT
   const char *func_;
   const char *file_;
   size_t line_;
 
-  const char *BaseName(const char *path)
-  {
+  const char *BaseName(const char *path) {
     int pos = strlen(path) - 1;
-    while (pos >= 0)
-    {
-      if (path[pos] == '/')
-        break;
+    while (pos >= 0) {
+      if (path[pos] == '/') break;
       pos--;
     }
     return path + pos + 1;
   }
 
-  const std::string Date()
-  {
+  const std::string Date() {
     std::ostringstream time_format;
     time_t time_now = time(0);
     tm *tm = localtime(&time_now);
@@ -83,8 +73,7 @@ private:
 #define LOG_FAIL Logger("FAIL", __FUNCTION__, __FILE__, __LINE__).Stream()
 
 #define ASSERT(cond)                                              \
-  do                                                              \
-  {                                                               \
+  do {                                                            \
     if (cond)                                                     \
       (void)0;                                                    \
     else                                                          \
