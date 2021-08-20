@@ -98,11 +98,3 @@ def test_aps_selfattn(index):
     assert my2.shape == th2.shape
     th.testing.assert_allclose(my2, th2)
     th.testing.assert_allclose(my1, th1)
-
-
-def test_context_mask(lctx, rctx, chunk):
-    print(prep_context_mask(10, chunk, lctx, rctx))
-
-
-if __name__ == "__main__":
-    test_context_mask(0, 0, 3)

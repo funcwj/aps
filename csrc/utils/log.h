@@ -1,8 +1,8 @@
 // Copyright 2018 Jian Wu
 // License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-#ifndef CSRC_UTILS_LOG_H
-#define CSRC_UTILS_LOG_H
+#ifndef CSRC_UTILS_LOG_H_
+#define CSRC_UTILS_LOG_H_
 
 #include <algorithm>
 #include <cstring>
@@ -10,6 +10,7 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <string>
 
 class Logger {
  public:
@@ -56,14 +57,15 @@ class Logger {
 
   const std::string Date() {
     std::ostringstream time_format;
-    time_t time_now = time(0);
-    tm *tm = localtime(&time_now);
-    time_format << 1900 + tm->tm_year << "/" << std::setw(2)
-                << std::setfill('0') << 1 + tm->tm_mon << "/" << std::setw(2)
-                << std::setfill('0') << tm->tm_mday << " - " << std::setw(2)
-                << std::setfill('0') << tm->tm_hour << ":" << std::setw(2)
-                << std::setfill('0') << tm->tm_min << ":" << std::setw(2)
-                << std::setfill('0') << tm->tm_sec;
+    time_t timer = time(0);
+    tm now;
+    localtime_r(&timer, &now);
+    time_format << 1900 + now.tm_year << "/" << std::setw(2)
+                << std::setfill('0') << 1 + now.tm_mon << "/" << std::setw(2)
+                << std::setfill('0') << now.tm_mday << " " << std::setw(2)
+                << std::setfill('0') << now.tm_hour << ":" << std::setw(2)
+                << std::setfill('0') << now.tm_min << ":" << std::setw(2)
+                << std::setfill('0') << now.tm_sec;
     return time_format.str();
   }
 };
@@ -81,4 +83,4 @@ class Logger {
           << "Assert '" << #cond << "' failed!";                  \
   } while (0)
 
-#endif
+#endif  // CSRC_UTILS_LOG_H_

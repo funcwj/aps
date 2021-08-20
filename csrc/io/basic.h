@@ -1,18 +1,19 @@
 // Copyright 2018 Jian Wu
 // License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-#ifndef CSRC_IO_BASIC_H
-#define CSRC_IO_BASIC_H
+#ifndef CSRC_IO_BASIC_H_
+#define CSRC_IO_BASIC_H_
 
 #include <fstream>
 #include <iostream>
+#include <string>
 
 #include "utils/log.h"
 
 class BinaryInput {
  public:
   BinaryInput() {}
-  BinaryInput(const std::string &filename) : filename_(filename) {
+  explicit BinaryInput(const std::string &filename) : filename_(filename) {
     Open(filename);
   }
 
@@ -37,10 +38,9 @@ class BinaryInput {
 class BinaryOutput {
  public:
   BinaryOutput() {}
-  BinaryOutput(const std::string &filename) : filename_(filename) {
+  explicit BinaryOutput(const std::string &filename) : filename_(filename) {
     Open(filename_);
   }
-
 
   ~BinaryOutput() { Close(); }
 
@@ -74,4 +74,4 @@ void ReadBinaryBasicType(std::istream &is, T *t);
 template <class T>
 void WriteBinaryBasicType(std::ostream &os, T t);
 
-#endif
+#endif  // CSRC_IO_BASIC_H_

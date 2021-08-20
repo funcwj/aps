@@ -1,12 +1,12 @@
 // Copyright 2018 Jian Wu
 // License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-#ifndef CSRC_IO_WAV_H
-#define CSRC_IO_WAV_H
+#ifndef CSRC_IO_WAV_H_
+#define CSRC_IO_WAV_H_
 
 #include <algorithm>
 #include <iostream>
-
+#include <string>
 #include "io/basic.h"
 #include "utils/math.h"
 
@@ -67,7 +67,7 @@ class WavWriter {
   void Close() {
     Flush();
     os_.Close();
-  };
+  }
   void Reset();
 
  private:
@@ -78,4 +78,4 @@ class WavWriter {
   void Flush();
 };
 
-#endif
+#endif  // CSRC_IO_WAV_H_
