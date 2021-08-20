@@ -10,7 +10,7 @@ import torch as th
 from torch.nn.utils.rnn import pad_sequence
 from typing import Dict, Iterable, Optional
 from kaldi_python_io import ScriptReader
-from aps.loader.am.utils import AsrDataset, AsrDataLoader
+from aps.loader.am.utils import ASRDataset, ASRDataLoader
 from aps.libs import ApsRegisters
 from aps.const import IGNORE_ID
 
@@ -59,7 +59,7 @@ def DataLoader(train: bool = True,
                       max_token_num=max_token_num,
                       max_frame_num=max_dur,
                       min_frame_num=min_dur)
-    return AsrDataLoader(dataset,
+    return ASRDataLoader(dataset,
                          egs_collate,
                          shuffle=train,
                          distributed=distributed,
@@ -71,7 +71,7 @@ def DataLoader(train: bool = True,
                          min_batch_size=min_batch_size)
 
 
-class Dataset(AsrDataset):
+class Dataset(ASRDataset):
     """
     Dataset for kaldi features
     Args:

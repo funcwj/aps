@@ -10,12 +10,20 @@ import torch.nn.functional as tf
 import librosa.filters as filters
 
 from aps.const import EPSILON, TORCH_VERSION
-from typing import Optional
+from typing import Optional, Tuple
 
 if TORCH_VERSION >= 1.7:
     from torch.fft import fft as fft_func
 else:
     pass
+
+
+def export_jit(transform: nn.Module) -> nn.Module:
+    """
+    Export transform module for inference
+    """
+    eval_transform = [module for module in transform if module.jit_export()]
+    return nn.Sequential(*eval_transform)
 
 
 def init_window(wnd: str,
@@ -56,7 +64,7 @@ def init_kernel(frame_len: int,
                 round_pow_of_two: bool = True,
                 normalized: bool = False,
                 inverse: bool = False,
-                mode: str = "librosa") -> th.Tensor:
+                mode: str = "librosa") -> Tuple[th.Tensor, th.Tensor]:
     """
     Return STFT kernels
     Args:
@@ -225,7 +233,7 @@ def _forward_stft(wav: th.Tensor,
                   center: bool = False,
                   eps: float = EPSILON) -> th.Tensor:
     """
-    STFT function implemented by conv1d
+    STFT function implemented by conv1d (not efficient, but we don't care during training)
     Args:
         wav (Tensor): N x (C) x S
         kernel (Tensor): STFT transform kernels, from init_kernel(...)
@@ -250,6 +258,7 @@ def _forward_stft(wav: th.Tensor,
         # NOTE: match with librosa
         wav = tf.pad(wav, (pad, pad), mode="reflect")
     # STFT
+    kernel = kernel * window
     if pre_emphasis > 0:
         # NC x W x T
         frames = tf.unfold(wav[:, None], (1, kernel.shape[-1]),
@@ -257,9 +266,9 @@ def _forward_stft(wav: th.Tensor,
                            padding=0)
         frames[:, 1:] = frames[:, 1:] - pre_emphasis * frames[:, :-1]
         # 1 x 2B x W, NC x W x T,  NC x 2B x T
-        packed = th.matmul(kernel[:, 0][None, ...] * window, frames)
+        packed = th.matmul(kernel[:, 0][None, ...], frames)
     else:
-        packed = tf.conv1d(wav, kernel * window, stride=frame_hop, padding=0)
+        packed = tf.conv1d(wav, kernel, stride=frame_hop, padding=0)
     # NC x 2B x T => N x C x 2B x T
     if wav_dim == 3:
         packed = packed.view(N, -1, packed.shape[-2], packed.shape[-1])
@@ -411,7 +420,8 @@ def _pytorch_istft(transform: th.Tensor,
                    return_polar: bool = False,
                    normalized: bool = False,
                    onesided: bool = True,
-                   center: bool = False) -> th.Tensor:
+                   center: bool = False,
+                   eps: float = EPSILON) -> th.Tensor:
     """
     Wrapper of PyTorch iSTFT function
     Args:
@@ -466,7 +476,8 @@ def forward_stft(wav: th.Tensor,
                  normalized: bool = False,
                  onesided: bool = True,
                  center: bool = False,
-                 mode: str = "librosa") -> th.Tensor:
+                 mode: str = "librosa",
+                 eps: float = EPSILON) -> th.Tensor:
     """
     STFT function implementation, equals to STFT layer
     Args:
@@ -497,7 +508,8 @@ def forward_stft(wav: th.Tensor,
                              window=window,
                              normalized=normalized,
                              onesided=onesided,
-                             center=center)
+                             center=center,
+                             eps=eps)
     else:
         kernel, window = init_kernel(frame_len,
                                      frame_hop,
@@ -513,7 +525,8 @@ def forward_stft(wav: th.Tensor,
                              frame_hop=frame_hop,
                              pre_emphasis=pre_emphasis,
                              onesided=onesided,
-                             center=center)
+                             center=center,
+                             eps=eps)
 
 
 def inverse_stft(transform: th.Tensor,
@@ -525,7 +538,8 @@ def inverse_stft(transform: th.Tensor,
                  normalized: bool = False,
                  onesided: bool = True,
                  center: bool = False,
-                 mode: str = "librosa") -> th.Tensor:
+                 mode: str = "librosa",
+                 eps: float = EPSILON) -> th.Tensor:
     """
     iSTFT function implementation, equals to iSTFT layer
     Args:
@@ -554,7 +568,8 @@ def inverse_stft(transform: th.Tensor,
                               window=window,
                               normalized=normalized,
                               onesided=onesided,
-                              center=center)
+                              center=center,
+                              eps=eps)
     else:
         kernel, window = init_kernel(frame_len,
                                      frame_hop,
@@ -569,7 +584,8 @@ def inverse_stft(transform: th.Tensor,
                              return_polar=return_polar,
                              frame_hop=frame_hop,
                              onesided=onesided,
-                             center=center)
+                             center=center,
+                             eps=eps)
 
 
 class STFTBase(nn.Module):
@@ -662,7 +678,10 @@ class STFT(STFTBase):
     def __init__(self, *args, **kwargs):
         super(STFT, self).__init__(*args, inverse=False, **kwargs)
 
-    def forward(self, wav: th.Tensor, return_polar: bool = False) -> th.Tensor:
+    def forward(self,
+                wav: th.Tensor,
+                return_polar: bool = False,
+                eps: float = EPSILON) -> th.Tensor:
         """
         Accept (single or multiple channel) raw waveform and output magnitude and phase
         Args
@@ -679,7 +698,8 @@ class STFT(STFTBase):
                                  window=self.w,
                                  normalized=self.normalized,
                                  onesided=self.onesided,
-                                 center=self.center)
+                                 center=self.center,
+                                 eps=eps)
         else:
             return _forward_stft(wav,
                                  self.K,
@@ -688,7 +708,8 @@ class STFT(STFTBase):
                                  frame_hop=self.frame_hop,
                                  pre_emphasis=self.pre_emphasis,
                                  onesided=self.onesided,
-                                 center=self.center)
+                                 center=self.center,
+                                 eps=eps)
 
 
 class iSTFT(STFTBase):
@@ -701,7 +722,8 @@ class iSTFT(STFTBase):
 
     def forward(self,
                 transform: th.Tensor,
-                return_polar: bool = False) -> th.Tensor:
+                return_polar: bool = False,
+                eps: float = EPSILON) -> th.Tensor:
         """
         Accept phase & magnitude and output raw waveform
         Args
@@ -718,7 +740,8 @@ class iSTFT(STFTBase):
                                   window=self.w,
                                   normalized=self.normalized,
                                   onesided=self.onesided,
-                                  center=self.center)
+                                  center=self.center,
+                                  eps=eps)
         else:
             return _inverse_stft(transform,
                                  self.K,
@@ -726,4 +749,5 @@ class iSTFT(STFTBase):
                                  return_polar=return_polar,
                                  frame_hop=self.frame_hop,
                                  onesided=self.onesided,
-                                 center=self.center)
+                                 center=self.center,
+                                 eps=eps)

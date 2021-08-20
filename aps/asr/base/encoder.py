@@ -427,8 +427,8 @@ class Conv2dEncoder(EncoderBase):
             out (Tensor): N x F x O
             out_len (Tensor or None)
         """
+        # N x C x T x F
         for conv2d in self.enc_layers:
-            # N x C x T x F
             inp = conv2d(inp)
             if inp_len is not None:
                 inp_len = conv2d.compute_outp_dim(inp_len, 0)

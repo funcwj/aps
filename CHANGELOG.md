@@ -5,6 +5,7 @@
 1. Kick off streaming ASR and real-time SSE
 2. Add streaming features: (i)STFT, fsmn|rnn|conv1d|conv2d ASR encoders
 3. Add encode/decode function in EnhTransform class
+4. Done with streaming transformer/conformer
 
 ### 2021/07
 

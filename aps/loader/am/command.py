@@ -8,7 +8,7 @@ Online simulation dataloader for ASR
 import numpy as np
 
 from typing import Optional, Dict, Iterable
-from aps.loader.am.utils import AsrDataset, AsrDataLoader
+from aps.loader.am.utils import ASRDataset, ASRDataLoader
 from aps.loader.se.command import CommandOptionsDataset
 from aps.loader.am.raw import egs_collate
 from aps.libs import ApsRegisters
@@ -58,7 +58,7 @@ def DataLoader(train: bool = True,
                       max_token_num=max_token_num,
                       max_wav_dur=max_dur,
                       min_wav_dur=min_dur)
-    return AsrDataLoader(dataset,
+    return ASRDataLoader(dataset,
                          egs_collate,
                          shuffle=train,
                          distributed=distributed,
@@ -91,7 +91,7 @@ class AsrSimuReader(CommandOptionsDataset):
         return self._simu(opts_str)["mix"]
 
 
-class Dataset(AsrDataset):
+class Dataset(ASRDataset):
     """
     Dataset for raw waveform input
     Args:

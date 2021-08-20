@@ -8,38 +8,31 @@ import pytest
 import librosa
 import torch as th
 
-from aps.transform.utils import forward_stft, inverse_stft
-from aps.transform.utils import STFT, iSTFT
+from aps.transform.utils import forward_stft, inverse_stft, STFT, iSTFT
 from aps.transform.streaming import StreamingSTFT, StreamingiSTFT
-from aps.loader import read_audio
+from aps.transform.asr import SpeedPerturbTransform
 from aps.transform import AsrTransform, EnhTransform, FixedBeamformer, DfTransform
-from aps.transform.asr import SpeedPerturbTransform, export_jit
+from aps.loader import read_audio
 
 egs1_wav = read_audio("data/transform/egs1.wav", sr=16000)
 egs2_wav = read_audio("data/transform/egs2.wav", sr=16000)
 
 
 @pytest.mark.parametrize("wav", [egs1_wav])
-@pytest.mark.parametrize("mode", ["librosa", "torch"])
+@pytest.mark.parametrize("mode", ["torch", "librosa"])
 @pytest.mark.parametrize("frame_len, frame_hop", [(512, 256), (1024, 256),
                                                   (256, 128)])
 @pytest.mark.parametrize("window", ["hamm", "sqrthann"])
 def test_forward_inverse_stft(wav, frame_len, frame_hop, window, mode):
     wav = th.from_numpy(wav)[None, ...]
-    mid = forward_stft(wav,
-                       frame_len,
-                       frame_hop,
-                       mode=mode,
-                       window=window,
-                       center=True,
-                       return_polar=False)
-    out = inverse_stft(mid,
-                       frame_len,
-                       frame_hop,
-                       window=window,
-                       center=True,
-                       mode=mode,
-                       return_polar=False)
+    stft_cfg = {
+        "mode": mode,
+        "window": window,
+        "center": True,
+        "return_polar": False
+    }
+    mid = forward_stft(wav, frame_len, frame_hop, **stft_cfg)
+    out = inverse_stft(mid, frame_len, frame_hop, **stft_cfg)
     trunc = min(out.shape[-1], wav.shape[-1])
     th.testing.assert_allclose(out[..., :trunc], wav[..., :trunc])
 
@@ -129,35 +122,6 @@ def test_asr_transform(wav, mode, feats, shape):
     assert transform.feats_dim == shape[-1]
 
 
-@pytest.mark.parametrize("wav", [egs1_wav])
-@pytest.mark.parametrize("feats", ["fbank-log-cmvn", "perturb-mfcc-aug-delta"])
-def test_asr_transform_jit(wav, feats):
-    wav = th.from_numpy(wav[None, ...])
-    packed = forward_stft(wav,
-                          400,
-                          160,
-                          mode="librosa",
-                          window="hamm",
-                          pre_emphasis=0.96,
-                          center=False,
-                          return_polar=True)
-    trans = AsrTransform(feats=feats,
-                         stft_mode="librosa",
-                         window="hamm",
-                         frame_len=400,
-                         frame_hop=160,
-                         use_power=True,
-                         pre_emphasis=0.96,
-                         center=False,
-                         aug_prob=0.5,
-                         aug_mask_zero=False)
-    trans.eval()
-    scripted_trans = th.jit.script(export_jit(trans.transform))
-    ref_out = trans(wav, None)[0]
-    jit_out = scripted_trans(packed[..., 0])
-    th.testing.assert_allclose(ref_out, jit_out)
-
-
 @pytest.mark.parametrize("max_length", [160000])
 def test_speed_perturb(max_length):
     for _ in range(4):
@@ -211,13 +175,13 @@ def test_df_transform(num_bins, num_doas):
                             num_doas=num_doas,
                             af_index="1,0;2,0;3,0;4,0;5,0;6,0")
     num_frames = th.randint(50, 100, (1,)).item()
-    phase = th.rand(batch_size, num_channels, num_bins, num_frames)
+    phase = th.rand(batch_size, num_channels, num_frames, num_bins)
     doa = th.rand(batch_size)
     df = transform(phase, doa)
     if num_doas == 1:
-        assert df.shape == th.Size([batch_size, num_bins, num_frames])
+        assert df.shape == th.Size([batch_size, num_frames, num_bins])
     else:
-        assert df.shape == th.Size([batch_size, num_doas, num_bins, num_frames])
+        assert df.shape == th.Size([batch_size, num_doas, num_frames, num_bins])
 
 
 def debug_visualize_feature():

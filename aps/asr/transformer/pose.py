@@ -71,24 +71,12 @@ class RelPosEncoding(nn.Module):
     def __init__(self,
                  embed_dim: int,
                  dropout: float = 0.0,
-                 radius: int = 128) -> None:
+                 lradius: int = 128,
+                 rradius: int = 128) -> None:
         super(RelPosEncoding, self).__init__()
-        self.radius = radius
-        self.embed = nn.Embedding(radius * 2 + 1, embed_dim)
+        self.embed = nn.Embedding(lradius + rradius + 1, embed_dim)
         self.dropout = nn.Dropout(p=dropout)
-
-    def dumplicate(self, seq_len) -> th.Tensor:
-        """
-        Produce 2D matrice (dumplicated, see test_function.py:test_rel_pose)
-        Args:
-            seq_len (int): length of the sequence
-        Return:
-            encodings (Tensor): T1 x T2 x D, learnt encodings
-        """
-        pos_vec = th.arange(seq_len, device=self.embed.weight.device)
-        rel_mat = pos_vec[None, :] - pos_vec[:, None]
-        rel_mat = th.clamp(rel_mat, max=self.radius, min=-self.radius)
-        return self.dropout(self.embed(rel_mat + self.radius))
+        self.lradius, self.rradius = lradius, rradius
 
     def forward(self, position: th.Tensor) -> th.Tensor:
         """
@@ -97,8 +85,8 @@ class RelPosEncoding(nn.Module):
         Return:
             encodings (Tensor): T x D, learnt encodings
         """
-        position = th.clamp(position, max=self.radius, min=-self.radius)
-        return self.dropout(self.embed(position + self.radius))
+        position = th.clamp(position, max=self.rradius, min=-self.lradius)
+        return self.dropout(self.embed(position + self.lradius))
 
 
 @PosEncodings.register("abs")

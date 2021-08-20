@@ -11,16 +11,21 @@ __pycache__/
 *.decode
 *config
 
+/bin/
+/lib/
 /exp/
 /log/
 /checkpoint/
+/third_party/
 /cache/
 /build/
 /tests/*.jpg
+/tests/csrc/bin
 
 # examples
 /examples/*/*/data
 /examples/*/*/exp
+/tests/data/transform/copy.wav
 
 # pytest
 .pytest_cache/

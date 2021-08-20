@@ -83,8 +83,8 @@ def prep_context_mask(num_frames: int,
     index = th.arange(0, num_frames, device=device)
     index_seqs = th.repeat_interleave(index[None, ...], num_frames, 0)
     # limit right context
-    right = (index // chunk_size + rctx) * chunk_size
-    right_mask = index_seqs > right[..., None]
+    right = (index // chunk_size + rctx + 1) * chunk_size
+    right_mask = index_seqs >= right[..., None]
     # limit left context
     left = th.clamp_min((index // chunk_size - lctx) * chunk_size, 0)
     left_mask = index_seqs < left[..., None]

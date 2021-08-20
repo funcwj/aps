@@ -37,7 +37,7 @@ def derive_indices(num_batches: int,
         return indices
 
 
-class AsrDataset(dat.Dataset):
+class ASRDataset(dat.Dataset):
     """
     A base dataset class for AM training
 
@@ -290,7 +290,7 @@ class BatchSampler(dat.Sampler):
         return self.num_batches
 
 
-class AsrDataLoader(dat.DataLoader):
+class ASRDataLoader(dat.DataLoader):
     """
     ASR dataloader for E2E AM training
 
@@ -325,7 +325,7 @@ class AsrDataLoader(dat.DataLoader):
                                distributed=distributed,
                                min_batch_size=min_batch_size,
                                adapt_token_num=adapt_token_num)
-        super(AsrDataLoader, self).__init__(dataset,
+        super(ASRDataLoader, self).__init__(dataset,
                                             collate_fn=collate_fn,
                                             num_workers=num_workers,
                                             batch_sampler=sampler)

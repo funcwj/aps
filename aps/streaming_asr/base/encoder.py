@@ -131,7 +131,8 @@ class StreamingFSMNEncoder(FSMNEncoder):
         """
         hc, hm = [], []
         if not self.init:
-            chunk = chunk[:, None]
+            # only need last frame
+            chunk = chunk[:, -1:]
 
         mem = th.tensor(0)
         for i, fsmn in enumerate(self.enc_layers):

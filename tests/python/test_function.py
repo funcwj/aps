@@ -28,7 +28,8 @@ def test_load_dict(str_dict):
 
 
 @pytest.mark.parametrize(
-    "package", ["asr", "streaming_asr", "sse", "task", "loader", "trainer", "transform"])
+    "package",
+    ["asr", "streaming_asr", "sse", "task", "loader", "trainer", "transform"])
 def test_register(package):
     attr = getattr(ApsModules, package)
     attr.import_all()

@@ -32,11 +32,19 @@ jobs:
       - name: Install dependencies
         run: |
           bash .ci/install_test_deps.sh
+          bash .ci/install_libtorch.sh
+
+      - name: Run testing cases (csrc)
+        run: |
+          mkdir build && cd build
+          cmake -DCMAKE_PREFIX_PATH=$PWD/../third_party/libtorch ..
+          make -j && cd ../tests/csrc
+          for x in bin/*; do $x; done
 
       - name: Run testing cases (cmd)
         run: |
-          cd tests && bash check_cmds.sh
+          cd tests/python && bash check_cmds.sh
 
       - name: Run testing cases (lib)
         run: |
-          cd tests && pytest
+          cd tests/python && pytest

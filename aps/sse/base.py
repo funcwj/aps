@@ -10,14 +10,14 @@ import torch.nn.functional as tf
 from aps.cplx import ComplexTensor
 from typing import Optional, Union, List, NoReturn
 
-all_nonlinear = ["relu", "tanh", "softplus", "sigmoid", "softmax"]
-all_wo_softmax = ["relu", "tanh", "softplus", "sigmoid"]
-positive_nonlinear = ["relu", "softplus", "sigmoid", "softmax"]
-positive_nonlinear_wo_softmax = ["relu", "softplus", "sigmoid"]
-positive_nonlinear_wo_softplus = ["relu", "sigmoid", "softmax"]
-common_nonlinear = ["relu", "sigmoid"]
-bounded_nonlinear = ["sigmoid", "softmax"]
-unbounded_nonlinear = ["relu", "tanh", "softplus"]
+all_ = ["none", "relu", "tanh", "softplus", "sigmoid", "softmax"]
+all_wo_softmax = ["none", "relu", "tanh", "softplus", "sigmoid"]
+positive = ["relu", "softplus", "sigmoid", "softmax"]
+positive_wo_softmax = ["relu", "softplus", "sigmoid"]
+positive_wo_softplus = ["relu", "sigmoid", "softmax"]
+common = ["relu", "sigmoid"]
+bounded = ["sigmoid", "softmax"]
+unbounded = ["none", "relu", "tanh", "softplus"]
 
 
 def tf_masking(packed_stft: th.Tensor,
@@ -51,7 +51,12 @@ def softmax(tensor: th.Tensor) -> th.Tensor:
     return th.softmax(tensor, 0)
 
 
+def identity(tensor: th.Tensor) -> th.Tensor:
+    return tensor
+
+
 supported_nonlinear = {
+    "none": identity,  # [-oo, +oo]
     "relu": th.relu,  # [0, +oo]
     "tanh": th.tanh,  # [-oo, +oo]
     "softplus": tf.softplus,  # [0, +oo]
@@ -113,22 +118,24 @@ class MaskNonLinear(nn.Module):
                  non_linear: str,
                  enable: str = "all",
                  scale: float = 1,
-                 value_clip: Optional[float] = None) -> None:
+                 vmax: Optional[float] = None,
+                 vmin: Optional[float] = None) -> None:
         super(MaskNonLinear, self).__init__()
         supported_set = {
-            "positive": positive_nonlinear,
-            "positive_wo_softmax": positive_nonlinear_wo_softmax,
-            "positive_wo_softplus": positive_nonlinear_wo_softplus,
-            "all": all_nonlinear,
+            "positive": positive,
+            "positive_wo_softmax": positive_wo_softmax,
+            "positive_wo_softplus": positive_wo_softplus,
+            "all": all_,
             "all_wo_softmax": all_wo_softmax,
-            "bounded": bounded_nonlinear,
-            "unbounded": unbounded_nonlinear,
-            "common": common_nonlinear
+            "bounded": bounded,
+            "unbounded": unbounded,
+            "common": common
         }
         if non_linear not in supported_set[enable]:
             raise ValueError(f"Unsupported nonlinear: {non_linear}")
         self.non_linear = supported_nonlinear[non_linear]
-        self.value_clip = value_clip
+        self.max = vmax
+        self.min = vmin
         self.scale = scale
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
@@ -142,6 +149,8 @@ class MaskNonLinear(nn.Module):
             raise RuntimeError(
                 f"MaskNonLinear expects 3/4D tensor, got {inp.dim()}")
         out = self.non_linear(inp) * self.scale
-        if self.value_clip is not None:
-            out = th.clamp_max(out, self.value_clip)
+        if self.max is not None:
+            out = th.clamp_max(out, self.max)
+        if self.min is not None:
+            out = th.clamp_min(out, self.min)
         return out

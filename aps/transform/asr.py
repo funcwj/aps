@@ -53,14 +53,6 @@ def check_valid(feature: th.Tensor,
     return feature, num_frames
 
 
-def export_jit(transform: nn.Module) -> nn.Module:
-    """
-    Export transform module for inference
-    """
-    eval_transform = [module for module in transform if module.jit_export()]
-    return nn.Sequential(*eval_transform)
-
-
 class RescaleTransform(nn.Module):
     """
     Rescale audio samples (e.g., [-1, 1] to MAX_INT16 scale)
@@ -270,9 +262,6 @@ class SpectrogramTransform(STFT):
     def dim(self) -> int:
         return self.num_bins
 
-    def len(self, xlen: th.Tensor) -> th.Tensor:
-        return self.num_frames(xlen)
-
     def jit_export(self) -> bool:
         return False
 
@@ -284,9 +273,9 @@ class SpectrogramTransform(STFT):
             mag (Tensor): magnitude, N x (C) x F x T
         """
         # N x (C) x F x T
-        in_polar = super().forward(wav, return_polar=True)
+        packed = super().forward(wav, return_polar=False)
         # return only magnitude
-        return in_polar[..., 0]
+        return th.sum(packed**2, -1)**0.5
 
 
 class AbsTransform(nn.Module):
@@ -982,7 +971,7 @@ class FeatureTransform(nn.Module):
             return inp_len
         if self.perturb_index != -1:
             inp_len = self.transform[self.perturb_index].output_length(inp_len)
-        num_frames = self.transform[self.spectra_index].len(inp_len)
+        num_frames = self.transform[self.spectra_index].num_frames(inp_len)
         return num_frames // self.subsampling_factor
 
     def forward(self, inp_pad: th.Tensor,

@@ -169,7 +169,8 @@ xfmr_rel_enc_kwargs = {
     },
     "pose": "rel",
     "pose_kwargs": {
-        "radius": 128,
+        "lradius": 128,
+        "rradius": 128,
         "dropout": 0.1
     },
     "arch_kwargs": {
@@ -213,7 +214,8 @@ cfmr_rel_enc_kwargs = {
     },
     "pose": "rel",
     "pose_kwargs": {
-        "radius": 128,
+        "lradius": 128,
+        "rradius": 128,
         "dropout": 0.1
     },
     "arch_kwargs": {

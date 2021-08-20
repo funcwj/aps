@@ -89,7 +89,7 @@ class ApsModules(object):
     trainer = Module("aps.trainer", ["ddp", "hvd", "apex"])
     transform = Module("aps.transform", ["asr", "enh"])
     streaming_asr = Module("aps.streaming_asr", ["ctc"])
-    rt_sse = Module("aps.rt_sse", ["enh.dfsmn"])
+    rt_sse = Module("aps.rt_sse", ["enh.dfsmn", "enh.transformer"])
 
 
 def dynamic_importlib(sstr: str) -> Any:
@@ -178,9 +178,9 @@ def aps_nnet(nnet: str) -> nn.Module:
     Return network class supported by aps (wraps aps_xxx_nnet(...) functions)
     """
     nnet_cls, _ = nnet.split("@")
-    if nnet_cls == "sse":
+    if nnet_cls in ["rt_sse", "sse"]:
         return aps_sse_nnet(nnet)
-    elif nnet_cls == "asr":
+    elif nnet_cls == ["streaming_asr", "asr"]:
         return aps_asr_nnet(nnet)
     else:
         raise RuntimeError(f"Unknown type of the network: {nnet_cls}")
