@@ -1,4 +1,4 @@
-name: Unit Testing
+name: Python Unit Testing
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
 
 jobs:
   unit_test:
-    name: Unit Testing
+    name: Python Unit Testing
     runs-on: ubuntu-18.04
     strategy:
       matrix:
@@ -32,14 +32,6 @@ jobs:
       - name: Install dependencies
         run: |
           bash .ci/install_test_deps.sh
-          bash .ci/install_libtorch.sh
-
-      - name: Run testing cases (csrc)
-        run: |
-          mkdir build && cd build
-          cmake -DCMAKE_PREFIX_PATH=$PWD/../third_party/libtorch ..
-          make -j && cd ../tests/csrc
-          for x in bin/*; do $x; done
 
       - name: Run testing cases (cmd)
         run: |

@@ -1,0 +1,28 @@
+name:  C++ Unit Testing
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  script_check:
+    name: C++ Unit Testing
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Get code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          bash .ci/install_libtorch.sh
+
+      - name: Building & Running
+        run: |
+          mkdir build && cd build
+          cmake -DCMAKE_PREFIX_PATH=$PWD/../third_party/libtorch ..
+          make -j && cd ../tests/csrc
+          for x in bin/*; do $x; done

@@ -22,8 +22,8 @@ void TestWavIO() {
     float *cache_ptr = cache.data_ptr<float>();
     while (true) {
       if (wav_reader.Done()) break;
-      read = wav_reader.Read(chunk, cache_ptr);
-      write = wav_writer.Write(read, cache_ptr);
+      read = wav_reader.Read(cache_ptr, chunk);
+      write = wav_writer.Write(cache_ptr, read);
       ASSERT(read == write);
     }
     wav_writer.Close();
