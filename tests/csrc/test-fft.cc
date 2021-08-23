@@ -31,7 +31,7 @@ void TestRealFFT() {
   for (size_t i = 0; i < 3; i++) {
     int N = win_size[i];
     FFTComputer fft(N);
-    Tensor egs1 = torch::rand(N);
+    Tensor egs1 = torch::rand(N) * 10;
     Tensor egs2 = egs1.clone();
     // my rfft
     fft.RealFFT(egs1.data_ptr<float>(), N, false);
@@ -42,7 +42,7 @@ void TestRealFFT() {
     // torch rfft
     egs2 = torch::fft_rfft(egs2, N, -1);
     egs2 = torch::view_as_real(egs2).view(-1);
-    // ASSERT(torch::allclose(egs3, egs2));
+    ASSERT(torch::allclose(egs3, egs2, 1.0e-05, 1.0e-06));
   }
 }
 
@@ -51,30 +51,30 @@ void TestComplexFFT() {
   for (size_t i = 0; i < 3; i++) {
     int N = win_size[i];
     FFTComputer fft(N);
-    Tensor egs1 = torch::rand(N);
+    Tensor egs1 = torch::rand(N) * 10;
     Tensor egs2 = egs1.clone();
     fft.ComplexFFT(egs1.data_ptr<float>(), N, false);
     fft.ComplexFFT(egs1.data_ptr<float>(), N, true);
-    ASSERT(torch::allclose(egs1, egs2));
+    ASSERT(torch::allclose(egs1, egs2, 1.0e-05, 1.0e-06));
   }
 }
 
-void TestRealFFTAndiFFT() {
+void TestRealiFFT() {
   int win_size[3] = {32, 64, 128};
   for (size_t i = 0; i < 3; i++) {
     int N = win_size[i];
     FFTComputer fft(N);
-    Tensor egs1 = torch::rand(N);
-    LOG_INFO << egs1;
+    Tensor egs1 = torch::rand(N) * 10;
+    Tensor egs2 = egs1.clone();
     fft.RealFFT(egs1.data_ptr<float>(), N, false);
     fft.RealFFT(egs1.data_ptr<float>(), N, true);
-    LOG_INFO << egs1;
+    ASSERT(torch::allclose(egs1, egs2, 1.0e-05, 1.0e-06));
   }
 }
 
 int main(int argc, char const *argv[]) {
   // TestRealFFT();
-  TestRealFFTAndiFFT();
-  // TestComplexFFT();
+  TestComplexFFT();
+  TestRealiFFT();
   return 0;
 }
