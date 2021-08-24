@@ -61,7 +61,7 @@ WavReader::WavReader(const std::string &filename) {
   read_samples_ = 0;
 }
 
-size_t WavReader::Read(size_t num_samples, float *chunk, bool norm) {
+size_t WavReader::Read(float *data_ptr, size_t num_samples, bool norm) {
   size_t start = read_samples_, offset = 0;
   while (read_samples_ < start + num_samples) {
     for (size_t c = 0; c < header_.riff_and_fmt.num_channels; c++) {
@@ -71,21 +71,21 @@ size_t WavReader::Read(size_t num_samples, float *chunk, bool norm) {
           int8_t s;
           float denorm = norm ? MAX_INT8 : 1.0f;
           ReadBinaryBasicType(is_.Stream(), &s);
-          chunk[offset] = static_cast<float>(s) / denorm;
+          data_ptr[offset] = static_cast<float>(s) / denorm;
           break;
         }
         case 16: {
           int16_t s;
           float denorm = norm ? MAX_INT16 : 1.0f;
           ReadBinaryBasicType(is_.Stream(), &s);
-          chunk[offset] = static_cast<float>(s) / denorm;
+          data_ptr[offset] = static_cast<float>(s) / denorm;
           break;
         }
         case 32: {
           int32_t s;
           float denorm = norm ? MAX_INT32 : 1.0f;
           ReadBinaryBasicType(is_.Stream(), &s);
-          chunk[offset] = static_cast<float>(s) / denorm;
+          data_ptr[offset] = static_cast<float>(s) / denorm;
           break;
         }
         default:
@@ -145,7 +145,7 @@ WavWriter::WavWriter(const std::string &filename, int sample_rate,
   write_samples_ = 0;
 }
 
-size_t WavWriter::Write(size_t num_samples, float *chunk, bool norm) {
+size_t WavWriter::Write(float *data_ptr, size_t num_samples, bool norm) {
   size_t offset = 0;
   for (size_t n = 0; n < num_samples; n++) {
     for (size_t c = 0; c < header_.riff_and_fmt.num_channels; c++) {
@@ -153,19 +153,19 @@ size_t WavWriter::Write(size_t num_samples, float *chunk, bool norm) {
       switch (header_.riff_and_fmt.bit_width) {
         case 8: {
           float scale = norm ? MAX_INT8 : 1.0f;
-          int8_t s = static_cast<int8_t>(chunk[offset] * scale);
+          int8_t s = static_cast<int8_t>(data_ptr[offset] * scale);
           WriteBinaryBasicType(os_.Stream(), s);
           break;
         }
         case 16: {
           float scale = norm ? MAX_INT16 : 1.0f;
-          int16_t s = static_cast<int16_t>(chunk[offset] * scale);
+          int16_t s = static_cast<int16_t>(data_ptr[offset] * scale);
           WriteBinaryBasicType(os_.Stream(), s);
           break;
         }
         case 32: {
           float scale = norm ? MAX_INT32 : 1.0f;
-          int32_t s = static_cast<int32_t>(chunk[offset] * scale);
+          int32_t s = static_cast<int32_t>(data_ptr[offset] * scale);
           WriteBinaryBasicType(os_.Stream(), s);
           break;
         }

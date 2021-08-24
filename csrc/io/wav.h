@@ -41,7 +41,7 @@ class WavReader {
   size_t NumSamples() const { return num_samples_; }
   std::string Info() const;
 
-  size_t Read(size_t num_samples, float *chunk, bool normalized = true);
+  size_t Read(float *data_ptr, size_t num_samples, bool normalized = true);
   bool Done() { return read_samples_ >= num_samples_; }
   void Close() { is_.Close(); }
   void Reset();
@@ -63,7 +63,7 @@ class WavWriter {
   size_t NumSamples() const { return write_samples_; }
   std::string Info() const;
 
-  size_t Write(size_t num_samples, float *chunk, bool norm = true);
+  size_t Write(float *data_ptr, size_t num_samples, bool norm = true);
   void Close() {
     Flush();
     os_.Close();

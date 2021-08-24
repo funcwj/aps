@@ -2,7 +2,7 @@
 
 set -eu
 
-version=1.7.1
+version=1.8.0
 name=libtorch-shared-with-deps-$version
 url=https://download.pytorch.org/libtorch/cpu/$name%2Bcpu.zip
 
