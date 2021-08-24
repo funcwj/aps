@@ -20,8 +20,8 @@ class FFTComputer {
     sin_table_ = new float[table_size];
     // pre-compute cos/sin values for FFT
     for (int32_t k = 0; k < table_size; k++) {
-      cos_table_[k] = cos(PI * k / table_size);
-      sin_table_[k] = sin(PI * k / table_size);
+      cos_table_[k] = cosf32(PI * k / table_size);
+      sin_table_[k] = sinf32(PI * k / table_size);
     }
     // for RealFFT data cache
     cplx_cache_ = new float[register_size];

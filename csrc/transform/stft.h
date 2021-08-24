@@ -4,28 +4,45 @@
 #ifndef CSRC_TRANSFORM_STFT_H_
 #define CSRC_TRANSFORM_STFT_H_
 
+#include <string>
+
 #include "utils/fft.h"
 #include "utils/log.h"
 #include "utils/math.h"
 #include "utils/window.h"
 
+/*
+For mode == "librosa", window_len must be 2^N, which is used for front-end
+models, e.g., speech enhancement, speech separation. mode == "kaldi" is used for
+ASR tasks
+*/
 class STFTBase {
  public:
-  STFTBase(int32_t frame_len = 512, int32_t frame_hop = 256,
-           const std::string& window = "hann")
-      : frame_len_(frame_len), frame_hop_(frame_hop), window_str_(window) {
-    window_len_ = RoundUpToNearestPowerOfTwo(frame_len);
-    fft_computer_ = new FFTComputer(window_len_);
-    window_ = new float[window_len_];
-    memset(window_, 0, sizeof(float) * window_len_);
-    window_gen_.Generate(window, window_ + (window_len_ - frame_len) / 2,
-                         frame_len, true);
+  STFTBase(int32_t window_len = 512, int32_t frame_hop = 256,
+           const std::string& window = "hann",
+           const std::string& mode = "librosa")
+      : frame_hop_(frame_hop), win_str_(window), mode_(mode) {
+    ASSERT(mode == "librosa" || mode == "kaldi");
+    // due to implementation of FFT, we need fft_size as 2^N
+    fft_size_ = RoundUpToNearestPowerOfTwo(window_len);
+    fft_computer_ = new FFTComputer(fft_size_);
+    window_ = new float[fft_size_];
+    memset(window_, 0, sizeof(float) * fft_size_);
+    // librosa & kaldi is different
+    window_gen_.Generate(
+        window, window_ + (mode == "kaldi" ? 0 : (fft_size_ - window_len) / 2),
+        window_len, true);
+    frame_len_ = mode == "librosa" ? fft_size_ : window_len;
   }
 
-  int32_t WindowLength() const { return window_len_; }
-  int32_t FrameShift() const { return frame_hop_; }
+  // return the frame length used for STFT
+  int32_t FrameLength() const { return frame_len_; }
+  // frame hop size
+  int32_t FrameHop() const { return frame_hop_; }
+  // FFT size, must be 2^N
+  int32_t FFTSize() const { return fft_size_; }
 
-  void SquareWindow(float* dst);
+  void SquareOfWindow(float* dst);
   void AddWindow(float* src, int32_t src_length);
   void RealFFT(float* src, int32_t src_length, bool invert);
 
@@ -36,8 +53,8 @@ class STFTBase {
 
  private:
   float* window_;
-  std::string window_str_;
-  int32_t frame_len_, frame_hop_, window_len_;
+  std::string win_str_, mode_;
+  int32_t frame_len_, frame_hop_, fft_size_;
   FFTComputer* fft_computer_;
   WindowFunction window_gen_;
 };
@@ -45,26 +62,25 @@ class STFTBase {
 class StreamingSTFT : public STFTBase {
  public:
   StreamingSTFT(int32_t frame_len = 512, int32_t frame_hop = 256,
-                const std::string& window = "hann", float pre_emphasis = 0.0)
-      : STFTBase(frame_len, frame_hop, window), pre_emphasis_(pre_emphasis) {}
+                const std::string& window = "hann",
+                const std::string& mode = "librosa")
+      : STFTBase(frame_len, frame_hop, window, mode) {}
 
   void Compute(float* src, int32_t window_length, float* dst);
-
- private:
-  float pre_emphasis_;
 };
 
 class StreamingiSTFT : public STFTBase {
  public:
   StreamingiSTFT(int32_t frame_len = 512, int32_t frame_hop = 256,
-                 const std::string& window = "hann")
-      : STFTBase(frame_len, frame_hop, window) {
-    overlap_len_ = WindowLength() - FrameShift();
+                 const std::string& window = "hann",
+                 const std::string& mode = "librosa")
+      : STFTBase(frame_len, frame_hop, window, mode) {
+    overlap_len_ = FrameLength() - FrameHop();
     wav_cache_ = new float[overlap_len_];
     win_cache_ = new float[overlap_len_];
     memset(wav_cache_, 0, sizeof(float) * overlap_len_);
     memset(win_cache_, 0, sizeof(float) * overlap_len_);
-    win_denorm_ = new float[WindowLength()];
+    win_denorm_ = new float[FrameLength()];
   }
 
   ~StreamingiSTFT() {
@@ -81,6 +97,7 @@ class StreamingiSTFT : public STFTBase {
   float* win_cache_;
   float* win_denorm_;
   int32_t overlap_len_;
+  void Normalization(float* src, int32_t src_length);
 };
 
 #endif  // CSRC_TRANSFORM_STFT_H_

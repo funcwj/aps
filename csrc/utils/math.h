@@ -8,8 +8,8 @@
 #include <limits>
 
 const float EPS_F32 = std::numeric_limits<float>::epsilon();
-const float PI = acos(-1);
-const float PI2 = acos(-1) * 2;
+const float PI = acosf32(-1);
+const float PI2 = PI * 2;
 
 const int32_t MAX_INT32 = std::numeric_limits<int32_t>::max();
 const int16_t MAX_INT16 = std::numeric_limits<int16_t>::max();

@@ -4,6 +4,8 @@
 #ifndef CSRC_UTILS_WINDOW_H_
 #define CSRC_UTILS_WINDOW_H_
 
+#include <string>
+
 #include "utils/log.h"
 #include "utils/math.h"
 
@@ -16,9 +18,10 @@ class WindowFunction {
   static void Hanning(float* window, int32_t window_len, bool periodic = true);
   static void Hamming(float* window, int32_t window_len, bool periodic = true);
   static void Rectangular(float* window, int32_t window_len);
-  static void SqrtHanning(float* window, int32_t window_len, bool periodic = true);
+  static void SqrtHanning(float* window, int32_t window_len,
+                          bool periodic = true);
   static void Blackman(float* window, int32_t window_len, bool periodic = true);
   static void Bartlett(float* window, int32_t window_len, bool periodic = true);
 };
 
-#endif
+#endif  // CSRC_UTILS_WINDOW_H_

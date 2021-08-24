@@ -3,12 +3,12 @@
 
 #include "transform/stft.h"
 
-void STFTBase::SquareWindow(float* dst) {
-  for (size_t n = 0; n < window_len_; n++) dst[n] = window_[n] * window_[n];
+void STFTBase::SquareOfWindow(float* dst) {
+  for (size_t n = 0; n < frame_len_; n++) dst[n] = window_[n] * window_[n];
 }
 
 void STFTBase::AddWindow(float* src, int32_t src_length) {
-  ASSERT(src_length == window_len_);
+  ASSERT(src_length == frame_len_);
   for (size_t n = 0; n < src_length; n++) src[n] *= window_[n];
 }
 
@@ -17,28 +17,30 @@ void STFTBase::RealFFT(float* src, int32_t src_length, bool invert) {
 }
 
 void StreamingSTFT::Compute(float* src, int32_t src_length, float* dst) {
+  ASSERT(src_length <= FFTSize());
+  memset(dst, 0, sizeof(float) * FFTSize());
   memcpy(dst, src, sizeof(float) * src_length);
-  if (pre_emphasis_ > 0) {
-    for (int32_t n = src_length - 1; n > 0; n--)
-      dst[n] -= pre_emphasis_ * dst[n - 1];
-  }
   AddWindow(dst, src_length);
-  RealFFT(dst, src_length, false);
+  RealFFT(dst, FFTSize(), false);
 }
 
 void StreamingiSTFT::Compute(float* src, int32_t src_length, float* dst) {
-  memcpy(dst, src, sizeof(float) * src_length);
-  RealFFT(dst, src_length, true);
+  ASSERT(src_length <= FFTSize());
+  memcpy(dst, src, sizeof(float) * FFTSize());
+  RealFFT(dst, FFTSize(), true);
   AddWindow(dst, src_length);
-  // need post processing
-  SquareWindow(win_denorm_);
+  Normalization(dst, src_length);
+}
+
+void StreamingiSTFT::Normalization(float* src, int32_t src_length) {
+  SquareOfWindow(win_denorm_);
   for (int32_t n = 0; n < overlap_len_; n++) {
-    dst[n] += wav_cache_[n];
+    src[n] += wav_cache_[n];
     win_denorm_[n] += win_cache_[n];
   }
-  memcpy(wav_cache_, dst, sizeof(float) * overlap_len_);
-  memcpy(win_cache_, win_denorm_, sizeof(float) * overlap_len_);
-  for (int32_t n = 0; n < src_length; n++) dst[n] /= (win_denorm_[n] + EPS_F32);
+  memcpy(wav_cache_, src + FrameHop(), sizeof(float) * overlap_len_);
+  memcpy(win_cache_, win_denorm_ + FrameHop(), sizeof(float) * overlap_len_);
+  for (int32_t n = 0; n < src_length; n++) src[n] /= (win_denorm_[n] + EPS_F32);
 }
 
 void StreamingiSTFT::Flush(float* dst) {

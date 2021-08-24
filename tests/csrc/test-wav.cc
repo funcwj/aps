@@ -18,7 +18,7 @@ void TestWavIO() {
     LOG_INFO << wav_writer.Info();
     int32_t chunk = 3200;  // 0.2s
     size_t read = 0, write = 0;
-    Tensor cache = torch::zeros({num_channels * chunk}, torch::kFloat32);
+    Tensor cache = torch::zeros(num_channels * chunk, torch::kFloat32);
     float *cache_ptr = cache.data_ptr<float>();
     while (true) {
       if (wav_reader.Done()) break;
