@@ -1,0 +1,1 @@
+../../wsj/local/normalize_transcript.pl

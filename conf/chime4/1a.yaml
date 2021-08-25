@@ -1,0 +1,96 @@
+nnet: "asr@xfmr"
+
+nnet_conf:
+  input_size: 80
+  enc_type: "cfmr"
+  enc_kwargs:
+    num_layers: 12
+    proj: "conv2d"
+    proj_kwargs:
+      conv_channels: 128
+      num_layers: 2
+    pose: "rel"
+    pose_kwargs:
+      lradius: 256
+      rradius: 256
+      dropout: 0.2
+    arch_kwargs:
+      att_dim: 512
+      nhead: 8
+      feedforward_dim: 1024
+      att_dropout: 0.2
+      ffn_dropout: 0.2
+  dec_kwargs:
+    num_layers: 6
+    pose_kwargs:
+      dropout: 0.2
+    arch_kwargs:
+      att_dim: 512
+      nhead: 8
+      feedforward_dim: 1024
+      ffn_dropout: 0.2
+      att_dropout: 0.2
+
+task: "asr@ctc_xent"
+
+task_conf:
+  lsm_factor: 0.1
+  lsm_method: "uniform"
+  ctc_weight: 0.2
+
+asr_transform:
+  feats: "perturb-fbank-log-cmvn-aug"
+  frame_len: 400
+  frame_hop: 160
+  window: "hamm"
+  stft_mode: "kaldi"
+  round_pow_of_two: true
+  use_power: true
+  pre_emphasis: 0.97
+  audio_norm: false
+  sr: 16000
+  num_mels: 80
+  min_freq: 20
+  norm_mean: true
+  norm_var: true
+  norm_per_band: true
+  aug_prob: 1
+  aug_freq_args: [27, 2]
+  aug_time_args: [100, 2]
+  aug_mask_zero: false
+
+trainer_conf:
+  optimizer: "adamw"
+  optimizer_kwargs:
+    lr: 0.0
+    weight_decay: 1.0e-4
+  lr_scheduler: "warmup_noam_lr"
+  lr_scheduler_period: "step"
+  lr_scheduler_kwargs:
+    transformer_dim: 512
+    peak_lr: -1
+    warmup: 20000
+  no_impr: 8
+  no_impr_thres: 0
+  clip_gradient: 10
+  acmu_gradient: 1
+  report_metrics: ["loss", "accu", "@ctc"]
+  stop_criterion: "accu"
+
+data_conf:
+  fmt: "am@raw"
+  loader:
+    max_dur: 30 # (s)
+    min_dur: 0.4 # (s)
+    adapt_dur: 10 # (s)
+    min_batch_size: 4
+    max_token_num: 400
+    adapt_token_num: 100
+  train:
+    text: data/chime4/train/char
+    utt2dur: data/chime4/train/utt2dur
+    wav_scp: data/chime4/train/wav.scp
+  valid:
+    text: data/chime4/dev/char
+    utt2dur: data/chime4/dev/utt2dur
+    wav_scp: data/chime4/dev/wav.scp

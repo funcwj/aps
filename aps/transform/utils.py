@@ -78,33 +78,36 @@ def init_kernel(frame_len: int,
     """
     if mode not in ["librosa", "kaldi"]:
         raise ValueError(f"Unsupported mode: {mode}")
-    # FFT points
-    B = 2**math.ceil(math.log2(frame_len)) if round_pow_of_two else frame_len
+    # FFT size: B
+    if round_pow_of_two or mode == "kaldi":
+        fft_size = 2**math.ceil(math.log2(frame_len))
+    else:
+        fft_size = frame_len
     # center padding window if needed
-    if mode == "librosa" and B != frame_len:
-        lpad = (B - frame_len) // 2
-        window = tf.pad(window, (lpad, B - frame_len - lpad))
+    if mode == "librosa" and fft_size != frame_len:
+        lpad = (fft_size - frame_len) // 2
+        window = tf.pad(window, (lpad, fft_size - frame_len - lpad))
     if normalized:
         # make K^H * K = I
-        S = B**0.5
+        S = fft_size**0.5
     else:
         S = 1
     # W x B x 2
     if TORCH_VERSION >= 1.7:
-        K = fft_func(th.eye(B) / S, dim=-1)
+        K = fft_func(th.eye(fft_size) / S, dim=-1)
         K = th.stack([K.real, K.imag], dim=-1)
     else:
-        I = th.stack([th.eye(B), th.zeros(B, B)], dim=-1)
+        I = th.stack([th.eye(fft_size), th.zeros(fft_size, fft_size)], dim=-1)
         K = th.fft(I / S, 1)
     if mode == "kaldi":
         K = K[:frame_len]
     if inverse and not normalized:
         # to make K^H * K = I
-        K = K / B
+        K = K / fft_size
     # 2 x B x W
     K = th.transpose(K, 0, 2)
     # 2B x 1 x W
-    K = th.reshape(K, (B * 2, 1, K.shape[-1]))
+    K = th.reshape(K, (fft_size * 2, 1, K.shape[-1]))
     return K.to(window.device), window
 
 

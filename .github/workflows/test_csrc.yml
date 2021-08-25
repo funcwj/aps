@@ -10,7 +10,7 @@ on:
 
 jobs:
   script_check:
-    name: C++ Unit Testing
+    name: Building
     runs-on: ubuntu-18.04
     steps:
       - name: Get code

@@ -1,6 +1,7 @@
 # Copyright 2019 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
+import os
 import math
 import warnings
 
@@ -670,11 +671,16 @@ class Trainer(object):
             self.reporter.log("Cancel as not found enough checkpoints")
             return
         averager = ParameterAverager()
-        for i in range(beg_epoch, self.cur_epoch + 1):
-            self.reporter.log(f"Loading epoch.{i}.pt.tar ...")
-            cpt = th.load(self.checkpoint / f"epoch.{i}.pt.tar",
-                          map_location="cpu")
-            averager.add(cpt["model_state"])
+        for i in range(0, self.cur_epoch + 1):
+            epoch_cpt = self.checkpoint / f"epoch.{i}.pt.tar"
+            # avoid consuming too much disk space
+            if i < beg_epoch:
+                if epoch_cpt.exists():
+                    os.remove(epoch_cpt)
+            else:
+                self.reporter.log(f"Loading epoch.{i}.pt.tar ...")
+                cpt = th.load(epoch_cpt, map_location="cpu")
+                averager.add(cpt["model_state"])
 
         final = {
             "step": self.cur_step,
