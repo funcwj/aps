@@ -87,7 +87,6 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
       --space "<space>" \
       --ctc-weight $ctc_weight \
       --len-norm $len_norm \
-      --ctc-weight $ctc_weight \
       --eos-threshold $eos_threshold \
       wsj $am_exp \
       data/wsj/$name/wav.scp \

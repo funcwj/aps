@@ -676,6 +676,7 @@ class Trainer(object):
             # avoid consuming too much disk space
             if i < beg_epoch:
                 if epoch_cpt.exists():
+                    self.reporter.log(f"Removing epoch.{i}.pt.tar ...")
                     os.remove(epoch_cpt)
             else:
                 self.reporter.log(f"Loading epoch.{i}.pt.tar ...")

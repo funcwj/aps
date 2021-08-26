@@ -180,7 +180,7 @@ def aps_nnet(nnet: str) -> nn.Module:
     nnet_cls, _ = nnet.split("@")
     if nnet_cls in ["rt_sse", "sse"]:
         return aps_sse_nnet(nnet)
-    elif nnet_cls == ["streaming_asr", "asr"]:
+    elif nnet_cls in ["streaming_asr", "asr"]:
         return aps_asr_nnet(nnet)
     else:
         raise RuntimeError(f"Unknown type of the network: {nnet_cls}")

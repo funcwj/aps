@@ -216,9 +216,10 @@ class XfmrASR(ASREncoderDecoderBase):
                                       enc_kwargs=enc_kwargs)
         if dec_type != "xfmr":
             raise ValueError("XfmrASR: currently decoder must be xfmr")
-        if not self.is_xfmr_encoder and enc_proj != dec_kwargs["arch_kwargs"][
-                "att_dim"]:
-            raise ValueError("enc_proj should be equal to att_dim")
+        att_dim = dec_kwargs["arch_kwargs"]["att_dim"]
+        if not self.is_xfmr_encoder and enc_proj != att_dim:
+            raise ValueError(
+                f"enc_proj({enc_proj}) should be equal to att_dim({att_dim})")
         self.decoder = TorchTransformerDecoder(
             vocab_size - 1 if ctc else vocab_size, **dec_kwargs)
 

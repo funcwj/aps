@@ -6,6 +6,8 @@
 2. Add streaming features: (i)STFT, fsmn|rnn|conv1d|conv2d ASR encoders
 3. Add encode/decode function in EnhTransform class
 4. Done with streaming transformer/conformer
+5. Add c++ source code (FFT, STFT, Wav IO ...)
+6. CHiME4 recipe
 
 ### 2021/07
 

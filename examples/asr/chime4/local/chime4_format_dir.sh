@@ -7,21 +7,22 @@ set -eu
 echo "$0: Formating chime4 data dir..."
 
 nj=6
+track=isolated_1ch_track
 data_dir=data/chime4
 
-for name in tr05 dt05; do
-  mkdir -p $data_dir/$name
-  cat $data_dir/${name}_{simu,real}_noisy/wav.scp $data_dir/${name}_orig_clean/wav.scp | \
-    sort -k1 > $data_dir/$name/wav.scp
-  cat $data_dir/${name}_{simu,real}_noisy/text $data_dir/${name}_orig_clean/text | \
-    sort -k1 > $data_dir/$name/text
-done
+mkdir -p $data_dir/{train,dev}
 
-cp -rf $data_dir/tr05 $data_dir/train
-cp -rf $data_dir/dt05 $data_dir/dev
-rm -rf $data_dir/{tr05,dt05}
+cat $data_dir/tr05_{simu,real}_noisy/wav.scp $data_dir/tr05_orig_clean/wav.scp | \
+  sort -k1 > $data_dir/train/wav.scp
+cat $data_dir/tr05_{simu,real}_noisy/text $data_dir/tr05_orig_clean/text | \
+  sort -k1 > $data_dir/train/text
 
-for name in train dev; do
+cat $data_dir/dt05_{real,simu}_${track}/wav.scp $data_dir/dt05_orig_clean/wav.scp | \
+  sort -k1 > $data_dir/dev/wav.scp
+cat $data_dir/dt05_{real,simu}_${track}/text $data_dir/dt05_orig_clean/text | \
+  sort -k1 > $data_dir/dev/text
+
+for name in dev; do
   scripts/get_wav_dur.sh --nj $nj --output "time" \
     $data_dir/$name exp/utt2dur/$name
 done
