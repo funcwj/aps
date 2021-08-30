@@ -10,6 +10,7 @@ space="<space>"
 dataset=chime4
 track="isolated_1ch_track"
 chime4_data_dir=/home/jwu/doc/data/CHiME4
+wsj1_data_dir=/home/jwu/doc/data/wsj1
 
 gpu=0
 am_exp=1a
@@ -33,6 +34,7 @@ end=$(echo $stage | awk -F '-' '{print $2}')
 if [ $end -ge 1 ] && [ $beg -le 1 ]; then
   echo "Stage 1: preparing data ..."
   ./local/clean_wsj0_data_prep.sh $chime4_data_dir/CHiME3/data/WSJ0
+  ./local/clean_wsj1_data_prep.sh $wsj1_data_dir
   ./local/simu_noisy_chime4_data_prep.sh $chime4_data_dir
   ./local/real_noisy_chime4_data_prep.sh $chime4_data_dir
   ./local/simu_enhan_chime4_data_prep.sh $track $chime4_data_dir/data/audio/16kHz/$track

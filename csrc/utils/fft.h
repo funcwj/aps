@@ -48,7 +48,7 @@ class FFTComputer {
   // Precomputed values
   float *sin_table_, *cos_table_, *cplx_cache_;
   // BitReverse for complex values
-  void ComplexBitReverse(float *complex_values, int32_t num_values);
+  void ComplexBitReverse(float *cplx_values, int32_t num_values);
 };
 
 #endif  // CSRC_UTILS_FFT_H_

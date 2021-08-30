@@ -5,6 +5,7 @@
 #define CSRC_TRANSFORM_STFT_H_
 
 #include <string>
+#include <vector>
 
 #include "utils/fft.h"
 #include "utils/log.h"
@@ -26,11 +27,10 @@ class STFTBase {
     // due to implementation of FFT, we need fft_size as 2^N
     fft_size_ = RoundUpToNearestPowerOfTwo(window_len);
     fft_computer_ = new FFTComputer(fft_size_);
-    window_ = new float[fft_size_];
-    memset(window_, 0, sizeof(float) * fft_size_);
+    window_.resize(fft_size_, 0);
     // librosa & kaldi is different
     window_gen_.Generate(
-        window, window_ + (mode == "kaldi" ? 0 : (fft_size_ - window_len) / 2),
+        window, window_.data() + (mode == "kaldi" ? 0 : (fft_size_ - window_len) / 2),
         window_len, true);
     frame_len_ = mode == "librosa" ? fft_size_ : window_len;
   }
@@ -42,17 +42,16 @@ class STFTBase {
   // FFT size, must be 2^N
   int32_t FFTSize() const { return fft_size_; }
 
-  void SquareOfWindow(float* dst);
-  void AddWindow(float* src, int32_t src_length);
-  void RealFFT(float* src, int32_t src_length, bool invert);
+  void Windowing(float* frame, int32_t frame_len);
+  void RealFFT(float* data_ptr, int32_t data_len, bool invert, bool invert);
 
   ~STFTBase() {
-    if (window_) delete[] window_;
     if (fft_computer_) delete fft_computer_;
   }
+  // public: we need access it in iSTFT
+  std::vector<float> window_;
 
  private:
-  float* window_;
   std::string win_str_, mode_;
   int32_t frame_len_, frame_hop_, fft_size_;
   FFTComputer* fft_computer_;
@@ -66,7 +65,8 @@ class StreamingSTFT : public STFTBase {
                 const std::string& mode = "librosa")
       : STFTBase(frame_len, frame_hop, window, mode) {}
 
-  void Compute(float* src, int32_t window_length, float* dst);
+  // Run STFT for one frame
+  void Compute(float* frame, int32_t frame_len, float* stft);
 };
 
 class StreamingiSTFT : public STFTBase {
@@ -76,28 +76,20 @@ class StreamingiSTFT : public STFTBase {
                  const std::string& mode = "librosa")
       : STFTBase(frame_len, frame_hop, window, mode) {
     overlap_len_ = FrameLength() - FrameHop();
-    wav_cache_ = new float[overlap_len_];
-    win_cache_ = new float[overlap_len_];
-    memset(wav_cache_, 0, sizeof(float) * overlap_len_);
-    memset(win_cache_, 0, sizeof(float) * overlap_len_);
-    win_denorm_ = new float[FrameLength()];
+    wav_cache_.resize(overlap_len_, 0);
+    win_cache_.resize(overlap_len_, 0);
+    win_denorm_.resize(FrameLength());
   }
 
-  ~StreamingiSTFT() {
-    if (win_cache_) delete[] win_cache_;
-    if (wav_cache_) delete[] wav_cache_;
-    if (win_denorm_) delete[] win_denorm_;
-  }
-
-  void Compute(float* src, int32_t window_length, float* dst);
-  void Flush(float* dst);
+  // Run iSTFT for one frame (with normalization)
+  void Compute(float* stft, int32_t frame_len, float* frame);
+  // Calling it at last
+  void Flush(float* frame);
 
  private:
-  float* wav_cache_;
-  float* win_cache_;
-  float* win_denorm_;
+  std::vector<float> wav_cache_, win_cache_, win_denorm_;
   int32_t overlap_len_;
-  void Normalization(float* src, int32_t src_length);
+  void Normalization(float* frame, int32_t frame_len);
 };
 
 #endif  // CSRC_TRANSFORM_STFT_H_

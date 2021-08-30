@@ -27,7 +27,7 @@ echo "$0 $@"  # Print the command line for logging
 enhan=$1
 audio_dir=$2
 
-dir=$PWD/data/local
+dir=$PWD/data/chime4/local
 mkdir -p $dir
 local=$PWD/local
 utils=$PWD/utils

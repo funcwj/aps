@@ -21,7 +21,7 @@ fi
 
 wsj0=$1
 
-srcdir=$PWD/data/local
+srcdir=$PWD/data/chime4/local
 dstdir=$PWD/data/$dataset
 local=$PWD/local
 utils=$PWD/utils
@@ -89,29 +89,6 @@ for x in tr05 et05 dt05; do
   awk -v cmd=$sph2pipe '{printf("%s %s -f wav %s |\n", $1, cmd, $2);}' ${x}_sph.scp > ${x}_wav.scp
 done
 
-if [ ! -f wsj0-train-spkrinfo.txt ] || [ `cat wsj0-train-spkrinfo.txt | wc -l` -ne 134 ]; then
-  rm -f wsj0-train-spkrinfo.txt
-  wget http://www.ldc.upenn.edu/Catalog/docs/LDC93S6A/wsj0-train-spkrinfo.txt \
-    || ( echo "Getting wsj0-train-spkrinfo.txt from backup location" && \
-         wget --no-check-certificate https://sourceforge.net/projects/kaldi/files/wsj0-train-spkrinfo.txt );
-fi
-
-if [ ! -f wsj0-train-spkrinfo.txt ]; then
-  echo "Could not get the spkrinfo.txt file from LDC website (moved)?"
-  echo "This is possibly omitted from the training disks; couldn't find it."
-  echo "Everything else may have worked; we just may be missing gender info"
-  echo "which is only needed for VTLN-related diagnostics anyway."
-  exit 1
-fi
-# Note: wsj0-train-spkrinfo.txt doesn't seem to be on the disks but the
-# LDC put it on the web.  Perhaps it was accidentally omitted from the
-# disks.
-
-cat $wsj0/wsj0/doc/spkrinfo.txt \
-    ./wsj0-train-spkrinfo.txt  | \
-    perl -ane 'tr/A-Z/a-z/; m/^;/ || print;' | \
-    awk '{print $1, $2}' | grep -v -- -- | sort | uniq > spk2gender
-
 # return back
 cd -
 
@@ -121,4 +98,4 @@ for x in et05 dt05 tr05; do
   cp $srcdir/${x}_wav.scp $dstdir/${x}_orig_clean/wav.scp || exit 1
 done
 
-echo "Data preparation succeeded"
+echo "Data preparation WSJ0 succeeded"

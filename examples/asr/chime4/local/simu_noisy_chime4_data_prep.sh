@@ -33,7 +33,7 @@ trans_dir=$1/data/transcriptions
 
 echo "extract all channels (CH[1-6].wav) for noisy data"
 
-dir=$PWD/data/local
+dir=$PWD/data/chime4/local
 mkdir -p $dir
 local=$PWD/local
 utils=$PWD/utils
@@ -109,9 +109,9 @@ done
 # copying data to data/...
 for x in $list_set; do
   sort ${x}_wav.scp.temp > ${x}_wav.scp
-  mkdir -p ../chime4/$x
-  cp ${x}_wav.scp ../chime4/$x/wav.scp || exit 1;
-  cp ${x}.txt     ../chime4/$x/text    || exit 1;
+  mkdir -p ../../chime4/$x
+  cp ${x}_wav.scp ../../chime4/$x/wav.scp || exit 1;
+  cp ${x}.txt     ../../chime4/$x/text    || exit 1;
 done
 
 # clean up temp files
