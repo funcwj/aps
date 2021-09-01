@@ -106,9 +106,12 @@ class StreamingiSTFT(STFTBase):
         frame[:, :overlap_len] += self.wav_cache
         window[:overlap_len] += self.win_cache
         self.win_cache = window[self.frame_hop:]
-        self.wav_cache = frame[:, self.frame_hop:]
+        self.wav_cache = frame[0, self.frame_hop:]
         frame = frame / (window + eps)
         return frame[:, :self.frame_hop]
+
+    def flush(self, eps: float = EPSILON) -> th.Tensor:
+        return self.wav_cache / (self.win_cache + eps)
 
     def forward(self,
                 transform: th.Tensor,
@@ -127,6 +130,5 @@ class StreamingiSTFT(STFTBase):
         for t in range(num_frames):
             frame = self.step(transform[..., t, :], return_polar=return_polar)
             frames.append(frame)
-        cache = self.wav_cache / (self.win_cache + eps)
-        wav = th.cat(frames + [cache], -1)
+        wav = th.cat(frames + [self.flush(eps=eps)], -1)
         return wav

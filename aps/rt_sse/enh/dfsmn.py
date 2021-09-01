@@ -21,6 +21,7 @@ class DFSMN(RealTimeSSEBase):
     Uses Deep FSMN for speech enhancement/separation
     """
     FSMNParam = Union[List[int], int]
+    __constants__ = ["lctx", "rctx", "cplx_mask"]
 
     def __init__(self,
                  enh_transform: Optional[nn.Module] = None,
@@ -126,6 +127,10 @@ class DFSMN(RealTimeSSEBase):
         """
         self.check_args(mix, training=True, valid_dim=[2])
         return self._infer(mix, self.training_mode)
+
+    @th.jit.export
+    def reset(self):
+        self.dfsmn.reset()
 
     @th.jit.export
     def step(self, chunk: th.Tensor) -> th.Tensor:

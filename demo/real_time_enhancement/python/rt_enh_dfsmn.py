@@ -39,8 +39,10 @@ def run(args):
     transform.eval()
 
     # Get attributes
-    chunk = scripted_nnet.chunk
+    lctx = scripted_nnet.lctx
+    rctx = scripted_nnet.rctx
     complex_mask = scripted_nnet.cplx_mask
+    logger.info(f"lctx = {lctx}, rctx = {rctx}")
 
     forward_stft = StreamingSTFT(frame_len,
                                  frame_hop,
@@ -59,34 +61,42 @@ def run(args):
         timer = SimpleTimer()
 
         num_samples = wav.shape[-1]
-        wav_chunk_size = (chunk - 1) * frame_hop + frame_len
+        num_frames = (num_samples - frame_len) // frame_hop + 1
+        pad_samples = (num_frames + rctx - 1) * frame_hop + frame_len
+        feat_buffer = None
+        stft_buffer = []
         enh = []
-        for n in range(0, num_samples, wav_chunk_size):
-            end = n + wav_chunk_size
+        for n in range(0, pad_samples, frame_hop):
+            end = n + frame_len
             pad = end - num_samples
-            if pad > 0:
-                wav_chunk = tf.pad(wav[n:], (0, pad))
+            if pad >= frame_len:
+                frame = th.zeros(frame_len)
+            elif pad > 0 and pad < frame_len:
+                frame = tf.pad(wav[n:], (0, pad))
             else:
-                wav_chunk = wav[n:end]
-            stft_chunk = []
-            # STFT
-            for t in range(chunk):
-                frame = wav_chunk[t * frame_hop:t * frame_hop + frame_len]
-                stft_chunk.append(forward_stft.step(frame[None, ...]))
-            # STFT: N x F x C x 2
-            stft_chunk = th.stack(stft_chunk, -2)
-            # feature: N x T x F
-            feats = transform(stft_chunk)
-            # N x 2F x C (complex) or N x F x C (real)
-            masks = scripted_nnet.step(feats)
-            # N x F x C x 2
-            stft_chunk = tf_masking(stft_chunk,
-                                    masks,
-                                    complex_mask=complex_mask)
-            # iSTFT
-            for t in range(chunk):
-                frame = stft_chunk[..., t, :]
-                enh.append(inverse_stft.step(frame)[0])
+                frame = wav[n:end]
+            # N x F x 2
+            frame = forward_stft.step(frame[None, ...])
+            # N x F x 1 x 2
+            frame = frame[..., None, :]
+            stft_buffer.append(frame)
+            # N x 1 x F
+            frame = transform(frame)
+            if feat_buffer is None:
+                feat_buffer = [th.zeros_like(frame)] * lctx
+            feat_buffer.append(frame)
+            if len(feat_buffer) != lctx + rctx + 1:
+                continue
+            # N x C x F
+            chunk = th.cat(feat_buffer, 1)
+            # N x F x 1
+            masks = scripted_nnet.step(chunk)
+            # N x F
+            frame = tf_masking(stft_buffer[0], masks, complex_mask=complex_mask)
+            frame = frame[..., 0, :]
+            enh.append(inverse_stft.step(frame)[0])
+            stft_buffer = stft_buffer[1:]
+            feat_buffer = feat_buffer[1:]
         last = inverse_stft.flush()
         enh = th.cat(enh + [last], 0)
         enh = enh[center_pad:num_samples - center_pad]

@@ -60,10 +60,6 @@ class FreqXfmr(RealTimeSSEBase):
         self.cplx_mask = cplx_mask
         self.chunk = chunk
 
-    @th.jit.export
-    def reset(self):
-        self.xfmr.reset()
-
     def _tf_mask(self, feats: th.Tensor) -> List[th.Tensor]:
         """
         TF mask estimation from given features
@@ -120,6 +116,10 @@ class FreqXfmr(RealTimeSSEBase):
         """
         self.check_args(mix, training=True, valid_dim=[2])
         return self._infer(mix, self.training_mode)
+
+    @th.jit.export
+    def reset(self):
+        self.xfmr.reset()
 
     @th.jit.export
     def step(self, chunk: th.Tensor) -> th.Tensor:
