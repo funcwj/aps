@@ -270,12 +270,36 @@ class SpectrogramTransform(STFT):
         Args:
             wav (Tensor): input signal, N x (C) x S
         Return:
-            mag (Tensor): magnitude, N x (C) x F x T
+            mag (Tensor): magnitude, N x (C) x F x T x 2
         """
-        # N x (C) x F x T
-        packed = super().forward(wav, return_polar=False)
-        # return only magnitude
-        return th.sum(packed**2, -1)**0.5
+        # N x (C) x F x T x 2
+        return super().forward(wav, return_polar=False)
+
+
+class MagnitudeTransform(nn.Module):
+    """
+    Transform tensor [real, imag] to angle tensor
+    """
+
+    def __init__(self, dim: int = -1, eps: float = 0):
+        super(MagnitudeTransform, self).__init__()
+        self.dim = dim
+        self.eps = eps
+
+    def extra_repr(self) -> str:
+        return f"dim={self.dim}, eps={self.eps}"
+
+    def jit_export(self) -> bool:
+        return True
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp (Tensor): N x ... x 2 x ...
+        Return:
+            out (Tensor): N x ...
+        """
+        return th.sqrt(th.sum(inp**2, self.dim) + self.eps)
 
 
 class AbsTransform(nn.Module):
@@ -880,15 +904,17 @@ class FeatureTransform(nn.Module):
                 self.spectra_index = len(transform)
                 spectrogram = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    MagnitudeTransform(dim=-1),
                     TFTransposeTransform(),
                     PowerTransform(power=2 if use_power else 1)
                 ]
                 transform += spectrogram
-                feats_dim = transform[-3].dim()
+                feats_dim = spectrogram[0].dim()
             elif tok == "fbank":
                 self.spectra_index = len(transform)
                 fbank = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    MagnitudeTransform(dim=-1),
                     TFTransposeTransform(),
                     PowerTransform(power=2 if use_power else 1),
                     MelTransform(frame_len, **mel_kwargs)
@@ -899,6 +925,7 @@ class FeatureTransform(nn.Module):
                 self.spectra_index = len(transform)
                 mfcc = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    MagnitudeTransform(dim=-1),
                     TFTransposeTransform(),
                     PowerTransform(power=2 if use_power else 1),
                     MelTransform(frame_len, **mel_kwargs),

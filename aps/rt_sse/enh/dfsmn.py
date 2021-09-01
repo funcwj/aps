@@ -68,7 +68,7 @@ class DFSMN(RealTimeSSEBase):
         self.lctx = context(num_layers, lctx)
         self.rctx = context(num_layers, rctx)
 
-    def _tf_mask(self, feats: th.Tensor, num_branchs: int) -> List[th.Tensor]:
+    def _tf_mask(self, feats: th.Tensor) -> List[th.Tensor]:
         """
         TF mask estimation from given features
         """
@@ -90,7 +90,7 @@ class DFSMN(RealTimeSSEBase):
         # N x (T+L+R) x F
         feats = tf.pad(feats, (0, 0, self.lctx, self.rctx), "constant", 0)
         # [N x F x T, ...]
-        masks = self._tf_mask(feats, self.num_branchs)
+        masks = self._tf_mask(feats)
         # post processing
         if mode == "time":
             bss_stft = [

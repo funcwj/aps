@@ -27,6 +27,7 @@ class RefChannelTransform(nn.Module):
         super(RefChannelTransform, self).__init__()
         # < 0 means return all
         self.ref_channel = ref_channel
+        # N x C x T x F or N x C x T x F x 2
         self.input_dim = input_dim
 
     def extra_repr(self) -> str:
@@ -73,32 +74,6 @@ class PhaseTransform(nn.Module):
         real = th.select(inp, self.dim, 0)
         imag = th.select(inp, self.dim, 1)
         return th.atan2(imag, real)
-
-
-class MagnitudeTransform(nn.Module):
-    """
-    Transform tensor [real, imag] to angle tensor
-    """
-
-    def __init__(self, dim: int = -1, eps: float = 0):
-        super(MagnitudeTransform, self).__init__()
-        self.dim = dim
-        self.eps = eps
-
-    def extra_repr(self) -> str:
-        return f"dim={self.dim}, eps={self.eps}"
-
-    def jit_export(self) -> bool:
-        return True
-
-    def forward(self, inp: th.Tensor) -> th.Tensor:
-        """
-        Args:
-            inp (Tensor): N x ... x 2 x ...
-        Return:
-            out (Tensor): N x ...
-        """
-        return th.sqrt(th.sum(inp**2, self.dim) + self.eps)
 
 
 class IpdTransform(nn.Module):
@@ -549,8 +524,7 @@ class FeatureTransform(nn.Module):
             feats_dim = asr_transform.feats_dim
             # remove SpectrogramTransform()
             mag_transform = [
-                MagnitudeTransform(dim=-1),
-                RefChannelTransform(ref_channel=ref_channel, input_dim=4),
+                RefChannelTransform(ref_channel=ref_channel, input_dim=5),
             ] + list(asr_transform.transform[1:])
             self.mag_transform = nn.Sequential(*mag_transform)
         else:

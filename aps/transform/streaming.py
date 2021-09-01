@@ -75,7 +75,10 @@ class StreamingiSTFT(STFTBase):
         self.wav_cache = th.zeros(self.win_length - self.frame_hop)
         self.win_cache = th.zeros_like(self.wav_cache)
 
-    def step(self, frame: th.Tensor, return_polar: bool = False) -> th.Tensor:
+    def step(self,
+             frame: th.Tensor,
+             return_polar: bool = False,
+             eps: float = EPSILON) -> th.Tensor:
         """
         Process one frame
         Args:
@@ -92,7 +95,7 @@ class StreamingiSTFT(STFTBase):
                              self.win_length,
                              dim=-1,
                              norm="ortho" if self.normalized else "backward")
-        return frame * self.w
+        return self.norm(frame * self.w, eps=eps)
 
     def norm(self, frame: th.Tensor, eps: float = EPSILON) -> th.Tensor:
         """
@@ -123,7 +126,7 @@ class StreamingiSTFT(STFTBase):
         num_frames = transform.shape[-2]
         for t in range(num_frames):
             frame = self.step(transform[..., t, :], return_polar=return_polar)
-            frames.append(self.norm(frame, eps=eps))
+            frames.append(frame)
         cache = self.wav_cache / (self.win_cache + eps)
         wav = th.cat(frames + [cache], -1)
         return wav

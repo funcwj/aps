@@ -18,6 +18,8 @@ class FreqXfmr(RealTimeSSEBase):
     Transformer for speech enhancement/separation
     """
 
+    __constants__ = ["chunk", "cplx_mask"]
+
     def __init__(self,
                  enh_transform: Optional[nn.Module] = None,
                  num_bins: int = 257,
@@ -56,8 +58,13 @@ class FreqXfmr(RealTimeSSEBase):
                 TFTransposeTransform())
         self.num_branchs = num_branchs
         self.cplx_mask = cplx_mask
+        self.chunk = chunk
 
-    def _tf_mask(self, feats: th.Tensor, num_branchs: int) -> List[th.Tensor]:
+    @th.jit.export
+    def reset(self):
+        self.xfmr.reset()
+
+    def _tf_mask(self, feats: th.Tensor) -> List[th.Tensor]:
         """
         TF mask estimation from given features
         """
@@ -77,7 +84,7 @@ class FreqXfmr(RealTimeSSEBase):
         # N x T x F
         feats = self.enh_transform(stft)
         # [N x F x T, ...]
-        masks = self._tf_mask(feats, self.num_branchs)
+        masks = self._tf_mask(feats)
         # post processing
         if mode == "time":
             bss_stft = [
@@ -113,3 +120,16 @@ class FreqXfmr(RealTimeSSEBase):
         """
         self.check_args(mix, training=True, valid_dim=[2])
         return self._infer(mix, self.training_mode)
+
+    @th.jit.export
+    def step(self, chunk: th.Tensor) -> th.Tensor:
+        """
+        Processing one step
+        """
+        # N x S*F x T
+        masks = self.masks(self.xfmr.step(chunk))
+        # [N x F x T, ...]
+        masks = th.chunk(masks, self.num_branchs, 1)
+        # S x N x F x T
+        masks = th.stack(masks)
+        return masks[0] if self.num_branchs == 1 else masks

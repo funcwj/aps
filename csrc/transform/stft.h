@@ -4,6 +4,7 @@
 #ifndef CSRC_TRANSFORM_STFT_H_
 #define CSRC_TRANSFORM_STFT_H_
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -30,7 +31,8 @@ class STFTBase {
     window_.resize(fft_size_, 0);
     // librosa & kaldi is different
     window_gen_.Generate(
-        window, window_.data() + (mode == "kaldi" ? 0 : (fft_size_ - window_len) / 2),
+        window,
+        window_.data() + (mode == "kaldi" ? 0 : (fft_size_ - window_len) / 2),
         window_len, true);
     frame_len_ = mode == "librosa" ? fft_size_ : window_len;
   }
@@ -43,7 +45,7 @@ class STFTBase {
   int32_t FFTSize() const { return fft_size_; }
 
   void Windowing(float* frame, int32_t frame_len);
-  void RealFFT(float* data_ptr, int32_t data_len, bool invert, bool invert);
+  void RealFFT(float* data_ptr, int32_t data_len, bool invert);
 
   ~STFTBase() {
     if (fft_computer_) delete fft_computer_;

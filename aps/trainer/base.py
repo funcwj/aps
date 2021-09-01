@@ -539,7 +539,7 @@ class Trainer(object):
         ]) / 10.0**6
         # logging
         self.reporter.log(
-            f"Load model to GPU-{device_id}, #param: {self.num_params:.2f}M")
+            f"Offload model to GPU-{device_id}, #param: {self.num_params:.2f}M")
         self.reporter.log(
             f"Track the metrics during training: {report_metrics}, " +
             f"reduction = {reduction_tag}")
