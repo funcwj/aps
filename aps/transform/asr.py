@@ -71,7 +71,7 @@ class RescaleTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"rescale={self.rescale}"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return False
 
     def forward(self, wav: th.Tensor) -> th.Tensor:
@@ -98,7 +98,7 @@ class PreEmphasisTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"pre_emphasis={self.pre_emphasis}"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return False
 
     def forward(self, wav: th.Tensor) -> th.Tensor:
@@ -147,7 +147,7 @@ class SpeedPerturbTransform(nn.Module):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(sr={self.sr}, factor={self.factor_str})"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return False
 
     def output_length(self,
@@ -209,7 +209,7 @@ class TFTransposeTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"axis1={self.axis1}, axis2={self.axis2}"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def forward(self, tensor: th.Tensor) -> th.Tensor:
@@ -262,7 +262,7 @@ class SpectrogramTransform(STFT):
     def dim(self) -> int:
         return self.num_bins
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return False
 
     def forward(self, wav: th.Tensor) -> th.Tensor:
@@ -289,7 +289,7 @@ class MagnitudeTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"dim={self.dim}, eps={self.eps}"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
@@ -316,7 +316,7 @@ class AbsTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"eps={self.eps:.3e}"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def forward(self, tensor: th.Tensor) -> th.Tensor:
@@ -343,7 +343,7 @@ class PowerTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"power={self.power}"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def forward(self, tensor: th.Tensor) -> th.Tensor:
@@ -404,7 +404,7 @@ class MelTransform(nn.Module):
     def dim(self) -> int:
         return self.num_mels
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def extra_repr(self) -> str:
@@ -443,7 +443,7 @@ class LogTransform(nn.Module):
     def dim_scale(self) -> int:
         return 1
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def extra_repr(self) -> str:
@@ -496,7 +496,7 @@ class DiscreteCosineTransform(nn.Module):
     def dim(self) -> int:
         return self.num_ceps
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def extra_repr(self) -> str:
@@ -562,7 +562,7 @@ class CmvnTransform(nn.Module):
     def dim_scale(self) -> int:
         return 1
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def _cmvn_per_band(self, feats: th.Tensor) -> th.Tensor:
@@ -643,7 +643,7 @@ class SpecAugTransform(nn.Module):
             f"p={self.p}, p_time={self.p_time}, mask_zero={self.mask_zero}, "
             f"num_freq_masks={self.fnum}, num_time_masks={self.tnum}")
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return False
 
     def forward(self, x: th.Tensor) -> th.Tensor:
@@ -701,7 +701,7 @@ class SpliceTransform(nn.Module):
     def dim_scale(self) -> int:
         return (1 + self.rctx + self.lctx)
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def forward(self, feats: th.Tensor) -> th.Tensor:
@@ -712,10 +712,7 @@ class SpliceTransform(nn.Module):
             slice (Tensor): spliced feature, N x ... x To x FD
         """
         # N x ... x T x FD
-        feats = splice_feature(feats,
-                               lctx=self.lctx,
-                               rctx=self.rctx,
-                               subsampling_factor=self.subsampling_factor)
+        feats = splice_feature(feats, lctx=self.lctx, rctx=self.rctx)
         if self.subsampling_factor != 1:
             feats = feats[..., ::self.subsampling_factor, :]
         return feats
@@ -747,7 +744,7 @@ class DeltaTransform(nn.Module):
     def dim_scale(self) -> int:
         return self.order
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def forward(self, feats: th.Tensor) -> th.Tensor:

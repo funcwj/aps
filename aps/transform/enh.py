@@ -33,7 +33,7 @@ class RefChannelTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"ref_channel={self.ref_channel}"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
@@ -61,7 +61,7 @@ class PhaseTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"dim={self.dim}"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
@@ -106,7 +106,7 @@ class IpdTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"ipd_index={self.ipd_index}, cos={self.cos}, sin={self.sin}"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def forward(self, p: th.Tensor) -> th.Tensor:
@@ -236,7 +236,7 @@ class DfTransform(nn.Module):
             f"sr={self.sr}, num_bins={self.num_bins}, velocity={self.velocity}, "
             + f"known_doa={self.num_doas == 1}")
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def _compute_af(self, ipd: th.Tensor, doa: th.Tensor) -> th.Tensor:
@@ -342,7 +342,7 @@ class FixedBeamformer(nn.Module):
                 f"num_bins={F}, init_weight={self.init_weight}, " +
                 f"requires_grad={self.requires_grad}")
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def forward(self,

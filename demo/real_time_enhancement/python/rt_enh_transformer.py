@@ -15,7 +15,6 @@ from aps.sse.base import tf_masking
 from aps.utils import get_logger, SimpleTimer
 from aps.const import EPSILON
 
-logger = get_logger(__name__)
 # STFT configurations
 # ---------------------------------
 frame_len = 512
@@ -23,6 +22,8 @@ frame_hop = 256
 window = "hann"
 center = True
 # ---------------------------------
+
+logger = get_logger(__name__)
 
 
 def run(args):
@@ -34,6 +35,8 @@ def run(args):
     wav_reader = AudioReader(args.wav_scp, channel=args.channel, sr=args.sr)
     scripted_nnet = th.jit.load(args.scripted_nnet)
     scripted_nnet.eval()
+    transform = th.jit.load(args.transform)
+    transform.eval()
 
     # Get attributes
     chunk = scripted_nnet.chunk
@@ -73,9 +76,7 @@ def run(args):
             # STFT: N x F x C x 2
             stft_chunk = th.stack(stft_chunk, -2)
             # feature: N x T x F
-            mag_chunk = th.sum(stft_chunk**2, -1)**0.5
-            feats = th.log(th.clamp(mag_chunk, min=EPSILON))
-            feats = th.transpose(feats, 1, 2)
+            feats = transform(stft_chunk)
             # N x 2F x C (complex) or N x F x C (real)
             masks = scripted_nnet.step(feats)
             # N x F x C x 2
@@ -94,7 +95,7 @@ def run(args):
         dur = wav.shape[-1] / args.sr
         time_cost = timer.elapsed()
         logger.info(
-            f"Processing utterance {key} done, RTF = {time_cost / dur:.2f}")
+            f"Processing utterance {key} done, RTF = {time_cost / dur:.4f}")
         write_audio(dst_dir / f"{key}.wav", enh.numpy())
     logger.info(f"Processed {len(wav_reader)} utterances done!")
 
@@ -107,8 +108,14 @@ if __name__ == "__main__":
     parser.add_argument("wav_scp", help="Audio script for evaluation")
     parser.add_argument("scripted_nnet",
                         type=str,
-                        help="Scripted transformer model")
-    parser.add_argument("dst_dir", help="Path to save the enhanced audio")
+                        help="Scripted transformer based SE model")
+    parser.add_argument("--transform",
+                        type=str,
+                        required=True,
+                        help="Scripted feature transform network")
+    parser.add_argument("dst_dir",
+                        type=str,
+                        help="Path to save the enhanced audio")
     parser.add_argument("--sr",
                         type=int,
                         default=16000,

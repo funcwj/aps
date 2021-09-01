@@ -22,8 +22,8 @@ def export_jit(transform: nn.Module) -> nn.Module:
     """
     Export transform module for inference
     """
-    eval_transform = [module for module in transform if module.jit_export()]
-    return nn.Sequential(*eval_transform)
+    export_out = [module for module in transform if module.exportable()]
+    return nn.Sequential(*export_out)
 
 
 def init_window(wnd: str,
@@ -192,7 +192,6 @@ def speed_perturb_filter(src_sr: int,
 def splice_feature(feats: th.Tensor,
                    lctx: int = 1,
                    rctx: int = 1,
-                   subsampling_factor: int = 1,
                    op: str = "cat") -> th.Tensor:
     """
     Splice feature
@@ -200,7 +199,6 @@ def splice_feature(feats: th.Tensor,
         feats (Tensor): N x ... x T x F, original feature
         lctx: left context
         rctx: right context
-        subsampling_factor: subsampling factor
         op: operator on feature context
     Return:
         splice (Tensor): feature with context padded
@@ -212,7 +210,6 @@ def splice_feature(feats: th.Tensor,
     # [N x ... x T x F, ...]
     ctx = []
     T = feats.shape[-2]
-    T = T - T % subsampling_factor
     for c in range(-lctx, rctx + 1):
         idx = th.arange(c, c + T, device=feats.device, dtype=th.int64)
         idx = th.clamp(idx, min=0, max=T - 1)
