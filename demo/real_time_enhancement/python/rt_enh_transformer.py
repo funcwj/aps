@@ -40,7 +40,7 @@ def run(args):
 
     # Get attributes
     chunk = scripted_nnet.chunk
-    complex_mask = scripted_nnet.cplx_mask
+    complex_mask = scripted_nnet.complex_mask
 
     forward_stft = StreamingSTFT(frame_len,
                                  frame_hop,
@@ -77,12 +77,10 @@ def run(args):
             stft_chunk = th.stack(stft_chunk, -2)
             # feature: N x T x F
             feats = transform(stft_chunk)
-            # N x 2F x C (complex) or N x F x C (real)
+            # N x F x C x 2 (complex) or N x F x C (real)
             masks = scripted_nnet.step(feats)
             # N x F x C x 2
-            stft_chunk = tf_masking(stft_chunk,
-                                    masks,
-                                    complex_mask=complex_mask)
+            stft_chunk = tf_masking(stft_chunk, masks)
             # iSTFT
             for t in range(chunk):
                 frame = stft_chunk[..., t, :]

@@ -20,31 +20,31 @@ bounded = ["sigmoid", "softmax"]
 unbounded = ["none", "relu", "tanh", "softplus"]
 
 
-def tf_masking(packed_stft: th.Tensor,
-               mask: th.Tensor,
-               complex_mask: bool = False,
+def tf_masking(mix_stft: th.Tensor,
+               src_mask: th.Tensor,
                channel: int = 0) -> th.Tensor:
     """
     Do time-frequency masking
     Args:
-        packed_stft: packed version of STFT, N x (C) x F x T x 2
-        mask: TF masks, N x F x T or N x F*2 x T
-        complex_mask: mask is real or complex
+        mix_stft: STFT of the mixture signal, N x (C) x F x T x 2
+        src_mask: TF masks of the source component, N x F x T (real) or N x F x T x 2 (complex)
         channel: for channel selection in packed_stft
     Return:
-        masked_stft: masked version of STFT, N x F x T x 2
+        enh_stft: STFT of the enhanced signal, N x F x T x 2
     """
-    stft_dim = packed_stft.dim()
+    stft_dim = mix_stft.dim()
+    mask_dim = src_mask.dim()
     assert stft_dim in [4, 5]
+    assert mask_dim in [3, 4]
     if stft_dim == 5:
-        packed_stft = packed_stft[:, channel]
-    real, imag = packed_stft[..., 0], packed_stft[..., 1]
-    cplx_stft = ComplexTensor(real, imag)
-    if complex_mask:
-        mask_real, mask_imag = th.chunk(mask, 2, dim=1)
-        mask = ComplexTensor(mask_real, mask_imag)
-    masked_stft = cplx_stft * mask
-    return masked_stft.as_real()
+        mix_stft = mix_stft[:, channel]
+    mix_stft = ComplexTensor(mix_stft[..., 0], mix_stft[..., 1])
+    # complex mask
+    if mask_dim == 4:
+        assert src_mask.shape[-1] == 2
+        src_mask = ComplexTensor(src_mask[..., 0], src_mask[..., 1])
+    enh_stft = mix_stft * src_mask
+    return enh_stft.as_real()
 
 
 def softmax(tensor: th.Tensor) -> th.Tensor:

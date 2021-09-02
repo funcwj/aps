@@ -41,7 +41,7 @@ def run(args):
     # Get attributes
     lctx = scripted_nnet.lctx
     rctx = scripted_nnet.rctx
-    complex_mask = scripted_nnet.cplx_mask
+    complex_mask = scripted_nnet.complex_mask
     logger.info(f"lctx = {lctx}, rctx = {rctx}")
 
     forward_stft = StreamingSTFT(frame_len,
@@ -92,7 +92,7 @@ def run(args):
             # N x F x 1
             masks = scripted_nnet.step(chunk)
             # N x F
-            frame = tf_masking(stft_buffer[0], masks, complex_mask=complex_mask)
+            frame = tf_masking(stft_buffer[0], masks)
             frame = frame[..., 0, :]
             enh.append(inverse_stft.step(frame)[0])
             stft_buffer = stft_buffer[1:]
