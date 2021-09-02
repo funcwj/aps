@@ -13,7 +13,6 @@ from aps.loader.audio import AudioReader, write_audio
 from aps.transform.streaming import StreamingSTFT, StreamingiSTFT
 from aps.sse.base import tf_masking
 from aps.utils import get_logger, SimpleTimer
-from aps.const import EPSILON
 
 # STFT configurations
 # ---------------------------------

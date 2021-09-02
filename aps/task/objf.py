@@ -197,6 +197,10 @@ def permu_invarint_objf(inp: List[Any],
         inp = [transform(i) for i in inp]
         ref = [transform(r) for r in ref]
 
+    # no permutation needed
+    if num_spks == 1:
+        return objf(inp[0], ref[0])
+
     loss_mat = th.stack(
         [permu_objf(p, inp, ref) for p in permutations(range(num_spks))])
 

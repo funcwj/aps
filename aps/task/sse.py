@@ -91,6 +91,7 @@ def snr(x: th.Tensor,
 def hybrid_objf(out: List[Any],
                 ref: List[Any],
                 objf: Callable,
+                transform: Optional[Callable] = None,
                 weight: Optional[List[float]] = None,
                 permute: bool = True,
                 permu_num_spks: int = 2) -> th.Tensor:
@@ -108,10 +109,13 @@ def hybrid_objf(out: List[Any],
     if num_branch != len(ref):
         raise RuntimeError(
             f"Got {len(ref)} references but with {num_branch} outputs")
+
     if permute:
         # N
-        loss = permu_invarint_objf(out[:permu_num_spks], ref[:permu_num_spks],
-                                   objf)
+        loss = permu_invarint_objf(out[:permu_num_spks],
+                                   ref[:permu_num_spks],
+                                   objf,
+                                   transform=transform)
         # add residual loss
         if num_branch > permu_num_spks:
             # warnings.warn(f"#Branch: {num_branch} > #Speaker: {permu_num_spks}")
@@ -124,7 +128,7 @@ def hybrid_objf(out: List[Any],
                                        weight=weight[1:])
             loss = weight[0] * loss + other_loss
     else:
-        loss = multiple_objf(out, ref, objf, weight=weight)
+        loss = multiple_objf(out, ref, objf, weight=weight, transform=transform)
     return loss
 
 
@@ -197,14 +201,13 @@ class TimeDomainTask(SepTask):
         out = self.nnet(egs["mix"])
 
         if isinstance(out, th.Tensor):
-            loss = self.objf(out, ref)
-        else:
-            loss = hybrid_objf(out,
-                               ref,
-                               self.objf,
-                               weight=self.weight,
-                               permute=self.permute,
-                               permu_num_spks=self.num_spks)
+            out, ref = [out], [ref]
+        loss = hybrid_objf(out,
+                           ref,
+                           self.objf,
+                           weight=self.weight,
+                           permute=self.permute,
+                           permu_num_spks=self.num_spks)
         return {"loss": th.mean(loss)}
 
 
@@ -373,8 +376,7 @@ class FreqSaTask(SepTask):
             mix (Tensor): N x (C) x S
             ref (Tensor or [Tensor, ...]): N x S
         """
-        mix = egs["mix"]
-        # do separation or enhancement
+        mix, ref = egs["mix"], egs["ref"]
         # out: Tensor or [Tensor, ...]
         mask = self.nnet(mix)
 
@@ -384,28 +386,21 @@ class FreqSaTask(SepTask):
         mix_mag, mix_pha = in_polar[..., 0], in_polar[..., 1]
 
         if isinstance(mask, th.Tensor):
-            # F x T
-            ref = self._ref_mag(mix_mag, mix_pha, egs["ref"])
-            # post processing
-            out = self.transform(mask * mix_mag if self.masking else mask)
-            ref = self.transform(ref)
-            # loss
-            loss = self.objf(out, ref)
+            mask, ref = [mask], [ref]
+        # for each reference
+        ref = [self._ref_mag(mix_mag, mix_pha, r) for r in ref]
+        if self.masking:
+            out = [m * mix_mag for m in mask]
         else:
-            # for each reference
-            ref = [self._ref_mag(mix_mag, mix_pha, r) for r in egs["ref"]]
-            if self.masking:
-                out = [m * mix_mag for m in mask]
-            else:
-                out = mask
-            ref = [self.transform(r) for r in ref]
-            out = [self.transform(o) for o in out]
-            loss = hybrid_objf(out,
-                               ref,
-                               self.objf,
-                               weight=self.weight,
-                               permute=self.permute,
-                               permu_num_spks=self.num_spks)
+            out = mask
+        ref = [self.transform(r) for r in ref]
+        out = [self.transform(o) for o in out]
+        loss = hybrid_objf(out,
+                           ref,
+                           self.objf,
+                           weight=self.weight,
+                           permute=self.permute,
+                           permu_num_spks=self.num_spks)
         return {"loss": th.mean(loss)}
 
 
@@ -599,30 +594,23 @@ class TimeSaTask(SepTask):
             mix (Tensor): N x (C) x S
             ref (Tensor or [Tensor, ...]): N x S
         """
-        mix = egs["mix"]
-        # do separation or enhancement
+        mix, ref = egs["mix"], egs["ref"]
         # spk: Tensor or [Tensor, ...]
         spk = self.nnet(mix)
 
         if isinstance(spk, th.Tensor):
-            # F x T
-            spk_mag = self._stft_mag(spk)
-            ref_mag = self._stft_mag(egs["ref"])
-            # loss (N)
-            loss = self.objf(self.transform(spk_mag), self.transform(ref_mag))
-        else:
-            spk_mag = [self._stft_mag(s) for s in spk]
-            # for each reference
-            ref_mag = [self._stft_mag(r) for r in egs["ref"]]
-            # post
-            out = [self.transform(s) for s in spk_mag]
-            ref = [self.transform(r) for r in ref_mag]
-            loss = hybrid_objf(out,
-                               ref,
-                               self.objf,
-                               weight=self.weight,
-                               permute=self.permute,
-                               permu_num_spks=self.num_spks)
+            spk, ref = [spk], [ref]
+        spk_mag = [self._stft_mag(s) for s in spk]
+        ref_mag = [self._stft_mag(r) for r in ref]
+        # post processing
+        out = [self.transform(s) for s in spk_mag]
+        ref = [self.transform(r) for r in ref_mag]
+        loss = hybrid_objf(out,
+                           ref,
+                           self.objf,
+                           weight=self.weight,
+                           permute=self.permute,
+                           permu_num_spks=self.num_spks)
         return {"loss": th.mean(loss)}
 
 
@@ -785,7 +773,8 @@ class ComplexMappingTask(SepTask):
                  num_spks: int = 2,
                  weight: Optional[str] = None,
                  permute: bool = True,
-                 objf: str = "L1") -> None:
+                 objf: str = "L1",
+                 add_magnitude_loss: bool = True) -> None:
         # STFT context
         sa_ctx = nnet.enh_transform.ctx("forward_stft")
         super(ComplexMappingTask, self).__init__(
@@ -796,17 +785,19 @@ class ComplexMappingTask(SepTask):
         self.permute = permute
         self.num_spks = num_spks
         self.objf_ptr = tf.l1_loss if objf == "L1" else tf.mse_loss
+        self.add_magnitude_loss = add_magnitude_loss
 
     def objf(self, out: th.Tensor, ref: th.Tensor) -> th.Tensor:
         """
         Return loss for each mini-batch
         """
-        out_mag = th.sqrt(out[..., 0]**2 + out[..., 1]**2)
-        ref_mag = th.sqrt(ref[..., 0]**2 + ref[..., 1]**2)
         real_loss = self.objf_ptr(out[..., 0], ref[..., 0], reduction="none")
         imag_loss = self.objf_ptr(out[..., 1], ref[..., 1], reduction="none")
-        loss = real_loss + imag_loss + self.objf_ptr(
-            out_mag, ref_mag, reduction="none")
+        loss = real_loss + imag_loss
+        if self.add_magnitude_loss:
+            out_mag = th.sqrt(out[..., 0]**2 + out[..., 1]**2)
+            ref_mag = th.sqrt(ref[..., 0]**2 + ref[..., 1]**2)
+            loss += self.objf_ptr(out_mag, ref_mag, reduction="none")
         loss = th.sum(loss.mean(-1), -1)
         return loss
 
@@ -817,25 +808,20 @@ class ComplexMappingTask(SepTask):
             mix (Tensor): N x (C) x S
             ref (Tensor or [Tensor, ...]): N x S
         """
-        mix = egs["mix"]
-        # do separation or enhancement
+        mix, ref = egs["mix"], egs["ref"]
         # out: Tensor ([real, imag])
         out = self.nnet(mix)
 
         if isinstance(out, th.Tensor):
-            # F x T
-            ref = self.ctx(egs["ref"], return_polar=False)
-            # loss
-            loss = self.objf(out, ref)
-        else:
-            # for each reference
-            ref = [self.ctx(r, return_polar=False) for r in egs["ref"]]
-            loss = hybrid_objf(out,
-                               ref,
-                               self.objf,
-                               weight=self.weight,
-                               permute=self.permute,
-                               permu_num_spks=self.num_spks)
+            out, ref = [out], [ref]
+        # for each reference
+        ref = [self.ctx(r, return_polar=False) for r in egs["ref"]]
+        loss = hybrid_objf(out,
+                           ref,
+                           self.objf,
+                           weight=self.weight,
+                           permute=self.permute,
+                           permu_num_spks=self.num_spks)
         return {"loss": th.mean(loss)}
 
 
@@ -858,13 +844,17 @@ class ComplexMaskingTask(ComplexMappingTask):
                  weight: Optional[str] = None,
                  permute: bool = True,
                  compress_param: Tuple[float] = [10, 0.1, -100],
+                 compress_masks: bool = False,
                  objf: str = "L2") -> None:
-        super(ComplexMaskingTask, self).__init__(nnet,
-                                                 num_spks=num_spks,
-                                                 weight=weight,
-                                                 permute=permute,
-                                                 objf=objf)
+        super(ComplexMaskingTask,
+              self).__init__(nnet,
+                             num_spks=num_spks,
+                             weight=weight,
+                             permute=permute,
+                             objf=objf,
+                             add_magnitude_loss=not compress_masks)
         self.k, self.c, self.lower_bound = compress_param
+        self.compress_masks = compress_masks
 
     def _compress_mask(self, mix: th.Tensor, ref: th.Tensor) -> th.Tensor:
         """
@@ -881,15 +871,16 @@ class ComplexMaskingTask(ComplexMappingTask):
         exp = th.exp(-self.c * th.clamp_min(crm, self.lower_bound))
         return self.k * (1 - exp) / (1 + exp)
 
-    def objf(self, out: th.Tensor, ref: th.Tensor) -> th.Tensor:
+    def _complex_tf_mask(self, mix: th.Tensor, mask: th.Tensor) -> th.Tensor:
         """
-        Return loss for each mini-batch
+        Return TF masking result using the complex masks
         """
-        real_loss = self.objf_ptr(out[..., 0], ref[..., 0], reduction="none")
-        imag_loss = self.objf_ptr(out[..., 1], ref[..., 1], reduction="none")
-        loss = real_loss + imag_loss
-        loss = th.sum(loss.mean(-1), -1)
-        return loss
+        mix_stft = self.ctx(mix, return_polar=False)
+        real = (mix_stft[..., 0] * mask[..., 0] -
+                mix_stft[..., 1] * mask[..., 1])
+        imag = (mix_stft[..., 0] * mask[..., 1] +
+                mix_stft[..., 1] * mask[..., 0])
+        return th.stack([real, imag], -1)
 
     def forward(self, egs: Dict) -> Dict:
         """
@@ -899,22 +890,22 @@ class ComplexMaskingTask(ComplexMappingTask):
             ref (Tensor or [Tensor, ...]): N x S
         """
         mix = egs["mix"]
+        ref = egs["ref"]
         # do separation or enhancement
-        # out: Tensor ([real, imag])
         out = self.nnet(mix)
 
         if isinstance(out, th.Tensor):
-            # F x T
-            ref = self._compress_mask(mix, egs["ref"])
-            # loss
-            loss = self.objf(out, ref)
-        else:
-            # for each reference
+            out, ref = [out], [ref]
+        # for each reference
+        if self.compress_masks:
             ref = [self._compress_mask(mix, r) for r in egs["ref"]]
-            loss = hybrid_objf(out,
-                               ref,
-                               self.objf,
-                               weight=self.weight,
-                               permute=self.permute,
-                               permu_num_spks=self.num_spks)
+        else:
+            ref = [self.ctx(r, return_polar=False) for r in ref]
+            out = [self._complex_tf_mask(mix, o) for o in out]
+        loss = hybrid_objf(out,
+                           ref,
+                           self.objf,
+                           weight=self.weight,
+                           permute=self.permute,
+                           permu_num_spks=self.num_spks)
         return {"loss": th.mean(loss)}
