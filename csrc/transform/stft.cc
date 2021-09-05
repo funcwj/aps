@@ -3,47 +3,45 @@
 
 #include "transform/stft.h"
 
-void STFTBase::Windowing(float* frame, int32_t frame_len) {
-  ASSERT(frame_len == frame_len_);
-  for (size_t n = 0; n < frame_len; n++) frame[n] *= window_[n];
+void TorchSTFTBase::GenerateWindow(const std::string& name,
+                                   int32_t window_len) {
+  if (name == "hann")
+    window_ = torch::hann_window(window_len);
+  else if (name == "sqrthann")
+    window_ = torch::hann_window(window_len).sqrt();
+  else if (name == "hamm")
+    window_ = torch::hamming_window(window_len);
+  else if (name == "rect")
+    window_ = torch::ones(window_len);
+  else if (name == "blackman")
+    window_ = torch::blackman_window(window_len);
+  else if (name == "bartlett")
+    window_ = torch::bartlett_window(window_len);
+  else
+    LOG_FAIL << "Unknown type of the window: " << name;
 }
 
-void STFTBase::RealFFT(float* data_ptr, int32_t data_len, bool invert) {
-  fft_computer_->RealFFT(data_ptr, data_len, invert);
+torch::Tensor StreamingTorchSTFT::Compute(const torch::Tensor& frame) {
+  torch::Tensor stft = torch::fft_rfft(frame * window_, FFTSize(), -1);
+  return torch::view_as_real(stft);
 }
 
-void StreamingSTFT::Compute(float* frame, int32_t frame_len, float* stft) {
-  ASSERT(frame_len <= FFTSize());
-  memset(stft, 0, sizeof(float) * FFTSize());
-  memcpy(stft, frame, sizeof(float) * frame_len);
-  Windowing(stft, frame_len);
-  RealFFT(stft, FFTSize(), false);
+torch::Tensor StreamingTorchiSTFT::Compute(const torch::Tensor& stft) {
+  torch::Tensor frame =
+      torch::fft_irfft(torch::view_as_complex(stft), FFTSize(), -1);
+  return Normalization(frame * window_);
 }
 
-void StreamingiSTFT::Compute(float* stft, int32_t frame_len, float* frame) {
-  ASSERT(frame_len <= FFTSize());
-  memcpy(frame, stft, sizeof(float) * FFTSize());
-  RealFFT(frame, FFTSize(), true);
-  Windowing(frame, frame_len);
-  Normalization(frame, frame_len);
+torch::Tensor StreamingTorchiSTFT::Normalization(const torch::Tensor& frame) {
+  torch::Tensor denorm = window_ * window_;
+  torch::slice(frame, 0, 0, overlap_len_) += wav_cache_;
+  torch::slice(denorm, 0, 0, overlap_len_) += win_cache_;
+  win_cache_ = torch::slice(denorm, 0, FrameHop(), FFTSize());
+  wav_cache_ = torch::slice(frame, 0, FrameHop(), FFTSize());
+  torch::Tensor frame_norm = frame / (denorm + EPS_F32);
+  return torch::slice(frame_norm, 0, 0, FrameHop());
 }
 
-void StreamingiSTFT::Normalization(float* frame, int32_t frame_len) {
-  ASSERT(frame_len == FrameLength());
-  for (int32_t n = 0; n < frame_len; n++)
-    win_denorm_[n] = window_[n] * window_[n];
-  for (int32_t n = 0; n < overlap_len_; n++) {
-    frame[n] += wav_cache_[n];
-    win_denorm_[n] += win_cache_[n];
-  }
-  std::copy(frame + FrameHop(), frame + frame_len, wav_cache_.begin());
-  std::copy(win_denorm_.begin() + FrameHop(), win_denorm_.end(),
-            win_cache_.begin());
-  for (int32_t n = 0; n < frame_len; n++)
-    frame[n] /= (win_denorm_[n] + EPS_F32);
-}
-
-void StreamingiSTFT::Flush(float* frame) {
-  for (int32_t n = 0; n < overlap_len_; n++)
-    frame[n] = wav_cache_[n] / (win_cache_[n] + EPS_F32);
+torch::Tensor StreamingTorchiSTFT::Flush() {
+  return wav_cache_ / win_cache_;
 }

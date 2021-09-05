@@ -87,10 +87,10 @@ def run(args):
         last = inverse_stft.flush()
         enh = th.cat(enh + [last], 0)
         enh = enh[center_pad:num_samples - center_pad]
-        # for complex mask, we need re-norm
-        if complex_mask:
-            norm = th.max(th.abs(wav))
-            enh = enh * norm / th.max(th.abs(enh))
+        # for complex mask, we may need re-norm
+        # if complex_mask:
+        #     norm = th.max(th.abs(wav))
+        #     enh = enh * norm / th.max(th.abs(enh))
         dur = wav.shape[-1] / args.sr
         time_cost = timer.elapsed()
         logger.info(

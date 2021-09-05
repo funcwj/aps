@@ -3,8 +3,8 @@
 
 #include <torch/script.h>
 
-#include "io/wav.h"
-#include "transform/stft.h"
+#include "utils/wav.h"
+#include "utils/stft.h"
 
 using Tensor = at::Tensor;
 

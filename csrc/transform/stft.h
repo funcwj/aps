@@ -4,94 +4,84 @@
 #ifndef CSRC_TRANSFORM_STFT_H_
 #define CSRC_TRANSFORM_STFT_H_
 
+#include <torch/csrc/api/include/torch/nn/functional.h>
+#include <torch/script.h>
+
 #include <algorithm>
 #include <string>
-#include <vector>
 
-#include "utils/fft.h"
 #include "utils/log.h"
 #include "utils/math.h"
-#include "utils/window.h"
 
-/*
-For mode == "librosa", window_len must be 2^N, which is used for front-end
-models, e.g., speech enhancement, speech separation. mode == "kaldi" is used for
-ASR tasks
-*/
-class STFTBase {
+namespace tf = torch::nn::functional;
+
+class TorchSTFTBase {
  public:
-  STFTBase(int32_t window_len = 512, int32_t frame_hop = 256,
-           const std::string& window = "hann",
-           const std::string& mode = "librosa")
-      : frame_hop_(frame_hop), win_str_(window), mode_(mode) {
+  TorchSTFTBase(int32_t window_len = 512, int32_t frame_hop = 256,
+                const std::string& window = "hann",
+                const std::string& mode = "librosa")
+      : frame_hop_(frame_hop), mode_(mode) {
     ASSERT(mode == "librosa" || mode == "kaldi");
-    // due to implementation of FFT, we need fft_size as 2^N
-    fft_size_ = RoundUpToNearestPowerOfTwo(window_len);
-    fft_computer_ = new FFTComputer(fft_size_);
-    window_.resize(fft_size_, 0);
-    // librosa & kaldi is different
-    window_gen_.Generate(
-        window,
-        window_.data() + (mode == "kaldi" ? 0 : (fft_size_ - window_len) / 2),
-        window_len, true);
-    frame_len_ = mode == "librosa" ? fft_size_ : window_len;
+    GenerateWindow(window, window_len);
+    fft_size_ =
+        mode == "kaldi" ? RoundUpToNearestPowerOfTwo(window_len) : window_len;
+    if (mode == "kaldi") {
+      window_ =
+          tf::pad(window_, tf::PadFuncOptions({0, fft_size_ - window_len}));
+    } else {
+      int32_t lpad = (fft_size_ - window_len) / 2;
+      window_ = tf::pad(
+          window_, tf::PadFuncOptions({lpad, fft_size_ - window_len - lpad}));
+    }
+    frame_len_ = mode == "kaldi" ? window_len : fft_size_;
   }
 
   // return the frame length used for STFT
   int32_t FrameLength() const { return frame_len_; }
   // frame hop size
   int32_t FrameHop() const { return frame_hop_; }
-  // FFT size, must be 2^N
+  // FFT size
   int32_t FFTSize() const { return fft_size_; }
-
-  void Windowing(float* frame, int32_t frame_len);
-  void RealFFT(float* data_ptr, int32_t data_len, bool invert);
-
-  ~STFTBase() {
-    if (fft_computer_) delete fft_computer_;
-  }
-  // public: we need access it in iSTFT
-  std::vector<float> window_;
+  // window
+  torch::Tensor window_;
 
  private:
-  std::string win_str_, mode_;
+  std::string mode_;
   int32_t frame_len_, frame_hop_, fft_size_;
-  FFTComputer* fft_computer_;
-  WindowFunction window_gen_;
+  void GenerateWindow(const std::string& name, int32_t window_len);
 };
 
-class StreamingSTFT : public STFTBase {
+class StreamingTorchSTFT : public TorchSTFTBase {
  public:
-  StreamingSTFT(int32_t frame_len = 512, int32_t frame_hop = 256,
-                const std::string& window = "hann",
-                const std::string& mode = "librosa")
-      : STFTBase(frame_len, frame_hop, window, mode) {}
+  StreamingTorchSTFT(int32_t frame_len = 512, int32_t frame_hop = 256,
+                     const std::string& window = "hann",
+                     const std::string& mode = "librosa")
+      : TorchSTFTBase(frame_len, frame_hop, window, mode) {}
 
   // Run STFT for one frame
-  void Compute(float* frame, int32_t frame_len, float* stft);
+  torch::Tensor Compute(const torch::Tensor& frame);
 };
 
-class StreamingiSTFT : public STFTBase {
+class StreamingTorchiSTFT : public TorchSTFTBase {
  public:
-  StreamingiSTFT(int32_t frame_len = 512, int32_t frame_hop = 256,
-                 const std::string& window = "hann",
-                 const std::string& mode = "librosa")
-      : STFTBase(frame_len, frame_hop, window, mode) {
+  StreamingTorchiSTFT(int32_t frame_len = 512, int32_t frame_hop = 256,
+                      const std::string& window = "hann",
+                      const std::string& mode = "librosa")
+      : TorchSTFTBase(frame_len, frame_hop, window, mode) {
     overlap_len_ = FrameLength() - FrameHop();
-    wav_cache_.resize(overlap_len_, 0);
-    win_cache_.resize(overlap_len_, 0);
-    win_denorm_.resize(FrameLength());
+    wav_cache_ = torch::zeros(overlap_len_);
+    win_cache_ = torch::zeros_like(wav_cache_);
   }
 
   // Run iSTFT for one frame (with normalization)
-  void Compute(float* stft, int32_t frame_len, float* frame);
+  torch::Tensor Compute(const torch::Tensor& stft);
   // Calling it at last
-  void Flush(float* frame);
+  torch::Tensor Flush();
 
  private:
-  std::vector<float> wav_cache_, win_cache_, win_denorm_;
+  torch::Tensor wav_cache_, win_cache_;
   int32_t overlap_len_;
-  void Normalization(float* frame, int32_t frame_len);
+  torch::Tensor Normalization(const torch::Tensor& frame);
 };
 
 #endif  // CSRC_TRANSFORM_STFT_H_

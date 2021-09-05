@@ -393,11 +393,12 @@ class FreqSaTask(SepTask):
             out = [m * mix_mag for m in mask]
         else:
             out = mask
-        ref = [self.transform(r) for r in ref]
-        out = [self.transform(o) for o in out]
+        # ref = [self.transform(r) for r in ref]
+        # out = [self.transform(o) for o in out]
         loss = hybrid_objf(out,
                            ref,
                            self.objf,
+                           transform=self.transform,
                            weight=self.weight,
                            permute=self.permute,
                            permu_num_spks=self.num_spks)
@@ -603,11 +604,12 @@ class TimeSaTask(SepTask):
         spk_mag = [self._stft_mag(s) for s in spk]
         ref_mag = [self._stft_mag(r) for r in ref]
         # post processing
-        out = [self.transform(s) for s in spk_mag]
-        ref = [self.transform(r) for r in ref_mag]
-        loss = hybrid_objf(out,
-                           ref,
+        # out = [self.transform(s) for s in spk_mag]
+        # ref = [self.transform(r) for r in ref_mag]
+        loss = hybrid_objf(spk_mag,
+                           ref_mag,
                            self.objf,
+                           transform=self.transform,
                            weight=self.weight,
                            permute=self.permute,
                            permu_num_spks=self.num_spks)
@@ -795,8 +797,8 @@ class ComplexMappingTask(SepTask):
         imag_loss = self.objf_ptr(out[..., 1], ref[..., 1], reduction="none")
         loss = real_loss + imag_loss
         if self.add_magnitude_loss:
-            out_mag = th.sqrt(out[..., 0]**2 + out[..., 1]**2)
-            ref_mag = th.sqrt(ref[..., 0]**2 + ref[..., 1]**2)
+            out_mag = th.sqrt(out[..., 0]**2 + out[..., 1]**2 + EPSILON)
+            ref_mag = th.sqrt(ref[..., 0]**2 + ref[..., 1]**2 + EPSILON)
             loss += self.objf_ptr(out_mag, ref_mag, reduction="none")
         loss = th.sum(loss.mean(-1), -1)
         return loss
@@ -815,7 +817,7 @@ class ComplexMappingTask(SepTask):
         if isinstance(out, th.Tensor):
             out, ref = [out], [ref]
         # for each reference
-        ref = [self.ctx(r, return_polar=False) for r in egs["ref"]]
+        ref = [self.ctx(r, return_polar=False) for r in ref]
         loss = hybrid_objf(out,
                            ref,
                            self.objf,
@@ -846,21 +848,19 @@ class ComplexMaskingTask(ComplexMappingTask):
                  compress_param: Tuple[float] = [10, 0.1, -100],
                  compress_masks: bool = False,
                  objf: str = "L2") -> None:
-        super(ComplexMaskingTask,
-              self).__init__(nnet,
-                             num_spks=num_spks,
-                             weight=weight,
-                             permute=permute,
-                             objf=objf,
-                             add_magnitude_loss=not compress_masks)
+        super(ComplexMaskingTask, self).__init__(nnet,
+                                                 num_spks=num_spks,
+                                                 weight=weight,
+                                                 permute=permute,
+                                                 objf=objf,
+                                                 add_magnitude_loss=False)
         self.k, self.c, self.lower_bound = compress_param
         self.compress_masks = compress_masks
 
-    def _compress_mask(self, mix: th.Tensor, ref: th.Tensor) -> th.Tensor:
+    def _compress_mask(self, mix_stft: th.Tensor, ref: th.Tensor) -> th.Tensor:
         """
         Return compressed version of complex mask, ranges [-k, k]
         """
-        mix_stft = self.ctx(mix, return_polar=False)
         ref_stft = self.ctx(ref, return_polar=False)
         denominator = th.sum(mix_stft**2, -1) + EPSILON
         real = (mix_stft[..., 0] * ref_stft[..., 0] +
@@ -871,11 +871,11 @@ class ComplexMaskingTask(ComplexMappingTask):
         exp = th.exp(-self.c * th.clamp_min(crm, self.lower_bound))
         return self.k * (1 - exp) / (1 + exp)
 
-    def _complex_tf_mask(self, mix: th.Tensor, mask: th.Tensor) -> th.Tensor:
+    def _complex_tf_mask(self, mix_stft: th.Tensor,
+                         mask: th.Tensor) -> th.Tensor:
         """
         Return TF masking result using the complex masks
         """
-        mix_stft = self.ctx(mix, return_polar=False)
         real = (mix_stft[..., 0] * mask[..., 0] -
                 mix_stft[..., 1] * mask[..., 1])
         imag = (mix_stft[..., 0] * mask[..., 1] +
@@ -889,16 +889,17 @@ class ComplexMaskingTask(ComplexMappingTask):
             mix (Tensor): N x (C) x S
             ref (Tensor or [Tensor, ...]): N x S
         """
-        mix = egs["mix"]
         ref = egs["ref"]
         # do separation or enhancement
-        out = self.nnet(mix)
+        out = self.nnet(egs["mix"])
 
         if isinstance(out, th.Tensor):
             out, ref = [out], [ref]
+
+        mix = self.ctx(egs["mix"], return_polar=False)
         # for each reference
         if self.compress_masks:
-            ref = [self._compress_mask(mix, r) for r in egs["ref"]]
+            ref = [self._compress_mask(mix, r) for r in ref]
         else:
             ref = [self.ctx(r, return_polar=False) for r in ref]
             out = [self._complex_tf_mask(mix, o) for o in out]

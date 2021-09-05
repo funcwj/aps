@@ -203,6 +203,40 @@ def test_complex_mapping(num_spks):
     run_epochs(task, egs, 3)
 
 
+@pytest.mark.parametrize("num_branchs", [1, 2])
+def test_complex_masking(num_branchs):
+    nnet_cls = aps_sse_nnet("rt_sse@freq_xfmr")
+    transform = EnhTransform(feats="spectrogram-log-cmvn",
+                             frame_len=512,
+                             frame_hop=256,
+                             center=True)
+    proj_kwargs = {"dropout": 0.1, "norm": "BN"}
+    pose_kwargs = {"dropout": 0.1}
+    arch_kwargs = {
+        "att_dim": 256,
+        "nhead": 4,
+        "feedforward_dim": 1024,
+        "ffn_dropout": 0.2,
+        "att_dropout": 0.2
+    }
+    nnet = nnet_cls(enh_transform=transform,
+                    complex_mask=True,
+                    num_layers=3,
+                    num_branchs=num_branchs,
+                    pose_kwargs=pose_kwargs,
+                    arch_kwargs=arch_kwargs,
+                    proj_kwargs=proj_kwargs)
+    kwargs = {
+        "objf": "L2",
+        "num_spks": num_branchs,
+        "permute": False,
+        "compress_masks": False
+    }
+    task = aps_task("sse@complex_masking", nnet, **kwargs)
+    egs = gen_egs(num_branchs)
+    run_epochs(task, egs, 3)
+
+
 @pytest.mark.parametrize("num_channels", [3])
 def test_enh_ml(num_channels):
     nnet_cls = aps_sse_nnet("sse@rnn_enh_ml")

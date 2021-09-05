@@ -3,7 +3,7 @@
 
 #include <torch/script.h>
 
-#include "io/wav.h"
+#include "utils/wav.h"
 
 using Tensor = torch::Tensor;
 const std::string wav_egs[3] = {"egs1.wav", "egs2.wav", "egs3.wav"};

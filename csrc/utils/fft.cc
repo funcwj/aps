@@ -61,16 +61,16 @@ void FFTComputer::RealFFT(float *src, int32_t num_samples, bool invert) {
   }
 
   int32_t n = num_samples >> 1, s = register_size_ / num_samples;
-  memcpy(cplx_cache_, src, sizeof(float) * num_samples);
+  std::copy(src, src + num_samples, fft_cache_.begin());
   if (!invert) {
-    ComplexFFT(cplx_cache_, num_samples, invert);
+    ComplexFFT(fft_cache_.data(), num_samples, invert);
   }
 
   float FR, FI, GR, GI, YR, YI, CYR, CYI, cosr, sinr;
 
   for (int r = 1; r < n; r++) {
-    YR = REAL_PART(cplx_cache_, r), CYR = REAL_PART(cplx_cache_, n - r);
-    YI = IMAG_PART(cplx_cache_, r), CYI = IMAG_PART(cplx_cache_, n - r);
+    YR = REAL_PART(fft_cache_, r), CYR = REAL_PART(fft_cache_, n - r);
+    YI = IMAG_PART(fft_cache_, r), CYI = IMAG_PART(fft_cache_, n - r);
     FR = (YR + CYR) / 2, FI = (YI - CYI) / 2;
     GR = (YI + CYI) / 2, GI = (CYR - YR) / 2;
     cosr = invert? -cos_table_[r * s]: cos_table_[r * s];
@@ -78,8 +78,8 @@ void FFTComputer::RealFFT(float *src, int32_t num_samples, bool invert) {
     REAL_PART(src, r) = FR + cosr * GR - sinr * GI;
     IMAG_PART(src, r) = FI + cosr * GI + sinr * GR;
   }
-  FR = REAL_PART(cplx_cache_, 0);
-  GR = IMAG_PART(cplx_cache_, 0);
+  FR = REAL_PART(fft_cache_, 0);
+  GR = IMAG_PART(fft_cache_, 0);
   REAL_PART(src, 0) = invert ? (FR + GR) * 0.5 : FR + GR;
   IMAG_PART(src, 0) = invert ? (FR - GR) * 0.5 : FR - GR;
   if (invert) {
