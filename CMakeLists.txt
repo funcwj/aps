@@ -5,7 +5,7 @@ MESSAGE(STATUS "Detect OS: ${CMAKE_SYSTEM}")
 
 find_package(Torch REQUIRED)
 
-set(APS_BASE aps_base)
+set(APS_UTILS aps_utils)
 set(APS_TORCH aps_torch)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
@@ -17,3 +17,4 @@ link_directories(${CMAKE_SOURCE_DIR}/lib)
 
 add_subdirectory(csrc)
 add_subdirectory(tests/csrc)
+add_subdirectory(demo/real_time_enhancement/cpp)

@@ -25,6 +25,7 @@ class STFTBase {
            const std::string& mode = "librosa")
       : frame_hop_(frame_hop), mode_(mode) {
     ASSERT(mode == "librosa" || mode == "kaldi");
+    ASSERT(window_len % 2 == 0);
     // due to implementation of FFT, we need fft_size as 2^N
     fft_size_ = RoundUpToNearestPowerOfTwo(window_len);
     fft_computer_ = new FFTComputer(fft_size_);

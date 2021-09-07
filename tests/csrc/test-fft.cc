@@ -73,8 +73,8 @@ void TestRealiFFT() {
 }
 
 int main(int argc, char const *argv[]) {
-  // TestRealFFT();
-  TestComplexFFT();
-  TestRealiFFT();
+  ToyComplexFFT();
+  // TestComplexFFT();
+  // TestRealiFFT();
   return 0;
 }

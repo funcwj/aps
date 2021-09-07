@@ -77,6 +77,7 @@ def run(args):
             # feature: N x T x F
             feats = transform(stft_chunk)
             # N x F x C x 2 (complex) or N x F x C (real)
+            print(feats.shape)
             masks = scripted_nnet.step(feats)
             # N x F x C x 2
             stft_chunk = tf_masking(stft_chunk, masks)

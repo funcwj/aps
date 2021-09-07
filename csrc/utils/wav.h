@@ -1,8 +1,8 @@
 // Copyright 2018 Jian Wu
 // License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-#ifndef CSRC_IO_WAV_H_
-#define CSRC_IO_WAV_H_
+#ifndef CSRC_UTILS_WAV_H_
+#define CSRC_UTILS_WAV_H_
 
 #include <algorithm>
 #include <iostream>
@@ -78,4 +78,4 @@ class WavWriter {
   void Flush();
 };
 
-#endif  // CSRC_IO_WAV_H_
+#endif  // CSRC_UTILS_WAV_H_

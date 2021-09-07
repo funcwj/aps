@@ -7,6 +7,7 @@
 
 #include <utility>
 #include <vector>
+#include <algorithm>
 #include "utils/math.h"
 #include "utils/log.h"
 
