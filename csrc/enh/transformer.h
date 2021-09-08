@@ -6,14 +6,17 @@
 
 #include <memory>
 #include <vector>
+
 #include "base/pipeline.h"
 #include "enh/time_frequency.h"
 
+namespace aps {
 class TransformerNnet : public TimeFrequencyNnet {
  public:
   explicit TransformerNnet(const TimeFrequencyNnetOptions &opts);
 
-  virtual bool Process(const torch::Tensor &audio_chunk, torch::Tensor *audio_enhan);
+  virtual bool Process(const torch::Tensor &audio_chunk,
+                       torch::Tensor *audio_enhan);
 
   virtual void Reset();
 
@@ -27,7 +30,8 @@ class TransformerNnet : public TimeFrequencyNnet {
 
   torch::Tensor FeatureTransform(const torch::Tensor &stft);
   torch::Tensor SpeechEnhancement();
-
 };
+
+}  // namespace aps
 
 #endif  // CSRC_ENH_TRANSFORMER_H_

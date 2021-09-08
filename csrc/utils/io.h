@@ -10,6 +10,8 @@
 
 #include "utils/log.h"
 
+namespace aps {
+
 class BinaryInput {
  public:
   BinaryInput() {}
@@ -73,5 +75,7 @@ void ReadBinaryBasicType(std::istream &is, T *t);
 
 template <class T>
 void WriteBinaryBasicType(std::ostream &os, T t);
+
+}  // namespace aps
 
 #endif  // CSRC_UTILS_IO_H_

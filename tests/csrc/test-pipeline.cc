@@ -5,6 +5,9 @@
 
 #include "base/pipeline.h"
 
+using namespace aps;
+using Tensor = torch::Tensor;
+
 void TestFrame() {
   int32_t num_samples = 100;
   int32_t frame_len = 20, frame_hop = 10;
@@ -20,7 +23,7 @@ void TestContext() {
   int32_t num_frames = 50;
   int32_t lctx = 2, rctx = 3, chunk = 2;
   Context ctx(lctx, rctx, chunk);
-  torch::Tensor buffer;
+  Tensor buffer;
   for (int32_t t = 0; t < num_frames; t++) {
     ctx.Process(torch::ones(3) * (t + 1));
   }
@@ -31,9 +34,9 @@ void TestContext() {
 }
 
 void TestToy() {
-  std::queue<torch::Tensor> q;
+  std::queue<Tensor> q;
   for (int32_t i = 0; i < 10; i++) {
-    torch::Tensor egs = torch::ones(10) * i;
+    Tensor egs = torch::ones(10) * i;
     q.push(std::move(egs));
   }
   while (!q.empty()) {

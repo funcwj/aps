@@ -3,6 +3,8 @@
 
 #include "utils/stft.h"
 
+namespace aps {
+
 void STFTBase::Windowing(float* frame, int32_t frame_len) {
   ASSERT(frame_len == frame_len_);
   for (size_t n = 0; n < frame_len; n++) frame[n] *= window_[n];
@@ -47,3 +49,5 @@ void StreamingiSTFT::Flush(float* frame) {
   for (int32_t n = 0; n < overlap_len_; n++)
     frame[n] = wav_cache_[n] / (win_cache_[n] + EPS_F32);
 }
+
+}  // namespace aps

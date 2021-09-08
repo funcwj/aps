@@ -6,12 +6,14 @@
 
 #include <torch/script.h>
 
-#include <string>
 #include <queue>
+#include <string>
 #include <vector>
 
 #include "base/stft.h"
 #include "utils/log.h"
+
+namespace aps {
 
 class PipelineBase {
  public:
@@ -54,7 +56,9 @@ class STFT : public Frame {
       : Frame(frame_len, frame_hop), stft_(frame_len, frame_hop, window) {}
 
   // Pop one frame
-  virtual torch::Tensor Pop(int32_t dim = 0) { return stft_.Compute(Frame::Pop()); }
+  virtual torch::Tensor Pop(int32_t dim = 0) {
+    return stft_.Compute(Frame::Pop());
+  }
 
  private:
   StreamingTorchSTFT stft_;
@@ -104,4 +108,5 @@ class Context : public PipelineBase {
   std::vector<torch::Tensor> queue_;
 };
 
+}  // namespace aps
 #endif  // CSRC_BASE_PIPELINE_H_

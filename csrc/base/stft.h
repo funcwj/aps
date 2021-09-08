@@ -13,6 +13,7 @@
 #include "utils/log.h"
 #include "utils/math.h"
 
+namespace aps {
 namespace tf = torch::nn::functional;
 
 // For mode == "kaldi", we always use FFT size as 2^N (for ASR tasks)
@@ -26,7 +27,8 @@ class TorchSTFTBase {
     ASSERT(mode == "librosa" || mode == "kaldi");
     ASSERT(window_len % 2 == 0);
     GenerateWindow(window, window_len);
-    fft_size_ = mode == "kaldi"? RoundUpToNearestPowerOfTwo(window_len): window_len;
+    fft_size_ =
+        mode == "kaldi" ? RoundUpToNearestPowerOfTwo(window_len) : window_len;
     zero_pad_ = fft_size_ - frame_len_;
   }
 
@@ -80,5 +82,7 @@ class StreamingTorchiSTFT : public TorchSTFTBase {
   int32_t overlap_len_;
   torch::Tensor Normalization(const torch::Tensor& frame);
 };
+
+}  // namespace aps
 
 #endif  // CSRC_BASE_STFT_H_

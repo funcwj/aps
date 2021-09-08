@@ -5,13 +5,15 @@
 #define CSRC_ENH_TIME_FREQUENCY_H_
 
 #include <torch/script.h>
-#include <string>
+
 #include <algorithm>
+#include <string>
 #include <vector>
 
 #include "base/stft.h"
 #include "utils/log.h"
 
+namespace aps {
 using Module = torch::jit::script::Module;
 
 struct TimeFrequencyNnetOptions {
@@ -34,14 +36,16 @@ class TimeFrequencyNnet {
   Module LoadTorchScriptModule(const std::string &path);
 
   // Do time-frequency masking
-  torch::Tensor Masking(const torch::Tensor &stft,
-                        const torch::Tensor &mask);
+  torch::Tensor Masking(const torch::Tensor &stft, const torch::Tensor &mask);
 
-  virtual bool Process(const torch::Tensor &audio_chunk, torch::Tensor *audio_enhan) = 0;
+  virtual bool Process(const torch::Tensor &audio_chunk,
+                       torch::Tensor *audio_enhan) = 0;
 
   virtual void Reset() = 0;
 
   virtual torch::Tensor Flush() = 0;
 };
+
+}  // namespace aps
 
 #endif  // CSRC_ENH_TIME_FREQUENCY_H_

@@ -13,6 +13,8 @@
 #include "utils/math.h"
 #include "utils/window.h"
 
+namespace aps {
+
 /*
 For mode == "librosa", window_len must be 2^N, which is used for front-end
 models, e.g., speech enhancement, speech separation. mode == "kaldi" is used for
@@ -94,5 +96,7 @@ class StreamingiSTFT : public STFTBase {
   int32_t overlap_len_;
   void Normalization(float* frame, int32_t frame_len);
 };
+
+}  // namespace aps
 
 #endif  // CSRC_UTILS_STFT_H_

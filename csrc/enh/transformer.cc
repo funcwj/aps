@@ -3,6 +3,7 @@
 
 #include "enh/transformer.h"
 
+namespace aps {
 TransformerNnet::TransformerNnet(const TimeFrequencyNnetOptions &opts)
     : stft_(opts.frame_len, opts.frame_hop, opts.window),
       istft_(opts.frame_len, opts.frame_hop, opts.window) {
@@ -27,7 +28,7 @@ void TransformerNnet::Reset() {
 torch::Tensor TransformerNnet::FeatureTransform(const torch::Tensor &stft) {
   // add additional batch dim: F x 2 => 1 x F x 1 x 2
   ASSERT(stft.dim() == 2);
-  torch::Tensor feats =  feature_.forward({stft.view({1, -1, 1, 2})}).toTensor();
+  torch::Tensor feats = feature_.forward({stft.view({1, -1, 1, 2})}).toTensor();
   return feats.squeeze();
 }
 
@@ -43,7 +44,8 @@ torch::Tensor TransformerNnet::SpeechEnhancement() {
     masks = nnet_.run_method("step", feats.unsqueeze(0)).toTensor()[0];
     enhan = Masking(stft_ctx_->Pop(1), masks);
     for (int32_t t = 0; t < enhan.size(1); t++)
-      buffer.push_back(istft_.Compute(enhan.index({torch::indexing::Slice(), t})));
+      buffer.push_back(
+          istft_.Compute(enhan.index({torch::indexing::Slice(), t})));
   }
   return torch::cat(buffer, 0);
 }
@@ -64,3 +66,5 @@ bool TransformerNnet::Process(const torch::Tensor &audio_chunk,
     return true;
   }
 }
+
+}  // namespace aps

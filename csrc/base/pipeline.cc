@@ -3,6 +3,8 @@
 
 #include "base/pipeline.h"
 
+namespace aps {
+
 void Frame::Process(const torch::Tensor &chunk) {
   int32_t chunk_len = chunk.size(0), n = 0, cache_len = cache_.size(0);
   if (cache_len != 0) {
@@ -54,3 +56,5 @@ torch::Tensor Context::Pop(int32_t dim) {
   for (int32_t c = 0; c < stride_; c++) queue_.erase(queue_.begin());
   return chunk;
 }
+
+}  // namespace aps

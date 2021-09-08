@@ -7,8 +7,11 @@
 #include <algorithm>
 #include <iostream>
 #include <string>
+
 #include "utils/io.h"
 #include "utils/math.h"
+
+namespace aps {
 
 struct ChunkHeader {
   char id[4];
@@ -77,5 +80,7 @@ class WavWriter {
 
   void Flush();
 };
+
+}  // namespace aps
 
 #endif  // CSRC_UTILS_WAV_H_

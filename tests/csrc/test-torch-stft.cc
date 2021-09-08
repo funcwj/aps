@@ -6,6 +6,9 @@
 #include "base/stft.h"
 #include "utils/wav.h"
 
+using Tensor = torch::Tensor;
+using namespace aps;
+
 void TestSTFT() {
   const std::string src_wav = "data/transform/egs1.wav";
   const std::string dst_wav = "data/transform/copy.wav";
@@ -14,7 +17,7 @@ void TestSTFT() {
   WavWriter wav_writer(dst_wav, wav_reader.SampleRate(),
                        wav_reader.NumChannels(), 2);
   size_t num_samples = wav_reader.NumSamples();
-  torch::Tensor src_data = torch::zeros(num_samples);
+  Tensor src_data = torch::zeros(num_samples);
   float *src_wav_ptr = src_data.data_ptr<float>();
   size_t read = wav_reader.Read(src_wav_ptr, num_samples);
 
@@ -24,7 +27,7 @@ void TestSTFT() {
   StreamingTorchiSTFT istft(window_len, frame_hop, "hann", "librosa");
   int32_t frame_len = stft.FrameLength(), fft_size = stft.FFTSize();
 
-  torch::Tensor frame;
+  Tensor frame;
   for (int32_t n = 0; n + frame_len < num_samples; n += frame_hop) {
     frame = istft.Compute(
         stft.Compute(torch::slice(src_data, 0, n, n + frame_len)));

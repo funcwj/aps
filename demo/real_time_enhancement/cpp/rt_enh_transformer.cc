@@ -4,6 +4,8 @@
 #include "enh/transformer.h"
 #include "utils/wav.h"
 
+using namespace aps;
+
 const int32_t wav_chunk = 16000;
 const std::string nnet = "debug/avg.epoch29-38.scripted.pt";
 const std::string transform = "debug/avg.epoch29-38.transform.pt";
@@ -11,7 +13,7 @@ const std::string noisy_wav = "debug/noisy.wav";
 const std::string enhan_wav = "debug/enhan.wav";
 
 int main(int argc, char const *argv[]) {
-    torch::NoGradGuard no_grad;
+  torch::NoGradGuard no_grad;
   TimeFrequencyNnetOptions opts;
   opts.nnet = nnet;
   opts.transform = transform;

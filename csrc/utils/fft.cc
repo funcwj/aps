@@ -4,6 +4,8 @@
 
 #include "utils/fft.h"
 
+namespace aps {
+
 void FFTComputer::ComplexBitReverse(float *cplx_values, int32_t num_values) {
   for (int32_t j = 0, i = 0; i < num_values - 1; i++) {
     if (i < j) {
@@ -73,7 +75,7 @@ void FFTComputer::RealFFT(float *src, int32_t num_samples, bool invert) {
     YI = IMAG_PART(fft_cache_, r), CYI = IMAG_PART(fft_cache_, n - r);
     FR = (YR + CYR) / 2, FI = (YI - CYI) / 2;
     GR = (YI + CYI) / 2, GI = (CYR - YR) / 2;
-    cosr = invert? -cos_table_[r * s]: cos_table_[r * s];
+    cosr = invert ? -cos_table_[r * s] : cos_table_[r * s];
     sinr = sin_table_[r * s];
     REAL_PART(src, r) = FR + cosr * GR - sinr * GI;
     IMAG_PART(src, r) = FI + cosr * GI + sinr * GR;
@@ -86,3 +88,5 @@ void FFTComputer::RealFFT(float *src, int32_t num_samples, bool invert) {
     ComplexFFT(src, num_samples, invert);
   }
 }
+
+}  // namespace aps

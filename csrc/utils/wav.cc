@@ -3,6 +3,8 @@
 
 #include "utils/wav.h"
 
+namespace aps {
+
 bool CheckRiffHeader(const WavHeader &header) {
   const RiffAndFmtHeader *riff_and_fmt = &(header.riff_and_fmt);
   const ChunkHeader *data = &(header.data);
@@ -201,3 +203,5 @@ std::string WavWriter::Info() const {
      << ", sample_rate=" << SampleRate() << ", num_samples=" << NumSamples();
   return os.str();
 }
+
+}  // namespace aps

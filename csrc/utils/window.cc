@@ -3,6 +3,8 @@
 
 #include "utils/window.h"
 
+namespace aps {
+
 void WindowFunction::Hanning(float* window, int32_t window_len, bool periodic) {
   float a = PI2 / (periodic ? window_len : window_len - 1.0f);
   for (int32_t i = 0; i < window_len; i++)
@@ -57,3 +59,5 @@ void WindowFunction::Generate(const std::string& name, float* window,
   else
     LOG_FAIL << "Unknown type of the window: " << name;
 }
+
+}  // namespace aps

@@ -7,6 +7,7 @@
 #include "utils/stft.h"
 
 using Tensor = at::Tensor;
+using namespace aps;
 
 void TestWindow() {
   int32_t window_len[3] = {256, 400, 512};

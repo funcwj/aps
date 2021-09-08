@@ -3,6 +3,8 @@
 
 #include "enh/time_frequency.h"
 
+namespace aps {
+
 Module TimeFrequencyNnet::LoadTorchScriptModule(const std::string &path) {
   Module nnet = torch::jit::load(path);
   // make sure in evaluation mode
@@ -23,9 +25,10 @@ torch::Tensor TimeFrequencyNnet::Masking(const torch::Tensor &stft,
     enh_stft = stft * mask.squeeze(-1);
   } else {
     ASSERT(mask.size(-1) == 2);
-    enh_stft =
-        torch::view_as_complex(stft) * torch::view_as_complex(mask);
+    enh_stft = torch::view_as_complex(stft) * torch::view_as_complex(mask);
     enh_stft = torch::view_as_real(enh_stft);
   }
   return enh_stft;
 }
+
+}  // namespace aps

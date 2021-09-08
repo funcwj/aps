@@ -16,13 +16,18 @@ jobs:
       - name: Get code
         uses: actions/checkout@v2
 
-      - name: Install dependencies
-        run: |
-          bash .ci/install_libtorch.sh
+      - name: Setup cmake
+        uses: jwlawson/actions-setup-cmake@v1.9
+        with:
+          cmake-version: "3.14"
+
+      # - name: Install dependencies
+      #   run: |
+      #     bash .ci/install_csrc_deps.sh
 
       - name: Building & Running
         run: |
           mkdir build && cd build
-          cmake -DCMAKE_PREFIX_PATH=$PWD/../third_party/libtorch ..
+          cmake ..
           make -j && cd ../tests/csrc
           for x in bin/*; do $x; done

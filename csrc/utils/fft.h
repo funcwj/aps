@@ -5,11 +5,14 @@
 #ifndef CSRC_UTILS_FFT_H_
 #define CSRC_UTILS_FFT_H_
 
+#include <algorithm>
 #include <utility>
 #include <vector>
-#include <algorithm>
-#include "utils/math.h"
+
 #include "utils/log.h"
+#include "utils/math.h"
+
+namespace aps {
 
 // Class for FFT computation
 
@@ -46,5 +49,7 @@ class FFTComputer {
   // BitReverse for complex values
   void ComplexBitReverse(float *cplx_values, int32_t num_values);
 };
+
+}  // namespace aps
 
 #endif  // CSRC_UTILS_FFT_H_

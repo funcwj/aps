@@ -3,6 +3,8 @@
 
 #include "utils/math.h"
 
+namespace aps {
+
 int32_t RoundUpToNearestPowerOfTwo(int32_t n) {
   n--;
   n |= n >> 1;
@@ -12,3 +14,5 @@ int32_t RoundUpToNearestPowerOfTwo(int32_t n) {
   n |= n >> 16;
   return n + 1;
 }
+
+}  // namespace aps

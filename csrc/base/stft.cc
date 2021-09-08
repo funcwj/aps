@@ -3,6 +3,7 @@
 
 #include "base/stft.h"
 
+namespace aps {
 void TorchSTFTBase::GenerateWindow(const std::string& name,
                                    int32_t window_len) {
   if (name == "hann")
@@ -59,3 +60,5 @@ void StreamingTorchiSTFT::Reset() {
   wav_cache_ = torch::zeros(overlap_len_);
   win_cache_ = torch::zeros_like(wav_cache_);
 }
+
+}  // namespace aps

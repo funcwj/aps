@@ -19,7 +19,7 @@ from aps.utils import get_logger, SimpleTimer
 frame_len = 512
 frame_hop = 256
 window = "hann"
-center = True
+center = False
 # ---------------------------------
 
 logger = get_logger(__name__)
@@ -77,7 +77,6 @@ def run(args):
             # feature: N x T x F
             feats = transform(stft_chunk)
             # N x F x C x 2 (complex) or N x F x C (real)
-            print(feats.shape)
             masks = scripted_nnet.step(feats)
             # N x F x C x 2
             stft_chunk = tf_masking(stft_chunk, masks)
