@@ -6,6 +6,8 @@
 
 #include <cmath>
 #include <limits>
+#include <string>
+#include "utils/log.h"
 
 namespace aps {
 
@@ -21,6 +23,10 @@ const int8_t MAX_INT8 = std::numeric_limits<int8_t>::max();
 #define IMAG_PART(complex_values, index) (complex_values[((index) << 1) + 1])
 
 int32_t RoundUpToNearestPowerOfTwo(int32_t n);
+
+bool StringToInt32(const std::string &str, int32_t *out);
+bool StringToFloat(const std::string &str, float *out);
+
 }  // namespace aps
 
 #endif  // CSRC_UTILS_MATH_H_

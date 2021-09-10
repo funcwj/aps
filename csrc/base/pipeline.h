@@ -21,7 +21,7 @@ class PipelineBase {
 
   virtual void Process(const torch::Tensor &chunk) = 0;
 
-  virtual bool IsDone() = 0;
+  virtual bool Done() = 0;
 
   virtual torch::Tensor Pop(int32_t dim = 0) = 0;
 };
@@ -40,7 +40,7 @@ class Frame : public PipelineBase {
   // Push one audio chunk
   virtual void Process(const torch::Tensor &chunk);
   // Current queue is empty
-  virtual bool IsDone() { return queue_.size() == 0; }
+  virtual bool Done() { return queue_.size() == 0; }
   // Pop one frame
   virtual torch::Tensor Pop(int32_t dim = 0);
 
@@ -94,14 +94,13 @@ class Context : public PipelineBase {
 
   virtual void Reset() { queue_.clear(); }
 
-  virtual bool IsDone() { return queue_.size() < chunk_ + rctx_ + lctx_; }
+  virtual bool Done() { return queue_.size() < chunk_ + rctx_ + lctx_; }
   // Push one frame
   virtual void Process(const torch::Tensor &one_frame);
   // Pop one chunk if possible
   virtual torch::Tensor Pop(int32_t dim = 0);
 
-  // Set done, add right context
-  void SetDone();
+  // void SetDone();
 
  private:
   int32_t lctx_, rctx_, chunk_, stride_;

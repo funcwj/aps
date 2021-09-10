@@ -20,9 +20,10 @@ class TransformerNnet : public TimeFrequencyNnet {
 
   virtual void Reset();
 
-  virtual torch::Tensor Flush() { return istft_.Flush(); }
+  virtual torch::Tensor Flush();
 
  private:
+  int32_t chunk_size_;
   torch::jit::script::Module nnet_, feature_;
   STFT stft_;
   StreamingTorchiSTFT istft_;

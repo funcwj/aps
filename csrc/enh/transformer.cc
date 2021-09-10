@@ -10,11 +10,11 @@ TransformerNnet::TransformerNnet(const TimeFrequencyNnetOptions &opts)
   // load nnet and feature transform module
   nnet_ = LoadTorchScriptModule(opts.nnet);
   feature_ = LoadTorchScriptModule(opts.transform);
-  int32_t chunk = nnet_.attr("chunk").toInt();
-  LOG_INFO << "Get chunk size = " << chunk << " from " << opts.nnet;
+  chunk_size_ = nnet_.attr("chunk").toInt();
+  LOG_INFO << "Get chunk size = " << chunk_size_ << " from " << opts.nnet;
   // for nnet forward & stft
-  feat_ctx_ = std::make_unique<Context>(Context(0, 0, chunk));
-  stft_ctx_ = std::make_unique<Context>(Context(0, 0, chunk));
+  feat_ctx_ = std::make_unique<Context>(Context(0, 0, chunk_size_));
+  stft_ctx_ = std::make_unique<Context>(Context(0, 0, chunk_size_));
   Reset();
 }
 
@@ -25,6 +25,14 @@ void TransformerNnet::Reset() {
   nnet_.run_method("reset");
 }
 
+torch::Tensor TransformerNnet::Flush() {
+  int32_t padding_samples =
+      (chunk_size_ - 1) * istft_.FrameHop() + istft_.FrameLength();
+  torch::Tensor zero_pad = torch::zeros(padding_samples), enhan_pad;
+  ASSERT(Process(zero_pad, &enhan_pad));
+  return enhan_pad;
+}
+
 torch::Tensor TransformerNnet::FeatureTransform(const torch::Tensor &stft) {
   // add additional batch dim: F x 2 => 1 x F x 1 x 2
   ASSERT(stft.dim() == 2);
@@ -33,11 +41,11 @@ torch::Tensor TransformerNnet::FeatureTransform(const torch::Tensor &stft) {
 }
 
 torch::Tensor TransformerNnet::SpeechEnhancement() {
-  ASSERT(!feat_ctx_->IsDone());
+  ASSERT(!feat_ctx_->Done());
   // call step function, output TF masks
   torch::Tensor feats, masks, enhan;
   std::vector<torch::Tensor> buffer;
-  while (!feat_ctx_->IsDone()) {
+  while (!feat_ctx_->Done()) {
     // feats: T x F
     feats = feat_ctx_->Pop();
     // F x T (x2)
@@ -54,12 +62,12 @@ bool TransformerNnet::Process(const torch::Tensor &audio_chunk,
                               torch::Tensor *audio_enhan) {
   // do STFT
   stft_.Process(audio_chunk);
-  while (!stft_.IsDone()) {
+  while (!stft_.Done()) {
     torch::Tensor raw_stft = stft_.Pop();
     stft_ctx_->Process(raw_stft);
     feat_ctx_->Process(FeatureTransform(raw_stft));
   }
-  if (feat_ctx_->IsDone()) {
+  if (feat_ctx_->Done()) {
     return false;
   } else {
     *audio_enhan = SpeechEnhancement();

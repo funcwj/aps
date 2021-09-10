@@ -26,8 +26,8 @@ __pycache__/
 /examples/*/*/data
 /examples/*/*/exp
 /tests/data/transform/copy.wav
-/demo/*/cpp/bin
-/demo/*/cpp/debug
+/demos/*/cpp/bin
+/demos/*/cpp/debug
 
 # pytest
 .pytest_cache/

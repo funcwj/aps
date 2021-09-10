@@ -3,7 +3,8 @@ set(APS_UTILS_SRC ${CMAKE_SOURCE_DIR}/csrc/utils/wav.cc
                   ${CMAKE_SOURCE_DIR}/csrc/utils/fft.cc
                   ${CMAKE_SOURCE_DIR}/csrc/utils/math.cc
                   ${CMAKE_SOURCE_DIR}/csrc/utils/window.cc
-                  ${CMAKE_SOURCE_DIR}/csrc/utils/stft.cc)
+                  ${CMAKE_SOURCE_DIR}/csrc/utils/stft.cc
+                  ${CMAKE_SOURCE_DIR}/csrc/utils/args.cc)
 
 set(APS_TORCH_SRC ${CMAKE_SOURCE_DIR}/csrc/base/stft.cc
                   ${CMAKE_SOURCE_DIR}/csrc/base/pipeline.cc

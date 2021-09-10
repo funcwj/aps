@@ -13,8 +13,8 @@ Module TimeFrequencyNnet::LoadTorchScriptModule(const std::string &path) {
   return nnet;
 }
 
-// mix_stft: F x T x 2
-// src_mask: F x T or F x T x 2
+// stft: F x T x 2
+// mask: F x T or F x T x 2
 torch::Tensor TimeFrequencyNnet::Masking(const torch::Tensor &stft,
                                          const torch::Tensor &mask) {
   ASSERT(stft.dim() == 3);

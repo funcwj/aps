@@ -9,12 +9,12 @@ using namespace aps;
 using Tensor = torch::Tensor;
 
 void TestFrame() {
-  int32_t num_samples = 100;
+  int32_t num_samples = 100, chunk_size = 25;
   int32_t frame_len = 20, frame_hop = 10;
   Frame frm(frame_len, frame_hop);
-  frm.Process(torch::arange(0, num_samples / 2));
-  frm.Process(torch::arange(num_samples / 2, num_samples));
-  while (!frm.IsDone()) {
+  for (int32_t c = 0; c < num_samples; c += chunk_size)
+    frm.Process(torch::arange(c, c + chunk_size));
+  while (!frm.Done()) {
     LOG_INFO << frm.Pop();
   }
 }
@@ -27,8 +27,8 @@ void TestContext() {
   for (int32_t t = 0; t < num_frames; t++) {
     ctx.Process(torch::ones(3) * (t + 1));
   }
-  ctx.SetDone();
-  while (!ctx.IsDone()) {
+  // ctx.SetDone();
+  while (!ctx.Done()) {
     LOG_INFO << ctx.Pop();
   }
 }

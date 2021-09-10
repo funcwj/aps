@@ -59,7 +59,7 @@ class WavReader {
 class WavWriter {
  public:
   explicit WavWriter(const std::string &filename, int sample_rate,
-                     int num_channels, int bit_width);
+                     int num_channels, int bit_width = 2);
 
   int NumChannels() const { return header_.riff_and_fmt.num_channels; }
   int SampleRate() const { return header_.riff_and_fmt.sample_rate; }

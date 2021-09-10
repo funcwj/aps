@@ -11,5 +11,6 @@ add_aps_test(test-fft)
 add_aps_test(test-utils-stft)
 add_aps_test(test-torch-stft)
 add_aps_test(test-pipeline)
+add_aps_test(test-arg)
 
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/tests/csrc/bin)

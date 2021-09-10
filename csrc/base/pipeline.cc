@@ -14,18 +14,19 @@ void Frame::Process(const torch::Tensor &chunk) {
       queue_.push(torch::slice(chunk_with_cache, 0, n, n + frame_len_));
       n += frame_hop_;
     }
+    cache_ = torch::slice(chunk_with_cache, 0, n, chunk_len);
   } else {
     while (n + frame_len_ < chunk_len) {
       queue_.push(torch::slice(chunk, 0, n, n + frame_len_));
       n += frame_hop_;
     }
+    cache_ = torch::slice(chunk, 0, n, chunk_len);
   }
   ASSERT(chunk_len - n);
-  cache_ = torch::slice(chunk, 0, n, chunk_len);
 }
 
 torch::Tensor Frame::Pop(int32_t dim) {
-  ASSERT(!IsDone());
+  ASSERT(!Done());
   torch::Tensor frame = queue_.front();
   queue_.pop();
   return frame;
@@ -40,14 +41,14 @@ void Context::Process(const torch::Tensor &one_frame) {
   queue_.push_back(one_frame);
 }
 
-void Context::SetDone() {
-  for (int32_t c = 0; c < rctx_; c++) {
-    queue_.push_back(torch::zeros_like(queue_[0]));
-  }
-}
+// void Context::SetDone() {
+//   for (int32_t c = 0; c < rctx_; c++) {
+//     queue_.push_back(torch::zeros_like(queue_[0]));
+//   }
+// }
 
 torch::Tensor Context::Pop(int32_t dim) {
-  ASSERT(!IsDone());
+  ASSERT(!Done());
   std::vector<torch::Tensor> frames;
   for (int32_t c = 0; c < chunk_ + rctx_ + lctx_; c++) {
     frames.push_back(queue_[c]);

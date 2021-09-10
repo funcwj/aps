@@ -60,7 +60,7 @@ def run(args):
         num_samples = wav.shape[-1]
         wav_chunk_size = (chunk - 1) * frame_hop + frame_len
         enh = []
-        for n in range(0, num_samples, wav_chunk_size):
+        for n in range(0, num_samples, chunk * frame_hop):
             end = n + wav_chunk_size
             pad = end - num_samples
             if pad > 0:
