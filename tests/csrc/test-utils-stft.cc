@@ -3,10 +3,11 @@
 
 #include <torch/script.h>
 
-#include "io/wav.h"
-#include "transform/stft.h"
+#include "utils/wav.h"
+#include "utils/stft.h"
 
 using Tensor = at::Tensor;
+using namespace aps;
 
 void TestWindow() {
   int32_t window_len[3] = {256, 400, 512};
@@ -40,9 +41,9 @@ void TestSTFT() {
   float *src_wav_ptr = src_data.data_ptr<float>();
   size_t read = wav_reader.Read(src_wav_ptr, num_samples);
   ASSERT(read == num_samples);
-  const int32_t window_len = 512, frame_hop = 256;
-  StreamingSTFT stft(window_len, frame_hop, "sqrthann", "librosa");
-  StreamingiSTFT istft(window_len, frame_hop, "sqrthann", "librosa");
+  const int32_t window_len = 400, frame_hop = 256;
+  StreamingSTFT stft(window_len, frame_hop, "hann", "kaldi");
+  StreamingiSTFT istft(window_len, frame_hop, "hann", "kaldi");
   int32_t fft_size = stft.FFTSize();
   int32_t frame_len = stft.FrameLength(), overlap_len = frame_len - frame_hop;
 

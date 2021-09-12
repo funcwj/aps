@@ -54,26 +54,20 @@ class StreamingTransformerEncoder(nn.Module):
             self.outp = None
         self.lctx = lctx
         self.chunk = chunk
+        self.inj_pose = th.tensor(0)
 
     @th.jit.export
     def reset(self):
         self.encoder.reset()
-
-    @th.jit.export
-    def step_pose(self) -> th.Tensor:
-        """
-        Return the position encodings used in step functions
-        """
         seq = th.arange((self.lctx + 1) * self.chunk)
         seq = seq[None, :] - seq[:, None]
-        return self.pose(seq)
+        self.inj_pose = self.pose(seq)
 
     @th.jit.export
-    def step(self, chunk: th.Tensor, inj_pose: th.Tensor) -> th.Tensor:
+    def step(self, chunk: th.Tensor) -> th.Tensor:
         """
         Args:
             chunk (Tensor): N x T x F
-            inj_pose (Tensor): T x D
         Return:
             chunk (Tensor): N x T x F
         """
@@ -84,7 +78,7 @@ class StreamingTransformerEncoder(nn.Module):
         # T x N x D
         enc_inp = enc_inp.transpose(0, 1)
         # T x N x D
-        enc_out = self.encoder.step(enc_inp, inj_pose=inj_pose)
+        enc_out = self.encoder.step(enc_inp, inj_pose=self.inj_pose)
         # project back
         if self.outp is not None:
             enc_out = self.outp(enc_out)

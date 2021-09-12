@@ -1,14 +1,16 @@
 // Copyright 2018 Jian Wu
 // License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-#ifndef CSRC_IO_BASIC_H_
-#define CSRC_IO_BASIC_H_
+#ifndef CSRC_UTILS_IO_H_
+#define CSRC_UTILS_IO_H_
 
 #include <fstream>
 #include <iostream>
 #include <string>
 
 #include "utils/log.h"
+
+namespace aps {
 
 class BinaryInput {
  public:
@@ -74,4 +76,6 @@ void ReadBinaryBasicType(std::istream &is, T *t);
 template <class T>
 void WriteBinaryBasicType(std::ostream &os, T t);
 
-#endif  // CSRC_IO_BASIC_H_
+}  // namespace aps
+
+#endif  // CSRC_UTILS_IO_H_

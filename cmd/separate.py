@@ -115,7 +115,7 @@ def run(args):
         time_cost = timer.elapsed() * 60
         dur = mix.shape[-1] / args.sr
         logger.info(
-            f"Processing utterance {key} done, RTF = {time_cost / dur:.2f}")
+            f"Processing utterance {key} done, RTF = {time_cost / dur:.4f}")
     logger.info(f"Processed {len(mix_reader)} utterances done!")
 
 

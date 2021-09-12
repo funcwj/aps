@@ -185,11 +185,10 @@ def test_streaming_xfmr_linear(lctx, chunk):
     egs_out = xfmr(egs, None)[0]
 
     scripted_xfmr = th.jit.script(xfmr)
-    key_rel_pose = scripted_xfmr.step_pose()
-    xfmr.reset()
+    scripted_xfmr.reset()
     for t in range(0, T, chunk):
         end = t + chunk
-        c = xfmr.step(egs[:, t:end], key_rel_pose)
+        c = scripted_xfmr.step(egs[:, t:end])
         th.testing.assert_allclose(c[:, :chunk], egs_out[:, t:t + chunk])
 
 
@@ -223,12 +222,11 @@ def test_streaming_cfmr_linear(lctx, chunk):
     egs_out = cfmr(egs, None)[0]
 
     scripted_cfmr = th.jit.script(cfmr)
-    key_rel_pose = scripted_cfmr.step_pose()
-    cfmr.reset()
+    scripted_cfmr.reset()
     for t in range(0, T, chunk):
         end = t + chunk
         print(f"{t}:{end}")
-        c = cfmr.step(egs[:, t:end], key_rel_pose)
+        c = scripted_cfmr.step(egs[:, t:end])
         th.testing.assert_allclose(c[:, :chunk], egs_out[:, t:t + chunk])
 
 

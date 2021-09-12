@@ -1,7 +1,9 @@
 // Copyright 2018 Jian Wu
 // License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-#include "io/basic.h"
+#include "utils/io.h"
+
+namespace aps {
 
 void WriteBinary(std::ostream &os, const char *ptr, uint32_t num_bytes) {
   os.write(ptr, num_bytes);
@@ -33,18 +35,12 @@ void WriteBinaryBasicType(std::ostream &os, T t) {
   ASSERT(!os.fail() && "WriteBinaryBasicType Failed");
 }
 
-template void ReadBinaryBasicType<float>(std::istream &is, float *t);
 template void ReadBinaryBasicType<int8_t>(std::istream &is, int8_t *t);
-template void ReadBinaryBasicType<uint8_t>(std::istream &is, uint8_t *t);
 template void ReadBinaryBasicType<int16_t>(std::istream &is, int16_t *t);
-template void ReadBinaryBasicType<uint16_t>(std::istream &is, uint16_t *t);
 template void ReadBinaryBasicType<int32_t>(std::istream &is, int32_t *t);
-template void ReadBinaryBasicType<uint32_t>(std::istream &is, uint32_t *t);
-template void ReadBinaryBasicType<int64_t>(std::istream &is, int64_t *t);
-template void ReadBinaryBasicType<uint64_t>(std::istream &is, uint64_t *t);
 
-template void WriteBinaryBasicType<float>(std::ostream &os, float t);
 template void WriteBinaryBasicType<int8_t>(std::ostream &os, int8_t t);
 template void WriteBinaryBasicType<int16_t>(std::ostream &os, int16_t t);
 template void WriteBinaryBasicType<int32_t>(std::ostream &os, int32_t t);
-template void WriteBinaryBasicType<int64_t>(std::ostream &os, int64_t t);
+
+}  // namespace aps

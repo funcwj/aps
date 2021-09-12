@@ -9,6 +9,8 @@
 #include "utils/log.h"
 #include "utils/math.h"
 
+namespace aps {
+
 class WindowFunction {
  public:
   static void Generate(const std::string& name, float* window,
@@ -24,4 +26,5 @@ class WindowFunction {
   static void Bartlett(float* window, int32_t window_len, bool periodic = true);
 };
 
+}  // namespace aps
 #endif  // CSRC_UTILS_WINDOW_H_

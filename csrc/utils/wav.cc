@@ -1,7 +1,9 @@
 // Copyright 2018 Jian Wu
 // License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-#include "io/wav.h"
+#include "utils/wav.h"
+
+namespace aps {
 
 bool CheckRiffHeader(const WavHeader &header) {
   const RiffAndFmtHeader *riff_and_fmt = &(header.riff_and_fmt);
@@ -201,3 +203,5 @@ std::string WavWriter::Info() const {
      << ", sample_rate=" << SampleRate() << ", num_samples=" << NumSamples();
   return os.str();
 }
+
+}  // namespace aps

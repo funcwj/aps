@@ -12,6 +12,8 @@
 #include <sstream>
 #include <string>
 
+namespace aps {
+
 class Logger {
  public:
   Logger(const std::string &type, const char *func, const char *file,
@@ -82,5 +84,7 @@ class Logger {
       Logger("ASSERT", __FUNCTION__, __FILE__, __LINE__).Stream() \
           << "Assert '" << #cond << "' failed!";                  \
   } while (0)
+
+}  // namespace aps
 
 #endif  // CSRC_UTILS_LOG_H_

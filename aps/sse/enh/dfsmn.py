@@ -32,14 +32,14 @@ class DFSMN(SSEBase):
                  rctx: int = 3,
                  norm: str = "BN",
                  dilation: Union[List[int], int] = 1,
-                 cplx_mask: bool = True,
+                 complex_mask: bool = True,
                  non_linear: str = "relu",
                  training_mode: str = "freq"):
         super(DFSMN, self).__init__(enh_transform, training_mode=training_mode)
         assert enh_transform is not None
         self.dfsmn = FSMNEncoder(num_bins,
                                  num_bins * num_branchs *
-                                 (2 if cplx_mask else 1),
+                                 (2 if complex_mask else 1),
                                  dim=dim,
                                  norm=norm,
                                  project=project,
@@ -49,17 +49,18 @@ class DFSMN(SSEBase):
                                  lctx=lctx,
                                  rctx=rctx,
                                  dilation=dilation)
-        if cplx_mask:
+        if complex_mask:
             # no activation for complex mask
-            self.masks = TFTransposeTransform()
+            self.masks = nn.Sequential(MaskNonLinear("none", enable="all"),
+                                       TFTransposeTransform())
         else:
             self.masks = nn.Sequential(
                 MaskNonLinear(non_linear, enable="common"),
                 TFTransposeTransform())
         self.num_branchs = num_branchs
-        self.cplx_mask = cplx_mask
+        self.complex_mask = complex_mask
 
-    def _tf_mask(self, feats: th.Tensor, num_branchs: int) -> List[th.Tensor]:
+    def _tf_mask(self, feats: th.Tensor) -> List[th.Tensor]:
         """
         TF mask estimation from given features
         """
@@ -78,12 +79,13 @@ class DFSMN(SSEBase):
         stft, _ = self.enh_transform.encode(mix, None)
         feats = self.enh_transform(stft)
         # [N x F x T, ...]
-        masks = self._tf_mask(feats, self.num_branchs)
+        masks = self._tf_mask(feats)
+        if self.complex_mask:
+            # [N x F x T x 2, ...]
+            masks = [th.stack(th.chunk(m, 2, 1), -1) for m in masks]
         # post processing
         if mode == "time":
-            bss_stft = [
-                tf_masking(stft, m, complex_mask=self.cplx_mask) for m in masks
-            ]
+            bss_stft = [tf_masking(stft, m) for m in masks]
             packed = self.enh_transform.decode(bss_stft)
         else:
             packed = masks
@@ -123,7 +125,10 @@ class DFSMN(SSEBase):
         Return:
             masks (Tensor): masks of each speaker, N x T x F
         """
-        masks = self._tf_mask(feats, self.num_branchs)
-        # S x N x F x T
+        masks = self._tf_mask(feats)
+        if self.complex_mask:
+            # [N x F x T x 2, ...]
+            masks = [th.stack(th.chunk(m, 2, 1), -1) for m in masks]
+        # S x N x F x T or S x N x F x T x 2
         masks = th.stack(masks)
         return masks[0] if self.num_branchs == 1 else masks

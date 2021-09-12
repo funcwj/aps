@@ -42,16 +42,16 @@ class ASREncoderBase(nn.Module):
         self.vocab_size = vocab_size
         self.asr_transform = asr_transform
         if enc_type in ["xfmr", "cfmr"]:
+            self.is_xfmr_encoder = True
             enc_proj = enc_kwargs["arch_kwargs"]["att_dim"]
             enc_kwargs["output_proj"] = vocab_size if ctc_only else -1
             self.encoder = TransformerEncoder(enc_type, input_size,
                                               **enc_kwargs)
-            self.is_xfmr_encoder = True
         else:
+            self.is_xfmr_encoder = False
             self.encoder = encoder_instance(
                 enc_type, input_size, vocab_size if ctc_only else enc_proj,
                 enc_kwargs, BaseEncoder)
-            self.is_xfmr_encoder = False
         # for hybrid ctc/aed, we add CTC branch
         self.ctc = nn.Linear(enc_proj, vocab_size) if ead and ctc else None
 
@@ -176,15 +176,13 @@ class CtcASR(ASREncoderBase):
             x (Tensor): audio samples or acoustic features, S or Ti x F
         """
         with th.no_grad():
-            # N x T x D or N x D x T
-            enc_out = self._decoding_prep(x,
-                                          batch_first=not self.is_xfmr_encoder)
+            # N x T x D
+            enc_out = self._decoding_prep(x, batch_first=True)
             if self.ctc is not None:
                 enc_out = self.ctc(enc_out)
-            return ctc_beam_search(
-                enc_out[:, 0] if self.is_xfmr_encoder else enc_out[0],
-                blank=self.vocab_size - 1,
-                **kwargs)
+            return ctc_beam_search(enc_out[0],
+                                   blank=self.vocab_size - 1,
+                                   **kwargs)
 
     def ctc_align(self, x: th.Tensor, y: th.Tensor) -> Dict:
         """
@@ -194,12 +192,8 @@ class CtcASR(ASREncoderBase):
             y (Tensor): reference sequence, U
         """
         with th.no_grad():
-            # N x T x D or N x D x T
-            enc_out = self._decoding_prep(x,
-                                          batch_first=not self.is_xfmr_encoder)
+            # N x T x D
+            enc_out = self._decoding_prep(x, batch_first=True)
             if self.ctc is not None:
                 enc_out = self.ctc(enc_out)
-            return ctc_viterbi_align(
-                enc_out[:, 0] if self.is_xfmr_encoder else enc_out[0],
-                y,
-                blank=self.vocab_size - 1)
+            return ctc_viterbi_align(enc_out[0], y, blank=self.vocab_size - 1)

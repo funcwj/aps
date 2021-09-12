@@ -130,9 +130,9 @@ class Conv2dProj(nn.Module):
     def __init__(self,
                  input_size: int,
                  embed_dim: int = 512,
+                 num_layers: int = 2,
                  in_channels: int = 1,
                  conv_channels: int = 256,
-                 num_layers: int = 2,
                  for_streaming: bool = True) -> None:
         super(Conv2dProj, self).__init__()
         # generally num_layers should not be too large

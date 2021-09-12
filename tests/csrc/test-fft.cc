@@ -4,6 +4,7 @@
 #include <torch/script.h>
 #include "utils/fft.h"
 
+using namespace aps;
 using Tensor = torch::Tensor;
 
 void ToyRealFFT() {
@@ -73,7 +74,6 @@ void TestRealiFFT() {
 }
 
 int main(int argc, char const *argv[]) {
-  // TestRealFFT();
   TestComplexFFT();
   TestRealiFFT();
   return 0;

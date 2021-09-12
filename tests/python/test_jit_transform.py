@@ -23,8 +23,7 @@ def test_asr_transform_jit(wav, feats):
                           window="hamm",
                           pre_emphasis=0.96,
                           center=False,
-                          return_polar=True,
-                          eps=0)
+                          return_polar=False)
     trans = AsrTransform(feats=feats,
                          stft_mode="librosa",
                          window="hamm",
@@ -38,9 +37,9 @@ def test_asr_transform_jit(wav, feats):
     trans.eval()
     scripted_trans = th.jit.script(export_jit(trans.transform))
     ref_out = trans(wav, None)[0]
-    jit_out = scripted_trans(packed[..., 0])
+    jit_out = scripted_trans(packed)
     th.testing.assert_allclose(ref_out, jit_out)
 
 
 if __name__ == "__main__":
-    pass
+    test_asr_transform_jit(egs1_wav, "fbank-log-cmvn")

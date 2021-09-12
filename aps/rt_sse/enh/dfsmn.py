@@ -21,6 +21,7 @@ class DFSMN(RealTimeSSEBase):
     Uses Deep FSMN for speech enhancement/separation
     """
     FSMNParam = Union[List[int], int]
+    __constants__ = ["lctx", "rctx", "complex_mask"]
 
     def __init__(self,
                  enh_transform: Optional[nn.Module] = None,
@@ -34,14 +35,14 @@ class DFSMN(RealTimeSSEBase):
                  lctx: FSMNParam = 3,
                  rctx: FSMNParam = 3,
                  norm: str = "BN",
-                 cplx_mask: bool = True,
+                 complex_mask: bool = True,
                  non_linear: str = "relu",
                  training_mode: str = "freq"):
         super(DFSMN, self).__init__(enh_transform, training_mode=training_mode)
         assert enh_transform is not None
         self.dfsmn = StreamingFSMNEncoder(num_bins,
                                           num_bins * num_branchs *
-                                          (2 if cplx_mask else 1),
+                                          (2 if complex_mask else 1),
                                           dim=dim,
                                           norm=norm,
                                           project=project,
@@ -50,17 +51,16 @@ class DFSMN(RealTimeSSEBase):
                                           residual=residual,
                                           lctx=lctx,
                                           rctx=rctx)
-        if cplx_mask:
+        if complex_mask:
             # constraint in [-100, 100]
-            self.masks = nn.Sequential(
-                MaskNonLinear("none", vmax=100, vmin=-100),
-                TFTransposeTransform())
+            self.masks = nn.Sequential(MaskNonLinear("none", enable="all"),
+                                       TFTransposeTransform())
         else:
             self.masks = nn.Sequential(
                 MaskNonLinear(non_linear, enable="common"),
                 TFTransposeTransform())
         self.num_branchs = num_branchs
-        self.cplx_mask = cplx_mask
+        self.complex_mask = complex_mask
 
         def context(num_layers, ctx):
             return num_layers * ctx if isinstance(ctx, int) else sum(ctx)
@@ -68,7 +68,7 @@ class DFSMN(RealTimeSSEBase):
         self.lctx = context(num_layers, lctx)
         self.rctx = context(num_layers, rctx)
 
-    def _tf_mask(self, feats: th.Tensor, num_branchs: int) -> List[th.Tensor]:
+    def _tf_mask(self, feats: th.Tensor) -> List[th.Tensor]:
         """
         TF mask estimation from given features
         """
@@ -90,12 +90,13 @@ class DFSMN(RealTimeSSEBase):
         # N x (T+L+R) x F
         feats = tf.pad(feats, (0, 0, self.lctx, self.rctx), "constant", 0)
         # [N x F x T, ...]
-        masks = self._tf_mask(feats, self.num_branchs)
+        masks = self._tf_mask(feats)
+        if self.complex_mask:
+            # [N x F x T x 2, ...]
+            masks = [th.stack(th.chunk(m, 2, 1), -1) for m in masks]
         # post processing
         if mode == "time":
-            bss_stft = [
-                tf_masking(stft, m, complex_mask=self.cplx_mask) for m in masks
-            ]
+            bss_stft = [tf_masking(stft, m) for m in masks]
             packed = self.enh_transform.decode(bss_stft)
         else:
             packed = masks
@@ -128,6 +129,10 @@ class DFSMN(RealTimeSSEBase):
         return self._infer(mix, self.training_mode)
 
     @th.jit.export
+    def reset(self):
+        self.dfsmn.reset()
+
+    @th.jit.export
     def step(self, chunk: th.Tensor) -> th.Tensor:
         """
         Processing one step
@@ -136,6 +141,9 @@ class DFSMN(RealTimeSSEBase):
         masks = self.masks(self.dfsmn.step(chunk))
         # [N x F x T, ...]
         masks = th.chunk(masks, self.num_branchs, 1)
-        # S x N x F x T
+        if self.complex_mask:
+            # [N x F x T x 2, ...]
+            masks = [th.stack(th.chunk(m, 2, 1), -1) for m in masks]
+        # S x N x F x T or S x N x F x T x 2
         masks = th.stack(masks)
         return masks[0] if self.num_branchs == 1 else masks

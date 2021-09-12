@@ -5,9 +5,14 @@
 #ifndef CSRC_UTILS_FFT_H_
 #define CSRC_UTILS_FFT_H_
 
+#include <algorithm>
 #include <utility>
-#include "utils/math.h"
+#include <vector>
+
 #include "utils/log.h"
+#include "utils/math.h"
+
+namespace aps {
 
 // Class for FFT computation
 
@@ -16,15 +21,15 @@ class FFTComputer {
   explicit FFTComputer(int32_t register_size) : register_size_(register_size) {
     ASSERT(RoundUpToNearestPowerOfTwo(register_size) == register_size);
     int32_t table_size = register_size >> 1;
-    cos_table_ = new float[table_size];
-    sin_table_ = new float[table_size];
+    cos_table_.resize(table_size);
+    sin_table_.resize(table_size);
     // pre-compute cos/sin values for FFT
     for (int32_t k = 0; k < table_size; k++) {
-      cos_table_[k] = cosf32(PI * k / table_size);
-      sin_table_[k] = sinf32(PI * k / table_size);
+      cos_table_[k] = cosf(PI * k / table_size);
+      sin_table_[k] = sinf(PI * k / table_size);
     }
     // for RealFFT data cache
-    cplx_cache_ = new float[register_size];
+    fft_cache_.resize(register_size);
   }
 
   // Compute (inverse)FFT values
@@ -36,19 +41,15 @@ class FFTComputer {
   // src: [R0, R1, ..., R(N - 1)]
   void RealFFT(float *src, int32_t num_samples, bool invert);
 
-  ~FFTComputer() {
-    if (sin_table_) delete[] sin_table_;
-    if (cos_table_) delete[] cos_table_;
-    if (cplx_cache_) delete[] cplx_cache_;
-  }
-
  private:
   // Required 2^N
   int32_t register_size_;
   // Precomputed values
-  float *sin_table_, *cos_table_, *cplx_cache_;
+  std::vector<float> cos_table_, sin_table_, fft_cache_;
   // BitReverse for complex values
-  void ComplexBitReverse(float *complex_values, int32_t num_values);
+  void ComplexBitReverse(float *cplx_values, int32_t num_values);
 };
+
+}  // namespace aps
 
 #endif  // CSRC_UTILS_FFT_H_

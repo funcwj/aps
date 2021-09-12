@@ -424,7 +424,7 @@ class Conv2dEncoder(EncoderBase):
             inp (Tensor): N x T x F, input
             inp_len (Tensor or None)
         Return:
-            out (Tensor): N x F x O
+            out (Tensor): N x T' x D
             out_len (Tensor or None)
         """
         # N x C x T x F
@@ -488,7 +488,7 @@ class FSMNEncoder(EncoderBase):
                 inp_len: Optional[th.Tensor]) -> EncRetType:
         """
         Args:
-            inp (Tensor): N x T x F, input
+            inp (Tensor): input features, N x T x F
             inp_len (Tensor or None)
         Return:
             out (Tensor): N x T x F

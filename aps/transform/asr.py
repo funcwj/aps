@@ -71,7 +71,7 @@ class RescaleTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"rescale={self.rescale}"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return False
 
     def forward(self, wav: th.Tensor) -> th.Tensor:
@@ -98,7 +98,7 @@ class PreEmphasisTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"pre_emphasis={self.pre_emphasis}"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return False
 
     def forward(self, wav: th.Tensor) -> th.Tensor:
@@ -147,7 +147,7 @@ class SpeedPerturbTransform(nn.Module):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(sr={self.sr}, factor={self.factor_str})"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return False
 
     def output_length(self,
@@ -209,7 +209,7 @@ class TFTransposeTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"axis1={self.axis1}, axis2={self.axis2}"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def forward(self, tensor: th.Tensor) -> th.Tensor:
@@ -262,7 +262,7 @@ class SpectrogramTransform(STFT):
     def dim(self) -> int:
         return self.num_bins
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return False
 
     def forward(self, wav: th.Tensor) -> th.Tensor:
@@ -270,12 +270,36 @@ class SpectrogramTransform(STFT):
         Args:
             wav (Tensor): input signal, N x (C) x S
         Return:
-            mag (Tensor): magnitude, N x (C) x F x T
+            mag (Tensor): magnitude, N x (C) x F x T x 2
         """
-        # N x (C) x F x T
-        packed = super().forward(wav, return_polar=False)
-        # return only magnitude
-        return th.sum(packed**2, -1)**0.5
+        # N x (C) x F x T x 2
+        return super().forward(wav, return_polar=False)
+
+
+class MagnitudeTransform(nn.Module):
+    """
+    Transform tensor [real, imag] to angle tensor
+    """
+
+    def __init__(self, dim: int = -1, eps: float = 0):
+        super(MagnitudeTransform, self).__init__()
+        self.dim = dim
+        self.eps = eps
+
+    def extra_repr(self) -> str:
+        return f"dim={self.dim}, eps={self.eps}"
+
+    def exportable(self) -> bool:
+        return True
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp (Tensor): N x ... x 2 x ...
+        Return:
+            out (Tensor): N x ...
+        """
+        return th.sqrt(th.sum(inp**2, self.dim) + self.eps)
 
 
 class AbsTransform(nn.Module):
@@ -292,7 +316,7 @@ class AbsTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"eps={self.eps:.3e}"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def forward(self, tensor: th.Tensor) -> th.Tensor:
@@ -319,7 +343,7 @@ class PowerTransform(nn.Module):
     def extra_repr(self) -> str:
         return f"power={self.power}"
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def forward(self, tensor: th.Tensor) -> th.Tensor:
@@ -380,7 +404,7 @@ class MelTransform(nn.Module):
     def dim(self) -> int:
         return self.num_mels
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def extra_repr(self) -> str:
@@ -419,7 +443,7 @@ class LogTransform(nn.Module):
     def dim_scale(self) -> int:
         return 1
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def extra_repr(self) -> str:
@@ -472,7 +496,7 @@ class DiscreteCosineTransform(nn.Module):
     def dim(self) -> int:
         return self.num_ceps
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def extra_repr(self) -> str:
@@ -538,7 +562,7 @@ class CmvnTransform(nn.Module):
     def dim_scale(self) -> int:
         return 1
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def _cmvn_per_band(self, feats: th.Tensor) -> th.Tensor:
@@ -619,7 +643,7 @@ class SpecAugTransform(nn.Module):
             f"p={self.p}, p_time={self.p_time}, mask_zero={self.mask_zero}, "
             f"num_freq_masks={self.fnum}, num_time_masks={self.tnum}")
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return False
 
     def forward(self, x: th.Tensor) -> th.Tensor:
@@ -677,7 +701,7 @@ class SpliceTransform(nn.Module):
     def dim_scale(self) -> int:
         return (1 + self.rctx + self.lctx)
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def forward(self, feats: th.Tensor) -> th.Tensor:
@@ -688,10 +712,7 @@ class SpliceTransform(nn.Module):
             slice (Tensor): spliced feature, N x ... x To x FD
         """
         # N x ... x T x FD
-        feats = splice_feature(feats,
-                               lctx=self.lctx,
-                               rctx=self.rctx,
-                               subsampling_factor=self.subsampling_factor)
+        feats = splice_feature(feats, lctx=self.lctx, rctx=self.rctx)
         if self.subsampling_factor != 1:
             feats = feats[..., ::self.subsampling_factor, :]
         return feats
@@ -723,7 +744,7 @@ class DeltaTransform(nn.Module):
     def dim_scale(self) -> int:
         return self.order
 
-    def jit_export(self) -> bool:
+    def exportable(self) -> bool:
         return True
 
     def forward(self, feats: th.Tensor) -> th.Tensor:
@@ -880,15 +901,17 @@ class FeatureTransform(nn.Module):
                 self.spectra_index = len(transform)
                 spectrogram = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    MagnitudeTransform(dim=-1),
                     TFTransposeTransform(),
                     PowerTransform(power=2 if use_power else 1)
                 ]
                 transform += spectrogram
-                feats_dim = transform[-3].dim()
+                feats_dim = spectrogram[0].dim()
             elif tok == "fbank":
                 self.spectra_index = len(transform)
                 fbank = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    MagnitudeTransform(dim=-1),
                     TFTransposeTransform(),
                     PowerTransform(power=2 if use_power else 1),
                     MelTransform(frame_len, **mel_kwargs)
@@ -899,6 +922,7 @@ class FeatureTransform(nn.Module):
                 self.spectra_index = len(transform)
                 mfcc = [
                     SpectrogramTransform(frame_len, frame_hop, **stft_kwargs),
+                    MagnitudeTransform(dim=-1),
                     TFTransposeTransform(),
                     PowerTransform(power=2 if use_power else 1),
                     MelTransform(frame_len, **mel_kwargs),
