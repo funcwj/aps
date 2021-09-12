@@ -1,5 +1,10 @@
 ## Overview of the Monthly Update
 
+### 2021/09
+
+1. Add command to export TorchScript model
+2. Add real time speech enhancement demo code (C++ & Python, Transformer & DFSMN)
+
 ### 2021/08
 
 1. Kick off streaming ASR and real-time SSE

@@ -66,20 +66,20 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
     --num-workers $num_workers \
     --prog-interval 100 \
     --eval-interval -1 \
-    am $dataset $exp
+    am $dataset $am_exp
 fi
 
 if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   echo "Stage 4: decoding ..."
   for name in $test_sets; do
-    name=${name}_${$track}
+    name=${name}_${track}
     ./scripts/decode.sh \
       --score true \
       --text data/$dataset/$name/text \
       --beam-size $beam_size \
       --max-len 220 \
       --dict exp/$dataset/$am_exp/dict \
-      --nbest 8 \
+      --nbest $nbest \
       --space "<space>" \
       --ctc-weight $ctc_weight \
       --len-norm $len_norm \

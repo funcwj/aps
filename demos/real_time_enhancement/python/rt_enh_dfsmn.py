@@ -40,7 +40,7 @@ def run(args):
     # Get attributes
     lctx = scripted_nnet.lctx
     rctx = scripted_nnet.rctx
-    complex_mask = scripted_nnet.complex_mask
+    # complex_mask = scripted_nnet.complex_mask
     logger.info(f"lctx = {lctx}, rctx = {rctx}")
 
     forward_stft = StreamingSTFT(frame_len,

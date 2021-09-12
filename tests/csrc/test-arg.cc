@@ -3,10 +3,9 @@
 
 #include "utils/args.h"
 
-using namespace aps;
-
 
 int main(int argc, char const *argv[]) {
+  using namespace aps;
   const std::string description = "Command for testing of the utils/args.h";
   ArgParser parser(description);
 
@@ -15,10 +14,14 @@ int main(int argc, char const *argv[]) {
   bool optional_bool = false;
   std::string optional_string = "";
 
-  parser.AddArgument("required-int32", &required_int32, "Required value for int32", true);
-  parser.AddArgument("required-float", &required_float, "Required value for float", true);
-  parser.AddArgument("optional-bool", &optional_bool, "Optional value for float", false);
-  parser.AddArgument("optional-string", &optional_string, "Optional value for string", false);
+  parser.AddArgument("required-int32", &required_int32,
+                     "Required value for int32", true);
+  parser.AddArgument("required-float", &required_float,
+                     "Required value for float", true);
+  parser.AddArgument("optional-bool", &optional_bool,
+                     "Optional value for float", false);
+  parser.AddArgument("optional-string", &optional_string,
+                     "Optional value for string", false);
 
   parser.ReadCommandArgs(argc, argv);
   LOG_INFO << "required-int32: " << required_int32;

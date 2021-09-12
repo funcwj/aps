@@ -39,7 +39,7 @@ def run(args):
 
     # Get attributes
     chunk = scripted_nnet.chunk
-    complex_mask = scripted_nnet.complex_mask
+    # complex_mask = scripted_nnet.complex_mask
 
     forward_stft = StreamingSTFT(frame_len,
                                  frame_hop,
