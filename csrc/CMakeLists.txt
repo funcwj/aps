@@ -11,7 +11,7 @@ set(APS_TORCH_SRC ${CMAKE_SOURCE_DIR}/csrc/base/stft.cc
                   ${CMAKE_SOURCE_DIR}/csrc/enh/time_frequency.cc
                   ${CMAKE_SOURCE_DIR}/csrc/enh/dfsmn.cc
                   ${CMAKE_SOURCE_DIR}/csrc/enh/transformer.cc)
-
-add_library(${APS_UTILS_LIB} SHARED ${APS_UTILS_SRC})
-add_library(${APS_TORCH_LIB} SHARED ${APS_TORCH_SRC})
+# SHARED didn't work for APPLE
+add_library(${APS_UTILS_LIB} STATIC ${APS_UTILS_SRC})
+add_library(${APS_TORCH_LIB} STATIC ${APS_TORCH_SRC})
 set(LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/lib)

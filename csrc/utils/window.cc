@@ -8,13 +8,13 @@ namespace aps {
 void WindowFunction::Hanning(float* window, int32_t window_len, bool periodic) {
   float a = PI2 / (periodic ? window_len : window_len - 1.0f);
   for (int32_t i = 0; i < window_len; i++)
-    window[i] = 0.50 - 0.50 * cosf32(a * i);
+    window[i] = 0.50 - 0.50 * cosf(a * i);
 }
 
 void WindowFunction::Hamming(float* window, int32_t window_len, bool periodic) {
   float a = PI2 / (periodic ? window_len : window_len - 1.0f);
   for (int32_t i = 0; i < window_len; i++)
-    window[i] = 0.54 - 0.46 * cosf32(a * i);
+    window[i] = 0.54 - 0.46 * cosf(a * i);
 }
 
 void WindowFunction::Rectangular(float* window, int32_t window_len) {
@@ -24,20 +24,20 @@ void WindowFunction::Rectangular(float* window, int32_t window_len) {
 void WindowFunction::SqrtHanning(float* window, int32_t window_len,
                                  bool periodic) {
   Hanning(window, window_len, periodic);
-  for (int32_t i = 0; i < window_len; i++) window[i] = sqrtf32(window[i]);
+  for (int32_t i = 0; i < window_len; i++) window[i] = sqrtf(window[i]);
 }
 
 void WindowFunction::Blackman(float* window, int32_t window_len,
                               bool periodic) {
   float a = PI2 / (periodic ? window_len : window_len - 1.0f);
   for (int32_t i = 0; i < window_len; i++)
-    window[i] = 0.42 - 0.5 * cosf32(a * i) + 0.08 * cosf32(2 * a * i);
+    window[i] = 0.42 - 0.5 * cosf(a * i) + 0.08 * cosf(2 * a * i);
 }
 void WindowFunction::Bartlett(float* window, int32_t window_len,
                               bool periodic) {
   float a = 2.0f / (periodic ? window_len : window_len - 1.0f);
   for (int32_t i = 0; i < window_len; i++)
-    window[i] = 1.0f - fabsf32(i * a - 1.0f);
+    window[i] = 1.0f - fabsf(i * a - 1.0f);
 }
 
 void WindowFunction::Generate(const std::string& name, float* window,

@@ -12,7 +12,7 @@
 namespace aps {
 
 const float EPS_F32 = std::numeric_limits<float>::epsilon();
-const float PI = acosf32(-1);
+const float PI = acosf(-1);
 const float PI2 = PI * 2;
 
 const int32_t MAX_INT32 = std::numeric_limits<int32_t>::max();
