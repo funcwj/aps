@@ -1,4 +1,4 @@
-name:  C++ Unit Testing
+name:  C++ Building & Testing
 
 on:
   push:
@@ -25,9 +25,7 @@ jobs:
       #   run: |
       #     bash .ci/install_csrc_deps.sh
 
-      - name: Building & Running
+      - name: Building
         run: |
           mkdir build && cd build
-          cmake ..
-          make -j && cd ../tests/csrc
-          for x in bin/*; do $x; done
+          cmake .. && make -j
