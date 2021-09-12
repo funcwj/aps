@@ -106,7 +106,7 @@ class StreamingiSTFT(STFTBase):
         frame[:, :overlap_len] += self.wav_cache
         window[:overlap_len] += self.win_cache
         self.win_cache = window[self.frame_hop:]
-        self.wav_cache = frame[0, self.frame_hop:]
+        self.wav_cache = frame[:, self.frame_hop:]
         frame = frame / (window + eps)
         return frame[:, :self.frame_hop]
 
