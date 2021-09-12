@@ -9,6 +9,7 @@ set(APS_UTILS_SRC ${CMAKE_SOURCE_DIR}/csrc/utils/wav.cc
 set(APS_TORCH_SRC ${CMAKE_SOURCE_DIR}/csrc/base/stft.cc
                   ${CMAKE_SOURCE_DIR}/csrc/base/pipeline.cc
                   ${CMAKE_SOURCE_DIR}/csrc/enh/time_frequency.cc
+                  ${CMAKE_SOURCE_DIR}/csrc/enh/dfsmn.cc
                   ${CMAKE_SOURCE_DIR}/csrc/enh/transformer.cc)
 
 add_library(${APS_UTILS_LIB} SHARED ${APS_UTILS_SRC})

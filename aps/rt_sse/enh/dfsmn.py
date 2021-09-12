@@ -53,9 +53,8 @@ class DFSMN(RealTimeSSEBase):
                                           rctx=rctx)
         if complex_mask:
             # constraint in [-100, 100]
-            self.masks = nn.Sequential(
-                MaskNonLinear("none", vmax=100, vmin=-100),
-                TFTransposeTransform())
+            self.masks = nn.Sequential(MaskNonLinear("none", enable="all"),
+                                       TFTransposeTransform())
         else:
             self.masks = nn.Sequential(
                 MaskNonLinear(non_linear, enable="common"),

@@ -67,7 +67,7 @@ def run(args):
             scripted_and_save(transform,
                               f"{args.checkpoint}/{args.tag}.transform.pt")
         nnet.enh_transform = None
-    scripted_and_save(nnet, f"{args.checkpoint}/{args.tag}.scripted.pt")
+    scripted_and_save(nnet, f"{args.checkpoint}/{args.tag}.nnet.pt")
 
 
 if __name__ == "__main__":

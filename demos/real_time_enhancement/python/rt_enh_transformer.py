@@ -92,7 +92,7 @@ def run(args):
         #     norm = th.max(th.abs(wav))
         #     enh = enh * norm / th.max(th.abs(enh))
         dur = wav.shape[-1] / args.sr
-        time_cost = timer.elapsed()
+        time_cost = timer.elapsed() * 60
         logger.info(
             f"Processing utterance {key} done, RTF = {time_cost / dur:.4f}")
         write_audio(dst_dir / f"{key}.wav", enh.numpy())
@@ -102,12 +102,15 @@ def run(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=
-        "Command to evaluate transformer based real time speech enhancement",
+        "Command to performance real time speech enhancement using Transformer. "
+        "Please using the script cmd/export_for_libtorch.py to export TorchScript "
+        "models and the available real time speech enhancement models supported "
+        "by the TorchScript are put under aps/rt_sse/*py",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("wav_scp", help="Audio script for evaluation")
     parser.add_argument("scripted_nnet",
                         type=str,
-                        help="Scripted transformer based SE model")
+                        help="Scripted Transformer SE model")
     parser.add_argument("--transform",
                         type=str,
                         required=True,

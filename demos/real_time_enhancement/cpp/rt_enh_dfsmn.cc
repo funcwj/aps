@@ -1,17 +1,17 @@
 // Copyright 2021 Jian Wu
 // License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-#include "enh/transformer.h"
+#include "enh/dfsmn.h"
 #include "utils/args.h"
-#include "utils/wav.h"
 #include "utils/timer.h"
+#include "utils/wav.h"
 
 int main(int argc, char const *argv[]) {
-  using namespace aps;
-
   try {
+    using namespace aps;
+
     const std::string description =
-        "Command to perform real time speech enhancement using Transformer. "
+        "Command to perform real time speech enhancement using DFSMN. The "
         "Please using the script cmd/export_for_libtorch.py to export "
         "TorchScript models and the available real time speech enhancement "
         "models supported by the TorchScript are put under aps/rt_sse/*py";
@@ -38,7 +38,7 @@ int main(int argc, char const *argv[]) {
 
     parser.ReadCommandArgs(argc, argv);
 
-    TransformerNnet nnet(opts);
+    DfsmnNet nnet(opts);
 
     WavReader wav_reader(noisy_wav);
     LOG_INFO << "Audio information: " << wav_reader.Info();

@@ -1,8 +1,8 @@
 // Copyright 2021 Jian Wu
 // License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-#ifndef CSRC_ENH_TRANSFORMER_H_
-#define CSRC_ENH_TRANSFORMER_H_
+#ifndef CSRC_ENH_DFSMN_H_
+#define CSRC_ENH_DFSMN_H_
 
 #include <memory>
 #include <vector>
@@ -12,11 +12,11 @@
 
 namespace aps {
 
-// Match with Transformer model in aps/rt_sse/enh/transformer.py
+// Match with Transformer model in aps/rt_sse/enh/dfsmn.py
 
-class TransformerNnet : public TimeFrequencyNnet {
+class DfsmnNet : public TimeFrequencyNnet {
  public:
-  explicit TransformerNnet(const TimeFrequencyNnetOptions &opts);
+  explicit DfsmnNet(const TimeFrequencyNnetOptions &opts);
 
   virtual bool Process(const torch::Tensor &audio_chunk,
                        torch::Tensor *audio_enhan);
@@ -26,7 +26,7 @@ class TransformerNnet : public TimeFrequencyNnet {
   virtual torch::Tensor Flush();
 
  private:
-  int32_t chunk_size_;
+  int32_t lctx_, rctx_;
   torch::jit::script::Module nnet_, feature_;
   STFT stft_;
   StreamingTorchiSTFT istft_;
@@ -38,4 +38,4 @@ class TransformerNnet : public TimeFrequencyNnet {
 
 }  // namespace aps
 
-#endif  // CSRC_ENH_TRANSFORMER_H_
+#endif  // CSRC_ENH_DFSMN_H_
