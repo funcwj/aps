@@ -23,7 +23,8 @@ for x in train_si284 test_eval92 test_dev93; do
   mkdir -p data/wsj/$x
   cp $srcdir/${x}_wav.scp data/wsj/$x/wav.scp || exit 1
   cp $srcdir/$x.txt data/wsj/$x/text || exit 1
-  scripts/get_wav_dur.sh --nj 4 --output "time" data/wsj/$x exp/utt2dur/$x
+  utils/wav_duration.py --num-jobs 4 --output "time" \
+    data/wsj/$x/wav.scp data/wsj/$x/utt2dur
 done
 
 echo "Succeeded in formatting data."

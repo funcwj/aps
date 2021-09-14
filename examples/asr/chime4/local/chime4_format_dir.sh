@@ -21,8 +21,8 @@ cat $data_dir/dt05_{real,simu}_${track}/wav.scp | sort -k1 > $data_dir/dev/wav.s
 cat $data_dir/dt05_{real,simu}_${track}/text | sort -k1 > $data_dir/dev/text
 
 for name in train dev; do
-  scripts/get_wav_dur.sh --nj $nj --output "time" \
-    $data_dir/$name exp/chime4/utt2dur/$name
+  utils/wav_duration.py --num-jobs $nj --output "time" \
+    $data_dir/$name/wav.scp $data_dir/$name/utt2dur
 done
 
 echo "$0: Format $data_dir done"

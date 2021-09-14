@@ -51,7 +51,7 @@ The APS has its own module to perform feature extraction (both ASR and enhanceme
     BAC009S0002W0130    4.1300
     BAC009S0002W0131    4.4060
     ```
-    We provide script `scripts/get_wav_dur.sh` to generate the duration file. Note that APS also supports "pipe" or "archive" style input, so the `wav.scp` like:
+    We provide script `utils/wav_duration.py` to generate the duration file. Note that APS also supports "pipe" or "archive" style input, so the `wav.scp` like:
     ```
     FAEM0_SI762 sox /scratch/jwu/TIMIT-LDC93S1/TIMIT/TRAIN/DR2/FAEM0/SI762.WAV -t wav - |
     FAEM0_SX132 sox /scratch/jwu/TIMIT-LDC93S1/TIMIT/TRAIN/DR2/FAEM0/SX132.WAV -t wav - |
@@ -68,7 +68,7 @@ The APS has its own module to perform feature extraction (both ASR and enhanceme
     100-121669-0008 /scratch/jwu/LibriSpeech/train-clean-360/wav.1.ark:2473296
     100-121669-0009 /scratch/jwu/LibriSpeech/train-clean-360/wav.1.ark:2591436
     ```
-    are both OK. The script `scripts/archive_wav.sh` can used to archive the small audio files if needed. The `text` is same as the one used in `am_kaldi` dataloader. `utt2dur` is also used to sort utterances to form the mini-batch that minimized the padding size.
+    are both OK. The script `utils/archive_wav.py` can used to archive the small audio files if needed. The `text` is same as the one used in `am_kaldi` dataloader. `utt2dur` is also used to sort utterances to form the mini-batch that minimized the padding size.
 
   The dictionary required by AM training is a text file where each line contains `<model-unit> <int-id>` pair. The following is the example from Librispeech dataset which using 6K word pieces as the model units:
   ```

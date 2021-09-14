@@ -43,12 +43,12 @@ end=$(echo $stage | awk -F '-' '{print $2}')
 if [ $end -ge 1 ] && [ $beg -le 1 ]; then
   echo "Stage 1: preparing data ..."
   local/prepare_data.sh $train_data/iOS/data $data_dir/local/train $data_dir/train
-  scripts/get_wav_dur.sh --output "time" --nj $nj $data_dir/train exp/$dataset/utt2dur
+  utils/wav_duration.py --output "time" --num-jobs $nj $data_dir/train/wav.scp $data_dir/train/utt2dur
   for subset in DEV TEST; do
     for subtype in ANDROID IOS MIC; do
       name=$(echo ${subset}_${subtype} | tr '[:upper:]' '[:lower:]')
       local/prepare_data.sh $valid_data/$subset/$subtype $data_dir/local/$name $data_dir/$name
-      scripts/get_wav_dur.sh --output "time" --nj $nj $data_dir/$name exp/$dataset/utt2dur
+      utils/wav_duration.py --output "time" --num-jobs $nj $data_dir/$name/wav.scp $data_dir/$name/utt2dur
     done
   done
   mkdir -p $data_dir/dev

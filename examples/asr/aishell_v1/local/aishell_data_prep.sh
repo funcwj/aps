@@ -60,7 +60,8 @@ echo "$0: Prepare dictionary..."
 
 echo "$0: Prepare utt2dur..."
 for dir in train dev; do
-  scripts/get_wav_dur.sh --nj 10 --output "time" $aishell_data_dir/$dir exp/$dataset/utt2dur/$dir
+  utils/wav_duration.py --num-jobs 10 --output "time" \
+    $aishell_data_dir/$dir/wav.scp $aishell_data_dir/$dir/utt2dur
 done
 
 echo "$0: AISHELL data preparation succeeded"
