@@ -58,12 +58,13 @@ def run(args):
     if args.num_jobs <= 1:
         worker(0, 1, args.wav_scp, args.out_scp, args.out_ark)
     else:
+        print(f"Archive audio to .ark files using {args.num_jobs} processes")
         # process fp of out_ark
         ark_out_toks = args.out_ark.split(".")
         ark_prefix = ".".join(ark_out_toks[:-1])
-        ark_suffix = ark_out_toks[-1]\
-        # process fp of out_scp
+        ark_suffix = ark_out_toks[-1]
 
+        # process fp of out_scp
         scp_out_toks = args.out_scp.split(".")
         scp_prefix = ".".join(scp_out_toks[:-1])
         scp_suffix = scp_out_toks[-1]

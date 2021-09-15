@@ -88,6 +88,7 @@ def run(args):
     if args.wav_scp == "-" or args.utt2dur == "-" or args.num_jobs <= 1:
         worker(0, 1, args.wav_scp, args.utt2dur, args.output)
     else:
+        print(f"Work out utt2dur files using {args.num_jobs} processes")
         wav2dur_list = []
         pool = mp.Pool(args.num_jobs)
         for j in range(args.num_jobs):

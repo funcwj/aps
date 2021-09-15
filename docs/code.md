@@ -17,6 +17,10 @@ The relationship of the `aps.transform`, `aps.task`, `aps.trainer`, `aps.loader`
     ---------------------------------------------
 ```
 
+## `aps.distributed`
+
+To deal with different distribution backend and unify the interface, e.g., Horovod, PyTorch.
+
 ## `aps.transform`
 
 Customized feature transform module in APS. The feature transform layer from `aps.transform` is stacked as the feature extractor for ASR or enhancement/separation tasks, e.g., a stack of `SpectrogramTransform, AbsTransform, MelTransform, LogTransform` can used to extract log mel filter-bank features. Currently the supported feature transform layers are shown in the following:
@@ -25,6 +29,7 @@ Customized feature transform module in APS. The feature transform layer from `ap
 * `PreEmphasisTransform`
 * `SpeedPerturbTransform`
 * `SpectrogramTransform`
+* `MagnitudeTransform`
 * `TFTransposeTransform`
 * `AbsTransform`
 * `MelTransform`
@@ -36,6 +41,7 @@ Customized feature transform module in APS. The feature transform layer from `ap
 * `SpliceTransform`
 * `DeltaTransform`
 * `RefChannelTransform`
+* `PhaseTransform`
 * `IpdTransform`
 * `DfTransform`
 * `FixedBeamformer`
@@ -68,7 +74,8 @@ Supported task in APS. The `Task` class is responsible for the computation of an
 * `LinearTimeSaTask`: spectral approximation loss for time domain enhancement/separation model
 * `MelTimeSaTask`: mel domain spectral approximation loss for time domain enhancement/separation model
 * `ComplexMappingTask`: frequency domain complex mapping objective function ([paper](https://ieeexplore.ieee.org/document/9103053))
-* `SseFreqKdTask`: frequency domain TS-learning task
+* `ComplexMaskingTask`: frequency domain complex mask training objective function
+* `SseFreqKdTask`: frequency domain TS (teacher-student) learning task
 
 ## `aps.loader`
 
@@ -150,5 +157,14 @@ The submodule for speech enhancement/separation model. The provided model are sh
 * `FreqRelXfmr`: A simple transformer model for enhancement/separation
 * `DEMUCS`: Real Time Speech Enhancement in the Waveform Domain ([paper](https://www.isca-speech.org/archive/Interspeech_2020/pdfs/2409.pdf))
 * `SepFormer`: Attention is All You Need in Speech Separation ([paper](https://arxiv.org/abs/2010.13154))
+* `DFSMN`: Deep FSMN for speech enhancement
 
 Note that in `aps.sse`, each network should have function `infer()` for inference while `forward()` is left for training only.
+
+## `aps.streaming_asr`
+
+The submodule for streaming ASR which is designed with TorchScript support and model deployment features.
+
+## `aps.rt_sse`
+
+The submodule for real time speech enhancement & separation which is also designed with TorchScript support and model deployment features. Refer to the demo code directory [aps/demos/real_time_enhancement](aps/demos/real_time_enhancement) for details.
