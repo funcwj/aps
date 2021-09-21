@@ -10,6 +10,8 @@ import multiprocessing as mp
 
 from kaldi_python_io import Reader as BaseReader
 
+prog_interval = 500
+
 
 def worker(jobid, num_jobs, wav_scp, scp_out, ark_out):
     scp_out = open(scp_out, "w")
@@ -45,7 +47,7 @@ def worker(jobid, num_jobs, wav_scp, scp_out, ark_out):
             if scp_out:
                 scp_out.write(f"{key}\t{ark_out}:{offset}\n")
             done += 1
-            if done % 200 == 0:
+            if done % prog_interval == 0:
                 print(
                     f"Worker {jobid}: processed {done}/{len(reader)} utterances...",
                     flush=True)
@@ -58,7 +60,9 @@ def run(args):
     if args.num_jobs <= 1:
         worker(0, 1, args.wav_scp, args.out_scp, args.out_ark)
     else:
-        print(f"Archive audio to .ark files using {args.num_jobs} processes")
+        num_arks = args.num_arks if args.num_arks >= args.num_jobs else args.num_jobs
+        print(f"Archive audio to [1...{args.num_arks}].ark " +
+              f"files using {args.num_jobs} processes")
         # process fp of out_ark
         ark_out_toks = args.out_ark.split(".")
         ark_prefix = ".".join(ark_out_toks[:-1])
@@ -71,9 +75,9 @@ def run(args):
 
         scp_out_list = []
         pool = mp.Pool(args.num_jobs)
-        for j in range(args.num_jobs):
+        for j in range(num_arks):
             scp_out_list.append(f"{scp_prefix}.{j}.{scp_suffix}")
-            packed_args = (j, args.num_jobs, args.wav_scp, scp_out_list[-1],
+            packed_args = (j, num_arks, args.wav_scp, scp_out_list[-1],
                            f"{ark_prefix}.{j}.{ark_suffix}")
             pool.apply_async(worker, args=packed_args)
         pool.close()
@@ -97,5 +101,9 @@ if __name__ == "__main__":
                         type=int,
                         default=1,
                         help="Number of the parallel jobs to run")
+    parser.add_argument("--num-arks",
+                        type=int,
+                        default=1,
+                        help="Number of the .ark files will created")
     args = parser.parse_args()
     run(args)

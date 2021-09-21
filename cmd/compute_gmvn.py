@@ -18,6 +18,7 @@ from aps.utils import get_logger
 key_to_remove = ["perturb", "cmvn", "splice", "aug", "delta"]
 
 logger = get_logger(__name__)
+prog_interval = 500
 
 
 def worker(jobid, transform, args, stats):
@@ -42,7 +43,7 @@ def worker(jobid, transform, args, stats):
                 gmvn[0] += th.sum(feats[0, c], 0)
                 gmvn[1] += th.sum(feats[0, c]**2, 0)
         done += 1
-        if done % 200 == 0:
+        if done % prog_interval == 0:
             logger.info(f"Worker {jobid}: processed " +
                         f"{done}/{len(wav_reader)} utterances...")
     state_dict = {"num_frames": num_frames, "gmvn": gmvn}

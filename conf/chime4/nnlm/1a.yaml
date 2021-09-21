@@ -1,0 +1,40 @@
+nnet: "asr@rnn_lm"
+
+nnet_conf:
+  rnn: lstm
+  dropout: 0.2
+  num_layers: 3
+  embed_size: 1024
+  tie_weights: true
+  hidden_size: 1024
+
+task: "asr@lm"
+
+task_conf:
+  bptt_mode: true
+
+trainer_conf:
+  optimizer: "adamw"
+  optimizer_kwargs:
+    lr: 1.0e-3
+    weight_decay: 1.0e-3
+  lr_scheduler_kwargs:
+    factor: 0.8
+    min_lr: 1.0e-8
+    patience: 1
+  no_impr: 8
+  no_impr_thres: 0.05
+  clip_gradient: 5
+  report_metrics: ["loss", "accu", "@ppl"]
+  stop_criterion: "@ppl"
+
+data_conf:
+  fmt: "lm@bptt"
+  loader:
+    bptt_size: 96
+    min_token_num: 4
+    max_token_num: 600
+  train:
+    text: "data/chime4/lm/train.char"
+  valid:
+    text: "data/chime4/lm/dev.char"

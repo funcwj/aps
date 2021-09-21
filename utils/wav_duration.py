@@ -13,7 +13,7 @@ import subprocess
 import soundfile as sf
 import multiprocessing as mp
 
-prog_interval = 100
+prog_interval = 500
 
 
 def ext_open(fd, mode):

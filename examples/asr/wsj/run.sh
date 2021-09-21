@@ -95,9 +95,10 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   wait
 fi
 
+lm_data_dir=data/wsj/lm
 if [ $end -ge 5 ] && [ $beg -le 5 ]; then
   echo "Stage 5: preparing data (LM) ..."
-  lm_data_dir=data/wsj/lm && mkdir -p $lm_data_dir
+  mkdir -p $lm_data_dir
   zcat $wsj1/13-32.1/wsj1/doc/lng_modl/lm_train/np_data/{87,88,89}/*.z \
     | grep -v "<" | tr "[:lower:]" "[:upper:]" \
     | awk '{printf("utt-%08d %s\n", NR, $0)}' > $lm_data_dir/external.train.text
