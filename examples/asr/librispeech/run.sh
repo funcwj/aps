@@ -7,6 +7,7 @@ set -eu
 
 stage="1-7"
 data=/scratch/jwu/LibriSpeech
+dataset=librispeech
 
 # word piece
 wp_name="wpm_6k"
@@ -39,15 +40,15 @@ len_norm=false
 ctc_weight=0.2
 lm_weight=0.2
 eos_threshold=0
-test_sets="test_clean test_other"
+test_sets="dev_clean dev_other test_clean test_other"
 
 . ./utils/parse_options.sh || exit 1
 
+data_dir=data/$dataset
 beg=$(echo $stage | awk -F '-' '{print $1}')
 end=$(echo $stage | awk -F '-' '{print $2}')
 [ -z $end ] && end=$beg
 
-data_dir=data/librispeech
 # NOTE: download Librispeech data first
 if [ $end -ge 1 ] && [ $beg -le 1 ]; then
   echo "Stage 1: preparing data for AM ..."
@@ -61,12 +62,12 @@ if [ $end -ge 2 ] && [ $beg -le 2 ]; then
   echo "Stage 2: tokenizing ..."
   # training
   ./utils/subword.sh --op "train" --mode $wp_mode --vocab-size $vocab_size \
-    $data_dir/train/text exp/librispeech/$wp_name
-  cp exp/librispeech/$wp_name/dict $data_dir
+    $data_dir/train/text exp/$dataset/$wp_name
+  cp exp/$dataset/$wp_name/dict $data_dir
   # wp encoding
   for data in dev train; do
     ./utils/subword.sh --op "encode" --encode "piece" \
-      $data_dir/$data/text exp/librispeech/$wp_name \
+      $data_dir/$data/text exp/$dataset/$wp_name \
       > $data_dir/$data/token
   done
   ./utils/count_label.py $data_dir/dict $data_dir/train/token \
@@ -85,7 +86,7 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
     --num-workers $am_num_workers \
     --prog-interval $am_prog_interval \
     --eval-interval $am_eval_interval \
-    am librispeech $am_exp
+    am $dataset $am_exp
 fi
 
 if [ $end -ge 4 ] && [ $beg -le 4 ]; then
@@ -98,12 +99,12 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
       --max-len 150 \
       --ctc-weight $ctc_weight \
       --len-norm $len_norm \
-      --dict exp/librispeech/$am_exp/dict \
+      --dict exp/$dataset/$am_exp/dict \
       --nbest $nbest \
-      --spm exp/librispeech/$wp_name/$wp_mode.model \
-      librispeech $am_exp \
+      --spm exp/$dataset/$wp_name/$wp_mode.model \
+      $dataset $am_exp \
       $data_dir/$name/wav.scp \
-      exp/librispeech/$am_exp/$name &
+      exp/$dataset/$am_exp/$name &
   done
   wait
 fi
@@ -118,7 +119,7 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
   cat $data_dir/dev/token | sort -k1 > $lm_data_dir/dev.token
   cp $data/lm/librispeech-lm-norm.txt $lm_data_dir/train.text
   ./utils/subword.sh --op "encode" --encode "piece" \
-    $lm_data_dir/train.text exp/librispeech/$wp_name \
+    $lm_data_dir/train.text exp/$dataset/$wp_name \
     > $lm_data_dir/external.train.token
   awk '{$1=""; print}' $data_dir/train/token | sed 's:^[ \t]*::g' \
     > $lm_data_dir/am.train.token
@@ -135,7 +136,7 @@ if [ $end -ge 6 ] && [ $beg -le 6 ]; then
     --num-workers $lm_num_workers \
     --prog-interval $lm_prog_interval \
     --eval-interval $lm_eval_interval \
-    lm librispeech $lm_exp
+    lm $dataset $lm_exp
 fi
 
 if [ $end -ge 7 ] && [ $beg -le 7 ]; then
@@ -146,19 +147,19 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
     ./scripts/decode.sh \
       --score true \
       --text $data_dir/$name/text \
-      --spm exp/librispeech/$wp_name/$wp_mode.model \
-      --lm exp/librispeech/nnlm/$lm_exp \
+      --spm exp/$dataset/$wp_name/$wp_mode.model \
+      --lm exp/$dataset/nnlm/$lm_exp \
       --lm-weight $lm_weight \
       --ctc-weight $ctc_weight \
       --beam-size $beam_size \
       --max-len 150 \
       --len-norm $len_norm \
       --eos-threshold $eos_threshold \
-      --dict exp/librispeech/$am_exp/dict \
+      --dict exp/$dataset/$am_exp/dict \
       --nbest $nbest \
-      librispeech $am_exp \
+      $dataset $am_exp \
       $data_dir/$name/wav.scp \
-      exp/librispeech/$am_exp/$dec_name &
+      exp/$dataset/$am_exp/$dec_name &
   done
   wait
 fi

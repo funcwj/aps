@@ -44,6 +44,7 @@ test_sets="dev test"
 
 . ./utils/parse_options.sh || exit 1
 
+data_dir=data/$dataset
 beg=$(echo $stage | awk -F '-' '{print $1}')
 end=$(echo $stage | awk -F '-' '{print $2}')
 [ -z $end ] && end=$beg
@@ -54,7 +55,7 @@ if [ $end -ge 1 ] && [ $beg -le 1 ]; then
     local/download_and_untar.sh $data $data_url $name
   done
   local/aishell_data_prep.sh $data/data_aishell/wav \
-    $data/data_aishell/transcript data/$dataset
+    $data/data_aishell/transcript $data_dir
 fi
 
 if [ $end -ge 2 ] && [ $beg -le 2 ]; then
@@ -76,7 +77,7 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
   for name in $test_sets; do
     ./scripts/decode.sh \
       --score true \
-      --text data/$dataset/$name/text \
+      --text $data_dir/$name/text \
       --gpu $gpu \
       --beam-size $beam_size \
       --nbest $nbest \
@@ -85,7 +86,7 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
       --len-norm $len_norm \
       --dict exp/$dataset/$am_exp/dict \
       $dataset $am_exp \
-      data/$dataset/$name/wav.scp \
+      $data_dir/$name/wav.scp \
       exp/$dataset/$am_exp/$name &
   done
   wait
@@ -94,7 +95,7 @@ fi
 if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   echo "Stage 4: training ngram LM ..."
   exp_dir=exp/$dataset/ngram && mkdir -p $exp_dir
-  cat data/$dataset/train/text | awk '{$1=""; print}' > $exp_dir/train.text
+  cat $data_dir/train/text | awk '{$1=""; print}' > $exp_dir/train.text
   lmplz -o $ngram --text $exp_dir/train.text --arpa $exp_dir/${ngram}gram.arpa
   build_binary $exp_dir/${ngram}gram.arpa $exp_dir/${ngram}gram.arpa.bin
 fi
@@ -105,7 +106,7 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
     dec_dir=${name}_${ngram}gram_$lm_weight
     ./scripts/decode.sh \
       --score true \
-      --text data/$dataset/$name/text \
+      --text $data_dir/$name/text \
       --gpu $gpu \
       --dict exp/$dataset/$am_exp/dict \
       --nbest $nbest \
@@ -119,7 +120,7 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
       --lm-weight $lm_weight \
       --log-suffix $name \
       $dataset $am_exp \
-      data/$dataset/$name/wav.scp \
+      $data_dir/$name/wav.scp \
       exp/$dataset/$am_exp/$dec_dir &
   done
   wait
@@ -144,7 +145,7 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
     dec_dir=${name}_lm${lm_exp}_$lm_weight
     ./scripts/decode.sh \
       --score true \
-      --text data/$dataset/$name/text \
+      --text $data_dir/$name/text \
       --lm exp/$dataset/nnlm/$lm_exp \
       --gpu $gpu \
       --dict exp/$dataset/$am_exp/dict \
@@ -154,7 +155,7 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
       --lm-weight $lm_weight \
       --ctc-weight $ctc_weight \
       $dataset $am_exp \
-      data/$dataset/$name/wav.scp \
+      $data_dir/$name/wav.scp \
       exp/$dataset/$am_exp/$dec_dir &
   done
   wait

@@ -33,6 +33,7 @@ test_sets="dt05_real dt05_simu et05_real et05_simu"
 
 . ./utils/parse_options.sh || exit 1
 
+data_dir=data/$dataset
 beg=$(echo $stage | awk -F '-' '{print $1}')
 end=$(echo $stage | awk -F '-' '{print $2}')
 [ -z $end ] && end=$beg
@@ -52,13 +53,13 @@ if [ $end -ge 2 ] && [ $beg -le 2 ]; then
   echo "Stage 2: tokenizing ..."
   for name in dev train; do
     ./utils/tokenizer.py \
-      --dump-vocab data/$dataset/dict \
+      --dump-vocab $data_dir/dict \
       --filter-units "<*IN*>,<*MR.*>,<NOISE>" \
       --add-units "<sos>,<eos>,<unk>" \
       --space $space \
       --unit char \
-      data/$dataset/$name/text \
-      data/$dataset/$name/char
+      $data_dir/$name/text \
+      $data_dir/$name/char
   done
 fi
 
@@ -81,7 +82,7 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
     name=${name}_${track}
     ./scripts/decode.sh \
       --score true \
-      --text data/$dataset/$name/text \
+      --text $data_dir/$name/text \
       --beam-size $beam_size \
       --max-len 220 \
       --dict exp/$dataset/$am_exp/dict \
@@ -90,13 +91,13 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
       --ctc-weight $ctc_weight \
       --len-norm $len_norm \
       $dataset $am_exp \
-      data/$dataset/$name/wav.scp \
+      $data_dir/$name/wav.scp \
       exp/$dataset/$am_exp/$name &
   done
   wait
 fi
 
-lm_data_dir=data/chime4/lm
+lm_data_dir=$data_dir/lm
 if [ $end -ge 5 ] && [ $beg -le 5 ]; then
   echo "Stage 5: preparing data (LM) ..."
   mkdir -p $lm_data_dir
@@ -104,10 +105,10 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
     | grep -v "<" | tr "[:lower:]" "[:upper:]" \
     | awk '{printf("utt-%08d %s\n", NR, $0)}' > $lm_data_dir/external.train.text
   cat $lm_data_dir/external.train.text \
-    data/chime4/train_si200_wsj1_clean/text \
-    data/chime4/tr05_orig_clean/text \
+    $data_dir/train_si200_wsj1_clean/text \
+    $data_dir/tr05_orig_clean/text \
     | sort -k1 > $lm_data_dir/train.text
-  cat data/chime4/test_dev93_wsj1_clean/text \
+  cat $data_dir/test_dev93_wsj1_clean/text \
     dt05_orig_clean/text | sort -k1 > $lm_data_dir/dev.text
   for name in dev train; do
     ./utils/tokenizer.py \
@@ -137,18 +138,18 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
   for name in $test_sets; do
     ./scripts/decode.sh \
       --score true \
-      --text data/$dataset/$name/text \
+      --text $data_dir/$name/text \
       --beam-size $beam_size \
       --max-len 220 \
       --lm exp/$dataset/nnlm/$lm_exp \
       --lm-weight $lm_weight \
+      --ctc-weight $ctc_weight \
       --len-norm $len_norm \
-      --eos-threshold $eos_threshold \
       --dict exp/$dataset/$am_exp/dict \
       --nbest 8 \
       --space "<space>" \
       $dataset $am_exp \
-      data/$dataset/$name/wav.scp \
+      $data_dir/$name/wav.scp \
       exp/$dataset/$am_exp/${name}_lm${lm_exp}_$lm_weight &
   done
   wait

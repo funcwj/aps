@@ -26,8 +26,8 @@ class StreamingASREncoder(nn.Module):
                  vocab_size: int,
                  ctc: bool = False,
                  ead: bool = False,
-                 lpad: int = -1,
-                 rpad: int = -1,
+                 lctx: int = -1,
+                 rctx: int = -1,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "pytorch_rnn",
                  enc_proj: int = -1,
@@ -36,8 +36,8 @@ class StreamingASREncoder(nn.Module):
         assert ctc or ead
         ctc_only = ctc and not ead
         # padding context of the network
-        self.lpad = lpad
-        self.rpad = rpad
+        self.lctx = lctx
+        self.rctx = rctx
         self.vocab_size = vocab_size
         self.asr_transform = asr_transform
         self.encoder = encoder_instance(enc_type, input_size,
@@ -69,8 +69,8 @@ class StreamingASREncoder(nn.Module):
                     f"tensor, but got {x_dim}")
             x = x[None, ...]
         # pad context
-        if self.lpad + self.rpad > 0:
-            x = tf.pad(x, (0, 0, self.lpad, self.rpad), "constant", 0)
+        if self.rctx + self.rctx > 0:
+            x = tf.pad(x, (0, 0, self.rctx, self.rctx), "constant", 0)
         # N x Ti x D
         enc_out, _ = self.encoder(x, None)
         # N x Ti x D or Ti x N x D (for xfmr)
@@ -92,9 +92,9 @@ class StreamingASREncoder(nn.Module):
         if self.asr_transform:
             x_pad, x_len = self.asr_transform(x_pad, x_len)
         # pad context
-        if self.lpad + self.rpad > 0:
-            x_pad = tf.pad(x_pad, (0, 0, self.lpad, self.rpad), "constant", 0)
-            x_len += self.lpad + self.rpad
+        if self.lctx + self.rctx > 0:
+            x_pad = tf.pad(x_pad, (0, 0, self.lctx, self.rctx), "constant", 0)
+            x_len += self.lctx + self.rctx
         # N x Ti x D
         enc_out, enc_len = self.encoder(x_pad, x_len)
         # CTC branch
@@ -115,8 +115,8 @@ class CtcASR(StreamingASREncoder):
                  vocab_size: int,
                  ctc: bool = True,
                  ead: bool = False,
-                 lpad: int = -1,
-                 rpad: int = -1,
+                 lctx: int = -1,
+                 rctx: int = -1,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "pytorch_rnn",
                  enc_kwargs: Optional[Dict] = None) -> None:
@@ -124,8 +124,8 @@ class CtcASR(StreamingASREncoder):
                                      vocab_size,
                                      ctc=ctc,
                                      ead=ead,
-                                     lpad=lpad,
-                                     rpad=rpad,
+                                     lctx=lctx,
+                                     rctx=rctx,
                                      asr_transform=asr_transform,
                                      enc_type=enc_type,
                                      enc_proj=-1,

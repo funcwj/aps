@@ -9,7 +9,6 @@ set -eu
 train_data=/home/jwu/doc/data/aishell_v2/AISHELL-2
 valid_data=/home/jwu/doc/data/aishell_v2/AISHELL-2-Eval-Test
 dataset="aishell_v2"
-data_dir=data/$dataset
 
 nj=4
 stage=1
@@ -36,6 +35,7 @@ ctc_weight=0
 
 . ./utils/parse_options.sh || exit 1
 
+data_dir=data/$dataset
 beg=$(echo $stage | awk -F '-' '{print $1}')
 end=$(echo $stage | awk -F '-' '{print $2}')
 [ -z $end ] && end=$beg
