@@ -6,7 +6,7 @@
 set -eu
 stage="2-4"
 
-database_dir=/home/jwu/doc/data/openslr_cn
+database_dir=/scratch/jwu/openslr_cn
 dataset=multi_cn
 test_sets="aishell aidatatang magicdata thchs"
 
@@ -65,15 +65,15 @@ fi
 
 if [ $end -ge 3 ] && [ $beg -le 3 ]; then
   # decoding
-  for name in $test_sets; do
-    for data in dev test; do
+  for data in dev test; do
+    for name in $test_sets; do
       ./scripts/decode.sh \
         --gpu 0 \
         --text $data_dir/$data/$name/text \
         --score true \
         --beam-size $beam_size \
         --nbest $nbest \
-        --max-len 50 \
+        --max-len 80 \
         --ctc-weight $ctc_weight \
         --len-norm $len_norm \
         --dict exp/$dataset/$am_exp/dict \
@@ -89,7 +89,7 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   echo "Stage 4: training LM ..."
   ./scripts/train.sh \
     --gpu 0 \
-    --seed 666 \
+    --seed $seed \
     --epochs $lm_epochs \
     --batch-size $lm_batch_size \
     --num-workers $lm_num_workers \
@@ -100,9 +100,9 @@ fi
 
 if [ $end -ge 5 ] && [ $beg -le 5 ]; then
   echo "Stage 5: decoding (NNLM) ..."
-  for name in $test_sets; do
-    for data in dev test; do
-      dec_dir=${data}_${name}_rnnlm_$lm_weight
+  for data in dev test; do
+    for name in $test_sets; do
+      dec_dir=${data}_${name}_nnlm_$lm_weight
       ./scripts/decode.sh \
         --score true \
         --text data/$dataset/$data/$name/text \
@@ -111,7 +111,7 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
         --nbest $nbest \
         --lm exp/$dataset/nnlm/$lm_exp \
         --lm-weight $lm_weight \
-        --max-len 50 \
+        --max-len 80 \
         --len-norm $len_norm \
         --beam-size $beam_size \
         --ctc-weight $ctc_weight \

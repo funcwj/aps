@@ -107,7 +107,7 @@ def run(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=
-        "Command to compute global mean & variance normalization statistics",
+        "Command to compute global mean & variance normalization statistics (Linux only).",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("wav_scp",
                         type=str,

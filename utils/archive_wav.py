@@ -89,7 +89,8 @@ def run(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Command to do convert audio to Kaldi's .ark format",
+        description=
+        "Command to do convert audio to Kaldi's .ark format (Linux only)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("wav_scp", type=str, help="Input audio script")
     parser.add_argument("out_scp",

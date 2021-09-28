@@ -1,39 +1,56 @@
-nnet: "asr@rnn_lm"
+# cmd_args:
+#   batch_size: 128
+#   dev_batch_factor: 1
+#   device_ids: '0'
+#   distributed: none
+#   epochs: 120
+#   eval_interval: 3000
+#   init: ''
+#   num_workers: 8
+#   prog_interval: 100
+#   resume: ''
+#   save_interval: -1
+#   seed: '888'
+#   tensorboard: false
+#   trainer: ddp
 
+nnet: asr@rnn_lm
 nnet_conf:
-  rnn: lstm
   dropout: 0.2
-  num_layers: 3
   embed_size: 1024
-  tie_weights: true
   hidden_size: 1024
+  num_layers: 3
+  rnn: lstm
+  tie_weights: true
 
-task: "asr@lm"
-
+task: asr@lm
 task_conf:
   bptt_mode: false
 
 trainer_conf:
-  optimizer: "adamw"
-  optimizer_kwargs:
-    lr: 1.0e-3
-    weight_decay: 1.0e-3
+  clip_gradient: 20
   lr_scheduler_kwargs:
     factor: 0.8
-    min_lr: 1.0e-8
+    min_lr: 1.0e-08
     patience: 1
   no_impr: 8
   no_impr_thres: 0.001
-  clip_gradient: 20
-  report_metrics: ["loss", "accu", "@ppl"]
-  stop_criterion: "@ppl"
+  optimizer: adamw
+  optimizer_kwargs:
+    lr: 0.001
+    weight_decay: 0.001
+  report_metrics:
+  - loss
+  - accu
+  - '@ppl'
+  stop_criterion: '@ppl'
 
 data_conf:
-  fmt: "lm@utt"
+  fmt: lm@utt
   loader:
+    max_token_num: 300
     min_batch_size: 16
     min_token_num: 4
-    max_token_num: 300
   train:
     text: data/multi_cn/train/text
   valid:
