@@ -28,6 +28,18 @@ class Node(object):
         return self.stats[key]
 
 
+def is_valid_decoder(decoder: nn.Module, blank: int):
+    """
+    Whether decoder is valid
+    """
+    if not hasattr(decoder, "step"):
+        raise RuntimeError("Function step should defined in decoder network")
+    if not hasattr(decoder, "pred"):
+        raise RuntimeError("Function pred should defined in decoder network")
+    if blank != decoder.vocab_size - 1:
+        raise RuntimeError("Hard code for blank = decoder.vocab_size - 1 here")
+
+
 def merge_hypos(hypos_list: List[Node]) -> List[Node]:
     """
     Merge the hypos that has the same prefix
@@ -46,22 +58,17 @@ def merge_hypos(hypos_list: List[Node]) -> List[Node]:
 
 def greedy_search(decoder: nn.Module,
                   enc_out: th.Tensor,
-                  blank: int = 0) -> List[Dict]:
+                  blank: int = -1) -> List[Dict]:
     """
     Greedy search algorithm for RNN-T
     Args:
         enc_out: N x Ti x D
     """
-    if blank < 0:
-        raise RuntimeError(f"Invalid blank ID: {blank:d}")
     N, T, _ = enc_out.shape
     if N != 1:
         raise RuntimeError(
             f"Got batch size {N:d}, now only support one utterance")
-    if not hasattr(decoder, "step"):
-        raise RuntimeError("Function step should defined in decoder network")
-    if not hasattr(decoder, "pred"):
-        raise RuntimeError("Function pred should defined in decoder network")
+    is_valid_decoder(decoder, blank)
 
     blk = th.tensor([[blank]], dtype=th.int64, device=enc_out.device)
     dec_out, hidden = decoder.step(blk)
@@ -84,7 +91,7 @@ def beam_search(decoder: nn.Module,
                 lm: Optional[nn.Module] = None,
                 lm_weight: float = 0,
                 beam_size: int = 16,
-                blank: int = 0,
+                blank: int = -1,
                 nbest: int = 8,
                 len_norm: bool = True) -> List[Dict]:
     """
@@ -97,17 +104,9 @@ def beam_search(decoder: nn.Module,
     if N != 1:
         raise RuntimeError(
             f"Got batch size {N:d}, now only support one utterance")
-    if not hasattr(decoder, "step"):
-        raise RuntimeError("Function step should defined in decoder network")
-    if not hasattr(decoder, "pred"):
-        raise RuntimeError("Function pred should defined in decoder network")
+    is_valid_decoder(decoder, blank)
     if beam_size > decoder.vocab_size:
         raise RuntimeError(f"Beam size({beam_size}) > vocabulary size")
-    if lm and lm.vocab_size < decoder.vocab_size:
-        raise RuntimeError("lm.vocab_size < am.vocab_size, "
-                           "seems different dictionary is used")
-    if blank != decoder.vocab_size - 1:
-        raise RuntimeError("Hard code for blank = self.vocab_size - 1 here")
 
     nbest = min(beam_size, nbest)
 

@@ -713,8 +713,10 @@ class SpliceTransform(nn.Module):
         """
         # N x ... x T x FD
         feats = splice_feature(feats, lctx=self.lctx, rctx=self.rctx)
+        end = (feats.shape[-2] //
+               self.subsampling_factor) * self.subsampling_factor
         if self.subsampling_factor != 1:
-            feats = feats[..., ::self.subsampling_factor, :]
+            feats = feats[..., :end:self.subsampling_factor, :]
         return feats
 
 

@@ -35,8 +35,7 @@ class ASRTransducerBase(ASREncoderBase):
                                                 enc_type=enc_type,
                                                 enc_proj=enc_proj,
                                                 enc_kwargs=enc_kwargs)
-        if blank < 0:
-            raise RuntimeError(f"Unsupported blank value: {blank}")
+        assert blank >= 0
         self.blank = blank
         self.decoder = None
 
