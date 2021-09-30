@@ -10,7 +10,7 @@ import torch.nn.functional as tf
 from aps.asr.base.encoder import encoder_instance
 from aps.streaming_asr.base.encoder import StreamingEncoder
 from aps.asr.ctc import AMForwardType, NoneOrTensor
-from aps.asr.beam_search.ctc import ctc_beam_search
+from aps.asr.beam_search.ctc import CtcApi
 from aps.libs import ApsRegisters
 
 from typing import Optional, Dict, List
@@ -156,11 +156,10 @@ class CtcASR(StreamingASREncoder):
         Args
             x (Tensor): audio samples or acoustic features, S or Ti x F
         """
+        ctc_api = CtcApi(self.vocab_size - 1)
         with th.no_grad():
             # N x T x D or N x D x T
             enc_out = self._decoding_prep(x, batch_first=True)
             if self.ctc is not None:
                 enc_out = self.ctc(enc_out)
-            return ctc_beam_search(enc_out[0],
-                                   blank=self.vocab_size - 1,
-                                   **kwargs)
+            return ctc_api.beam_search(enc_out[0], **kwargs)

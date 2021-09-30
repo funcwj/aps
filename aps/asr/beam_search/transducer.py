@@ -5,12 +5,15 @@
 """
 Beam search for transducer based AM
 """
+
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import List, Dict, Optional
+from copy import deepcopy
+from typing import List, Dict, Tuple, Optional
 from aps.utils import get_logger
+from aps.const import NEG_INF
 
 logger = get_logger(__name__)
 
@@ -32,148 +35,228 @@ def is_valid_decoder(decoder: nn.Module, blank: int):
     """
     Whether decoder is valid
     """
-    if not hasattr(decoder, "step"):
-        raise RuntimeError("Function step should defined in decoder network")
     if not hasattr(decoder, "pred"):
         raise RuntimeError("Function pred should defined in decoder network")
+    if not hasattr(decoder, "joint"):
+        raise RuntimeError("Function joint should defined in decoder network")
     if blank != decoder.vocab_size - 1:
         raise RuntimeError("Hard code for blank = decoder.vocab_size - 1 here")
 
 
-def merge_hypos(hypos_list: List[Node]) -> List[Node]:
+class TransducerBeamSearch(nn.Module):
     """
-    Merge the hypos that has the same prefix
+    Transducer prefix beam search in Sequence Transduction with
+    Recurrent Neural Networks: Algorithm 1
     """
-    merge_dict = {}
-    for hypos in hypos_list:
-        prefix_str = hypos["hashid"]
-        if prefix_str in merge_dict:
-            merge_dict[prefix_str].score = th.logaddexp(
-                hypos.score, merge_dict[prefix_str].score)
-        else:
-            merge_dict[prefix_str] = hypos
-    merge_list = [value for _, value in merge_dict.items()]
-    return sorted(merge_list, key=lambda n: n.score, reverse=True)
 
+    def __init__(self,
+                 decoder: nn.Module,
+                 lm: Optional[nn.Module] = None,
+                 blank: int = -1):
+        super(TransducerBeamSearch, self).__init__()
+        # check valid
+        is_valid_decoder(decoder, blank)
+        self.decoder = decoder
+        self.lm = lm
+        self.blank = blank
 
-def greedy_search(decoder: nn.Module,
-                  enc_out: th.Tensor,
-                  blank: int = -1) -> List[Dict]:
-    """
-    Greedy search algorithm for RNN-T
-    Args:
-        enc_out: N x Ti x D
-    """
-    N, T, _ = enc_out.shape
-    if N != 1:
-        raise RuntimeError(
-            f"Got batch size {N:d}, now only support one utterance")
-    is_valid_decoder(decoder, blank)
+    def _pred_step(
+            self,
+            prev_tok: int,
+            pred_hid: Optional[th.Tensor] = None
+    ) -> Tuple[th.Tensor, th.Tensor]:
+        """
+        Make one prediction step
+        """
+        prev_tok = th.tensor([[prev_tok]],
+                             dtype=th.int64,
+                             device=self.decoder.device)
+        dec_out, dec_hid = self.decoder.pred(prev_tok[..., None],
+                                             hidden=pred_hid)
+        return dec_out, dec_hid
 
-    blk = th.tensor([[blank]], dtype=th.int64, device=enc_out.device)
-    dec_out, hidden = decoder.step(blk)
-    score = 0
-    trans = []
-    for t in range(T):
-        # 1 x V
-        prob = tf.log_softmax(decoder.pred(enc_out[:, t], dec_out)[0], dim=-1)
-        best_prob, best_pred = th.max(prob, dim=-1)
-        score += best_prob.item()
-        # not blank
-        if best_pred.item() != blank:
-            dec_out, hidden = decoder.step(best_pred[None, ...], hidden=hidden)
-            trans += [best_pred.item()]
-    return [{"score": score, "trans": [blank] + trans + [blank]}]
+    def _joint_log_prob(self, enc_proj: th.Tensor,
+                        dec_proj: th.Tensor) -> th.Tensor:
+        """
+        Get log prob using joint network
+        """
+        # predict: N x 1 x V => V
+        joint = self.decoder.joint(enc_proj, dec_proj)[0, 0]
+        # log prob
+        return tf.log_softmax(joint, dim=-1)
 
+    def _merge_by_prefix(self, list_a: List[Node],
+                         enc_frame: th.Tensor) -> List[Node]:
+        """
+        Line 5-6 in Algorithm 1
+        """
+        num_nodes = len(list_a)
+        for j in range(num_nodes - 1):
+            for i in range(j + 1, num_nodes):
+                # node ni, nj
+                ni, nj = list_a[i], list_a[j]
+                # sequence si, sj
+                si, sj = ni["tok_seq"], nj["tok_seq"]
+                # sequence length li, lj
+                li, lj = len(si), len(sj)
+                # si is the prefix of sj
+                is_prefix = li < lj and si[:li] == sj[:li]
+                if not is_prefix:
+                    continue
+                dec_out, dec_hid = self._pred_step(si[-1], ni["dec_hid"])
+                dec_proj = self.decoder.dec_proj(dec_out)
+                log_prob = self._joint_log_prob(enc_frame, dec_proj)
+                score = ni.score + log_prob[sj[li]]
+                for k in range(li, lj - 1):
+                    log_prob = self._joint_log_prob(enc_frame, nj["dec_out"][k])
+                    score += log_prob[sj[k + 1]]
+                # update score
+                nj.score = th.logaddexp(nj.score, score)
+        return list_a
 
-def beam_search(decoder: nn.Module,
+    def greedy_search(self, enc_proj: th.Tensor):
+        """
+        Greedy search algorithm for Transducer
+        Args:
+            enc_proj: 1 x T x J
+        """
+        score = 0
+        trans = []
+        _, num_frames, _ = enc_proj.shape
+        dec_out, dec_hid = self._pred_step(self.blank)
+        for t in range(num_frames):
+            dec_out = self.decoder.dec_proj(dec_out)
+            log_prob = self._joint_log_prob(enc_proj[:, t], dec_out)
+            value, index = th.max(log_prob, dim=-1)
+            score += value.item()
+            index = index.item()
+            # not blank
+            if index != self.blank:
+                dec_out, dec_hid = self._pred_step(index, dec_hid)
+                trans += [index]
+        return [{"score": score, "trans": [self.blank] + trans + [self.blank]}]
+
+    def forward(self,
                 enc_out: th.Tensor,
-                lm: Optional[nn.Module] = None,
-                lm_weight: float = 0,
                 beam_size: int = 16,
-                blank: int = -1,
                 nbest: int = 8,
+                lm_weight: float = 0,
                 len_norm: bool = True) -> List[Dict]:
-    """
-    Beam search (not prefix beam search) algorithm for RNN-T
-    Args:
-        enc_out: N(=1) x Ti x D
-        blank: #vocab_size - 1
-    """
-    N, T, _ = enc_out.shape
-    if N != 1:
-        raise RuntimeError(
-            f"Got batch size {N:d}, now only support one utterance")
-    is_valid_decoder(decoder, blank)
-    if beam_size > decoder.vocab_size:
-        raise RuntimeError(f"Beam size({beam_size}) > vocabulary size")
+        """
+        Beam search (not prefix beam search) algorithm for Transducer
+        Args:
+            enc_out (Tensor): (1) x T x D
+            beam_size (int): beam size of the beam search
+            nbest (int): return nbest hypos
+        """
+        N, T, _ = enc_out.shape
+        if N != 1:
+            raise RuntimeError(
+                f"Got batch size {N:d}, now only support one utterance")
+        vocab_size = self.decoder.vocab_size
+        if beam_size > vocab_size:
+            raise RuntimeError(
+                f"Beam size ({beam_size}) > vocabulary size ({vocab_size})")
+        # apply projection at first
+        enc_proj = self.decoder.enc_proj(enc_out)
+        # greedy search
+        if beam_size == 1:
+            return self.greedy_search(enc_proj)
 
-    nbest = min(beam_size, nbest)
+        device = self.decoder.device
+        init = {"tok_seq": [self.blank], "dec_hid": None, "dec_out": []}
+        # list_a, list_b: A, B in Algorithm 1
+        list_b = [Node(th.tensor(0.0).to(device), init)]
+        for t in range(T):
+            # 1 x D:
+            enc_frame = enc_proj[:, t]
+            list_a = self._merge_by_prefix(list_b, enc_frame)
+            list_b = []
 
-    device = enc_out.device
-    blk = th.tensor([blank], dtype=th.int64, device=device)
-    init_node = Node(th.tensor(0.0), {
-        "hashid": f"{blk}",
-        "prefix": [blk],
-        "hidden": None,
-    })
-    # list_a, list_b: A, B in Sequence Transduction with Recurrent Neural Networks: Algorithm 1
-    list_b = [init_node]
-    for t in range(T):
-        # merge hypos, return in order
-        list_a = merge_hypos(list_b)
-        # logger.info(f"--- merge hypos: {len(list_b)} -> {len(list_a)}")
-        list_b = []
-        # for _ in range(beam_size):
-        while True:
-            # pop the best node
-            cur_node = list_a[0]
-            list_a = list_a[1:]
+            # cache
+            cache_logp = [th.stack([a.score for a in list_a])]
+            cache_dec_hid = []
+            cache_dec_out = []
+            cache_node = []
 
-            prefix_str = cur_node["hashid"]
-            prefix_tok = cur_node["prefix"]
+            best_idx = 0
+            best_tok = cache_logp[best_idx].argmax().item()
+            # y^* in Algorithm 1
+            best_node = list_a[best_tok]
 
-            # decoder step
-            dec_out, hidden = decoder.step(prefix_tok[-1][..., None],
-                                           hidden=cur_node["hidden"])
+            while True:
+                # predict network: compute Pr(y^*)
+                dec_out, dec_hid = self._pred_step(best_node["tok_seq"][-1],
+                                                   best_node["dec_hid"])
+                # decoder proj
+                dec_proj = self.decoder.dec_proj(dec_out)
+                # joint network
+                log_prob = self._joint_log_prob(enc_frame, dec_proj)
 
-            # predict: N x 1 x V => V
-            pred = decoder.pred(enc_out[:, t], dec_out)[0, 0]
-            prob = tf.log_softmax(pred, dim=-1)
+                # add terminal node (end with blank)
+                # update Pr(y^*) = Pr(y^*)Pr(b|y,t)
+                blank_node = deepcopy(best_node)
+                blank_node.score += log_prob[self.blank]
 
-            # add terminal node (end with blank)
-            score = cur_node.score + prob[blank]
-            blank_node = Node(
-                score, {
-                    "hashid": prefix_str,
-                    "prefix": prefix_tok,
-                    "hidden": cur_node["hidden"],
-                })
-            list_b.append(blank_node)
+                merge_done = False
+                for node_b in list_b:
+                    if blank_node["tok_seq"] == node_b["tok_seq"]:
+                        node_b.score = max(blank_node.score, node_b.score)
+                        merge_done = True
+                        break
+                if not merge_done:
+                    list_b.append(blank_node)
 
-            # extend other nodes
-            topk_score, topk_index = th.topk(prob[:-1], beam_size)
-            for i in range(beam_size):
-                score = cur_node.score + topk_score[i]
-                node = Node(
-                    score, {
-                        "hashid": prefix_str + f",{topk_index[i].item()}",
-                        "prefix": prefix_tok + [topk_index[None, i]],
-                        "hidden": hidden
-                    })
-                list_a.append(node)
-            # sort A
-            list_a = sorted(list_a, key=lambda n: n.score, reverse=True)
-            # while B contains less than W elements more probable than the most probable in A
-            cur_list_b = [n for n in list_b if n.score > list_a[0].score]
-            if len(cur_list_b) >= beam_size:
-                list_b = cur_list_b
-                break
+                # without blank
+                cache_logp.append(log_prob[:-1])
+                # cache stats
+                cache_node.append(best_node)
+                cache_dec_hid.append(dec_hid)
+                cache_dec_out.append(dec_proj)
 
-    final_hypos = [{
-        "score": n.score.item() / (len(n["prefix"]) if len_norm else 1),
-        "trans": [t.item() for t in n["prefix"]] + [blank]
-    } for n in merge_hypos(list_b)]
-    # return best
-    nbest_hypos = sorted(final_hypos, key=lambda n: n["score"], reverse=True)
-    return nbest_hypos[:nbest]
+                # set -inf as it already used
+                cache_logp[best_idx][best_tok] = NEG_INF
+                # init as None and 0
+                best_val, best_idx = None, 0
+                for i, logp in enumerate(cache_logp):
+                    max_logp, tok = th.max(logp, dim=-1)
+                    if i != 0:
+                        # Pr(y^*+k) = Pr(y^*)Pr(k|y^*,t)
+                        max_logp += cache_node[i - 1].score
+                    else:
+                        # init as max_logp
+                        best_val = max_logp
+                    if max_logp > best_val:
+                        best_val = max_logp
+                        best_tok = tok.item()
+                        best_idx = i
+                if best_idx == 0:
+                    best_node = list_a[best_tok]
+                else:
+                    father_node = cache_node[best_idx - 1]
+                    update_stats = {
+                        "tok_seq":
+                            father_node["tok_seq"] + [best_tok],
+                        "dec_hid":
+                            cache_dec_hid[best_idx - 1],
+                        "dec_out":
+                            father_node["dec_out"] + cache_dec_out[best_idx - 1]
+                    }
+                    best_node = Node(best_val, update_stats)
+                # sort list_b
+                list_b = sorted(list_b, key=lambda n: n.score, reverse=True)
+                cur_list_b = [n for n in list_b if n.score > best_node.score]
+                # end
+                if len(cur_list_b) >= beam_size:
+                    list_b = cur_list_b
+                    break
+
+        final_hypos = [{
+            "score": n.score.item() / (len(n["tok_seq"]) if len_norm else 1),
+            "trans": [t.item() for t in n["tok_seq"]] + [self.blank]
+        } for n in list_b]
+        # return best
+        nbest_hypos = sorted(final_hypos,
+                             key=lambda n: n["score"],
+                             reverse=True)
+        return nbest_hypos[:min(beam_size, nbest)]
