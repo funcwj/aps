@@ -159,10 +159,15 @@ class PyTorchRNNDecoder(DecoderBase):
     def pred(self, pred_prev, hidden=None):
         """
         Make one prediction step for decoder
+        Args:
+            pred_prev: N x 1
+        Return:
+            dec_out: N x J
         """
-        pred_prev_emb = self.vocab_embed(pred_prev)  # 1 x 1 x E
+        pred_prev_emb = self.vocab_embed(pred_prev)  # N x 1 x E
         dec_out, hidden = self.decoder(pred_prev_emb, hidden)
-        return dec_out[:, -1], hidden
+        dec_out = self.dec_proj(dec_out[:, -1])
+        return dec_out, hidden
 
 
 class TorchTransformerDecoder(DecoderBase):
@@ -220,10 +225,10 @@ class TorchTransformerDecoder(DecoderBase):
         """
         Make one prediction step for decoder
         Args:
-            pred_prev: 1 x 1
-            hidden: None or T x 1 x E
+            pred_prev: N x 1
+            hidden: None or T x N x E
         Return:
-            dec_out: 1 x D
+            dec_out: N x J
         """
         t = 0 if hidden is None else hidden.shape[0]
         # 1 x 1 x E
@@ -232,4 +237,5 @@ class TorchTransformerDecoder(DecoderBase):
             [hidden, pred_prev_emb], dim=0)
         tgt_mask = prep_sub_mask(t + 1, device=pred_prev.device)
         dec_out = self.decoder(hidden, mask=tgt_mask)
-        return dec_out[-1], hidden
+        dec_out = self.dec_proj(dec_out[-1])
+        return dec_out, hidden

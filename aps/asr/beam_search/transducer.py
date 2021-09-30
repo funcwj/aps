@@ -59,6 +59,7 @@ class TransducerBeamSearch(nn.Module):
         self.decoder = decoder
         self.lm = lm
         self.blank = blank
+        self.device = next(self.decoder.parameters()).device
 
     def _pred_step(
             self,
@@ -66,13 +67,11 @@ class TransducerBeamSearch(nn.Module):
             pred_hid: Optional[th.Tensor] = None
     ) -> Tuple[th.Tensor, th.Tensor]:
         """
-        Make one prediction step
+        Make one prediction step with projection
         """
-        prev_tok = th.tensor([[prev_tok]],
-                             dtype=th.int64,
-                             device=self.decoder.device)
-        dec_out, dec_hid = self.decoder.pred(prev_tok[..., None],
-                                             hidden=pred_hid)
+        prev_tok = th.tensor([[prev_tok]], dtype=th.int64, device=self.device)
+        # decoder + dec_proj
+        dec_out, dec_hid = self.decoder.pred(prev_tok, hidden=pred_hid)
         return dec_out, dec_hid
 
     def _joint_log_prob(self, enc_proj: th.Tensor,
@@ -104,8 +103,7 @@ class TransducerBeamSearch(nn.Module):
                 if not is_prefix:
                     continue
                 dec_out, dec_hid = self._pred_step(si[-1], ni["dec_hid"])
-                dec_proj = self.decoder.dec_proj(dec_out)
-                log_prob = self._joint_log_prob(enc_frame, dec_proj)
+                log_prob = self._joint_log_prob(enc_frame, dec_out)
                 score = ni.score + log_prob[sj[li]]
                 for k in range(li, lj - 1):
                     log_prob = self._joint_log_prob(enc_frame, nj["dec_out"][k])
@@ -125,7 +123,6 @@ class TransducerBeamSearch(nn.Module):
         _, num_frames, _ = enc_proj.shape
         dec_out, dec_hid = self._pred_step(self.blank)
         for t in range(num_frames):
-            dec_out = self.decoder.dec_proj(dec_out)
             log_prob = self._joint_log_prob(enc_proj[:, t], dec_out)
             value, index = th.max(log_prob, dim=-1)
             score += value.item()
@@ -149,7 +146,7 @@ class TransducerBeamSearch(nn.Module):
             beam_size (int): beam size of the beam search
             nbest (int): return nbest hypos
         """
-        N, T, _ = enc_out.shape
+        N, T, D = enc_out.shape
         if N != 1:
             raise RuntimeError(
                 f"Got batch size {N:d}, now only support one utterance")
@@ -157,16 +154,17 @@ class TransducerBeamSearch(nn.Module):
         if beam_size > vocab_size:
             raise RuntimeError(
                 f"Beam size ({beam_size}) > vocabulary size ({vocab_size})")
+        logger.info("--- shape of the encoder output: " +
+                    f"{T} x {D}, blank = {self.blank}")
         # apply projection at first
         enc_proj = self.decoder.enc_proj(enc_out)
         # greedy search
         if beam_size == 1:
             return self.greedy_search(enc_proj)
 
-        device = self.decoder.device
         init = {"tok_seq": [self.blank], "dec_hid": None, "dec_out": []}
         # list_a, list_b: A, B in Algorithm 1
-        list_b = [Node(th.tensor(0.0).to(device), init)]
+        list_b = [Node(th.tensor(0.0).to(self.device), init)]
         for t in range(T):
             # 1 x D:
             enc_frame = enc_proj[:, t]
@@ -188,10 +186,8 @@ class TransducerBeamSearch(nn.Module):
                 # predict network: compute Pr(y^*)
                 dec_out, dec_hid = self._pred_step(best_node["tok_seq"][-1],
                                                    best_node["dec_hid"])
-                # decoder proj
-                dec_proj = self.decoder.dec_proj(dec_out)
                 # joint network
-                log_prob = self._joint_log_prob(enc_frame, dec_proj)
+                log_prob = self._joint_log_prob(enc_frame, dec_out)
 
                 # add terminal node (end with blank)
                 # update Pr(y^*) = Pr(y^*)Pr(b|y,t)
@@ -212,12 +208,12 @@ class TransducerBeamSearch(nn.Module):
                 # cache stats
                 cache_node.append(best_node)
                 cache_dec_hid.append(dec_hid)
-                cache_dec_out.append(dec_proj)
+                cache_dec_out.append(dec_out)
 
                 # set -inf as it already used
                 cache_logp[best_idx][best_tok] = NEG_INF
                 # init as None and 0
-                best_val, best_idx = None, 0
+                best_val, best_idx, best_tok = None, 0, 0
                 for i, logp in enumerate(cache_logp):
                     max_logp, tok = th.max(logp, dim=-1)
                     if i != 0:
@@ -226,6 +222,7 @@ class TransducerBeamSearch(nn.Module):
                     else:
                         # init as max_logp
                         best_val = max_logp
+                        best_tok = tok.item()
                     if max_logp > best_val:
                         best_val = max_logp
                         best_tok = tok.item()
@@ -240,23 +237,25 @@ class TransducerBeamSearch(nn.Module):
                         "dec_hid":
                             cache_dec_hid[best_idx - 1],
                         "dec_out":
-                            father_node["dec_out"] + cache_dec_out[best_idx - 1]
+                            father_node["dec_out"] +
+                            [cache_dec_out[best_idx - 1]]
                     }
                     best_node = Node(best_val, update_stats)
                 # sort list_b
                 list_b = sorted(list_b, key=lambda n: n.score, reverse=True)
-                cur_list_b = [n for n in list_b if n.score > best_node.score]
                 # end
-                if len(cur_list_b) >= beam_size:
-                    list_b = cur_list_b
+                if len(list_b) < beam_size:
+                    continue
+                if list_b[beam_size - 1].score >= best_node.score:
+                    list_b = list_b[:beam_size]
                     break
-
+        nbest = min(beam_size, nbest)
         final_hypos = [{
             "score": n.score.item() / (len(n["tok_seq"]) if len_norm else 1),
-            "trans": [t.item() for t in n["tok_seq"]] + [self.blank]
+            "trans": n["tok_seq"] + [self.blank]
         } for n in list_b]
         # return best
         nbest_hypos = sorted(final_hypos,
                              key=lambda n: n["score"],
                              reverse=True)
-        return nbest_hypos[:min(beam_size, nbest)]
+        return nbest_hypos[:nbest]
