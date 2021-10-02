@@ -4,6 +4,9 @@
 
 1. Add command to export TorchScript model
 2. Add real time speech enhancement demo code (C++ & Python, Transformer & DFSMN)
+3. Re-impl transducer beam search
+4. Add multi-cn recipe
+5. Use multi-processing for some commands
 
 ### 2021/08
 
