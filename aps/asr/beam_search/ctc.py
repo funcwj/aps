@@ -29,167 +29,172 @@ class PrefixScore(object):
         return th.logaddexp(self.log_pb, self.log_pn)
 
 
-def ctc_beam_search(ctc_prob: th.Tensor,
+class CtcApi(object):
+    """
+    CTC related API: beam search & viterbi_align
+    """
+
+    def __init__(self, blank: int):
+        if blank < 0:
+            raise ValueError(f"Invalid blank ID: {blank}")
+        self.blank = blank
+
+    def beam_search(self,
+                    ctc_prob: th.Tensor,
                     beam_size: int = 8,
-                    blank: int = -1,
                     nbest: int = 1,
                     sos: int = -1,
                     eos: int = -1,
                     len_norm: bool = True,
                     **kwargs) -> List[Dict]:
-    """
-    Do CTC prefix beam search
-    Args:
-        ctc_prob: T x V
-    """
-    if blank < 0:
-        raise ValueError(f"Invalid blank ID: {blank}")
-    ctc_prob = th.log_softmax(ctc_prob, -1)
-    # T x B
-    topk_score, topk_token = th.topk(ctc_prob, beam_size, -1)
-    T, V = ctc_prob.shape
-    logger.info(
-        f"--- shape of the encoder output (CTC): {T} x {V}, blank = {blank}")
-    neg_inf = th.tensor(NEG_INF).to(ctc_prob.device)
-    zero = th.tensor(0.0).to(ctc_prob.device)
-    # (prefix, log_pb, log_pn)
-    # NOTE: actually do not need sos/eos here, just place it in the sentence
-    prev_beam = [(str(sos), PrefixScore(zero, neg_inf))]
-    for t in range(T):
-        next_beam = defaultdict(lambda: PrefixScore(neg_inf, neg_inf))
-        for n in range(beam_size):
-            symb = topk_token[t, n].item()
-            logp = topk_score[t, n].item()
+        """
+        Do CTC prefix beam search
+        Args:
+            ctc_prob: T x V
+        """
+        ctc_prob = th.log_softmax(ctc_prob, -1)
+        # T x B
+        topk_score, topk_token = th.topk(ctc_prob, beam_size, -1)
+        T, V = ctc_prob.shape
+        logger.info("--- shape of the encoder output (CTC): " +
+                    f"{T} x {V}, blank = {self.blank}")
+        neg_inf = th.tensor(NEG_INF).to(ctc_prob.device)
+        zero = th.tensor(0.0).to(ctc_prob.device)
+        # (prefix, log_pb, log_pn)
+        # NOTE: actually do not need sos/eos here, just place it in the sentence
+        prev_beam = [(str(sos), PrefixScore(zero, neg_inf))]
+        for t in range(T):
+            next_beam = defaultdict(lambda: PrefixScore(neg_inf, neg_inf))
+            for n in range(beam_size):
+                symb = topk_token[t, n].item()
+                logp = topk_score[t, n].item()
 
-            for prefix, prev in prev_beam[:beam_size]:
-                # update log_pb only
-                if symb == blank:
-                    other = next_beam[prefix]
-                    log_pb_update = th.logaddexp(prev.score() + logp,
-                                                 other.log_pb)
-                    next_beam[prefix] = PrefixScore(log_pb_update, other.log_pn)
-                else:
-                    # str
-                    symb = str(symb)
-                    prefix_symb = prefix + f",{symb}"
-                    # str list
-                    prefix_toks = prefix.split(",")
-                    other = next_beam[prefix_symb]
-                    # repeat
-                    if prefix_toks[-1] == symb:
-                        log_pn_update = th.logaddexp(prev.log_pb + logp,
-                                                     other.log_pn)
-                    else:
-                        log_pn_update = th.logaddexp(prev.score() + logp,
-                                                     other.log_pn)
-                    # update log_pn only
-                    next_beam[prefix_symb] = PrefixScore(
-                        other.log_pb, log_pn_update)
-                    # repeat case
-                    if prefix_toks[-1] == symb:
+                for prefix, prev in prev_beam[:beam_size]:
+                    # update log_pb only
+                    if symb == self.blank:
                         other = next_beam[prefix]
-                        log_pn_update = th.logaddexp(prev.log_pn + logp,
-                                                     other.log_pn)
-                        next_beam[prefix] = PrefixScore(other.log_pb,
-                                                        log_pn_update)
-        # keep top-#beam
-        prev_beam = sorted(next_beam.items(),
-                           key=lambda n: n[1].score(),
-                           reverse=True)
-    return [{
-        "score":
-            score.score() / (1 if len_norm else len(prefix.split(",")) - 1),
-        "trans":
-            list(map(int, (prefix + f",{eos}").split(",")))
-    } for prefix, score in prev_beam[:nbest]]
+                        log_pb_update = th.logaddexp(prev.score() + logp,
+                                                     other.log_pb)
+                        next_beam[prefix] = PrefixScore(log_pb_update,
+                                                        other.log_pn)
+                    else:
+                        # str
+                        symb = str(symb)
+                        prefix_symb = prefix + f",{symb}"
+                        # str list
+                        prefix_toks = prefix.split(",")
+                        other = next_beam[prefix_symb]
+                        # repeat
+                        if prefix_toks[-1] == symb:
+                            log_pn_update = th.logaddexp(
+                                prev.log_pb + logp, other.log_pn)
+                        else:
+                            log_pn_update = th.logaddexp(
+                                prev.score() + logp, other.log_pn)
+                        # update log_pn only
+                        next_beam[prefix_symb] = PrefixScore(
+                            other.log_pb, log_pn_update)
+                        # repeat case
+                        if prefix_toks[-1] == symb:
+                            other = next_beam[prefix]
+                            log_pn_update = th.logaddexp(
+                                prev.log_pn + logp, other.log_pn)
+                            next_beam[prefix] = PrefixScore(
+                                other.log_pb, log_pn_update)
+            # keep top-#beam
+            prev_beam = sorted(next_beam.items(),
+                               key=lambda n: n[1].score(),
+                               reverse=True)
+        return [{
+            "score":
+                score.score() / (1 if len_norm else len(prefix.split(",")) - 1),
+            "trans":
+                list(map(int, (prefix + f",{eos}").split(",")))
+        } for prefix, score in prev_beam[:nbest]]
 
+    def viterbi_align(self, ctc_enc: th.Tensor, dec_seq: th.Tensor) -> Dict:
+        """
+        Get alignment on CTC prob using viterbi algothrim
+        Args:
+            ctc_enc (th.Tensor): T x V
+            dec_seq (th.Tensor): U (remove eos & sos)
+        Return:
+            align (th.Tensor): T
+        """
+        ctc_prob = th.log_softmax(ctc_enc, -1)
+        T, V = ctc_prob.shape
+        logger.info("--- shape of the encoder output (CTC): " +
+                    f"{T} x {V}, blank = {self.blank}")
+        U = dec_seq.shape[-1]
+        if U * 2 + 1 > T:
+            raise ValueError(f"Invalid target length: {U}")
 
-def ctc_viterbi_align(ctc_enc: th.Tensor,
-                      dec_seq: th.Tensor,
-                      blank: int = -1) -> Dict:
-    """
-    Get alignment on CTC prob using viterbi algothrim
-    Args:
-        ctc_enc (th.Tensor): T x V
-        dec_seq (th.Tensor): U (remove eos & sos)
-    Return:
-        align (th.Tensor): T
-    """
-    if blank < 0:
-        raise ValueError(f"Invalid blank ID: {blank}")
+        dec_seq = dec_seq.tolist()
+        # T x U*2+1
+        score = NEG_INF * th.ones(T, U * 2 + 1, device=ctc_prob.device)
+        point = -1 * th.ones(
+            T, U * 2 + 1, dtype=th.int32, device=ctc_prob.device)
 
-    ctc_prob = th.log_softmax(ctc_enc, -1)
-    T, V = ctc_prob.shape
-    logger.info(
-        f"--- shape of the encoder output (CTC): {T} x {V}, blank = {blank}")
-    U = dec_seq.shape[-1]
-    if U * 2 + 1 > T:
-        raise ValueError(f"Invalid target length: {U}")
+        # time step: 0
+        score[0, 0] = ctc_prob[0, self.blank]
+        score[0, 1] = ctc_prob[0, dec_seq[0]]
 
-    dec_seq = dec_seq.tolist()
-    # T x U*2+1
-    score = NEG_INF * th.ones(T, U * 2 + 1, device=ctc_prob.device)
-    point = -1 * th.ones(T, U * 2 + 1, dtype=th.int32, device=ctc_prob.device)
-
-    # time step: 0
-    score[0, 0] = ctc_prob[0, blank]
-    score[0, 1] = ctc_prob[0, dec_seq[0]]
-
-    # time step: 1 -> T - 1
-    for t in range(1, T):
-        max_u_step = min(t * 2, U * 2 + 1)
-        for u in range(max_u_step):
-            # blank node
-            if u % 2 == 0:
-                ctc_score = ctc_prob[t, blank]
-                # [u, u - 1]
-                tok_index = range(u, u - 2, -1)
-            # non-blank node
-            else:
-                u_nb = (u - 1) // 2
-                ctc_score = ctc_prob[t, u_nb]
-                if u_nb != 0 and dec_seq[u_nb] == dec_seq[u_nb - 1]:
+        # time step: 1 -> T - 1
+        for t in range(1, T):
+            max_u_step = min(t * 2, U * 2 + 1)
+            for u in range(max_u_step):
+                # blank node
+                if u % 2 == 0:
+                    ctc_score = ctc_prob[t, self.blank]
                     # [u, u - 1]
                     tok_index = range(u, u - 2, -1)
+                # non-blank node
                 else:
-                    # [u, u - 1, u - 2]
-                    tok_index = range(u, u - 3, -1)
-            prev_score = th.stack([score[t - 1, u] for u in tok_index])
-            best_score, best_index = th.max(prev_score, 0)
-            score[t, u] = best_score + ctc_score
-            # point to time t - 1
-            point[t, u] = u - best_index.item()
+                    u_nb = (u - 1) // 2
+                    ctc_score = ctc_prob[t, u_nb]
+                    if u_nb != 0 and dec_seq[u_nb] == dec_seq[u_nb - 1]:
+                        # [u, u - 1]
+                        tok_index = range(u, u - 2, -1)
+                    else:
+                        # [u, u - 1, u - 2]
+                        tok_index = range(u, u - 3, -1)
+                prev_score = th.stack([score[t - 1, u] for u in tok_index])
+                best_score, best_index = th.max(prev_score, 0)
+                score[t, u] = best_score + ctc_score
+                # point to time t - 1
+                point[t, u] = u - best_index.item()
 
-    align_score = None
-    align = []
-    for t in range(T - 1, -1, -1):
-        if t == T - 1:
-            last_score = th.stack([score[-1, u] for u in [-1, -2]])
-            best_score, best_index = th.max(last_score, 0)
-            align.append(U * 2 - best_index.item())
-            align_score = best_score.item()
-        else:
-            align.append(point[t + 1, align[-1]].item())
-    align = align[::-1]
-    for t in range(T):
-        u = blank if align[t] % 2 == 0 else dec_seq[(align[t] - 1) // 2]
-        # <b> x x x <b> => <b> <b> <b> x <b>
-        if u != blank and t and u == align[t - 1]:
-            align[t - 1] = blank
-        align[t] = u
-    # remove blank
-    align_check = [a for a in align if a != blank]
-    # check alignment
-    assert sum([a != b for a, b in zip(align_check, dec_seq)]) == 0
+        align_score = None
+        align = []
+        for t in range(T - 1, -1, -1):
+            if t == T - 1:
+                last_score = th.stack([score[-1, u] for u in [-1, -2]])
+                best_score, best_index = th.max(last_score, 0)
+                align.append(U * 2 - best_index.item())
+                align_score = best_score.item()
+            else:
+                align.append(point[t + 1, align[-1]].item())
+        align = align[::-1]
+        for t in range(T):
+            u = self.blank if align[t] % 2 == 0 else dec_seq[(align[t] - 1) //
+                                                             2]
+            # <b> x x x <b> => <b> <b> <b> x <b>
+            if u != self.blank and t and u == align[t - 1]:
+                align[t - 1] = self.blank
+            align[t] = u
+        # remove blank
+        align_check = [a for a in align if a != self.blank]
+        # check alignment
+        assert sum([a != b for a, b in zip(align_check, dec_seq)]) == 0
 
-    def ali_map(v):
-        return "*" if v == blank else str(v)
+        def ali_map(v):
+            return "*" if v == self.blank else str(v)
 
-    return {
-        "score": align_score,
-        "align_seq": align,
-        "align_str": " ".join(map(ali_map, align))
-    }
+        return {
+            "score": align_score,
+            "align_seq": align,
+            "align_str": " ".join(map(ali_map, align))
+        }
 
 
 class CtcScorer(nn.Module):

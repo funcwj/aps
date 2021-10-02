@@ -15,7 +15,7 @@ from aps.asr.ctc import CtcASR, NoneOrTensor, AMForwardType
 from aps.asr.base.decoder import PyTorchRNNDecoder
 from aps.asr.transformer.decoder import TorchTransformerDecoder
 from aps.asr.base.attention import att_instance
-from aps.asr.beam_search.ctc import ctc_beam_search
+from aps.asr.beam_search.ctc import CtcApi
 from aps.libs import ApsRegisters
 
 
@@ -164,11 +164,11 @@ class AttASR(ASREncoderDecoderBase):
                 if ctc_prob is None:
                     raise RuntimeError(
                         "Can't do CTC beam search as self.ctc is None")
-                return ctc_beam_search(ctc_prob,
-                                       blank=self.vocab_size - 1,
-                                       sos=self.sos,
-                                       eos=self.eos,
-                                       **kwargs)
+                ctc_api = CtcApi(self.vocab_size - 1)
+                return ctc_api.beam_search(ctc_prob,
+                                           sos=self.sos,
+                                           eos=self.eos,
+                                           **kwargs)
 
     def beam_search_batch(self, batch: List[th.Tensor], **kwargs) -> List[Dict]:
         """
@@ -290,11 +290,11 @@ class XfmrASR(ASREncoderDecoderBase):
                 if ctc_prob is None:
                     raise RuntimeError(
                         "Can't do CTC beam search as self.ctc is None")
-                return ctc_beam_search(ctc_prob,
-                                       blank=self.vocab_size - 1,
-                                       sos=self.sos,
-                                       eos=self.eos,
-                                       **kwargs)
+                ctc_api = CtcApi(self.vocab_size - 1)
+                return ctc_api.beam_search(ctc_prob,
+                                           sos=self.sos,
+                                           eos=self.eos,
+                                           **kwargs)
 
     def beam_search_batch(self, batch: List[th.Tensor], **kwargs) -> List[Dict]:
         """

@@ -83,23 +83,20 @@ class DecoderBase(nn.Module):
         self.vocab_size = vocab_size
         self.output = nn.Linear(jot_dim, vocab_size, bias=False)
 
-    def pred(self, enc_out: th.Tensor, dec_out: th.Tensor) -> th.Tensor:
+    def joint(self, enc_proj_out: th.Tensor,
+              dec_proj_out: th.Tensor) -> th.Tensor:
         """
-        Joint network prediction
+        Joint network prediction (without projection)
         Args:
-            enc_out: N x Ti x D or N x D
-            dec_out: N x To+1 x D or N x D
+            enc_proj_out: N x Ti x J or N x J
+            dec_proj_out: N x To+1 x J or N x J
         Return:
             output: N x Ti x To+1 x V or N x 1 x V
         """
-        # N x Ti x J or N x J
-        enc_out = self.enc_proj(enc_out)
-        # N x To+1 x J or N x J
-        dec_out = self.dec_proj(dec_out)
         # N x Ti x To+1 x J or N x 1 x J
-        add_out = th.tanh(enc_out.unsqueeze(-2) + dec_out.unsqueeze(1))
+        add_out = enc_proj_out.unsqueeze(-2) + dec_proj_out.unsqueeze(1)
         # N x Ti x To+1 x V or N x 1 x V
-        return self.output(add_out)
+        return self.output(th.tanh(add_out))
 
 
 class PyTorchRNNDecoder(DecoderBase):
@@ -151,17 +148,26 @@ class PyTorchRNNDecoder(DecoderBase):
         # N x To+1 x E
         tgt_pad = self.vocab_embed(tgt_pad)
         # N x To+1 x D
-        dec_out, _ = self.decoder(tgt_pad)
+        dec_out = self.decoder(tgt_pad)[0]
+        # N x Ti x J
+        enc_out = self.enc_proj(enc_out)
+        # N x To+1 x J
+        dec_out = self.dec_proj(dec_out)
         # N x Ti x To+1 x V
-        return self.pred(enc_out, dec_out)
+        return self.joint(enc_out, dec_out)
 
-    def step(self, pred_prev, hidden=None):
+    def pred(self, pred_prev, hidden=None):
         """
-        Make one step for decoder
+        Make one prediction step for decoder
+        Args:
+            pred_prev: N x 1
+        Return:
+            dec_out: N x J
         """
-        pred_prev_emb = self.vocab_embed(pred_prev)  # 1 x 1 x E
+        pred_prev_emb = self.vocab_embed(pred_prev)  # N x 1 x E
         dec_out, hidden = self.decoder(pred_prev_emb, hidden)
-        return dec_out[:, -1], hidden
+        dec_out = self.dec_proj(dec_out[:, -1])
+        return dec_out, hidden
 
 
 class TorchTransformerDecoder(DecoderBase):
@@ -207,18 +213,22 @@ class TorchTransformerDecoder(DecoderBase):
         dec_out = self.decoder(tgt_pad,
                                src_mask=tgt_mask,
                                src_key_padding_mask=pad_mask)
-        return self.pred(enc_out, dec_out.transpose(0, 1))
+        # N x Ti x J
+        enc_out = self.enc_proj(enc_out)
+        # N x To+1 x J
+        dec_out = self.dec_proj(dec_out.transpose(0, 1))
+        return self.joint(enc_out, dec_out)
 
-    def step(self,
+    def pred(self,
              pred_prev: th.Tensor,
              hidden: Optional[th.Tensor] = None) -> Tuple[th.Tensor, th.Tensor]:
         """
-        Make one step for decoder
+        Make one prediction step for decoder
         Args:
-            pred_prev: 1 x 1
-            hidden: None or T x 1 x E
+            pred_prev: N x 1
+            hidden: None or T x N x E
         Return:
-            dec_out: 1 x D
+            dec_out: N x J
         """
         t = 0 if hidden is None else hidden.shape[0]
         # 1 x 1 x E
@@ -227,4 +237,5 @@ class TorchTransformerDecoder(DecoderBase):
             [hidden, pred_prev_emb], dim=0)
         tgt_mask = prep_sub_mask(t + 1, device=pred_prev.device)
         dec_out = self.decoder(hidden, mask=tgt_mask)
-        return dec_out[-1], hidden
+        dec_out = self.dec_proj(dec_out[-1])
+        return dec_out, hidden

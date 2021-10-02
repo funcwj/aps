@@ -8,6 +8,7 @@ set -eu
 wsj0="/home/jwu/doc/data/wsj0"
 wsj1="/home/jwu/doc/data/wsj1"
 
+dataset=wsj
 gpu=0
 space="<space>"
 stage="1-4"
@@ -37,6 +38,7 @@ test_sets="test_dev93 test_eval92"
 
 . ./utils/parse_options.sh || exit 1
 
+data_dir=data/$dataset
 beg=$(echo $stage | awk -F '-' '{print $1}')
 end=$(echo $stage | awk -F '-' '{print $2}')
 [ -z $end ] && end=$beg
@@ -51,12 +53,12 @@ if [ $end -ge 2 ] && [ $beg -le 2 ]; then
   echo "Stage 2: tokenizing ..."
   for name in test_dev93 train_si284; do
     ./utils/tokenizer.py \
-      --dump-vocab data/wsj/dict \
+      --dump-vocab $data_dir/dict \
       --filter-units "<*IN*>,<*MR.*>,<NOISE>" \
       --add-units "<sos>,<eos>,<unk>" \
       --space $space \
       --unit char \
-      data/wsj/$name/text data/wsj/$name/token
+      $data_dir/$name/text $data_dir/$name/token
   done
 fi
 
@@ -71,7 +73,7 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
     --num-workers $am_num_workers \
     --prog-interval 100 \
     --eval-interval -1 \
-    am wsj $am_exp
+    am $dataset $am_exp
 fi
 
 if [ $end -ge 4 ] && [ $beg -le 4 ]; then
@@ -79,25 +81,26 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   for name in $test_sets; do
     ./scripts/decode.sh \
       --score true \
-      --text data/wsj/$name/text \
+      --text $data_dir/$name/text \
       --beam-size $beam_size \
       --max-len 220 \
-      --dict exp/wsj/$am_exp/dict \
+      --dict exp/$dataset/$am_exp/dict \
       --nbest 8 \
       --space "<space>" \
       --ctc-weight $ctc_weight \
       --len-norm $len_norm \
       --eos-threshold $eos_threshold \
-      wsj $am_exp \
-      data/wsj/$name/wav.scp \
-      exp/wsj/$am_exp/$name &
+      $dataset $am_exp \
+      $data_dir/$name/wav.scp \
+      exp/$dataset/$am_exp/$name &
   done
   wait
 fi
 
+lm_data_dir=$data_dir/lm
 if [ $end -ge 5 ] && [ $beg -le 5 ]; then
   echo "Stage 5: preparing data (LM) ..."
-  lm_data_dir=data/wsj/lm && mkdir -p $lm_data_dir
+  mkdir -p $lm_data_dir
   zcat $wsj1/13-32.1/wsj1/doc/lng_modl/lm_train/np_data/{87,88,89}/*.z \
     | grep -v "<" | tr "[:lower:]" "[:upper:]" \
     | awk '{printf("utt-%08d %s\n", NR, $0)}' > $lm_data_dir/external.train.text
@@ -107,7 +110,7 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
     --unit char \
     $lm_data_dir/external.train.text \
     $lm_data_dir/external.train.token
-  cat $lm_data_dir/external.train.token data/wsj/train_si284/token \
+  cat $lm_data_dir/external.train.token $data_dir/train_si284/token \
     > $lm_data_dir/train.token
 fi
 
@@ -121,7 +124,7 @@ if [ $end -ge 6 ] && [ $beg -le 6 ]; then
     --num-workers $lm_num_workers \
     --prog-interval 100 \
     --eval-interval 5000 \
-    lm wsj $lm_exp
+    lm $dataset $lm_exp
 fi
 
 if [ $end -ge 7 ] && [ $beg -le 7 ]; then
@@ -129,19 +132,19 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
   for name in $test_sets; do
     ./scripts/decode.sh \
       --score true \
-      --text data/wsj/$name/text \
+      --text $data_dir/$name/text \
       --beam-size $beam_size \
       --max-len 220 \
-      --lm exp/wsj/nnlm/$lm_exp \
+      --lm exp/$dataset/nnlm/$lm_exp \
       --lm-weight $lm_weight \
       --len-norm $len_norm \
       --eos-threshold $eos_threshold \
-      --dict exp/wsj/$am_exp/dict \
+      --dict exp/$dataset/$am_exp/dict \
       --nbest 8 \
       --space "<space>" \
-      wsj $am_exp \
-      data/wsj/$name/wav.scp \
-      exp/wsj/$am_exp/${name}_lm${lm_exp}_$lm_weight &
+      $dataset $am_exp \
+      $data_dir/$name/wav.scp \
+      exp/$dataset/$am_exp/${name}_lm${lm_exp}_$lm_weight &
   done
   wait
 fi

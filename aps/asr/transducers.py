@@ -10,7 +10,7 @@ import torch.nn.functional as tf
 from typing import Optional, Dict, List
 from aps.asr.ctc import ASREncoderBase, NoneOrTensor, AMForwardType
 from aps.asr.transducer.decoder import TorchTransformerDecoder, PyTorchRNNDecoder
-from aps.asr.beam_search.transducer import greedy_search, beam_search
+from aps.asr.beam_search.transducer import TransducerBeamSearch
 from aps.libs import ApsRegisters
 
 
@@ -35,8 +35,7 @@ class ASRTransducerBase(ASREncoderBase):
                                                 enc_type=enc_type,
                                                 enc_proj=enc_proj,
                                                 enc_kwargs=enc_kwargs)
-        if blank < 0:
-            raise RuntimeError(f"Unsupported blank value: {blank}")
+        assert blank >= 0
         self.blank = blank
         self.decoder = None
 
@@ -44,9 +43,10 @@ class ASRTransducerBase(ASREncoderBase):
         """
         Greedy search for TransducerASR
         """
+        beam_search_api = TransducerBeamSearch(self.decoder, blank=self.blank)
         with th.no_grad():
             enc_out = self._decoding_prep(x)
-            return greedy_search(self.decoder, enc_out, blank=self.blank)
+            return beam_search_api(enc_out, beam_size=1)
 
     def beam_search(self,
                     x: th.Tensor,
@@ -55,21 +55,20 @@ class ASRTransducerBase(ASREncoderBase):
                     beam_size: int = 16,
                     nbest: int = 8,
                     len_norm: bool = True,
-                    max_len: int = -1,
                     **kwargs) -> List[Dict]:
         """
         Beam search for TransducerASR
         """
+        beam_search_api = TransducerBeamSearch(self.decoder,
+                                               lm=lm,
+                                               blank=self.blank)
         with th.no_grad():
             enc_out = self._decoding_prep(x)
-            return beam_search(self.decoder,
-                               enc_out,
-                               beam_size=beam_size,
-                               blank=self.blank,
-                               nbest=nbest,
-                               lm=lm,
-                               lm_weight=lm_weight,
-                               len_norm=len_norm)
+            return beam_search_api(enc_out,
+                                   beam_size=beam_size,
+                                   nbest=nbest,
+                                   lm_weight=lm_weight,
+                                   len_norm=len_norm)
 
 
 @ApsRegisters.asr.register("asr@transducer")

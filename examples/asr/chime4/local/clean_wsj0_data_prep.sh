@@ -29,7 +29,7 @@ sph2pipe=sph2pipe
 
 if [ ! `which sph2pipe` ]; then
   echo "Could not find sph2pipe, install it first..."
-  mkdir exp && cd exp && wget https://www.ldc.upenn.edu/sites/www.ldc.upenn.edu/files/ctools/sph2pipe_v2.5.tar.gz
+  mkdir -p exp && cd exp && wget https://www.openslr.org/resources/3/sph2pipe_v2.5.tar.gz
   tar -zxf sph2pipe_v2.5.tar.gz && cd sph2pipe_v2.5
   gcc -o sph2pipe *.c -lm && cd .. && rm -rf sph2pipe_v2.5.tar.gz
   sph2pipe=$PWD/sph2pipe_v2.5/sph2pipe

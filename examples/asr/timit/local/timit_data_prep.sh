@@ -116,7 +116,7 @@ echo "$0: Prepare dict & utt2dur..."
   --unit word --add-units "<sos>,<eos>" --dump-vocab $data_dir/dict
 
 for dir in train dev; do
-  scripts/get_wav_dur.sh --nj 10 --output "time" $data_dir/$dir exp/utt2dur/$dir
+  utils/wav_duration.py --num-jobs 10 --output "time" $data_dir/$dir/wav.scp $data_dir/$dir/utt2dur
 done
 
 echo "Data preparation succeeded"

@@ -54,11 +54,10 @@ class SseFreqKdTask(KdTask):
         out = self.nnet(mix)
 
         if isinstance(out, th.Tensor):
-            loss = self.objf(out, ref)
-        else:
-            loss = hybrid_objf(out,
-                               ref,
-                               self.objf,
-                               permute=self.permute,
-                               permu_num_spks=self.num_spks)
+            out, ref = [out], [ref]
+        loss = hybrid_objf(out,
+                           ref,
+                           self.objf,
+                           permute=self.permute,
+                           permu_num_spks=self.num_spks)
         return {"loss": th.mean(loss)}

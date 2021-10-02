@@ -13,7 +13,7 @@ from torch.nn.utils.rnn import pad_sequence
 from typing import Optional, Dict, Tuple, List
 from aps.asr.base.encoder import encoder_instance, BaseEncoder
 from aps.asr.transformer.encoder import TransformerEncoder
-from aps.asr.beam_search.ctc import ctc_beam_search, ctc_viterbi_align
+from aps.asr.beam_search.ctc import CtcApi
 from aps.libs import ApsRegisters
 
 NoneOrTensor = Optional[th.Tensor]
@@ -175,14 +175,13 @@ class CtcASR(ASREncoderBase):
         Args
             x (Tensor): audio samples or acoustic features, S or Ti x F
         """
+        ctc_api = CtcApi(self.vocab_size - 1)
         with th.no_grad():
             # N x T x D
             enc_out = self._decoding_prep(x, batch_first=True)
             if self.ctc is not None:
                 enc_out = self.ctc(enc_out)
-            return ctc_beam_search(enc_out[0],
-                                   blank=self.vocab_size - 1,
-                                   **kwargs)
+            return ctc_api.beam_search(enc_out[0], **kwargs)
 
     def ctc_align(self, x: th.Tensor, y: th.Tensor) -> Dict:
         """
@@ -191,9 +190,10 @@ class CtcASR(ASREncoderBase):
             x (Tensor): audio samples or acoustic features, S or Ti x F
             y (Tensor): reference sequence, U
         """
+        ctc_api = CtcApi(self.vocab_size - 1)
         with th.no_grad():
             # N x T x D
             enc_out = self._decoding_prep(x, batch_first=True)
             if self.ctc is not None:
                 enc_out = self.ctc(enc_out)
-            return ctc_viterbi_align(enc_out[0], y, blank=self.vocab_size - 1)
+            return ctc_api.viterbi_align(enc_out[0], y)

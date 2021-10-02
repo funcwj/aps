@@ -32,6 +32,7 @@ spm=""
 dump_align=""
 text=""
 score=false
+dec_prefix=""
 
 echo "$0 $*"
 
@@ -52,9 +53,11 @@ exp_dir=exp/$mdl_id/$exp_id
 
 mkdir -p $dec_dir $dec_dir/log
 
-# generate random string
-random_str=$(date +%s%N | md5sum | cut -c 1-9)
-dec_prefix=beam${beam_size}_${random_str}
+if [ -z $dec_prefix ]; then
+  # generate random string
+  random_str=$(date +%s%N | md5sum | cut -c 1-9)
+  dec_prefix=beam${beam_size}_${random_str}
+fi
 
 if [ -z $batch_size ]; then
   cmd/decode.py \

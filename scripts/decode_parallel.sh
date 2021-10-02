@@ -51,9 +51,11 @@ log_dir=$dec_dir/log && mkdir -p $log_dir
 [ ! -f $tst_scp ] && echo "$0: missing test wave script: $tst_scp" && exit 0
 [ ! -d $exp_dir ] && echo "$0: missing experiment directory: $exp_dir" && exit 0
 
-# generate random string
-random_str=$(date +%s%N | md5sum | cut -c 1-9)
-dec_prefix=beam${beam_size}_${random_str}
+if [ -z $dec_prefix ]; then
+  # generate random string
+  random_str=$(date +%s%N | md5sum | cut -c 1-9)
+  dec_prefix=beam${beam_size}_${random_str}
+fi
 
 wav_sp_scp=""
 for n in $(seq $nj); do wav_sp_scp="$wav_sp_scp $log_dir/wav.$n.scp"; done

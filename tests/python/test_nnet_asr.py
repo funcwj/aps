@@ -10,6 +10,11 @@ from aps.libs import aps_asr_nnet
 from aps.transform import AsrTransform, EnhTransform
 from aps.asr.base.encoder import Conv1dEncoder, Conv2dEncoder
 
+asr_transform = AsrTransform(feats="fbank-log-cmvn",
+                             frame_len=400,
+                             frame_hop=160,
+                             window="hamm")
+
 default_rnn_dec_kwargs = {
     "rnn": "lstm",
     "num_layers": 2,
@@ -303,10 +308,6 @@ def test_asr_att(att_type, att_kwargs):
     nnet_cls = aps_asr_nnet("asr@att")
     vocab_size = 100
     batch_size = 4
-    asr_transform = AsrTransform(feats="fbank-log-cmvn",
-                                 frame_len=400,
-                                 frame_hop=160,
-                                 window="hamm")
     att_asr = nnet_cls(input_size=80,
                        vocab_size=vocab_size,
                        sos=0,
@@ -348,10 +349,10 @@ def test_mvdr_att(att_type, att_kwargs):
         "mask_norm": True,
         "num_bins": 257
     }
-    asr_transform = AsrTransform(feats="abs-mel-log-cmvn",
-                                 frame_len=400,
-                                 frame_hop=160,
-                                 window="hamm")
+    asr_transform_no_stft = AsrTransform(feats="abs-mel-log-cmvn",
+                                         frame_len=400,
+                                         frame_hop=160,
+                                         window="hamm")
     enh_transform = EnhTransform(feats="spectrogram-log-cmvn-ipd",
                                  frame_len=400,
                                  frame_hop=160,
@@ -365,7 +366,7 @@ def test_mvdr_att(att_type, att_kwargs):
                             ctc=True,
                             enh_type="rnn_mask_mvdr",
                             enh_kwargs=enh_kwargs,
-                            asr_transform=asr_transform,
+                            asr_transform=asr_transform_no_stft,
                             enh_transform=enh_transform,
                             att_type=att_type,
                             att_kwargs=att_kwargs,
@@ -459,10 +460,6 @@ def test_att_encoder(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("asr@att")
     vocab_size = 100
     batch_size = 4
-    asr_transform = AsrTransform(feats="fbank-log-cmvn",
-                                 frame_len=400,
-                                 frame_hop=160,
-                                 window="hamm")
     att_kwargs = {"att_dim": 512}
     att_asr = nnet_cls(input_size=80,
                        vocab_size=vocab_size,
@@ -499,10 +496,6 @@ def test_xfmr_encoder(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("asr@xfmr")
     vocab_size = 100
     batch_size = 4
-    asr_transform = AsrTransform(feats="fbank-log-cmvn",
-                                 frame_len=400,
-                                 frame_hop=160,
-                                 window="hamm")
     xfmr_asr = nnet_cls(
         input_size=80,
         vocab_size=vocab_size,
@@ -545,10 +538,6 @@ def test_common_transducer(enc_type, enc_kwargs):
         "hidden": 512,
         "dropout": 0.1
     }
-    asr_transform = AsrTransform(feats="fbank-log-cmvn",
-                                 frame_len=400,
-                                 frame_hop=160,
-                                 window="hamm")
     xfmr_encoders = ["xfmr_abs", "xfmr_rel", "xfmr_xl", "cfmr_xl"]
     rnnt = nnet_cls(input_size=80,
                     vocab_size=vocab_size,
@@ -577,10 +566,6 @@ def test_xfmr_transducer(enc_type, enc_kwargs):
     nnet_cls = aps_asr_nnet("asr@xfmr_transducer")
     vocab_size = 100
     batch_size = 4
-    asr_transform = AsrTransform(feats="fbank-log-cmvn",
-                                 frame_len=400,
-                                 frame_hop=160,
-                                 window="hamm")
     xfmr_rnnt = nnet_cls(input_size=80,
                          vocab_size=vocab_size,
                          asr_transform=asr_transform,
@@ -590,4 +575,29 @@ def test_xfmr_transducer(enc_type, enc_kwargs):
                          dec_kwargs=default_xfmr_transducer_dec_kwargs)
     x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
     _, z, _ = xfmr_rnnt(x, x_len, y, y_len)
+    assert z.shape[2:] == th.Size([u + 1, vocab_size])
+
+
+def test_streaming_transducer():
+    nnet_cls = aps_asr_nnet("streaming_asr@transducer")
+    vocab_size = 100
+    batch_size = 4
+    enc_type = "pytorch_rnn"
+    enc_kwargs = {"num_layers": 3, "hidden": 512, "dropout": 0.2}
+    dec_kwargs = {
+        "embed_size": 512,
+        "jot_dim": 512,
+        "num_layers": 2,
+        "hidden": 512,
+        "dropout": 0.1
+    }
+    rnnt = nnet_cls(input_size=80,
+                    vocab_size=vocab_size,
+                    asr_transform=asr_transform,
+                    enc_type=enc_type,
+                    enc_proj=512,
+                    enc_kwargs=enc_kwargs,
+                    dec_kwargs=dec_kwargs)
+    x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
+    _, z, _ = rnnt(x, x_len, y, y_len)
     assert z.shape[2:] == th.Size([u + 1, vocab_size])

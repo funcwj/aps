@@ -61,8 +61,8 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
       --max-len 75 \
       --len-norm $len_norm \
       --ctc-weight $ctc_weight \
-      --function "beam_search" \
       --beam-size $beam_size \
+      --dec-prefix beam${beam_size}_raw \
       $dataset $exp \
       data/timit/$name/wav.scp \
       exp/timit/$exp/dec_$name &
@@ -73,7 +73,7 @@ fi
 if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   echo "Stage 4: compute wer ..."
   for name in $test_sets; do
-    txt=beam${beam_size}_eos0_lp0_ctc${ctc_weight}.decode
+    txt=beam${beam_size}_raw.decode
     hyp=exp/timit/$exp/dec_$name/$txt
     # mapping
     local/timit_norm_trans.pl -i $hyp -m conf/timit/phones.60-48-39.map \

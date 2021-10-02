@@ -88,7 +88,7 @@ class ApsModules(object):
     loader = Module("aps.loader", loader_submodules)
     trainer = Module("aps.trainer", ["ddp", "hvd", "apex"])
     transform = Module("aps.transform", ["asr", "enh"])
-    streaming_asr = Module("aps.streaming_asr", ["ctc"])
+    streaming_asr = Module("aps.streaming_asr", ["ctc", "transducers"])
     rt_sse = Module("aps.rt_sse", ["enh.dfsmn", "enh.transformer"])
 
 

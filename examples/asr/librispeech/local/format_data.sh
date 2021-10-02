@@ -22,7 +22,7 @@ done
 
 for data in train dev; do
   echo "$0: prepare utt2dur for $data_dir/$data ..."
-  scripts/get_wav_dur.sh --nj $nj --output "time" $data_dir/$data exp/$dataset/$data
+  utils/wav_duration.py --num-jobs $nj --output "time" $data_dir/$data/wav.scp $data_dir/$data/utt2dur
 done
 
 echo "$0: format data in $data_dir done"
