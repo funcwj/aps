@@ -6,26 +6,33 @@
 import argparse
 import pathlib
 
-from aps.loader import AudioReader, write_audio
+from aps.loader import AudioReader, SegmentReader, write_audio
 from aps.utils import get_logger
 
 logger = get_logger(__name__)
 
 
 def run(args):
-    wav_reader = AudioReader(args.wav_scp,
-                             sr=args.sr,
-                             norm=False,
-                             channel=args.channel)
+    if args.segment:
+        wav_reader = SegmentReader(args.wav_scp,
+                                   args.segment,
+                                   sr=args.sr,
+                                   norm=False,
+                                   channel=args.channel)
+    else:
+        wav_reader = AudioReader(args.wav_scp,
+                                 sr=args.sr,
+                                 norm=False,
+                                 channel=args.channel)
     dump_dir = pathlib.Path(args.wav_dir)
     dump_dir.mkdir(parents=True, exist_ok=True)
-    done = 1
+    done = 0
     for key, wav in wav_reader:
         write_audio(dump_dir / f"{key}.wav", wav, sr=args.sr, norm=False)
         done += 1
         if done % 200 == 0:
             logger.info(f"Extracted {done} utterances done ...")
-    logger.info(f"Extract {len(wav_reader)} to {dump_dir} done")
+    logger.info(f"Extract {done} to {dump_dir} done")
 
 
 if __name__ == "__main__":
@@ -42,5 +49,9 @@ if __name__ == "__main__":
                         type=int,
                         default=-1,
                         help="Channel index of the audio")
+    parser.add_argument("--segment",
+                        type=str,
+                        default="",
+                        help="Segment file in Kaldi format")
     args = parser.parse_args()
     run(args)

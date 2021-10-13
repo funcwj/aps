@@ -230,15 +230,15 @@ class TransducerBeamSearch(nn.Module):
                 if best_idx == 0:
                     best_node = list_a[best_tok]
                 else:
-                    father_node = cache_node[best_idx - 1]
+                    best_idx -= 1
+                    father_node = cache_node[best_idx]
                     update_stats = {
                         "tok_seq":
                             father_node["tok_seq"] + [best_tok],
                         "dec_hid":
-                            cache_dec_hid[best_idx - 1],
+                            cache_dec_hid[best_idx],
                         "dec_out":
-                            father_node["dec_out"] +
-                            [cache_dec_out[best_idx - 1]]
+                            father_node["dec_out"] + [cache_dec_out[best_idx]]
                     }
                     best_node = Node(best_val, update_stats)
                 # sort list_b

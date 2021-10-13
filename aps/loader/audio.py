@@ -12,6 +12,7 @@ import numpy as np
 import soundfile as sf
 import scipy.signal as ss
 
+from collections import defaultdict
 from kaldi_python_io import Reader as BaseReader
 from typing import Optional, IO, Union, Any, NoReturn
 
@@ -53,7 +54,8 @@ def read_audio(fname: Union[str, IO[Any]],
 def write_audio(fname: Union[str, IO[Any]],
                 samps: np.ndarray,
                 sr: int = 16000,
-                norm: bool = True) -> NoReturn:
+                norm: bool = True,
+                audio_format: str = "wav") -> NoReturn:
     """
     Write audio files, support single/multi-channel
     Args:
@@ -72,7 +74,7 @@ def write_audio(fname: Union[str, IO[Any]],
         parent = os.path.dirname(fname)
         if parent and not os.path.exists(parent):
             os.makedirs(parent)
-    sf.write(fname, samps, sr)
+    sf.write(fname, samps, sr, format=audio_format)
 
 
 def add_room_response(spk: np.ndarray,
@@ -111,26 +113,6 @@ def add_room_response(spk: np.ndarray,
         return revb, early_revb, np.mean(revb[0]**2)
 
 
-def run_command(command: str, wait: bool = True):
-    """
-    Runs shell commands
-    """
-    p = subprocess.Popen(command,
-                         shell=True,
-                         stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE)
-
-    if wait:
-        [stdout, stderr] = p.communicate()
-        if p.returncode != 0:
-            stderr_str = bytes.decode(stderr)
-            raise Exception("There was an error while running the " +
-                            f"command \"{command}\":\n{stderr_str}\n")
-        return stdout, stderr
-    else:
-        return p
-
-
 class AudioReader(BaseReader):
     """
     Sequential/Random Reader for single/multiple channel audio using soundfile as the backend
@@ -165,11 +147,11 @@ class AudioReader(BaseReader):
         self.norm = norm
         self.mngr = {}
 
-    def _load(self, key: str) -> Optional[np.ndarray]:
+    def _load(self, key: str) -> np.ndarray:
         fname = self.index_dict[key]
         samps = None
         # return C x N or N
-        if ":" in fname and fname[1] != ":":
+        if ".ark:" in fname:
             tokens = fname.split(":")
             if len(tokens) != 2:
                 raise RuntimeError(f"Value format error: {fname}")
@@ -187,8 +169,18 @@ class AudioReader(BaseReader):
                 warnings.warn(f"Read audio {key} {fname}:{offset} failed ...")
         else:
             if fname[-1] == "|":
-                shell, _ = run_command(fname[:-1], wait=True)
-                fname = io.BytesIO(shell)
+                # run command
+                p = subprocess.Popen(fname[:-1],
+                                     shell=True,
+                                     stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE)
+
+                [stdout, stderr] = p.communicate()
+                if p.returncode != 0:
+                    stderr_str = bytes.decode(stderr)
+                    raise Exception("There was an error while running the " +
+                                    f"command \"{command}\":\n{stderr_str}\n")
+                fname = io.BytesIO(stdout)
             try:
                 samps = read_audio(fname, norm=self.norm, sr=self.sr)
             except RuntimeError:
@@ -220,3 +212,56 @@ class AudioReader(BaseReader):
         """
         N = self.nsamps(key)
         return N / self.sr
+
+
+class SegmentReader(BaseReader):
+    """
+    Audio reader with segment file (defined in Kaldi), which looks like:
+        seg-key-1 utt-key-1 <beg-time> <end-time>
+        seg-key-2 utt-key-1 <beg-time> <end-time>
+        ...
+        seg-key-N utt-key-X <beg-time> <end-time>
+    To make the IO efficient, we disable the random access
+    """
+
+    def __init__(self,
+                 wav_scp: str,
+                 segment: str,
+                 sr: int = 16000,
+                 norm: bool = True,
+                 channel: int = -1):
+        super(SegmentReader, self).__init__(segment,
+                                            num_tokens=4,
+                                            value_processor=lambda x:
+                                            (x[0], float(x[1]), float(x[2])))
+        self.audio_reader = AudioReader(wav_scp,
+                                        sr=sr,
+                                        norm=norm,
+                                        channel=channel)
+        self.segment = self._format_segment(sr)
+
+    def _format_segment(self, sr: int):
+        """
+        Make segment grouped by key of utterance
+        """
+        segment = defaultdict(list)
+        for seg_key in self.index_dict:
+            utt_key, beg, end = self.index_dict[seg_key]
+            beg = int(sr * beg)
+            end = int(sr * end)
+            segment[utt_key].append((seg_key, beg, end))
+        return segment
+
+    def __iter__(self):
+        """
+        Sequential access
+        """
+        for utt_key, segs in self.segment.items():
+            audio = self.audio_reader[utt_key]
+            single = audio.ndim == 1
+            for s in segs:
+                seg_key, beg, end = s
+                if audio.ndim == 1:
+                    yield seg_key, audio[beg:end]
+                else:
+                    yield seg_key, audio[:, beg:end]

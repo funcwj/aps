@@ -1,1 +1,1 @@
-from .audio import read_audio, write_audio, AudioReader
+from .audio import read_audio, write_audio, AudioReader, SegmentReader
