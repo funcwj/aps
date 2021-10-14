@@ -6,7 +6,7 @@
 import argparse
 import pathlib
 
-from aps.loader import AudioReader, SegmentReader, write_audio
+from aps.loader import AudioReader, SegmentAudioReader, write_audio
 from aps.utils import get_logger
 
 logger = get_logger(__name__)
@@ -14,11 +14,11 @@ logger = get_logger(__name__)
 
 def run(args):
     if args.segment:
-        wav_reader = SegmentReader(args.wav_scp,
-                                   args.segment,
-                                   sr=args.sr,
-                                   norm=False,
-                                   channel=args.channel)
+        wav_reader = SegmentAudioReader(args.wav_scp,
+                                        args.segment,
+                                        sr=args.sr,
+                                        norm=False,
+                                        channel=args.channel)
     else:
         wav_reader = AudioReader(args.wav_scp,
                                  sr=args.sr,

@@ -9,96 +9,119 @@ import argparse
 import subprocess
 import multiprocessing as mp
 
-from aps.loader import SegmentReader, write_audio
+from aps.loader import read_audio, write_audio, group_segments
 from aps.utils import get_logger
-from kaldi_python_io import Reader as BaseReader
+from kaldi_python_io.inst import Writer as BaseWriter
+from kaldi_python_io.inst import Reader as BaseReader
 
 prog_interval = 500
 logger = get_logger(__name__)
 
 
+class WaveArkWriter(BaseWriter):
+    """
+    Write audio stream to archive object
+    """
+
+    def __init__(self, scp, ark):
+        super(WaveArkWriter, self).__init__(ark, scp)
+
+    def write(self, key, value):
+        self.ark_file.write(str.encode(key + " "))
+        offset = self.ark_file.tell()
+        self.scp_file.write(f"{key}\t{self.ark_path}:{offset}\n")
+        self.ark_file.write(value)
+
+
 def worker(jobid, num_jobs, wav_scp, scp_out, ark_out, args):
-    scp_out = open(scp_out, "w")
-    with open(ark_out, "wb") as wav_ark:
-        if args.segment:
-            reader = SegmentReader(wav_scp,
-                                   args.segment,
-                                   norm=False,
-                                   sr=args.sr)
-        else:
-            reader = BaseReader(wav_scp, num_tokens=2, restrict=True)
-        done, n = 0, 0
-        for key, value in reader:
-            n += 1
-            if (n - 1) % num_jobs != jobid:
-                continue
-            wav_ark.write(str.encode(key + " "))
-            offset = wav_ark.tell()
-            succ = True
-            if args.segment:
-                io_fd = io.BytesIO()
-                write_audio(io_fd,
-                            value,
-                            sr=args.sr,
-                            norm=False,
-                            audio_format="wav")
-                wav_ark.write(io_fd.getvalue())
+    writer = WaveArkWriter(scp_out, ark_out)
+    reader = BaseReader(wav_scp, num_tokens=2, restrict=True)
+    if args.segment:
+        segment = group_segments(args.segment, args.sr)
+    else:
+        segment = None
+    utt_done, n = 0, 0
+    num_segs = 0
+    # do not load the audio in the outside loop
+    for key, value in reader:
+        n += 1
+        if (n - 1) % num_jobs != jobid:
+            continue
+        succ = True
+        if value[-1] == "|":
+            p = subprocess.Popen(value[:-1],
+                                 shell=True,
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
+            [stdout, _] = p.communicate()
+            if p.returncode != 0:
+                succ = False
+                logger.warn(f"Worker {jobid}: running {value[:-1]} failed ...")
             else:
-                if value[-1] == "|":
-                    p = subprocess.Popen(value[:-1],
-                                         shell=True,
-                                         stdout=subprocess.PIPE,
-                                         stderr=subprocess.PIPE)
-                    [stdout, _] = p.communicate()
-                    if p.returncode != 0:
+                if segment is None:
+                    writer.write(key, stdout)
+                    num_segs += 1
+                else:
+                    if key not in segment:
                         succ = False
                     else:
-                        wav_ark.write(stdout)
-                else:
-                    try:
-                        with open(value, "rb") as wav:
-                            wav_bytes = wav.read()
-                        wav_ark.write(wav_bytes)
-                    except FileNotFoundError:
-                        succ = False
-                        print(f"Worker {jobid}: open {value} failed ...")
-            if not succ:
-                continue
-            if scp_out:
-                scp_out.write(f"{key}\t{ark_out}:{offset}\n")
-            done += 1
-            if done % prog_interval == 0:
-                logger.info(
-                    f"Worker {jobid}: processed {done}/{len(reader)} utterances..."
-                )
-    scp_out.close()
-    logger.info(f"Worker {jobid}: archive {done}/{len(reader)} " +
-                f"utterances to {ark_out}")
+                        fname = io.BytesIO(stdout)
+                        audio = read_audio(fname, norm=False, sr=args.sr)
+                        group = segment[key]
+                        for info in group:
+                            seg_key, beg, end = info
+                            io_fd = io.BytesIO()
+                            write_audio(io_fd,
+                                        audio[..., beg:end],
+                                        sr=args.sr,
+                                        norm=False,
+                                        audio_format="wav")
+                            writer.write(seg_key, io_fd.getvalue())
+                        num_segs += len(group)
+        else:
+            try:
+                with open(value, "rb") as wav:
+                    wav_bytes = wav.read()
+                writer.write(key, wav_bytes)
+                num_segs += 1
+            except FileNotFoundError:
+                succ = False
+                logger.warn(f"Worker {jobid}: open {value} failed ...")
+        if not succ:
+            continue
+        utt_done += 1
+        if utt_done % prog_interval == 0:
+            logger.info(
+                f"Worker {jobid}: processed {utt_done}/{len(reader)} utterances..."
+            )
+    logger.info(f"Worker {jobid}: archive {utt_done}/{len(reader)} " +
+                f"utterances, {num_segs} segments to {ark_out}")
 
 
 def run(args):
+
     if args.num_jobs <= 1:
         worker(0, 1, args.wav_scp, args.out_scp, args.out_ark, args)
     else:
         num_arks = args.num_arks if args.num_arks >= args.num_jobs else args.num_jobs
         logger.info(f"Archive audio to [0...{args.num_arks}].ark " +
                     f"files using {args.num_jobs} processes")
-        # process fp of out_ark
-        ark_out_toks = args.out_ark.split(".")
-        ark_prefix = ".".join(ark_out_toks[:-1])
-        ark_suffix = ark_out_toks[-1]
 
+        def prefix_and_suffix(fname):
+            toks = fname.split(".")
+            return (".".join(toks[:-1]), toks[-1])
+
+        # process fp of out_ark
+        ark_prefix, ark_suffix = prefix_and_suffix(args.out_ark)
         # process fp of out_scp
-        scp_out_toks = args.out_scp.split(".")
-        scp_prefix = ".".join(scp_out_toks[:-1])
-        scp_suffix = scp_out_toks[-1]
+        scp_prefix, scp_suffix = prefix_and_suffix(args.out_scp)
 
         scp_out_list = []
         pool = mp.Pool(args.num_jobs)
-        for j in range(num_arks):
-            scp_out_list.append(f"{scp_prefix}.{j}.{scp_suffix}")
-            ark_out_part = f"{ark_prefix}.{j}.{ark_suffix}"
-            packed_args = (j, num_arks, args.wav_scp, scp_out_list[-1],
+        for n in range(num_arks):
+            scp_out_list.append(f"{scp_prefix}.{n}.{scp_suffix}")
+            ark_out_part = f"{ark_prefix}.{n}.{ark_suffix}"
+            packed_args = (n, num_arks, args.wav_scp, scp_out_list[-1],
                            ark_out_part, args)
             pool.apply_async(worker, args=packed_args)
         pool.close()

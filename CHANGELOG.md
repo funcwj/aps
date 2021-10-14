@@ -1,5 +1,9 @@
 ## Overview of the Monthly Update
 
+### 2021/10
+
+1. Support segment processing in {archive,extract}_wav.py
+
 ### 2021/09
 
 1. Add command to export TorchScript model

@@ -77,6 +77,26 @@ def write_audio(fname: Union[str, IO[Any]],
     sf.write(fname, samps, sr, format=audio_format)
 
 
+def group_segments(segment: str, sr: int):
+    """
+    Make segment grouped by the utterance keys
+    Args:
+        segment: path of the segment file
+        sr: sample rate of the audio
+    """
+    grouped = defaultdict(list)
+    segment = BaseReader(segment,
+                         num_tokens=4,
+                         value_processor=lambda x:
+                         (x[0], float(x[1]), float(x[2])))
+    for seg_key, seg_stats in segment:
+        utt_key, beg, end = seg_stats
+        beg = int(sr * beg)
+        end = int(sr * end)
+        grouped[utt_key].append((seg_key, beg, end))
+    return grouped
+
+
 def add_room_response(spk: np.ndarray,
                       rir: np.ndarray,
                       early_energy: bool = False,
@@ -214,7 +234,7 @@ class AudioReader(BaseReader):
         return N / self.sr
 
 
-class SegmentReader(BaseReader):
+class SegmentAudioReader(object):
     """
     Audio reader with segment file (defined in Kaldi), which looks like:
         seg-key-1 utt-key-1 <beg-time> <end-time>
@@ -230,38 +250,23 @@ class SegmentReader(BaseReader):
                  sr: int = 16000,
                  norm: bool = True,
                  channel: int = -1):
-        super(SegmentReader, self).__init__(segment,
-                                            num_tokens=4,
-                                            value_processor=lambda x:
-                                            (x[0], float(x[1]), float(x[2])))
         self.audio_reader = AudioReader(wav_scp,
                                         sr=sr,
                                         norm=norm,
                                         channel=channel)
-        self.segment = self._format_segment(sr)
-
-    def _format_segment(self, sr: int):
-        """
-        Make segment grouped by key of utterance
-        """
-        segment = defaultdict(list)
-        for seg_key in self.index_dict:
-            utt_key, beg, end = self.index_dict[seg_key]
-            beg = int(sr * beg)
-            end = int(sr * end)
-            segment[utt_key].append((seg_key, beg, end))
-        return segment
+        self.segment = group_segments(segment, sr)
 
     def __iter__(self):
         """
         Sequential access
         """
-        for utt_key, segs in self.segment.items():
+        for utt_key in self.segment:
+            # segments on utterance: utt_key
+            segs = self.segment[utt_key]
+            # if some utterances are missing, skip
+            if utt_key not in self.audio_reader:
+                continue
             audio = self.audio_reader[utt_key]
-            single = audio.ndim == 1
-            for s in segs:
-                seg_key, beg, end = s
-                if audio.ndim == 1:
-                    yield seg_key, audio[beg:end]
-                else:
-                    yield seg_key, audio[:, beg:end]
+            for info in segs:
+                seg_key, beg, end = info
+                yield seg_key, audio[..., beg:end]
