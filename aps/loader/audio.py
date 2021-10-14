@@ -198,8 +198,9 @@ class AudioReader(BaseReader):
                 [stdout, stderr] = p.communicate()
                 if p.returncode != 0:
                     stderr_str = bytes.decode(stderr)
-                    raise Exception("There was an error while running the " +
-                                    f"command \"{command}\":\n{stderr_str}\n")
+                    raise Exception(
+                        "There was an error while running the " +
+                        f"command \"{fname[:-1]}\":\n{stderr_str}\n")
                 fname = io.BytesIO(stdout)
             try:
                 samps = read_audio(fname, norm=self.norm, sr=self.sr)

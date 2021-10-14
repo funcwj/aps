@@ -104,7 +104,7 @@ def run(args):
         worker(0, 1, args.wav_scp, args.out_scp, args.out_ark, args)
     else:
         num_arks = args.num_arks if args.num_arks >= args.num_jobs else args.num_jobs
-        logger.info(f"Archive audio to [0...{args.num_arks}].ark " +
+        logger.info(f"Archive audio to [0...{args.num_arks - 1}].ark " +
                     f"files using {args.num_jobs} processes")
 
         def prefix_and_suffix(fname):

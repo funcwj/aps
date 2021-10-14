@@ -16,7 +16,7 @@ from aps.eval import NnetEvaluator, TextPostProcessor
 from aps.conf import load_dict
 from aps.const import UNK_TOKEN
 from aps.utils import get_logger, io_wrapper, SimpleTimer
-from aps.loader import AudioReader
+from aps.loader import AudioReader, SegmentAudioReader
 
 from kaldi_python_io import ScriptReader
 
@@ -56,9 +56,15 @@ def run(args):
                            device_id=args.device_id,
                            cpt_tag=args.am_tag)
     if decoder.accept_raw:
-        src_reader = AudioReader(args.feats_or_wav_scp,
-                                 sr=args.sr,
-                                 channel=args.channel)
+        if args.segment:
+            src_reader = SegmentAudioReader(args.feats_or_wav_scp,
+                                            args.segment,
+                                            sr=args.sr,
+                                            channel=args.channel)
+        else:
+            src_reader = AudioReader(args.feats_or_wav_scp,
+                                     sr=args.sr,
+                                     channel=args.channel)
     else:
         src_reader = ScriptReader(args.feats_or_wav_scp)
 

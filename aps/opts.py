@@ -137,6 +137,10 @@ def get_aps_decode_parser():
     parser.add_argument("best",
                         type=str,
                         help="Output file of the decoded results (1-best)")
+    parser.add_argument("--segment",
+                        type=str,
+                        default="",
+                        help="Kaldi's segment file for wav.scp")
     parser.add_argument("--beam-size",
                         type=int,
                         default=8,
@@ -253,6 +257,10 @@ def get_aps_align_parser():
                         type=str,
                         default="",
                         help="To generate the word boundary file if assigned")
+    parser.add_argument("--segment",
+                        type=str,
+                        default="",
+                        help="Kaldi's segment file for wav.scp")
     return parser
 
 
