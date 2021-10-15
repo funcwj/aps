@@ -38,15 +38,11 @@ echo "$0 $*"
 
 . ./utils/parse_options.sh || exit 1
 
-[ $# -ne 4 ] && echo "Script format error: $0 <mdl-name> <exp-id> <tst-scp> <dec-dir>" && exit 1
+[ $# -ne 3 ] && echo "Script format error: $0 <exp-dir> <tst-scp> <dec-dir>" && exit 1
 
-mdl_id=$1
-exp_id=$2
-
-tst_scp=$3
-dec_dir=$4
-
-exp_dir=exp/$mdl_id/$exp_id
+exp_dir=$1
+tst_scp=$2
+dec_dir=$3
 
 [ ! -f $tst_scp ] && echo "$0: missing test wave script: $tst_scp" && exit 0
 [ ! -d $exp_dir ] && echo "$0: missing experiment directory: $exp_dir" && exit 0

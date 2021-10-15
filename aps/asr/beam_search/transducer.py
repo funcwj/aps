@@ -240,6 +240,7 @@ class TransducerBeamSearch(nn.Module):
                         "dec_out":
                             father_node["dec_out"] + [cache_dec_out[best_idx]]
                     }
+                    best_idx += 1
                     best_node = Node(best_val, update_stats)
                 # sort list_b
                 list_b = sorted(list_b, key=lambda n: n.score, reverse=True)

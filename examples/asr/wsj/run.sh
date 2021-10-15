@@ -39,6 +39,8 @@ test_sets="test_dev93 test_eval92"
 . ./utils/parse_options.sh || exit 1
 
 data_dir=data/$dataset
+exp_dir=exp/$dataset/$am_exp
+
 beg=$(echo $stage | awk -F '-' '{print $1}')
 end=$(echo $stage | awk -F '-' '{print $2}')
 [ -z $end ] && end=$beg
@@ -84,15 +86,14 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
       --text $data_dir/$name/text \
       --beam-size $beam_size \
       --max-len 220 \
-      --dict exp/$dataset/$am_exp/dict \
+      --dict $exp_dir/dict \
       --nbest 8 \
       --space "<space>" \
       --ctc-weight $ctc_weight \
       --len-norm $len_norm \
       --eos-threshold $eos_threshold \
-      $dataset $am_exp \
-      $data_dir/$name/wav.scp \
-      exp/$dataset/$am_exp/$name &
+      $exp_dir $data_dir/$name/wav.scp \
+      $exp_dir/$name &
   done
   wait
 fi
@@ -139,12 +140,11 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
       --lm-weight $lm_weight \
       --len-norm $len_norm \
       --eos-threshold $eos_threshold \
-      --dict exp/$dataset/$am_exp/dict \
+      --dict $exp_dir/dict \
       --nbest 8 \
       --space "<space>" \
-      $dataset $am_exp \
-      $data_dir/$name/wav.scp \
-      exp/$dataset/$am_exp/${name}_lm${lm_exp}_$lm_weight &
+      $exp_dir $data_dir/$name/wav.scp \
+      $exp_dir/${name}_lm${lm_exp}_$lm_weight &
   done
   wait
 fi

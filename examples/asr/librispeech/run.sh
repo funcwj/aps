@@ -14,7 +14,6 @@ wp_name="wpm_6k"
 wp_mode="unigram"
 vocab_size=6000
 
-
 # am
 am_exp=1a
 am_seed=888
@@ -45,6 +44,7 @@ test_sets="dev_clean dev_other test_clean test_other"
 . ./utils/parse_options.sh || exit 1
 
 data_dir=data/$dataset
+exp_dir=exp/$dataset/$am_exp
 beg=$(echo $stage | awk -F '-' '{print $1}')
 end=$(echo $stage | awk -F '-' '{print $2}')
 [ -z $end ] && end=$beg
@@ -99,12 +99,11 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
       --max-len 150 \
       --ctc-weight $ctc_weight \
       --len-norm $len_norm \
-      --dict exp/$dataset/$am_exp/dict \
+      --dict $exp_dir/dict \
       --nbest $nbest \
       --spm exp/$dataset/$wp_name/$wp_mode.model \
-      $dataset $am_exp \
-      $data_dir/$name/wav.scp \
-      exp/$dataset/$am_exp/$name &
+      $exp_dir $data_dir/$name/wav.scp \
+      $exp_dir/$name &
   done
   wait
 fi
@@ -155,11 +154,10 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
       --max-len 150 \
       --len-norm $len_norm \
       --eos-threshold $eos_threshold \
-      --dict exp/$dataset/$am_exp/dict \
+      --dict $exp_dir/dict \
       --nbest $nbest \
-      $dataset $am_exp \
-      $data_dir/$name/wav.scp \
-      exp/$dataset/$am_exp/$dec_name &
+      $exp_dir $data_dir/$name/wav.scp \
+      $exp_dir/$dec_name &
   done
   wait
 fi

@@ -45,6 +45,7 @@ test_sets="dev test"
 . ./utils/parse_options.sh || exit 1
 
 data_dir=data/$dataset
+exp_dir=exp/$dataset/$am_exp
 beg=$(echo $stage | awk -F '-' '{print $1}')
 end=$(echo $stage | awk -F '-' '{print $2}')
 [ -z $end ] && end=$beg
@@ -84,20 +85,19 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
       --max-len 50 \
       --ctc-weight $ctc_weight \
       --len-norm $len_norm \
-      --dict exp/$dataset/$am_exp/dict \
-      $dataset $am_exp \
-      $data_dir/$name/wav.scp \
-      exp/$dataset/$am_exp/$name &
+      --dict $exp_dir/dict \
+      $exp_dir $data_dir/$name/wav.scp \
+      $exp_dir/$name &
   done
   wait
 fi
 
 if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   echo "Stage 4: training ngram LM ..."
-  exp_dir=exp/$dataset/ngram && mkdir -p $exp_dir
-  cat $data_dir/train/text | awk '{$1=""; print}' > $exp_dir/train.text
-  lmplz -o $ngram --text $exp_dir/train.text --arpa $exp_dir/${ngram}gram.arpa
-  build_binary $exp_dir/${ngram}gram.arpa $exp_dir/${ngram}gram.arpa.bin
+  dir=exp/$dataset/ngram && mkdir -p $dir
+  cat $data_dir/train/text | awk '{$1=""; print}' > $dir/train.text
+  lmplz -o $ngram --text $dir/train.text --arpa $dir/${ngram}gram.arpa
+  build_binary $dir/${ngram}gram.arpa $dir/${ngram}gram.arpa.bin
 fi
 
 if [ $end -ge 5 ] && [ $beg -le 5 ]; then
@@ -108,7 +108,7 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
       --score true \
       --text $data_dir/$name/text \
       --gpu $gpu \
-      --dict exp/$dataset/$am_exp/dict \
+      --dict $exp_dir/dict \
       --nbest $nbest \
       --lm exp/$dataset/ngram/${ngram}gram.arpa.bin \
       --lm-weight $lm_weight \
@@ -119,9 +119,8 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
       --ctc-weight $ctc_weight \
       --lm-weight $lm_weight \
       --log-suffix $name \
-      $dataset $am_exp \
-      $data_dir/$name/wav.scp \
-      exp/$dataset/$am_exp/$dec_dir &
+      $exp_dir $data_dir/$name/wav.scp \
+      $exp_dir/$dec_dir &
   done
   wait
 fi
@@ -148,15 +147,14 @@ if [ $end -ge 7 ] && [ $beg -le 7 ]; then
       --text $data_dir/$name/text \
       --lm exp/$dataset/nnlm/$lm_exp \
       --gpu $gpu \
-      --dict exp/$dataset/$am_exp/dict \
+      --dict $exp_dir/dict \
       --nbest $nbest \
       --max-len 50 \
       --beam-size $beam_size \
       --lm-weight $lm_weight \
       --ctc-weight $ctc_weight \
-      $dataset $am_exp \
-      $data_dir/$name/wav.scp \
-      exp/$dataset/$am_exp/$dec_dir &
+      $exp_dir $data_dir/$name/wav.scp \
+      $exp_dir/$dec_dir &
   done
   wait
 fi
