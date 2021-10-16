@@ -30,6 +30,7 @@ lm_weight=0
 ctc_weight=0
 spm=""
 dump_align=""
+segment=""
 text=""
 score=false
 dec_prefix=""
@@ -59,6 +60,7 @@ if [ -z $batch_size ]; then
   cmd/decode.py \
     $tst_scp \
     $dec_dir/${dec_prefix}.decode \
+    --segment "$segment" \
     --beam-size $beam_size \
     --device-id $gpu \
     --channel $channel \
@@ -90,6 +92,7 @@ else
   cmd/decode_batch.py \
     $tst_scp \
     $dec_dir/${dec_prefix}.decode \
+    --segment "$segment" \
     --beam-size $beam_size \
     --batch-size $batch_size \
     --device-id $gpu \

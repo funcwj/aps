@@ -56,7 +56,7 @@ done
 
 echo "$0: Prepare dictionary..."
 ./utils/tokenizer.py $aishell_data_dir/train/text /dev/null \
-  --unit word --add-units "<sos>,<eos>,<unk>" --dump-vocab $aishell_data_dir/dict
+  --unit char --add-units "<sos>,<eos>,<unk>" --dump-vocab $aishell_data_dir/dict
 
 echo "$0: Prepare utt2dur..."
 for dir in train dev; do
