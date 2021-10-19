@@ -34,13 +34,11 @@ def read_audio(fname: Union[str, IO[Any]],
         sr: sample rate
     """
     # samps: N x C or N
-    #   N: number of samples
-    #   C: number of channels
     samps, ret_sr = sf.read(fname,
                             start=beg,
                             stop=end,
                             dtype="float32" if norm else "int16")
-    if sr != ret_sr:
+    if sr > 0 and sr != ret_sr:
         raise RuntimeError(f"Expect sr={sr} of {fname}, get {ret_sr} instead")
     if not norm:
         samps = samps.astype("float32")
@@ -160,14 +158,16 @@ class AudioReader(BaseReader):
                  wav_scp: str,
                  sr: int = 16000,
                  norm: bool = True,
-                 channel: int = -1) -> None:
+                 channel: int = -1,
+                 failed_if_error: bool = True) -> None:
         super(AudioReader, self).__init__(wav_scp, num_tokens=2)
         self.sr = sr
         self.ch = channel
         self.norm = norm
         self.mngr = {}
+        self.failed_if_error = failed_if_error
 
-    def _load(self, key: str) -> np.ndarray:
+    def _load(self, key: str) -> Optional[np.ndarray]:
         fname = self.index_dict[key]
         samps = None
         # return C x N or N
@@ -180,8 +180,7 @@ class AudioReader(BaseReader):
             if fname not in self.mngr:
                 self.mngr[fname] = open(fname, "rb")
             wav_ark = self.mngr[fname]
-            # wav_ark = open(fname, "rb")
-            # seek and read
+            # seek and read. TODO: need lock here?
             wav_ark.seek(offset)
             try:
                 samps = read_audio(wav_ark, norm=self.norm, sr=self.sr)
@@ -198,7 +197,7 @@ class AudioReader(BaseReader):
                 [stdout, stderr] = p.communicate()
                 if p.returncode != 0:
                     stderr_str = bytes.decode(stderr)
-                    raise Exception(
+                    raise RuntimeError(
                         "There was an error while running the " +
                         f"command \"{fname[:-1]}\":\n{stderr_str}\n")
                 fname = io.BytesIO(stdout)
@@ -207,7 +206,11 @@ class AudioReader(BaseReader):
             except RuntimeError:
                 warnings.warn(f"Load audio {key} {fname} failed ...")
         if samps is None:
-            raise RuntimeError("Audio IO failed ...")
+            if self.failed_if_error:
+                raise RuntimeError("Audio IO failed ...")
+            else:
+                # return None
+                return samps
         if self.ch >= 0 and samps.ndim == 2:
             samps = samps[self.ch]
         return samps
@@ -262,12 +265,11 @@ class SegmentAudioReader(object):
         Sequential access
         """
         for utt_key in self.segment:
-            # segments on utterance: utt_key
-            segs = self.segment[utt_key]
             # if some utterances are missing, skip
             if utt_key not in self.audio_reader:
                 continue
             audio = self.audio_reader[utt_key]
-            for info in segs:
+            # segments on utterance: utt_key
+            for info in self.segment[utt_key]:
                 seg_key, beg, end = info
                 yield seg_key, audio[..., beg:end]

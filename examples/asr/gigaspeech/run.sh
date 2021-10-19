@@ -19,6 +19,7 @@ wp_mode="unigram"
 vocab_size=5000
 
 # am
+gpu="0,1,2,3,4,5,6,7"
 am_exp=1a
 am_batch_size=96
 am_epochs=120
@@ -63,8 +64,7 @@ if [ $end -ge 1 ] && [ $beg -le 1 ]; then
       --num-arks ${num_arks[$x]} \
       --segment $src_dir/segments \
       --num-jobs $nj \
-      $src_dir/wav.scp \
-      $dst_dir/wav.scp \
+      $src_dir/wav.scp $dst_dir/wav.scp \
       $dst_dir/wav.ark && \
       cp $dst_dir/wav.scp $src_dir/wav_ark.scp
   done
@@ -88,8 +88,8 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
   echo "Stage 3: training AM ..."
   # training am
   ./scripts/distributed_train.sh \
+    --gpu $gpu \
     --seed 888 \
-    --gpu "0,1,2,3,4,5,6,7" \
     --distributed "torch" \
     --epochs $am_epochs \
     --batch-size $am_batch_size \

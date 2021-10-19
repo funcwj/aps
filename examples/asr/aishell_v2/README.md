@@ -26,7 +26,7 @@
 3. Transducer: Transformer encoder + RNN decoder
 
     * configuration: `1c.yaml`
-    * commit: `29c7da192484d7be93e4081d2784fb367ba39789`
+    * commit: `5b015c4945ee0468d1f00b35924eb36e13f2bc65`
 
     | LM | lm weight | beam | Dev-iOS | Dev-MIC | Dev-Android | Test-iOS |  Test-MIC | Test-Android |
     |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|

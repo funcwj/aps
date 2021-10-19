@@ -15,6 +15,7 @@ wp_mode="unigram"
 vocab_size=6000
 
 # am
+gpu="0,1,2,3"
 am_exp=1a
 am_seed=888
 am_batch_size=96
@@ -79,7 +80,7 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
   # training am
   ./scripts/distributed_train.sh \
     --seed $am_seed \
-    --gpu "0,1,2,3" \
+    --gpu $gpu \
     --distributed "torch" \
     --epochs $am_epochs \
     --batch-size $am_batch_size \

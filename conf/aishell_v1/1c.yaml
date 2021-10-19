@@ -1,23 +1,32 @@
-nnet: "asr@xfmr_transducer"
+nnet: "asr@transducer"
 
 nnet_conf:
   input_size: 80
-  enc_type: "xfmr_abs"
+  enc_type: "concat"
+  enc_proj: 512
   enc_kwargs:
-    proj_layer: "conv2d"
-    att_dim: 256
-    nhead: 4
-    feedforward_dim: 512
-    pos_dropout: 0.1
-    att_dropout: 0.2
-    num_layers: 8
+    conv2d:
+      out_features: -1
+      channel: 32
+      num_layers: 2
+      stride: 2
+      padding: 1
+      kernel_size: 3
+    variant_rnn:
+      rnn: "lstm"
+      num_layers: 3
+      bidirectional: true
+      dropout: 0.2
+      project: 512
+      hidden: 512
+      norm: "LN"
   dec_kwargs:
-    att_dim: 256
-    nhead: 4
-    feedforward_dim: 512
-    pos_dropout: 0.1
-    att_dropout: 0.2
-    num_layers: 6
+    embed_size: 512
+    jot_dim: 512
+    dec_rnn: "lstm"
+    dec_layers: 3
+    dec_hidden: 512
+    dec_dropout: 0.2
 
 task: "asr@transducer"
 
@@ -26,6 +35,7 @@ asr_transform:
   frame_len: 400
   frame_hop: 160
   window: "hamm"
+  pre_emphasis: 0.96
   round_pow_of_two: True
   sr: 16000
   num_mels: 80
@@ -38,26 +48,26 @@ trainer_conf:
   optimizer_kwargs:
     lr: 1.0e-4
     weight_decay: 1.0e-5
-  lr_scheduler: "warmup_noam_lr"
-  lr_scheduler_period: "step"
+  lr_scheduler: "reduce_lr"
+  lr_scheduler_period: "epoch"
   lr_scheduler_kwargs:
+    min_lr: 1.0e-8
+    patience: 1
     factor: 0.5
-    warmup: 22000
-    transformer_dim: 512
   no_impr: 6
-  no_impr_thres: 0.002
-  clip_gradient: 10
+  no_impr_thres: 0.3
+  clip_gradient: 50
   report_metrics: ["loss"]
   stop_criterion: "loss"
 
 data_conf:
   fmt: "am@raw"
   loader:
-    max_token_num: 400
-    adapt_token_num: 150
     max_dur: 30 # (s)
     min_dur: 0.4 # (s)
     adapt_dur: 10 # (s)
+    max_token_num: 400
+    adapt_token_num: 150
   train:
     wav_scp: "data/aishell_v1/train/wav.scp"
     utt2dur: "data/aishell_v1/train/utt2dur"

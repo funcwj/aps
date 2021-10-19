@@ -60,7 +60,7 @@ fi
 
 if [ $end -ge 2 ] && [ $beg -le 2 ]; then
   echo "Stage 2: training AM ..."
-  ./scripts/train.sh \
+  ./scripts/distributed_train.sh \
     --gpu $gpu \
     --seed $seed \
     --epochs $am_epochs \
