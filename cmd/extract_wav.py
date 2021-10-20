@@ -6,7 +6,7 @@
 import argparse
 import pathlib
 
-from aps.loader import AudioReader, SegmentAudioReader, write_audio
+from aps.io import AudioReader, SegmentAudioReader, write_audio
 from aps.utils import get_logger
 
 logger = get_logger(__name__)

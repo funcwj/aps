@@ -9,9 +9,9 @@ import torch as th
 import torch.utils.data as dat
 import aps.distributed as dist
 
+from aps.tokenizer import Vocab
 from typing import Dict, List, Tuple, NoReturn, Optional, Callable
 from kaldi_python_io import Reader as BaseReader
-from aps.const import UNK_TOKEN
 
 
 def derive_indices(num_batches: int,
@@ -107,7 +107,7 @@ class TokenReader(object):
                  max_dur: float = 3000,
                  min_dur: float = 40,
                  skip_utts: str = ""):
-        self.vocab_dict = vocab_dict
+        self.vocab_dict = Vocab(vocab_dict) if vocab_dict else None
         self.token_list = self._pre_process(text,
                                             utt2dur,
                                             max_dur=max_dur,
@@ -177,8 +177,8 @@ class TokenReader(object):
         stats = self.token_list[index]
         # if processed, skip
         if self.vocab_dict and "vis" not in stats:
-            stats["tok"] = [(self.vocab_dict[t] if t in self.vocab_dict else
-                             self.vocab_dict[UNK_TOKEN]) for t in stats["tok"]]
+            # map from str sequences to int sequences
+            stats["tok"] = self.vocab_dict(stats["tok"])
             stats["vis"] = True
         return stats
 

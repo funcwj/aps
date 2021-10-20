@@ -11,12 +11,13 @@ import numpy as np
 import torch as th
 
 from pathlib import Path
+
+from aps.io import AudioReader, SegmentAudioReader, io_wrapper
 from aps.opts import DecodingParser
 from aps.eval import NnetEvaluator, TextPostProcessor
 from aps.conf import load_dict
 from aps.const import UNK_TOKEN
-from aps.utils import get_logger, io_wrapper, SimpleTimer
-from aps.loader import AudioReader, SegmentAudioReader
+from aps.utils import get_logger, SimpleTimer
 
 from kaldi_python_io import ScriptReader
 

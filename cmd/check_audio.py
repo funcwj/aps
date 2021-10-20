@@ -5,7 +5,7 @@
 
 import argparse
 
-from aps.loader import AudioReader
+from aps.io import AudioReader
 from aps.utils import get_logger
 
 logger = get_logger(__name__)

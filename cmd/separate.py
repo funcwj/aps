@@ -9,7 +9,7 @@ import argparse
 import torch as th
 import numpy as np
 
-from aps.loader import AudioReader, write_audio
+from aps.io import AudioReader, write_audio
 from aps.utils import get_logger, SimpleTimer
 from aps.eval import NnetEvaluator, ChunkStitcher
 

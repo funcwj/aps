@@ -12,7 +12,7 @@ from aps.transform.utils import forward_stft, inverse_stft, STFT, iSTFT
 from aps.transform.streaming import StreamingSTFT, StreamingiSTFT
 from aps.transform.asr import SpeedPerturbTransform
 from aps.transform import AsrTransform, EnhTransform, FixedBeamformer, DfTransform
-from aps.loader import read_audio
+from aps.io import read_audio
 
 egs1_wav = read_audio("data/transform/egs1.wav", sr=16000)
 egs2_wav = read_audio("data/transform/egs2.wav", sr=16000)

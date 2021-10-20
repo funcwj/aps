@@ -11,7 +11,7 @@ import argparse
 import torch as th
 import multiprocessing as mp
 
-from aps.loader import AudioReader, SegmentAudioReader
+from aps.io import AudioReader, SegmentAudioReader
 from aps.libs import aps_transform
 from aps.utils import get_logger
 

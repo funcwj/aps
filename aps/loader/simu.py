@@ -9,7 +9,7 @@ See https://github.com/funcwj/setk/tree/master/doc/data_simu for command line us
 import argparse
 import numpy as np
 
-from aps.loader.audio import read_audio, add_room_response
+from aps.io.audio import read_audio, add_room_response
 from aps.opts import StrToBoolAction
 from aps.const import EPSILON
 

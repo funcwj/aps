@@ -12,8 +12,8 @@ import numpy as np
 from aps.opts import AlignmentParser
 from aps.eval import NnetEvaluator, TextPreProcessor
 from aps.conf import load_dict
-from aps.utils import get_logger, io_wrapper, SimpleTimer
-from aps.loader import AudioReader, SegmentAudioReader
+from aps.utils import get_logger, SimpleTimer
+from aps.io import AudioReader, SegmentAudioReader, io_wrapper
 
 from kaldi_python_io import ScriptReader, Reader
 from typing import Dict, Optional

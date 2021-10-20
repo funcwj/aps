@@ -8,7 +8,8 @@ Previous implementation is in aps/utils/tokenizer.{py,pl}
 import argparse
 
 from aps.tokenizer import WordTokenizer, SubwordTokenizer
-from aps.utils import io_wrapper, get_logger
+from aps.utils import get_logger
+from aps.io import io_wrapper
 
 logger = get_logger(__name__)
 

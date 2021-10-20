@@ -16,6 +16,11 @@ from collections import defaultdict
 from kaldi_python_io import Reader as BaseReader
 from typing import Optional, IO, Union, Any, NoReturn
 
+__all__ = [
+    "read_audio", "write_audio", "group_segments", "add_room_response",
+    "AudioReader", "SegmentAudioReader"
+]
+
 
 def read_audio(fname: Union[str, IO[Any]],
                beg: int = 0,
