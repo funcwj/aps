@@ -9,7 +9,7 @@ import argparse
 import subprocess
 import multiprocessing as mp
 
-from aps.loader import read_audio, write_audio, group_segments
+from aps.io import read_audio, write_audio, group_segments
 from aps.utils import get_logger
 from kaldi_python_io.inst import Writer as BaseWriter
 from kaldi_python_io.inst import Reader as BaseReader

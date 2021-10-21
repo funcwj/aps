@@ -8,13 +8,13 @@ import argparse
 
 from aps.utils import get_logger
 from aps.opts import StrToBoolAction
-from aps.io import io_wrapper, NBestReader
+from aps.io import io_wrapper, NbestReader
 
 logger = get_logger(__name__)
 
 
 def run(args):
-    nbest_reader = NBestReader(args.nbest)
+    nbest_reader = NbestReader(args.nbest)
     ngram = kenlm.LanguageModel(args.lm)
 
     stdout, top1 = io_wrapper(args.top1, "w")

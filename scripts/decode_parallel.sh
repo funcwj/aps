@@ -62,7 +62,7 @@ for n in $(seq $nj); do wav_sp_scp="$wav_sp_scp $log_dir/wav.$n.scp"; done
 
 gpu=-1
 for i in $(seq $nj); do
-  [ $cuda ] && gpu=$[i-1]
+  [ $cuda ] && gpu=$((i-1))
   cmd/decode.py \
     $log_dir/wav.${i}.scp \
     $log_dir/${dec_prefix}.${i}.decode \

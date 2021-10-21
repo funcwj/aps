@@ -32,16 +32,19 @@ class TextReader(BaseReader):
             return words
 
 
-class NBestReader(object):
+class NbestReader(object):
     """
     N-best hypothesis reader
     """
 
     def __init__(self, nbest: str):
-        self.hypos = {}
-        self.nbest = 1
+        self.nbest, self.hypos = self._load_nbest(nbest)
+
+    def _load_nbest(self, nbest: str):
+        hypos = {}
+        nbest = 1
         with codecs.open(nbest, "r", encoding="utf-8") as f:
-            self.nbest = int(f.readline())
+            nbest = int(f.readline())
             while True:
                 key = f.readline().strip()
                 if not key:
@@ -55,7 +58,8 @@ class NBestReader(object):
                     trans = " ".join(items[2:])
                     topk.append((score, num_tokens, trans))
                     n += 1
-                self.hypos[key] = topk
+                hypos[key] = topk
+        return nbest, hypos
 
     def __iter__(self):
         for key in self.hypos:

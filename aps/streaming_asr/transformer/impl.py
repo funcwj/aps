@@ -150,6 +150,8 @@ class StreamingConformerRelEncoderLayer(ApsConformerEncoderLayer):
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
                  kernel_size: int = 15,
+                 pre_norm: bool = False,
+                 macaron: bool = True,
                  activation: str = "swish") -> None:
         self_attn = StreamingRelMultiheadAttention(att_dim,
                                                    nhead,
@@ -163,6 +165,8 @@ class StreamingConformerRelEncoderLayer(ApsConformerEncoderLayer):
                              dropout=ffn_dropout,
                              activation=activation,
                              kernel_size=kernel_size,
+                             macaron=macaron,
+                             pre_norm=pre_norm,
                              casual_conv1d=True)
         self.reset()
 
@@ -202,23 +206,28 @@ class StreamingConformerRelEncoderLayer(ApsConformerEncoderLayer):
         Return:
             chunk (Tensor): T x N x E
         """
-        # NOTE: use pre-norm by default
         # 1) FFN
         if self.feedforward1 is not None:
-            chunk1 = self.feedforward1(chunk) * 0.5 + chunk
+            if self.pre_norm:
+                chunk = self.feedforward1(
+                    self.norm_ffn1(chunk)) * self.macaron_factor + chunk
+            else:
+                chunk = self.norm_ffn1(
+                    self.feedforward1(chunk) * self.macaron_factor + chunk)
+        # 2) MHSA
+        inp = self.norm_attn(chunk) if self.pre_norm else chunk
+        att = self.self_attn.step(inp, inj_pose)
+        chunk = chunk + self.dropout(att)
+        # 3) CNN + FFN
+        if self.pre_norm:
+            src = self.conv_step(self.norm_conv(chunk)) + chunk
+            out = self.feedforward2(
+                self.norm_ffn2(src)) * self.macaron_factor + src
         else:
-            chunk1 = chunk
-        # self-attention block
-        chunk2 = self.norm1(chunk1)
-        att = self.self_attn.step(chunk2, inj_pose)
-        chunk = chunk1 + self.dropout(att)
-        # conv
-        chunk = self.conv_step(self.norm2(chunk)) + chunk
-        # 2) FFN
-        if self.feedforward1 is not None:
-            out = self.feedforward2(chunk) * 0.5 + chunk
-        else:
-            out = self.feedforward2(chunk) + chunk
+            src = self.conv_step(self.norm_attn(chunk)) + chunk
+            src = self.norm_conv(src)
+            out = self.norm_ffn2(
+                self.feedforward2(src) * self.macaron_factor + src)
         return out
 
 

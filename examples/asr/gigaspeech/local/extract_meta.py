@@ -33,7 +33,7 @@ def meta_analysis(input_json, output_dir, pipe):
     try:
         with open(input_json, 'r') as injson:
             json_data = json.load(injson)
-    except:
+    except FileNotFoundError:
         sys.exit(f'Failed to load input json file: {input_json}')
     else:
         if json_data['audios'] is not None:

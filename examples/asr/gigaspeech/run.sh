@@ -11,7 +11,7 @@ stage="2-4"
 database_dir=/scratch/jwu/gigaspeech
 archive_dir=/scratch/jwu/gigaspeech_ark
 dataset=gigaspeech
-train_subset=xl
+train_subset="xl"
 
 # word piece
 wp_name="wpm_5k"
@@ -53,7 +53,7 @@ train=train_$train_subset
 
 if [ $end -ge 1 ] && [ $beg -le 1 ]; then
   echo "Stage 1: preparing the data ..."
-  local/prep_data.sh --train-subset $train \
+  local/data_prep.sh --train-subset $train \
     --stage 1 --prefix "" $database_dir $data_dir
   # archive to wav.xx.ark for training
   # may take some time here

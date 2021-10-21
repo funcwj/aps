@@ -3,6 +3,9 @@
 ### 2021/10
 
 1. Support segment processing in {archive,extract}_wav.py
+2. Add LM shallow fusion for transducer beam search
+3. Add gigaspeech recipe
+4. Add aps.tokenizer and aps.io module
 
 ### 2021/09
 

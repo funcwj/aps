@@ -6,6 +6,7 @@ exclude =
     # local mantained directory
     local/
     cache/
+    examples/
 per-file-ignores =
     # imported but unused
     # unable to detect undefined names
