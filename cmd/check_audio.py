@@ -5,7 +5,7 @@
 
 import argparse
 
-from aps.io import AudioReader
+from aps.io import AudioReader, io_wrapper
 from aps.utils import get_logger
 
 logger = get_logger(__name__)
@@ -17,17 +17,19 @@ def run(args):
                              norm=False,
                              failed_if_error=False)
     done, failed = 0, 0
-    with open(args.bad_utt, "w") as bad_utt:
-        for key, wav in wav_reader:
-            done += 1
-            if done % 5000 == 0:
-                logger.info(f"Tested {done}/{len(wav_reader)} utterances ...")
-            if wav is not None:
-                continue
-            else:
-                bad_utt.write(f"{key}\n")
-                logger.warning(f"Get bad utterance: {key}")
-                failed += 1
+    stdout, bad_utt = io_wrapper(args.bad_utt, "w")
+    for key, wav in wav_reader:
+        done += 1
+        if done % 5000 == 0:
+            logger.info(f"Tested {done}/{len(wav_reader)} utterances ...")
+        if wav is not None:
+            continue
+        else:
+            bad_utt.write(f"{key}\n")
+            logger.warning(f"Get bad utterance: {key}")
+            failed += 1
+    if not stdout:
+        bad_utt.close()
     logger.info(f"Tested {len(wav_reader)} utterances done " +
                 f"and get {failed} failures ...")
 
