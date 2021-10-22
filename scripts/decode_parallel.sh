@@ -6,8 +6,8 @@
 set -eu
 
 nj=20
-cmd="utils/run.pl"
 dict=""
+cuda=false
 space=""
 nbest=1
 channel=-1
@@ -29,6 +29,7 @@ lm=""
 lm_weight=0
 ctc_weight=0
 spm=""
+segment=""
 dump_align=""
 text=""
 score=false
@@ -37,15 +38,12 @@ echo "$0 $*"
 
 . ./utils/parse_options.sh || exit 1
 
-[ $# -ne 4 ] && echo "Script format error: $0 <mdl-name> <exp-id> <tst-scp> <dec-dir>" && exit 1
+[ $# -ne 3 ] && echo "Script format error: $0 <exp-dir> <tst-scp> <dec-dir>" && exit 1
 
-mdl_id=$1
-exp_id=$2
+exp_dir=$1
+tst_scp=$2
+dec_dir=$3
 
-tst_scp=$3
-dec_dir=$4
-
-exp_dir=exp/$mdl_id/$exp_id
 log_dir=$dec_dir/log && mkdir -p $log_dir
 
 [ ! -f $tst_scp ] && echo "$0: missing test wave script: $tst_scp" && exit 0
@@ -62,39 +60,46 @@ for n in $(seq $nj); do wav_sp_scp="$wav_sp_scp $log_dir/wav.$n.scp"; done
 
 ./utils/split_scp.pl $tst_scp $wav_sp_scp || exit 1
 
-$cmd JOB=1:$nj $log_dir/decode.$dec_prefix.JOB.log \
+gpu=-1
+for i in $(seq $nj); do
+  [ $cuda ] && gpu=$((i-1))
   cmd/decode.py \
-  $log_dir/wav.JOB.scp \
-  $log_dir/${dec_prefix}.JOB.decode \
-  --beam-size $beam_size \
-  --am $exp_dir \
-  --device-id -1 \
-  --channel $channel \
-  --am-tag $am_tag \
-  --lm-tag $lm_tag \
-  --dict "$dict" \
-  --lm "$lm" \
-  --spm "$spm" \
-  --lm-weight $lm_weight \
-  --ctc-weight $ctc_weight \
-  --temperature $temperature \
-  --space "$space" \
-  --nbest $nbest \
-  --dump-nbest $log_dir/${dec_prefix}.JOB.nbest \
-  --dump-align "$dump_align" \
-  --max-len $max_len \
-  --min-len $min_len \
-  --max-len-ratio $max_len_ratio \
-  --min-len-ratio $min_len_ratio \
-  --function $function \
-  --len-norm $len_norm \
-  --len-penalty $len_penalty \
-  --cov-penalty $cov_penalty \
-  --cov-threshold $cov_threshold \
-  --eos-threshold $eos_threshold
+    $log_dir/wav.${i}.scp \
+    $log_dir/${dec_prefix}.${i}.decode \
+    --segment "$segment" \
+    --beam-size $beam_size \
+    --am $exp_dir \
+    --device-id $gpu \
+    --channel $channel \
+    --am-tag $am_tag \
+    --lm-tag $lm_tag \
+    --dict "$dict" \
+    --lm "$lm" \
+    --spm "$spm" \
+    --lm-weight $lm_weight \
+    --ctc-weight $ctc_weight \
+    --temperature $temperature \
+    --space "$space" \
+    --nbest $nbest \
+    --dump-nbest $log_dir/${dec_prefix}.JOB.nbest \
+    --dump-align "$dump_align" \
+    --max-len $max_len \
+    --min-len $min_len \
+    --max-len-ratio $max_len_ratio \
+    --min-len-ratio $min_len_ratio \
+    --function $function \
+    --len-norm $len_norm \
+    --len-penalty $len_penalty \
+    --cov-penalty $cov_penalty \
+    --cov-threshold $cov_threshold \
+    --eos-threshold $eos_threshold \
+    > $log_dir/decode.${dec_prefix}.${i}.log 2>&1 &
+done
+wait
 
-cat $log_dir/${dec_prefix}.*.decode | sort -k1 > $dec_dir/${dec_prefix}.decode
-cat $log_dir/${dec_prefix}.*.nbest | sort -k1 > $dec_dir/${dec_prefix}.nbest
+for x in nbest decode; do
+  cat $log_dir/${dec_prefix}.*.${x} | sort -k1 > $dec_dir/${dec_prefix}.${x}
+done
 
 if $score ; then
   [ -z $text ] && echo "for --score true, you must given --text <reference-transcription>" && exit -1

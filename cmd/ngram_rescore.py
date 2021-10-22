@@ -4,47 +4,24 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 import kenlm
-import codecs
 import argparse
 
-from aps.utils import get_logger, io_wrapper
+from aps.utils import get_logger
 from aps.opts import StrToBoolAction
-from typing import Dict, Tuple
+from aps.io import io_wrapper, NbestReader
 
 logger = get_logger(__name__)
 
 
-def read_nbest(nbest_fd: str) -> Tuple[int, Dict]:
-    """
-    Load nbest list
-    """
-    hypos = {}
-    nbest = 1
-    with codecs.open(nbest_fd, "r", encoding="utf-8") as f:
-        nbest = int(f.readline())
-        while True:
-            key = f.readline().strip()
-            if not key:
-                break
-            topk = []
-            for _ in range(nbest):
-                items = f.readline().strip().split()
-                score = float(items[0])
-                num_tokens = int(items[1])
-                trans = " ".join(items[2:])
-                topk.append((score, num_tokens, trans))
-            hypos[key] = topk
-    return (nbest, hypos)
-
-
 def run(args):
-    nbest, nbest_hypos = read_nbest(args.nbest)
+    nbest_reader = NbestReader(args.nbest)
     ngram = kenlm.LanguageModel(args.lm)
 
     stdout, top1 = io_wrapper(args.top1, "w")
-    for key, nbest_dict in nbest_hypos.items():
+    done = 0
+    for key, nbest in nbest_reader:
         rescore = []
-        for hyp in nbest_dict:
+        for hyp in nbest:
             am_score, num_tokens, trans = hyp
             lm_score = ngram.score(trans, bos=True, eos=True)
             if args.len_norm:
@@ -53,9 +30,10 @@ def run(args):
             rescore.append((score, trans))
         rescore = sorted(rescore, key=lambda n: n[0], reverse=True)
         top1.write(f"{key}\t{rescore[0][1]}\n")
+        done += 1
     if not stdout:
         top1.close()
-    logger.info(f"Rescore {len(nbest_hypos)} utterances on {nbest} hypos")
+    logger.info(f"Rescore {done} utterances on {nbest} hypos")
 
 
 if __name__ == "__main__":

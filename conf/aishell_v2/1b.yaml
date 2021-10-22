@@ -1,0 +1,103 @@
+# cmd_args:
+#   batch_size: 256
+#   dev_batch_factor: 4
+#   device_ids: 0,1,2,3,4,5,6,7
+#   dict: data/aishell_v2/dict
+#   distributed: torch
+#   epochs: 80
+#   eval_interval: 2500
+#   init: ''
+#   num_workers: 32
+#   prog_interval: 100
+#   resume: ''
+#   save_interval: -1
+#   seed: '888'
+#   tensorboard: false
+#   trainer: ddp
+
+nnet: "asr@transducer"
+
+nnet_conf:
+  input_size: 80
+  enc_type: "concat"
+  enc_proj: 512
+  enc_kwargs:
+    conv2d:
+      channel: 64
+      num_layers: 3
+      stride: 2
+      kernel: 3
+    variant_rnn:
+      rnn: "lstm"
+      num_layers: 3
+      bidirectional: true
+      dropout: 0.2
+      project: 512
+      hidden: 512
+      norm: "LN"
+  dec_kwargs:
+    embed_size: 512
+    jot_dim: 512
+    add_ln: true
+    rnn: "lstm"
+    num_layers: 2
+    hidden: 512
+    dropout: 0.2
+
+task: "asr@transducer"
+
+task_conf:
+  reduction: batchmean
+  interface: warprnnt_pytorch
+
+asr_transform:
+  feats: "perturb-fbank-log-cmvn-aug"
+  frame_len: 400
+  frame_hop: 160
+  window: "hamm"
+  round_pow_of_two: true
+  sr: 16000
+  pre_emphasis: 0.97
+  num_mels: 80
+  norm_mean: true
+  norm_var: true
+  aug_prob: 1
+  aug_maxp_time: 0.2
+  aug_mask_zero: false
+  aug_freq_args: [20, 2]
+  aug_time_args: [80, 2]
+
+trainer_conf:
+  optimizer: "adam"
+  optimizer_kwargs:
+    lr: 0
+    weight_decay: 1.0e-5
+  lr_scheduler: "warmup_exp_decay_lr"
+  lr_scheduler_period: "step"
+  lr_scheduler_kwargs:
+    time_stamps: [12500, 37500, 200000] # epoch 5, 15, 80
+    peak_lr: 5.0e-4
+    stop_lr: 1.0e-8
+  no_impr: 15
+  no_impr_thres: 0.01
+  clip_gradient: 20
+  acmu_gradient: 4
+  report_metrics: ["loss"]
+  stop_criterion: "loss"
+
+data_conf:
+  fmt: "am@raw"
+  loader:
+    max_dur: 30
+    min_dur: 0.1
+    adapt_dur: 5
+    max_token_num: 400
+    adapt_token_num: 100
+  train:
+    wav_scp: "data/aishell_v2/train/wav.scp"
+    utt2dur: "data/aishell_v2/train/utt2dur"
+    text: "data/aishell_v2/train/text"
+  valid:
+    wav_scp: "data/aishell_v2/dev/wav.scp"
+    utt2dur: "data/aishell_v2/dev/utt2dur"
+    text: "data/aishell_v2/dev/text"

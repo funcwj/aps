@@ -37,6 +37,7 @@ ctc_weight=0.4
 . ./utils/parse_options.sh || exit 1
 
 data_dir=data/$dataset
+exp_dir=exp/$dataset/$am_exp
 beg=$(echo $stage | awk -F '-' '{print $1}')
 end=$(echo $stage | awk -F '-' '{print $2}')
 [ -z $end ] && end=$beg
@@ -50,7 +51,7 @@ fi
 
 if [ $end -ge 2 ] && [ $beg -le 2 ]; then
   echo "Stage 2: training AM ..."
-  ./scripts/train.sh \
+  ./scripts/distributed_train.sh \
     --gpu $gpu \
     --seed $seed \
     --epochs $am_epochs \
@@ -76,10 +77,9 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
         --max-len 80 \
         --ctc-weight $ctc_weight \
         --len-norm $len_norm \
-        --dict exp/$dataset/$am_exp/dict \
-        $dataset $am_exp \
-        $data_dir/$data/$name/wav.scp \
-        exp/$dataset/$am_exp/${data}_${name} &
+        --dict $exp_dir/dict \
+        $exp_dir $data_dir/$data/$name/wav.scp \
+        $exp_dir/${data}_${name} &
     done
     wait
   done
@@ -105,9 +105,9 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
       dec_dir=${data}_${name}_nnlm_$lm_weight
       ./scripts/decode.sh \
         --score true \
-        --text data/$dataset/$data/$name/text \
+        --text $data_dir/$data/$name/text \
         --gpu 0 \
-        --dict exp/$dataset/$am_exp/dict \
+        --dict $exp_dir/dict \
         --nbest $nbest \
         --lm exp/$dataset/nnlm/$lm_exp \
         --lm-weight $lm_weight \
@@ -116,9 +116,8 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
         --beam-size $beam_size \
         --ctc-weight $ctc_weight \
         --lm-weight $lm_weight \
-        $dataset $am_exp \
-        $data_dir/$data/$name/wav.scp \
-        exp/$dataset/$am_exp/$dec_dir &
+        $exp_dir $data_dir/$data/$name/wav.scp \
+        $exp_dir/$dec_dir &
     done
     wait
   done

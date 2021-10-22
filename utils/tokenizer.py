@@ -57,6 +57,7 @@ def run(args):
                 print(f"Add units: {add_units} to vocabulary")
                 add_to_vocab(vocab, add_units)
         if args.space:
+            print(f"Add units: {args.space} to vocabulary")
             add_to_vocab(vocab, [args.space])
     filter_units = args.filter_units.split(",")
     print(f"Filter units: {filter_units}")

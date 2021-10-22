@@ -264,7 +264,9 @@ def _forward_stft(wav: th.Tensor,
         frames = tf.unfold(wav[:, None], (1, kernel.shape[-1]),
                            stride=frame_hop,
                            padding=0)
+        # follow Kaldi's Preemphasize
         frames[:, 1:] = frames[:, 1:] - pre_emphasis * frames[:, :-1]
+        frames[:, 0] *= (1 - pre_emphasis)
         # 1 x 2B x W, NC x W x T,  NC x 2B x T
         packed = th.matmul(kernel[:, 0][None, ...], frames)
     else:

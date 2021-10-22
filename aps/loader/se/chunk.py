@@ -13,7 +13,7 @@ import aps.distributed as dist
 from torch.utils.data.dataloader import default_collate
 from kaldi_python_io import Reader as BaseReader
 from typing import List, Dict, Iterator, NoReturn, Union, Iterable
-from aps.loader.audio import AudioReader
+from aps.io.audio import AudioReader
 from aps.libs import ApsRegisters
 
 

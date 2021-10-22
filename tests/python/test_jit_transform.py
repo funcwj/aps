@@ -5,7 +5,7 @@
 import pytest
 import torch as th
 
-from aps.loader.audio import read_audio
+from aps.io import read_audio
 from aps.transform.utils import forward_stft, export_jit
 from aps.transform import AsrTransform
 

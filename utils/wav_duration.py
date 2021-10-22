@@ -17,6 +17,9 @@ prog_interval = 500
 
 
 def ext_open(fd, mode):
+    """
+    Support stdin/stdout & text IO
+    """
     if mode not in ["r", "w"]:
         raise ValueError(f"Unsupported mode: {mode}")
     if fd == "-":
@@ -100,6 +103,7 @@ def run(args):
         pool.join()
         wav2dur_list = " ".join(wav2dur_list)
         merge_cmd = f"cat {wav2dur_list} | sort -k1 > {args.utt2dur} && rm {wav2dur_list}"
+        print(f"Running bash cmd: {merge_cmd} ...")
         os.system(merge_cmd)
 
 

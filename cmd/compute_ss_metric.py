@@ -7,7 +7,7 @@ import tqdm
 import argparse
 import numpy as np
 
-from aps.loader import AudioReader
+from aps.io import AudioReader
 from aps.metric.reporter import AverageReporter
 from aps.metric.sse import permute_metric
 

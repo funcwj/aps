@@ -31,6 +31,9 @@ beg=$(echo $stage | awk -F '-' '{print $1}')
 end=$(echo $stage | awk -F '-' '{print $2}')
 [ -z $end ] && end=$beg
 
+exp_dir=exp/$dataset/$exp
+data_dir=data/$dataset
+
 if [ $end -ge 1 ] && [ $beg -le 1 ]; then
   echo "Stage 1: preparing data ..."
   ./local/timit_data_prep.sh --dataset $dataset $timit_data
@@ -56,16 +59,15 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
   for name in $test_sets; do
     ./scripts/decode.sh \
       --gpu $gpu \
-      --dict exp/timit/$exp/dict \
+      --dict $exp_dir/dict \
       --nbest $nbest \
       --max-len 75 \
       --len-norm $len_norm \
       --ctc-weight $ctc_weight \
       --beam-size $beam_size \
       --dec-prefix beam${beam_size}_raw \
-      $dataset $exp \
-      data/timit/$name/wav.scp \
-      exp/timit/$exp/dec_$name &
+      $exp_dir $data_dir/$name/wav.scp \
+      $exp_dir/dec_$name &
   done
   wait
 fi
@@ -74,11 +76,11 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   echo "Stage 4: compute wer ..."
   for name in $test_sets; do
     txt=beam${beam_size}_raw.decode
-    hyp=exp/timit/$exp/dec_$name/$txt
+    hyp=$exp_dir/dec_$name/$txt
     # mapping
-    local/timit_norm_trans.pl -i $hyp -m conf/timit/phones.60-48-39.map \
+    local/timit_norm_trans.pl -i $hyp -m conf/$dataset/phones.60-48-39.map \
       -from 48 -to 39 > ${hyp}.39phn
     # wer
-    ./cmd/compute_wer.py ${hyp}.39phn data/timit/$name/text.39phn
+    ./cmd/compute_wer.py ${hyp}.39phn $data_dir/$name/text.39phn
   done
 fi

@@ -1,5 +1,9 @@
+# Records
 
-1. `1a.yaml` (git commit `459a17463ac0d4fa59c014bac6f07ff863ffe065`)
+1. AED: Conformer encoder + Transformer decoder
+
+    - configuration: `1a.yaml`
+    - commit: `459a17463ac0d4fa59c014bac6f07ff863ffe065`
 
     - ctc weight = 0.5 & beam size = 8 & without aishell2 data
         | Dataset | dev (SUB/INS/DEL) | test (SUB/INS/DEL) |

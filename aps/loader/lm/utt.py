@@ -17,7 +17,8 @@ from typing import NoReturn, List, Dict, Optional, Iterator, Iterable
 from aps.loader.lm.utils import filter_utts
 from aps.loader.am.utils import derive_indices
 from aps.utils import get_logger
-from aps.const import IGNORE_ID, UNK_TOKEN
+from aps.tokenizer import Vocab
+from aps.const import IGNORE_ID
 from aps.libs import ApsRegisters
 
 logger = get_logger(__name__)
@@ -82,7 +83,7 @@ class Dataset(dat.Dataset):
                  text: str,
                  vocab_dict: Optional[Dict],
                  kaldi_format: bool = True) -> None:
-        self.vocab = vocab_dict
+        self.vocab = Vocab(vocab_dict) if vocab_dict else None
         self.kaldi_format = kaldi_format
         self.token = self._load(text)
 
@@ -104,10 +105,8 @@ class Dataset(dat.Dataset):
         if self.kaldi_format:
             str_toks = str_toks[1:]
         if self.vocab:
-            int_toks = [
-                (self.vocab[t] if t in self.vocab else self.vocab[UNK_TOKEN])
-                for t in str_toks
-            ]
+            # map from str sequences to int sequences
+            int_toks = self.vocab(str_toks)
         else:
             int_toks = list(map(int, str_toks))
         return int_toks

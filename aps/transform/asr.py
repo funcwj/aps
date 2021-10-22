@@ -531,21 +531,28 @@ class CmvnTransform(nn.Module):
                  norm_mean: bool = True,
                  norm_var: bool = True,
                  per_band: bool = True,
+                 dim: int = 1,
                  gcmvn: str = "",
                  eps: float = 1e-5) -> None:
         super(CmvnTransform, self).__init__()
         self.gmean, self.gstd = None, None
         if gcmvn:
             gcmvn_toks = gcmvn.split(".")
-            # in Kaldi format
-            if gcmvn_toks[-1] == "ark":
-                cmvn = th.tensor(read_kaldi_mat(gcmvn), dtype=th.float32)
-                N = cmvn[0, -1]
-                mean = cmvn[0, :-1] / N
-                std = (cmvn[1, :-1] / N - mean**2)**0.5
-            else:
-                stats = th.load(gcmvn)
-                mean, std = stats[0], stats[1]
+            try:
+                # in Kaldi format
+                if gcmvn_toks[-1] == "ark":
+                    cmvn = th.tensor(read_kaldi_mat(gcmvn), dtype=th.float32)
+                    N = cmvn[0, -1]
+                    mean = cmvn[0, :-1] / N
+                    std = (cmvn[1, :-1] / N - mean**2)**0.5
+                else:
+                    stats = th.load(gcmvn)
+                    mean, std = stats[0], stats[1]
+            except FileNotFoundError:
+                warnings.warn(f"{gcmvn} not found (no impact when " +
+                              "will load checkpoint later) ...")
+                mean = th.zeros(dim)
+                std = th.ones(dim)
             self.gmean = nn.Parameter(mean, requires_grad=False)
             self.gstd = nn.Parameter(std, requires_grad=False)
         self.norm_mean = norm_mean
@@ -928,7 +935,7 @@ class FeatureTransform(nn.Module):
                     TFTransposeTransform(),
                     PowerTransform(power=2 if use_power else 1),
                     MelTransform(frame_len, **mel_kwargs),
-                    LogTransform(eps=eps),
+                    LogTransform(eps=eps, lower_bound=log_lower_bound),
                     DiscreteCosineTransform(num_ceps=num_ceps,
                                             num_mels=num_mels,
                                             lifter=lifter)
@@ -959,6 +966,7 @@ class FeatureTransform(nn.Module):
                                   norm_var=norm_var,
                                   per_band=norm_per_band,
                                   gcmvn=gcmvn,
+                                  dim=feats_dim,
                                   eps=eps))
             elif tok == "aug":
                 transform.append(

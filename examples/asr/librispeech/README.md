@@ -1,4 +1,9 @@
-1. `1a.yaml` (git commit `c35d2ac9243024736b827c383ff2692c732e25e3`)
+# Records
+
+1. AED: RNN encoder + RNN decoder
+
+    * configuration: `1a.yaml`
+    * commit: `c35d2ac9243024736b827c383ff2692c732e25e3`
 
     | LM | lm weight | beam | CTC weight | test-clean (SUB/INS/DEL) | test-other (SUB/INS/DEL) |
     |:---:|:---:|:---:|:---:|:---:|:---:|
@@ -10,7 +15,10 @@
     | Transformer | 0.4 | 32 | 0.2 | 3.07% (1308/123/184) | 7.36% (3071/328/453) |
     | Transformer | 0.5 | 32 | 0.5 | 3.06% (1341/123/179) | 7.59% (3160/355/457) |
 
-2. `1b.yaml` (git commit `c35d2ac9243024736b827c383ff2692c732e25e3`)
+1. AED: Transformer encoder + Transformer decoder
+
+    * configuration: `1b.yaml`
+    * commit: `c35d2ac9243024736b827c383ff2692c732e25e3`
 
     | LM | lm weight | beam | CTC weight | test-clean (SUB/INS/DEL) | test-other (SUB/INS/DEL) |
     |:---:|:---:|:---:|:---:|:---:|:---:|

@@ -1,4 +1,9 @@
-* `1a.yaml` (git commit `03595de8d7fc5375a860f5ba52f787d2be7f05a6`)
+# Records
+
+1. AED: RNN encoder + RNN decoder
+
+    - configuration: `1a.yaml`
+    - commit: `03595de8d7fc5375a860f5ba52f787d2be7f05a6`
 
     | LM | LM weight | beam | CTC weight | Length Norm | dev93 (SUB/INS/DEL) | eval92 (SUB/INS/DEL) |
     |:---:|:---:|:---:|:---:|:---:|:---:|:---:|

@@ -10,7 +10,7 @@ import torch as th
 from torch.nn.utils.rnn import pad_sequence
 from typing import Dict, Iterable, Optional
 from aps.loader.am.utils import ASRDataset, ASRDataLoader
-from aps.loader.audio import AudioReader
+from aps.io.audio import AudioReader
 from aps.const import IGNORE_ID
 from aps.libs import ApsRegisters
 

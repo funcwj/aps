@@ -7,14 +7,15 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import Union, Tuple
+from typing import Union, Tuple, Optional
 from aps.asr.lm.ngram import NgramLM
 
 HiddenType = Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]
 LmType = Union[nn.Module, NgramLM]
 
 
-def adjust_hidden(back_point: th.Tensor, state: HiddenType) -> HiddenType:
+def adjust_hidden(back_point: Optional[th.Tensor],
+                  state: HiddenType) -> HiddenType:
     """
     Adjust RNN hidden states
     Args:
@@ -23,7 +24,7 @@ def adjust_hidden(back_point: th.Tensor, state: HiddenType) -> HiddenType:
     Return:
         state (None or Tensor, [Tensor, Tensor])
     """
-    if state is not None:
+    if state is not None and back_point is not None:
         if isinstance(state, tuple):
             # shape: num_layers * num_directions, batch, hidden_size
             h, c = state
@@ -33,8 +34,8 @@ def adjust_hidden(back_point: th.Tensor, state: HiddenType) -> HiddenType:
     return state
 
 
-def ngram_score(lm: NgramLM, back_point: th.Tensor, prev_token: th.Tensor,
-                state):
+def ngram_score(lm: NgramLM, back_point: Optional[th.Tensor],
+                prev_token: th.Tensor, state):
     """
     Get ngram LM score
     Args:
@@ -48,12 +49,16 @@ def ngram_score(lm: NgramLM, back_point: th.Tensor, prev_token: th.Tensor,
         prev_state = None
     else:
         # adjust states
-        ptr = back_point.tolist()
-        prev_state = [state[p] for p in ptr]
+        if back_point is None:
+            prev_state = state
+        else:
+            ptr = back_point.tolist()
+            prev_state = [state[p] for p in ptr]
     return lm(prev_token, prev_state)
 
 
-def rnnlm_score(rnnlm: nn.Module, back_point: th.Tensor, prev_token: th.Tensor,
+def rnnlm_score(rnnlm: nn.Module, back_point: Optional[th.Tensor],
+                prev_token: th.Tensor,
                 state: HiddenType) -> Tuple[th.Tensor, HiddenType]:
     """
     Get RNN LM prob/score
@@ -71,12 +76,12 @@ def rnnlm_score(rnnlm: nn.Module, back_point: th.Tensor, prev_token: th.Tensor,
     lmout, state = rnnlm(prev_token[..., None], state)
     # beam x V
     score = tf.log_softmax(lmout[:, -1], dim=-1)
-    # return state & score
+    # return score & state
     return (score, state)
 
 
-def lm_score_impl(lm: LmType, back_point: th.Tensor, prev_token: th.Tensor,
-                  state):
+def lm_score_impl(lm: LmType, back_point: Optional[th.Tensor],
+                  prev_token: th.Tensor, state):
     """
     Get ngram/rnnlm score (wraps {rnnlm|ngram}_score functions)
     """

@@ -14,6 +14,7 @@ from copy import deepcopy
 from typing import List, Dict, Tuple, Optional
 from aps.utils import get_logger
 from aps.const import NEG_INF
+from aps.asr.beam_search.lm import lm_score_impl, LmType
 
 logger = get_logger(__name__)
 
@@ -27,8 +28,17 @@ class Node(object):
         self.score = score
         self.stats = stats
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str):
         return self.stats[key]
+
+    def clone(self):
+        lm_state = self.stats["lm_state"]
+        # trick to avoid ngram state copy
+        self.stats["lm_state"] = None
+        copy = deepcopy(self)
+        copy.stats["lm_state"] = lm_state
+        self.stats["lm_state"] = lm_state
+        return copy
 
 
 def is_valid_decoder(decoder: nn.Module, blank: int):
@@ -51,7 +61,7 @@ class TransducerBeamSearch(nn.Module):
 
     def __init__(self,
                  decoder: nn.Module,
-                 lm: Optional[nn.Module] = None,
+                 lm: Optional[LmType] = None,
                  blank: int = -1):
         super(TransducerBeamSearch, self).__init__()
         # check valid
@@ -73,6 +83,14 @@ class TransducerBeamSearch(nn.Module):
         # decoder + dec_proj
         dec_out, dec_hid = self.decoder.pred(prev_tok, hidden=pred_hid)
         return dec_out, dec_hid
+
+    def _lm_score(self, prev_tok, state):
+        """
+        Predict LM score
+        """
+        prev_tok = th.tensor([prev_tok], dtype=th.int64, device=self.device)
+        score, state = lm_score_impl(self.lm, None, prev_tok, state)
+        return score[0], state
 
     def _joint_log_prob(self, enc_proj: th.Tensor,
                         dec_proj: th.Tensor) -> th.Tensor:
@@ -162,7 +180,13 @@ class TransducerBeamSearch(nn.Module):
         if beam_size == 1:
             return self.greedy_search(enc_proj)
 
-        init = {"tok_seq": [self.blank], "dec_hid": None, "dec_out": []}
+        with_lm = self.lm is not None and lm_weight > 0
+        init = {
+            "tok_seq": [self.blank],
+            "dec_hid": None,
+            "dec_out": [],
+            "lm_state": None
+        }
         # list_a, list_b: A, B in Algorithm 1
         list_b = [Node(th.tensor(0.0).to(self.device), init)]
         for t in range(T):
@@ -176,6 +200,7 @@ class TransducerBeamSearch(nn.Module):
             cache_dec_hid = []
             cache_dec_out = []
             cache_node = []
+            cache_lm = []
 
             best_idx = 0
             best_tok = cache_logp[best_idx].argmax().item()
@@ -191,7 +216,7 @@ class TransducerBeamSearch(nn.Module):
 
                 # add terminal node (end with blank)
                 # update Pr(y^*) = Pr(y^*)Pr(b|y,t)
-                blank_node = deepcopy(best_node)
+                blank_node = best_node.clone()
                 blank_node.score += log_prob[self.blank]
 
                 merge_done = False
@@ -204,7 +229,13 @@ class TransducerBeamSearch(nn.Module):
                     list_b.append(blank_node)
 
                 # without blank
-                cache_logp.append(log_prob[:-1])
+                if with_lm:
+                    lm_score, lm_state = self._lm_score(
+                        best_node["tok_seq"][-1], best_node["lm_state"])
+                    cache_logp.append(log_prob[:-1] + lm_weight * lm_score)
+                    cache_lm.append(lm_state)
+                else:
+                    cache_logp.append(log_prob[:-1])
                 # cache stats
                 cache_node.append(best_node)
                 cache_dec_hid.append(dec_hid)
@@ -230,16 +261,19 @@ class TransducerBeamSearch(nn.Module):
                 if best_idx == 0:
                     best_node = list_a[best_tok]
                 else:
-                    father_node = cache_node[best_idx - 1]
+                    best_idx -= 1
+                    father_node = cache_node[best_idx]
                     update_stats = {
                         "tok_seq":
                             father_node["tok_seq"] + [best_tok],
                         "dec_hid":
-                            cache_dec_hid[best_idx - 1],
+                            cache_dec_hid[best_idx],
                         "dec_out":
-                            father_node["dec_out"] +
-                            [cache_dec_out[best_idx - 1]]
+                            father_node["dec_out"] + [cache_dec_out[best_idx]],
+                        "lm_state":
+                            cache_lm[best_idx] if with_lm else None
                     }
+                    best_idx += 1
                     best_node = Node(best_val, update_stats)
                 # sort list_b
                 list_b = sorted(list_b, key=lambda n: n.score, reverse=True)

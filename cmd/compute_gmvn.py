@@ -11,7 +11,7 @@ import argparse
 import torch as th
 import multiprocessing as mp
 
-from aps.loader import AudioReader
+from aps.io import AudioReader, SegmentAudioReader
 from aps.libs import aps_transform
 from aps.utils import get_logger
 
@@ -22,7 +22,13 @@ prog_interval = 500
 
 
 def worker(jobid, transform, args, stats):
-    wav_reader = AudioReader(args.wav_scp, sr=args.sr, channel=args.channel)
+    if args.segment:
+        wav_reader = SegmentAudioReader(args.wav_scp,
+                                        args.segment,
+                                        sr=args.sr,
+                                        channel=args.channel)
+    else:
+        wav_reader = AudioReader(args.wav_scp, sr=args.sr, channel=args.channel)
     gmvn = th.zeros([2, transform.feats_dim])
     n, done, num_frames = 0, 0, 0
     for key, wav in wav_reader:
@@ -131,5 +137,9 @@ if __name__ == "__main__":
                         default=1,
                         type=int,
                         help="Number of jobs to run in parallel")
+    parser.add_argument("--segment",
+                        type=str,
+                        default="",
+                        help="Kaldi's segment file for wav.scp")
     args = parser.parse_args()
     run(args)

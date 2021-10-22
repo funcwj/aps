@@ -1,7 +1,9 @@
-1. `1a.yaml`
+# Records
 
-    * git commit:  `ece27e252c19bc64e37d48777935caf5f6417c56`
-    * track: `isolated_1ch_track`
+1. AED: Transformer encoder + Transformer decoder
+
+    * configuration: `1a.yaml`
+    * commit:  `ece27e252c19bc64e37d48777935caf5f6417c56`
 
     | LM | LM weight | beam | CTC weight | Length Norm | dt05_real | dt05_real | et05_simu | et05_real |
     |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|

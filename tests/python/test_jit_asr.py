@@ -203,7 +203,8 @@ def test_streaming_cfmr_linear(lctx, chunk):
         "feedforward_dim": 256,
         "kernel_size": 15,
         "att_dropout": 0.1,
-        "ffn_dropout": 0.1
+        "ffn_dropout": 0.1,
+        "pre_norm": False
     }
     N, T, F = 2, 20, 80
     cfmr = StreamingTransformerEncoder("cfmr",

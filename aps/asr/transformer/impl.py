@@ -411,16 +411,14 @@ class ApsTransformerEncoderLayer(nn.Module):
         Return:
             out (Tensor): T x N x D
         """
-        inp = src
-        if self.pre_norm:
-            src = self.norm1(src)
-        att, _ = self.self_attn(src,
-                                src,
-                                src,
+        inp = self.norm1(src) if self.pre_norm else src
+        att, _ = self.self_attn(inp,
+                                inp,
+                                inp,
                                 inj_pose,
                                 attn_mask=src_mask,
                                 key_padding_mask=src_key_padding_mask)
-        src = inp + self.dropout(att)
+        src = src + self.dropout(att)
         if self.pre_norm:
             src = src + self.feedforward(self.norm2(src))
         else:
@@ -442,17 +440,22 @@ class ApsConformerEncoderLayer(nn.Module):
                  dropout: float = 0.1,
                  kernel_size: int = 15,
                  macaron: float = True,
+                 pre_norm: bool = True,
                  casual_conv1d: bool = False,
                  activation: str = "swish"):
         super(ApsConformerEncoderLayer, self).__init__()
         assert kernel_size % 2 == 1
         self.self_attn = self_attn
         if macaron:
+            self.norm_ffn1 = nn.LayerNorm(att_dim)
+            self.macaron_factor = 0.5
             self.feedforward1 = nn.Sequential(
-                nn.LayerNorm(att_dim), nn.Linear(att_dim, feedforward_dim),
+                nn.Linear(att_dim, feedforward_dim),
                 get_activation_fn(activation), nn.Dropout(dropout),
                 nn.Linear(feedforward_dim, att_dim), nn.Dropout(dropout))
         else:
+            self.macaron_factor = 1
+            self.norm_ffn1 = None
             self.feedforward1 = None
         self.convolution = nn.Sequential(
             nn.Conv1d(att_dim, att_dim * 2, 1), nn.GLU(dim=-2),
@@ -463,16 +466,17 @@ class ApsConformerEncoderLayer(nn.Module):
                       padding=0 if casual_conv1d else (kernel_size - 1) // 2),
             nn.BatchNorm1d(att_dim), get_activation_fn(activation),
             nn.Conv1d(att_dim, att_dim, 1), nn.Dropout(p=dropout))
-        self.feedforward2 = nn.Sequential(nn.LayerNorm(att_dim),
-                                          nn.Linear(att_dim, feedforward_dim),
+        self.norm_ffn2 = nn.LayerNorm(att_dim)
+        self.feedforward2 = nn.Sequential(nn.Linear(att_dim, feedforward_dim),
                                           get_activation_fn(activation),
                                           nn.Dropout(dropout),
                                           nn.Linear(feedforward_dim, att_dim),
                                           nn.Dropout(dropout))
-        self.norm1 = nn.LayerNorm(att_dim)
-        self.norm2 = nn.LayerNorm(att_dim)
+        self.norm_attn = nn.LayerNorm(att_dim)
+        self.norm_conv = nn.LayerNorm(att_dim)
         self.dropout = nn.Dropout(dropout)
         self.padding = kernel_size - 1 if casual_conv1d else 0
+        self.pre_norm = pre_norm
 
     def conv(self, inp: th.Tensor) -> th.Tensor:
         """
@@ -507,25 +511,31 @@ class ApsConformerEncoderLayer(nn.Module):
         # NOTE: use pre-norm by default
         # 1) FFN
         if self.feedforward1 is not None:
-            src1 = self.feedforward1(src) * 0.5 + src
-        else:
-            src1 = src
-        # self-attention block
-        src2 = self.norm1(src1)
-        att, _ = self.self_attn(src2,
-                                src2,
-                                src2,
+            if self.pre_norm:
+                src = self.feedforward1(
+                    self.norm_ffn1(src)) * self.macaron_factor + src
+            else:
+                src = self.norm_ffn1(
+                    self.feedforward1(src) * self.macaron_factor + src)
+        # 2) MHSA
+        inp = self.norm_attn(src) if self.pre_norm else src
+        att, _ = self.self_attn(inp,
+                                inp,
+                                inp,
                                 inj_pose,
                                 attn_mask=src_mask,
                                 key_padding_mask=src_key_padding_mask)
-        src = src1 + self.dropout(att)
-        # conv
-        src = self.conv(self.norm2(src)) + src
-        # 2) FFN
-        if self.feedforward1 is not None:
-            out = self.feedforward2(src) * 0.5 + src
+        src = src + self.dropout(att)
+        # 3) CNN + FFN
+        if self.pre_norm:
+            src = self.conv(self.norm_conv(src)) + src
+            out = self.feedforward2(
+                self.norm_ffn2(src)) * self.macaron_factor + src
         else:
-            out = self.feedforward2(src) + src
+            src = self.conv(self.norm_attn(src)) + src
+            src = self.norm_conv(src)
+            out = self.norm_ffn2(
+                self.feedforward2(src) * self.macaron_factor + src)
         return out
 
 
@@ -623,6 +633,8 @@ class ConformerEncoderLayer(ApsConformerEncoderLayer):
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
                  kernel_size: int = 15,
+                 macaron: bool = True,
+                 pre_norm: bool = True,
                  activation: str = "swish") -> None:
         self_attn = ApsMultiheadAttention(att_dim,
                                           nhead,
@@ -634,7 +646,9 @@ class ConformerEncoderLayer(ApsConformerEncoderLayer):
                              feedforward_dim=feedforward_dim,
                              dropout=ffn_dropout,
                              activation=activation,
-                             kernel_size=kernel_size)
+                             kernel_size=kernel_size,
+                             macaron=macaron,
+                             pre_norm=pre_norm)
 
 
 @TransformerEncoderLayers.register("cfmr_rel")
@@ -650,6 +664,8 @@ class ConformerRelEncoderLayer(ApsConformerEncoderLayer):
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
                  kernel_size: int = 15,
+                 macaron: bool = True,
+                 pre_norm: bool = True,
                  activation: str = "swish") -> None:
         self_attn = RelMultiheadAttention(att_dim, nhead, dropout=att_dropout)
         super(ConformerRelEncoderLayer,
@@ -658,7 +674,9 @@ class ConformerRelEncoderLayer(ApsConformerEncoderLayer):
                              feedforward_dim=feedforward_dim,
                              dropout=ffn_dropout,
                              activation=activation,
-                             kernel_size=kernel_size)
+                             kernel_size=kernel_size,
+                             macaron=macaron,
+                             pre_norm=pre_norm)
 
 
 @TransformerEncoderLayers.register("cfmr_xl")
@@ -674,6 +692,8 @@ class ConformerXLEncoderLayer(ApsConformerEncoderLayer):
                  att_dropout: float = 0.1,
                  ffn_dropout: float = 0.1,
                  kernel_size: int = 15,
+                 macaron: bool = True,
+                 pre_norm: bool = True,
                  activation: str = "swish",
                  rel_u: Optional[nn.Parameter] = None,
                  rel_v: Optional[nn.Parameter] = None) -> None:
@@ -688,14 +708,17 @@ class ConformerXLEncoderLayer(ApsConformerEncoderLayer):
                              feedforward_dim=feedforward_dim,
                              dropout=ffn_dropout,
                              activation=activation,
-                             kernel_size=kernel_size)
+                             kernel_size=kernel_size,
+                             macaron=macaron,
+                             pre_norm=pre_norm)
 
 
 class ApsTransformerEncoder(nn.Module):
     """
     Wrapper for a stack of N Transformer encoder layers
     """
-    __constants__ = ['norm']
+
+    # __constants__ = ['norm']
 
     def __init__(self,
                  encoder_layer: nn.Module,
