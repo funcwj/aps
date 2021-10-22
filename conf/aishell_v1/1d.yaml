@@ -1,0 +1,111 @@
+# cmd_args:
+#   batch_size: 128
+#   dev_batch_factor: 2
+#   device_ids: 0,1,2,3
+#   dict: data/aishell_v1/dict
+#   distributed: torch
+#   epochs: 120
+#   eval_interval: 2500
+#   init: ''
+#   num_workers: 32
+#   prog_interval: 250
+#   resume: ''
+#   save_interval: -1
+#   seed: '888'
+#   tensorboard: false
+#   trainer: ddp
+
+asr_transform:
+  audio_norm: false
+  aug_freq_args:
+  - 20
+  - 2
+  aug_mask_zero: false
+  aug_maxp_time: 0.2
+  aug_prob: 1
+  aug_time_args:
+  - 40
+  - 2
+  feats: perturb-fbank-log-cmvn-aug
+  frame_hop: 160
+  frame_len: 400
+  log_lower_bound: 1
+  norm_mean: true
+  norm_var: true
+  num_mels: 80
+  pre_emphasis: 0.97
+  round_pow_of_two: true
+  sr: 16000
+  stft_mode: kaldi
+  window: hamm
+
+nnet: asr@transducer
+
+nnet_conf:
+  input_size: 80
+  enc_proj: 512
+  enc_type: concat
+  enc_kwargs:
+    conv2d:
+      channel: 128
+      kernel: 3
+      num_layers: 3
+      stride: 2
+    variant_rnn:
+      bidirectional: true
+      dropout: 0.2
+      hidden: 512
+      norm: LN
+      num_layers: 4
+      project: 512
+      rnn: lstm
+  dec_kwargs:
+    add_ln: true
+    dropout: 0.2
+    embed_size: 512
+    enc_dim: 512
+    hidden: 512
+    jot_dim: 512
+    num_layers: 2
+    rnn: lstm
+
+task: asr@transducer
+
+task_conf:
+  interface: warprnnt_pytorch
+  reduction: batchmean
+
+trainer_conf:
+  acmu_gradient: 1
+  clip_gradient: 20
+  lr_scheduler: warmup_exp_decay_lr
+  lr_scheduler_kwargs:
+    peak_lr: 0.0001
+    stop_lr: 1.0e-08
+    time_stamps: [12500, 37500, 200000]
+  lr_scheduler_period: step
+  no_impr: 15
+  no_impr_thres: 0.01
+  optimizer: adamw
+  optimizer_kwargs:
+    lr: 0
+    weight_decay: 0.001
+  report_metrics: ["loss"]
+  stop_criterion: loss
+
+data_conf:
+  fmt: am@raw
+  loader:
+    adapt_dur: 5
+    adapt_token_num: 100
+    max_dur: 30
+    max_token_num: 400
+    min_dur: 0.1
+  train:
+    text: data/aishell_v1/train/text
+    utt2dur: data/aishell_v1/train/utt2dur
+    wav_scp: data/aishell_v1/train/wav.scp
+  valid:
+    text: data/aishell_v1/dev/text
+    utt2dur: data/aishell_v1/dev/utt2dur
+    wav_scp: data/aishell_v1/dev/wav.scp
