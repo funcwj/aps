@@ -61,16 +61,12 @@ class FasterDecoder(NnetEvaluator):
         if not hasattr(self.nnet, function):
             raise RuntimeError(
                 f"AM doesn't have the decoding function: {function}")
-        self.decode = getattr(self.nnet, function)
-        self.function = function
+        self.decoder = getattr(self.nnet, function)
         logger.info(f"Use decoding function: {function}")
 
     def run(self, src, **kwargs):
         src = th.from_numpy(src).to(self.device)
-        if self.function == "greedy_search":
-            return self.decode(src)
-        else:
-            return self.decode(src, **kwargs)
+        return self.decoder(src, **kwargs)
 
 
 def run(args):

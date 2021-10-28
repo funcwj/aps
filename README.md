@@ -5,7 +5,7 @@
 [![Testing](https://github.com/funcwj/aps/workflows/Unit%20Testing/badge.svg)](https://github.com/funcwj/aps/workflows/Unit%20Testing/badge.svg)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 
-My opensource toolkit for speech related tasks, e.g., single/multi-channel speech enhancement & separation & recognition. The goal is to simplify the training and evaluation procedure and make it easy and flexible for me to do experiments and verify neural network based methods.
+My open-source toolkit for speech related tasks, e.g., single/multi-channel speech enhancement & separation & recognition. The goal is to simplify the training and evaluation procedure and make it easy and flexible for me to do experiments and verify neural network based methods.
 
 ## Setup
 

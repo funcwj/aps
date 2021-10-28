@@ -11,13 +11,14 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from distutils.version import LooseVersion
 from aps.sse.base import SSEBase
 from aps.libs import ApsRegisters
 from aps.const import TORCH_VERSION, EPSILON
 
 
 def sinc(t):
-    if TORCH_VERSION >= 1.8:
+    if TORCH_VERSION >= LooseVersion("1.8"):
         return th.sinc(t)
     else:
         return th.where(t == 0, th.tensor(1., device=t.device, dtype=t.dtype),

@@ -14,7 +14,7 @@ import scipy.signal as ss
 
 from collections import defaultdict
 from kaldi_python_io import Reader as BaseReader
-from typing import Optional, IO, Union, Any, NoReturn
+from typing import Optional, IO, Union, Any, NoReturn, Dict
 
 __all__ = [
     "read_audio", "write_audio", "group_segments", "add_room_response",
@@ -80,20 +80,23 @@ def write_audio(fname: Union[str, IO[Any]],
     sf.write(fname, samps, sr, format=audio_format)
 
 
-def group_segments(segment: str, sr: int):
+def group_segments(segment: str, sr: int, wav_scp: str = "") -> Dict:
     """
     Make segment grouped by the utterance keys
     Args:
         segment: path of the segment file
         sr: sample rate of the audio
     """
-    grouped = defaultdict(list)
     segment = BaseReader(segment,
                          num_tokens=4,
                          value_processor=lambda x:
                          (x[0], float(x[1]), float(x[2])))
+    wav_reader = BaseReader(wav_scp, num_tokens=2) if wav_scp else None
+    grouped = defaultdict(list)
     for seg_key, seg_stats in segment:
         utt_key, beg, end = seg_stats
+        if wav_scp and utt_key not in wav_reader:
+            continue
         beg = int(sr * beg)
         end = int(sr * end)
         grouped[utt_key].append((seg_key, beg, end))
@@ -263,16 +266,16 @@ class SegmentAudioReader(object):
                                         sr=sr,
                                         norm=norm,
                                         channel=channel)
-        self.segment = group_segments(segment, sr)
+        self.segment = group_segments(segment, sr, wav_scp=wav_scp)
+
+    def __len__(self):
+        return sum([len(self.segment[k]) for k in self.segment])
 
     def __iter__(self):
         """
         Sequential access
         """
         for utt_key in self.segment:
-            # if some utterances are missing, skip
-            if utt_key not in self.audio_reader:
-                continue
             audio = self.audio_reader[utt_key]
             # segments on utterance: utt_key
             for info in self.segment[utt_key]:

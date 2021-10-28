@@ -12,7 +12,7 @@
     | - | 0 | 16 | 1.0 | 8.76% (17390/350/238) | 9.90% (9927/279/168) |
     | RNN | 0.2 | 16 | 0.2 | 6.35% (12555/216/265) | 6.94% (6912/200/157) |
 
-2. AED: Transformer encoder + Transformer decoder
+2. AED: Conformer encoder + Transformer decoder
 
     * configuration: `1b.yaml`
     * commit: `5b015c4945ee0468d1f00b35924eb36e13f2bc65`
@@ -44,3 +44,14 @@
     | - | 0 | 1 | 9.64% (18621/909/256) | 10.80% (10609/562/141) |
     | - | 0 | 4 | 8.85% (17274/619/278) | 9.78% (9699/395/155) |
     | - | 0 | 8 | 8.84% (17250/611/281) | 9.76% (9679/390/153) |
+
+5. AED: Conformer encoder + Transformer decoder
+
+    * configuration: `1e.yaml`
+    * commit: `54c7f48bdadd7f495cbdfde6dee8e023a483205c`
+
+    | LM | lm weight | beam | CTC weight | Dev (SUB/INS/DEL) | Test (SUB/INS/DEL) |
+    |:---:|:---:|:---:|:---:|:---:|:---:|
+    | - | 0 | 8 | 0 | 4.83% (9584/178/160) |  |
+    | - | 0 | 8 | 0.2 | 4.57% (9043/175/157) | 5.08% (5036/214/77) |
+    | - | 0 | 8 | 0.4 | 4.52% (8965/164/156) | 5.07% (5056/172/80) |

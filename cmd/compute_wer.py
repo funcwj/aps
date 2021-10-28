@@ -8,8 +8,11 @@ import argparse
 
 from aps.opts import StrToBoolAction
 from aps.io import TextReader
+from aps.utils import get_logger
 from aps.metric.reporter import WerReporter
 from aps.metric.asr import permute_wer
+
+logger = get_logger(__name__)
 
 
 class TransReader(object):
@@ -26,19 +29,16 @@ class TransReader(object):
         return len(self.readers)
 
     def __getitem__(self, key):
-        if not self._check(key):
-            raise RuntimeError(f"Missing {key} in one of the text files")
         return [reader[key] for reader in self.readers]
 
-    def _check(self, key):
+    def __contains__(self, key):
         status = [key in reader for reader in self.readers]
         return sum(status) == len(self.readers)
 
     def __iter__(self):
         ref = self.readers[0]
         for key in ref.index_keys:
-            if self._check(key):
-                yield key, self[key]
+            yield key, self[key]
 
 
 def run(args):
@@ -52,9 +52,12 @@ def run(args):
                            name="CER" if args.cer else "WER",
                            unit="%")
     for key, hyp in hyp_reader:
+        if key not in ref_reader:
+            logger.warn(f"Missing reference for utterance {key} ...")
+            continue
         ref = ref_reader[key]
         if args.reduce == "sum" or len(hyp_reader) == 1:
-            err = permute_wer(hyp, ref)
+            err = permute_wer(hyp, ref, details=args.details)
             ref_len = sum([len(r) for r in ref])
         else:
             err = [math.inf, 0, 0]
@@ -70,6 +73,8 @@ def run(args):
             else:
                 each_utt.write(f"{key}\tINF\n")
         reporter.add(key, err, ref_len)
+    if each_utt:
+        each_utt.close()
     reporter.report()
 
 
@@ -95,6 +100,11 @@ if __name__ == "__main__":
                         default="",
                         help="If assigned, report results "
                         "per-class (gender or degree)")
+    parser.add_argument("--details",
+                        action=StrToBoolAction,
+                        default=False,
+                        help="Show alignment information " +
+                        "between hyp and ref text")
     parser.add_argument("--cer",
                         action=StrToBoolAction,
                         default=False,

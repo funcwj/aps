@@ -5,7 +5,7 @@ ARG CUDNN=7
 FROM nvidia/cuda:${CUDA}-cudnn${CUDNN}-devel-ubuntu18.04
 
 ARG PYTHON_VERSION=3.8
-ARG PYTORCH_VERSION=1.6.0
+ARG PYTORCH_VERSION=1.10
 ARG OPENMPI=v4.0
 ARG OPENMPI_VERSION=4.0.5
 
@@ -41,11 +41,13 @@ ENV LD_LIBRARY_PATH=$CUDA_HOME/lib64:/usr/local/lib:$LD_LIBRARY_PATH
 # install python dependency
 RUN conda install -y python=${PYTHON_VERSION}
 # see https://pytorch.org/get-started/previous-versions/
-RUN conda install -y pytorch==${PYTORCH_VERSION} cudatoolkit=${CUDA_TOOLKIT} -c pytorch -c conda-forge
+RUN conda install -y pytorch==${PYTORCH_VERSION} torchaudio cudatoolkit=${CUDA_TOOLKIT} -c pytorch
 RUN conda install -y pyyaml matplotlib tqdm scipy h5py pybind11 yapf
 RUN conda install -y -c conda-forge tensorboard pysoundfile librosa pre-commit && conda clean -ya
 RUN pip install kaldi_python_io edit-distance museval sentencepiece pystoi pypesq pytest flake8
 RUN pip install https://github.com/kpu/kenlm/archive/master.zip
+# patch
+RUN pip install numba==0.52
 
 # install hovorod (optional)
 RUN ldconfig /usr/local/cuda/targets/x86_64-linux/lib/stubs && \

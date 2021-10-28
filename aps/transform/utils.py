@@ -11,8 +11,9 @@ import librosa.filters as filters
 
 from aps.const import EPSILON, TORCH_VERSION
 from typing import Optional, Tuple
+from distutils.version import LooseVersion
 
-if TORCH_VERSION >= 1.7:
+if TORCH_VERSION >= LooseVersion("1.7"):
     from torch.fft import fft as fft_func
 else:
     pass
@@ -439,7 +440,7 @@ def _pytorch_istft(transform: th.Tensor,
     Return:
         wav (Tensor): synthetic audio
     """
-    if TORCH_VERSION < 1.7:
+    if TORCH_VERSION < LooseVersion("1.7"):
         raise RuntimeError("Can not use this function as TORCH_VERSION < 1.7")
 
     transform_dim = transform.dim()

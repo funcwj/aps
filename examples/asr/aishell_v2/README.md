@@ -36,7 +36,7 @@
     | 5gram | 0.5 | 8 | 8.15% (1884/91/47) | 9.52% (2188/117/57) | 9.64% (2211/109/70) |  8.31% (3830/194/92) | 9.14% (4233/181/115) | 9.30% (4251/241/113)  |
 
 
-3. AED: Transformer encoder + RNN decoder
+4. AED: Transformer encoder + RNN decoder
 
     * configuration: `1d.yaml`
     * commit: `29c7da192484d7be93e4081d2784fb367ba39789`

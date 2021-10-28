@@ -73,7 +73,7 @@ def run(args):
         for n, tok in enumerate(sets):
             # remove tokens
             is_filter_tok = tok in filter_units
-            if is_filter_tok and args.unit != "char":
+            if is_filter_tok:
                 continue
             # word => char
             if args.unit == "char" and not is_filter_tok:
