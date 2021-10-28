@@ -94,7 +94,7 @@ def init_kernel(frame_len: int,
     else:
         S = 1
     # W x B x 2
-    if TORCH_VERSION >= 1.7:
+    if TORCH_VERSION >= LooseVersion("1.7"):
         K = fft_func(th.eye(fft_size) / S, dim=-1)
         K = th.stack([K.real, K.imag], dim=-1)
     else:
@@ -385,7 +385,7 @@ def _pytorch_stft(wav: th.Tensor,
     Return:
         transform (Tensor), STFT transform results
     """
-    if TORCH_VERSION < 1.7:
+    if TORCH_VERSION < LooseVersion("1.7"):
         raise RuntimeError("Can not use this function as TORCH_VERSION < 1.7")
     wav_dim = wav.dim()
     if wav_dim not in [2, 3]:
@@ -657,7 +657,9 @@ class STFTBase(nn.Module):
         assert th.sum(wav_len <= self.win_length) == 0
         if self.center:
             wav_len += self.win_length
-        return (wav_len - self.win_length) // self.frame_hop + 1
+        return th.div(wav_len - self.win_length,
+                      self.frame_hop,
+                      rounding_mode="floor") + 1
 
     def extra_repr(self) -> str:
         str_repr = (

@@ -62,11 +62,10 @@ echo "#num_process = $num_process, GPUs = $gpu"
 case $distributed in
   "torch" )
     port=$(echo "import random; print(random.randint(10000, 20000))" | python)
-    python -m torch.distributed.launch \
-      --nnodes 1 \
-      --nproc_per_node $num_process \
+    # python -m torch.distributed.launch --use_env \
+    torchrun --nproc_per_node $num_process \
       --master_port $port \
-      --use_env \
+      --nnodes 1 \
       cmd/train_$task.py $opts \
       --conf $conf \
       --seed $seed \
