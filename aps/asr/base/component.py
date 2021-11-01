@@ -229,7 +229,7 @@ class Conv1d(nn.Module):
         return th.div(dim + 2 * self.padding - self.dilation *
                       (self.kernel_size - 1) - 1,
                       self.stride,
-                      rounding_mode="floor") + 1
+                      rounding_mode="trunc") + 1
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
@@ -294,7 +294,7 @@ class Conv2d(nn.Module):
         return th.div(dim + 2 * self.padding[axis] -
                       self.dilation[axis] * self.kernel_size[axis],
                       self.stride[axis],
-                      rounding_mode="floor") + 1
+                      rounding_mode="trunc") + 1
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """

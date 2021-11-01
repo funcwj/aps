@@ -659,7 +659,7 @@ class STFTBase(nn.Module):
             wav_len += self.win_length
         return th.div(wav_len - self.win_length,
                       self.frame_hop,
-                      rounding_mode="floor") + 1
+                      rounding_mode="trunc") + 1
 
     def extra_repr(self) -> str:
         str_repr = (

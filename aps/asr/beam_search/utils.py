@@ -383,7 +383,7 @@ class BeamTracker(BaseBeamTracker):
         # point to father's node
         token = topk_token.view(-1)[topk_index]
         self.acmu_score = self.disable_unk(token, acmu_score)
-        point = topk_index // self.param.beam_size
+        point = th.div(topk_index, self.param.beam_size, rounding_mode="trunc")
         # concat stats
         self.trans = self.concat(self.trans, point, token)
         self.align = self.concat(self.align, None,

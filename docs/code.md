@@ -168,3 +168,19 @@ The submodule for streaming ASR which is designed with TorchScript support and m
 ## `aps.rt_sse`
 
 The submodule for real time speech enhancement & separation which is also designed with TorchScript support and model deployment features. Refer to the demo code directory [aps/demos/real_time_enhancement](aps/demos/real_time_enhancement) for details.
+
+## `aps.io`
+
+IO utilities for audio and text
+
+## `aps.metric`
+
+Evaluation metric for speech tasks, e.g., WER for ASR, SNR/PESQ/STOI for speech enhancement/separation.
+
+## `aps.eval`
+
+Evaluation utilities speech tasks, e.g., text normalization for ASR, audio stitcher for speech enhancement/separation.
+
+## `aps.tokenizer`
+
+Tokenizer module for ASR tasks

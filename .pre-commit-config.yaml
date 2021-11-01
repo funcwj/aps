@@ -8,7 +8,11 @@ repos:
     -   id: end-of-file-fixer
     -   id: check-yaml
 -   repo: https://github.com/pre-commit/mirrors-yapf
-    rev: ''  # Use the sha / tag you want to point at
+    rev: ''
     hooks:
     -   id: yapf
         language: python
+-   repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: ''
+    hooks:
+    -   id: clang-format

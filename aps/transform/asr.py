@@ -161,7 +161,7 @@ class SpeedPerturbTransform(nn.Module):
             return None
         return th.div(inp_len,
                       self.src_sr[self.last_choice],
-                      rounding_mode="floor") * self.dst_sr[self.last_choice]
+                      rounding_mode="trunc") * self.dst_sr[self.last_choice]
 
     def forward(self, wav: th.Tensor) -> th.Tensor:
         """
@@ -1010,7 +1010,7 @@ class FeatureTransform(nn.Module):
         # return num_frames // self.subsampling_factor
         return th.div(num_frames,
                       self.subsampling_factor,
-                      rounding_mode="floor")
+                      rounding_mode="trunc")
 
     def forward(self, inp_pad: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> AsrReturnType:

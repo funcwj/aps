@@ -78,7 +78,7 @@ class ParameterAverager(object):
             if self.averaged[key].is_floating_point():
                 self.averaged[key].div_(self.count)
             else:
-                self.averaged[key] //= (self.count)
+                self.averaged[key].div_(self.count, rounding_mode="trunc")
         return self.averaged
 
 
