@@ -17,3 +17,7 @@ repos:
     rev: 'v13.0.0'
     hooks:
     -   id: clang-format
+-   repo: https://github.com/pycqa/flake8
+    rev: ''
+    hooks:
+    -   id: flake8

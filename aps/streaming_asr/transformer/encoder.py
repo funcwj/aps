@@ -74,7 +74,7 @@ class StreamingTransformerEncoder(nn.Module):
         if self.proj is None:
             enc_inp = chunk
         else:
-            enc_inp = self.proj(chunk)
+            enc_inp = self.proj(chunk, None)[0]
         # T x N x D
         enc_inp = enc_inp.transpose(0, 1)
         # T x N x D
@@ -99,8 +99,7 @@ class StreamingTransformerEncoder(nn.Module):
         if self.proj is None:
             enc_inp = inp_pad
         else:
-            inp_len = self.proj.num_frames(inp_len)
-            enc_inp = self.proj(inp_pad)
+            enc_inp, inp_len = self.proj(inp_pad, inp_len)
 
         src_pad_mask = None if inp_len is None else (padding_mask(inp_len) == 1)
         nframes = enc_inp.shape[1]

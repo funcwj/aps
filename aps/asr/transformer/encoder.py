@@ -66,8 +66,7 @@ class TransformerEncoder(nn.Module):
         if self.proj is None:
             enc_inp = inp_pad
         else:
-            inp_len = self.proj.num_frames(inp_len)
-            enc_inp = self.proj(inp_pad)
+            enc_inp, inp_len = self.proj(inp_pad, inp_len)
 
         src_pad_mask = None if inp_len is None else (padding_mask(inp_len) == 1)
         nframes = enc_inp.shape[1]

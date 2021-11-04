@@ -146,9 +146,10 @@ conv1d_fsmn_enc_kwargs = {
 }
 
 xfmr_abs_enc_kwargs = {
-    "proj": "conv2d",
+    "proj": "conv1d",
     "proj_kwargs": {
-        "conv_channels": 128,
+        "kernel": 3,
+        "stride": 2,
         "num_layers": 3
     },
     "pose": "abs",
@@ -190,9 +191,10 @@ xfmr_rel_enc_kwargs = {
 }
 
 xfmr_xl_enc_kwargs = {
-    "proj": "conv2d",
+    "proj": "conv1d",
     "proj_kwargs": {
-        "conv_channels": 128,
+        "kernel": 3,
+        "stride": 2,
         "num_layers": 3
     },
     "pose": "xl",
