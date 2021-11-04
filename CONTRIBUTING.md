@@ -8,6 +8,4 @@
 3. Create the pull request after the your personal branch is done. Remember to
 
     * use [type hints](https://docs.python.org/3.8/library/typing.html) in the python code
-    * format the python code using `yapf`
     * add necessary test cases in [tests](../tests)
-    * check the python style using `flake8` before making the PR or it will failed in testing
