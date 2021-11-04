@@ -21,7 +21,11 @@ For developers (who want to make commits or PRs), contiune running
 # set up the git hook scripts
 pre-commit install
 ```
-to setup the development environments.
+to setup the development environments. To build C++ sources and demo commands, running
+```shell
+mkdir build && cd build
+cmake .. && make -j
+```
 
 ## Introduction
 

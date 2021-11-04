@@ -9,8 +9,7 @@ import argparse
 from aps.opts import StrToBoolAction
 from aps.io import TextReader
 from aps.utils import get_logger
-from aps.metric.reporter import WerReporter
-from aps.metric.asr import permute_wer
+from aps.metric import WerReporter, permute_wer
 
 logger = get_logger(__name__)
 

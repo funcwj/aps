@@ -116,7 +116,8 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
   mkdir $data/lm && cd $data/lm && wget http://www.openslr.org/resources/11/librispeech-lm-norm.txt.gz && \
     gunzip librispeech-lm-norm.txt.gz && cd -
   lm_data_dir=$data_dir/lm && mkdir -p $lm_data_dir
-  cat $data_dir/dev/token | sort -k1 > $lm_data_dir/dev.token
+  cat $data_dir/dev/token | awk '{$1=""; print}' | sed 's:^[ \t]*::g' \
+    > $lm_data_dir/dev.token
   cp $data/lm/librispeech-lm-norm.txt $lm_data_dir/train.text
   ./utils/subword.sh --op "encode" --encode "piece" \
     $lm_data_dir/train.text exp/$dataset/$wp_name \

@@ -1,0 +1,60 @@
+# cmd_args:
+#   batch_size: 128
+#   dev_batch_factor: 1
+#   device_ids: '0'
+#   dict: data/gigaspeech/dict
+#   distributed: none
+#   epochs: 120
+#   eval_interval: 3000
+#   init: ''
+#   num_workers: 8
+#   prog_interval: 250
+#   resume: ''
+#   save_interval: -1
+#   seed: '888'
+#   tensorboard: false
+#   trainer: ddp
+
+nnet: asr@rnn_lm
+
+nnet_conf:
+  dropout: 0.2
+  embed_size: 512
+  hidden_size: 1024
+  num_layers: 3
+  rnn: lstm
+  tie_weights: true
+
+task: asr@lm
+
+task_conf:
+  bptt_mode: true
+
+trainer_conf:
+  clip_gradient: 10
+  lr_scheduler_kwargs:
+    factor: 0.8
+    min_lr: 1.0e-08
+    patience: 1
+  no_impr: 15
+  no_impr_thres: 0.05
+  optimizer: adam
+  optimizer_kwargs:
+    lr: 0.001
+    weight_decay: 1.0e-05
+  report_metrics:
+  - loss
+  - accu
+  - '@ppl'
+  stop_criterion: '@ppl'
+
+data_conf:
+  fmt: lm@bptt
+  loader:
+    bptt_size: 48
+    max_token_num: 120
+    min_token_num: 4
+  train:
+    text: /datablob/wujian/data/gigaspeech/gigaspeech_train_xl/token
+  valid:
+    text: /datablob/wujian/data/gigaspeech/gigaspeech_dev/token

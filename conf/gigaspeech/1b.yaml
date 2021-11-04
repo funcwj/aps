@@ -1,0 +1,129 @@
+# cmd_args:
+#   batch_size: 256
+#   dev_batch_factor: 2
+#   device_ids: 0,1,2,3,4,5,6,7
+#   dict: data/gigaspeech/dict
+#   distributed: torch
+#   epochs: 100
+#   eval_interval: 2500
+#   init: ''
+#   num_workers: 16
+#   prog_interval: 250
+#   resume: ''
+#   save_interval: -1
+#   seed: '888'
+#   tensorboard: false
+#   trainer: ddp
+
+asr_transform:
+  audio_norm: false
+  aug_adaptive_args:
+  - 0.05
+  - 0.05
+  aug_freq_args:
+  - 20
+  - 2
+  aug_mask_zero: false
+  aug_prob: 1
+  aug_time_args:
+  - 100
+  - 20
+  feats: perturb-fbank-log-cmvn-aug
+  frame_hop: 160
+  frame_len: 400
+  log_lower_bound: 1
+  norm_mean: true
+  norm_var: true
+  num_mels: 80
+  pre_emphasis: 0.97
+  round_pow_of_two: true
+  sr: 16000
+  stft_mode: kaldi
+  window: hamm
+
+nnet: asr@xfmr
+
+nnet_conf:
+  input_size: 80
+  enc_type: cfmr
+  enc_kwargs:
+    arch_kwargs:
+      att_dim: 512
+      att_dropout: 0
+      feedforward_dim: 2048
+      ffn_dropout: 0.2
+      kernel_size: 15
+      nhead: 8
+      pre_norm: true
+    num_layers: 12
+    pose: rel
+    pose_kwargs:
+      dropout: 0.1
+      lradius: 256
+      rradius: 256
+    proj: conv2d
+    proj_kwargs:
+      conv_channels: 256
+      num_layers: 3
+  dec_kwargs:
+    arch_kwargs:
+      att_dim: 512
+      att_dropout: 0
+      feedforward_dim: 2048
+      ffn_dropout: 0.2
+      nhead: 8
+    num_layers: 6
+    pose_kwargs:
+      dropout: 0.1
+
+task: asr@ctc_xent
+
+task_conf:
+  ctc_weight: 0.3
+  lsm_factor: 0.1
+  lsm_method: uniform
+
+trainer_conf:
+  acmu_gradient: 4
+  average_checkpoint: 15
+  clip_gradient: 20
+  lr_scheduler: warmup_linear_decay_lr
+  lr_scheduler_kwargs:
+    peak_lr: 0.0002
+    stop_lr: 1.0e-08
+    time_stamps:
+    - 25000
+    - 25000
+    - 250000
+  lr_scheduler_period: step
+  no_impr: 15
+  no_impr_thres: 0.01
+  optimizer: adamw
+  optimizer_kwargs:
+    lr: 0
+    weight_decay: 0.001
+  report_metrics:
+  - loss
+  - accu
+  - '@ctc'
+  stop_criterion: accu
+
+data_conf:
+  fmt: am@raw
+  loader:
+    adapt_dur: 10
+    adapt_token_num: 100
+    max_dur: 30
+    max_token_num: 400
+    min_batch_size: 4
+    min_dur: 0.4
+    # NOTE: you may need to filter bad utterances
+    # skip_utts: data/gigaspeech/bad_utts
+  train:
+    text: data/gigaspeech/train_xl/token
+    utt2dur: data/gigaspeech/train_xl/utt2dur
+    wav_scp: data/gigaspeech/train_xl/wav.scp
+  valid:
+    text: data/gigaspeech/dev/token
+    utt2dur: data/gigaspeech/dev/utt2dur
+    wav_scp: data/gigaspeech/dev/wav.scp
