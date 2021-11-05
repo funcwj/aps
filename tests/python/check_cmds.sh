@@ -34,10 +34,10 @@ for metric in sdr pesq stoi sisnr; do
 done
 
 egs_dir=tests/data/dataloader/se
-
+transform=tests/data/transform
 cmd/compute_gmvn.py --transform asr --sr 16000 --num-jobs 2 \
-  $egs_dir/wav.1.scp tests/data/transform/transform.yaml \
-  tests/data/transform/gmvn.pt && rm tests/data/transform/gmvn.pt
+  $egs_dir/wav.1.scp $transform/transform.yaml \
+  $transform/gmvn.pt && rm $transform/gmvn.pt
 cmd/check_audio.py $egs_dir/wav.1.scp -
 cmd/archive_wav.py $egs_dir/wav.1.scp $egs_dir/egs.1.scp $egs_dir/egs.1.ark
 cmd/extract_wav.py $egs_dir/egs.1.scp $egs_dir/egs

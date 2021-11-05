@@ -6,6 +6,8 @@ omit =
     aps/metric/*
     aps/trainer/*
     aps/eval/*
+    aps/tokenizer/*
+    tests/*
 
 [report]
 exclude_lines =

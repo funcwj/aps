@@ -2,8 +2,9 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-brightgreen.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python-Version](https://img.shields.io/badge/Python-3.7%7C3.8-brightgreen)](https://github.com/funcwj/aps)
+[![](https://codecov.io/gh/funcwj/aps/branch/jwu/master/graph/badge.svg)](https://codecov.io/gh/funcwj/aps)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
-[![Testing](https://github.com/funcwj/aps/actions/workflows/test_python.yml/badge.svg)](https://github.com/funcwj/aps/actions/workflows/test_python.yml/badge.svg)
+[![CI](https://github.com/funcwj/aps/actions/workflows/test_python.yml/badge.svg)](https://github.com/funcwj/aps/actions/workflows/test_python.yml/badge.svg)
 
 My open-source toolkit for speech related tasks, e.g., single/multi-channel speech enhancement & separation & recognition. The goal is to simplify the training and evaluation procedure and make it easy and flexible for me to do experiments and verify neural network based methods.
 
