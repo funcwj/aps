@@ -9,7 +9,7 @@ from aps.io import read_audio
 from aps.transform.utils import forward_stft, export_jit
 from aps.transform import AsrTransform
 
-egs1_wav = read_audio("data/transform/egs1.wav", sr=16000)
+egs1_wav = read_audio("tests/data/transform/egs1.wav", sr=16000)
 
 
 @pytest.mark.parametrize("wav", [egs1_wav])

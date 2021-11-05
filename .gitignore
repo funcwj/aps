@@ -37,3 +37,7 @@ __pycache__/
 
 # TODO: remove it
 *.pt.tar
+
+# codecov
+.coverage
+coverage.xml

@@ -14,8 +14,8 @@ from aps.transform.asr import SpeedPerturbTransform
 from aps.transform import AsrTransform, EnhTransform, FixedBeamformer, DfTransform
 from aps.io import read_audio
 
-egs1_wav = read_audio("data/transform/egs1.wav", sr=16000)
-egs2_wav = read_audio("data/transform/egs2.wav", sr=16000)
+egs1_wav = read_audio("tests/data/transform/egs1.wav", sr=16000)
+egs2_wav = read_audio("tests/data/transform/egs2.wav", sr=16000)
 
 
 @pytest.mark.parametrize("wav", [egs1_wav])
@@ -199,7 +199,7 @@ def debug_visualize_feature():
                              aug_time_args=(100, 1),
                              aug_mask_zero=False,
                              delta_as_channel=True)
-    egs1_wav = read_audio("data/transform/egs1.wav", sr=16000)
+    egs1_wav = read_audio("tests/data/transform/egs1.wav", sr=16000)
     egs1_wav = th.from_numpy(egs1_wav)
     egs1_len = th.tensor([egs1_wav.shape[-1]])
     feats, feats_len = transform(egs1_wav[None, ...], egs1_len[None, ...])
@@ -211,10 +211,10 @@ def debug_visualize_feature():
 def debug_speed_perturb():
     from aps.loader import write_audio
     speed_perturb = SpeedPerturbTransform(sr=16000)
-    egs = read_audio("data/transform/egs1.wav", sr=16000, norm=False)
+    # egs = read_audio("data/transform/egs1.wav", sr=16000, norm=False)
     # 12 x S
     batch = 12
-    egs = th.repeat_interleave(th.from_numpy(egs[None, :]), batch, 0)
+    egs = th.repeat_interleave(th.from_numpy(egs1_wav[None, :]), batch, 0)
     egs_len = th.tensor([egs.shape[-1]] * batch, dtype=th.int64)
     egs_sp = speed_perturb(egs)
     for i in range(batch):
@@ -228,5 +228,6 @@ if __name__ == "__main__":
     # debug_speed_perturb()
     # debug_visualize_feature()
     # test_asr_transform_jit(egs1_wav, "fbank-log-cmvn")
-    test_streaming_stft(egs1_wav, 512, 256, "hann")
+    # test_streaming_stft(egs1_wav, 512, 256, "hann")
     # test_forward_inverse_stft(egs1_wav, 512, 256, "hann", "librosa")
+    pass

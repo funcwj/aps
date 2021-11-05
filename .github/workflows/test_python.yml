@@ -35,8 +35,13 @@ jobs:
 
       - name: Run testing cases (cmd)
         run: |
-          cd tests/python && bash check_cmds.sh
+          bash tests/python/check_cmds.sh
 
       - name: Run testing cases (lib)
         run: |
-          cd tests/python && pytest
+          pytest tests/python --cov=. --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v2
+        with:
+          fail_ci_if_error: true
