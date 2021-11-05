@@ -1,13 +1,13 @@
 # cmd_args:
-#   batch_size: 256
+#   batch_size: 64
 #   dev_batch_factor: 2
-#   device_ids: 0,1,2,3,4,5,6,7
-#   dict: data/gigaspeech/dict
+#   device_ids: 0,1,2,3
+#   dict: data/librispeech/dict
 #   distributed: torch
-#   epochs: 80
-#   eval_interval: 2500
+#   epochs: 120
+#   eval_interval: -1
 #   init: ''
-#   num_workers: 16
+#   num_workers: 32
 #   prog_interval: 250
 #   resume: ''
 #   save_interval: -1
@@ -17,15 +17,17 @@
 
 asr_transform:
   audio_norm: false
+  aug_adaptive_args:
+  - 0.05
+  - 0.05
   aug_freq_args:
   - 20
   - 2
   aug_mask_zero: false
-  aug_maxp_time: 0.3
   aug_prob: 1
   aug_time_args:
-  - 80
-  - 2
+  - 100
+  - 20
   feats: perturb-fbank-log-cmvn-aug
   frame_hop: 160
   frame_len: 400
@@ -46,30 +48,29 @@ nnet_conf:
   enc_type: cfmr
   enc_kwargs:
     arch_kwargs:
-      att_dim: 256
-      att_dropout: 0.2
+      att_dim: 512
+      att_dropout: 0
       feedforward_dim: 2048
       ffn_dropout: 0.2
       kernel_size: 15
-      nhead: 4
+      nhead: 8
       pre_norm: true
     num_layers: 12
-    pose: rel
+    output_proj: -1
+    pose: xl
     pose_kwargs:
       dropout: 0.2
-      lradius: 256
-      rradius: 256
     proj: conv2d
     proj_kwargs:
       conv_channels: 256
-      num_layers: 2
+      num_layers: 3
   dec_kwargs:
     arch_kwargs:
-      att_dim: 256
-      att_dropout: 0.2
+      att_dim: 512
+      att_dropout: 0
       feedforward_dim: 2048
       ffn_dropout: 0.2
-      nhead: 4
+      nhead: 8
     num_layers: 6
     pose_kwargs:
       dropout: 0.2
@@ -77,7 +78,7 @@ nnet_conf:
 task: asr@ctc_xent
 
 task_conf:
-  ctc_weight: 0.2
+  ctc_weight: 0.3
   lsm_factor: 0.1
   lsm_method: uniform
 
@@ -86,19 +87,19 @@ trainer_conf:
   clip_gradient: 20
   lr_scheduler: warmup_linear_decay_lr
   lr_scheduler_kwargs:
-    peak_lr: 0.0004
+    peak_lr: 0.0005
     stop_lr: 1.0e-08
     time_stamps:
     - 25000
     - 25000
-    - 250000
+    - 200000
   lr_scheduler_period: step
   no_impr: 15
   no_impr_thres: 0.01
-  optimizer: adam
+  optimizer: adamw
   optimizer_kwargs:
     lr: 0
-    weight_decay: 0.0001
+    weight_decay: 0.001
   report_metrics:
   - loss
   - accu
@@ -115,10 +116,10 @@ data_conf:
     min_batch_size: 4
     min_dur: 0.4
   train:
-    text: data/gigaspeech/train_xl/token
-    utt2dur: data/gigaspeech/train_xl/utt2dur
-    wav_scp: data/gigaspeech/train_xl/wav.scp
+    text: data/librispeech/train/token
+    utt2dur: data/librispeech/train/utt2dur
+    wav_scp: data/librispeech/train/wav.scp
   valid:
-    text: data/gigaspeech/dev/token
-    utt2dur: data/gigaspeech/dev/utt2dur
-    wav_scp: data/gigaspeech/dev/wav.scp
+    text: data/librispeech/dev/token
+    utt2dur: data/librispeech/dev/utt2dur
+    wav_scp: data/librispeech/dev/wav.scp

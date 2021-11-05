@@ -4,6 +4,8 @@
 import math
 
 import torch as th
+import torch.cuda.amp as amp
+
 from torch.nn.utils import clip_grad_norm_
 from torch.nn.parallel import DistributedDataParallel
 from typing import Optional, Dict, List, Union, NoReturn
@@ -50,6 +52,7 @@ class DdpTrainer(Trainer):
                  report_metrics: List[str] = ["loss"],
                  reduction_tag: str = "none",
                  stop_on_errors: int = 10,
+                 use_amp: bool = False,
                  **kwargs) -> None:
         super(DdpTrainer,
               self).__init__(task,
@@ -82,7 +85,14 @@ class DdpTrainer(Trainer):
         if dist.get_backend() not in ["torch", "none"]:
             raise ValueError(
                 "DdpTrainer should use torch/none as distributed backend")
+        self.scaler = amp.GradScaler() if use_amp else None
         self.setup_distributed(device_id)
+        if self.scaler:
+            self.reporter.log(
+                "Use PyTorch's automatic mixed precision training")
+            if self.cpt_stats:
+                self.scaler.load_state_dict(self.cpt_stats["scaler_state"])
+                self.reporter.log("Load scaler state from the checkpoint")
 
     def setup_distributed(self, device_id: int) -> NoReturn:
         """
@@ -100,6 +110,17 @@ class DdpTrainer(Trainer):
         else:
             self.distributed = False
 
+    def _forward_step(self, egs: Dict, is_backward_step: bool) -> Dict:
+        """
+        Wrapper of forward step
+        """
+        if self.distributed and not is_backward_step:
+            with self.task.no_sync():
+                stats = self.task(egs)
+        else:
+            stats = self.task(egs)
+        return stats
+
     def train_one_step(self, egs: Dict) -> bool:
         """
         Make one training step (return true if no error exists)
@@ -116,11 +137,11 @@ class DdpTrainer(Trainer):
         is_backward_step = (self.cur_step + 1) % self.acmu_gradient == 0
         # handle OOM during forward
         try:
-            if self.distributed and not is_backward_step:
-                with self.task.no_sync():
-                    stats = self.task(egs)
+            if self.scaler:
+                with amp.autocast():
+                    stats = self._forward_step(egs, is_backward_step)
             else:
-                stats = self.task(egs)
+                stats = self._forward_step(egs, is_backward_step)
         except RuntimeError as rt_err:
             if OOM_STRING in str(rt_err):
                 th.cuda.empty_cache()
@@ -131,15 +152,19 @@ class DdpTrainer(Trainer):
 
         # use all reduce to check loss
         if self.distributed and is_backward_step:
-            loss = dist.all_reduce(stats["loss"].clone()).item()
+            loss_float = dist.all_reduce(stats["loss"].clone()).item()
         else:
-            loss = stats["loss"].item()
+            loss_float = stats["loss"].item()
 
         # backward if not nan/inf
-        if math.isfinite(loss):
-            (stats["loss"] / self.acmu_gradient).backward()
+        if math.isfinite(loss_float):
+            loss = stats["loss"] / self.acmu_gradient
+            if self.scaler:
+                self.scaler.scale(loss).backward()
+            else:
+                loss.backward()
         else:
-            self.reporter.log(f"Invalid loss {loss:.3f}, skip...")
+            self.reporter.log(f"Invalid loss {loss_float:.3f}, skip...")
             return False
 
         # if not backward step, return
@@ -149,11 +174,18 @@ class DdpTrainer(Trainer):
         # clip gradient after backward
         norm = -1
         if self.clip_gradient > 0:
+            if self.scaler:
+                self.scaler.unscale_(self.optimizer)
             norm = clip_grad_norm_(self.task.parameters(), self.clip_gradient)
 
         # step optimizer and update statistics
         if math.isfinite(norm):
-            self.optimizer.step()
+            # if use amp
+            if self.scaler:
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                self.optimizer.step()
             self.optimizer.zero_grad()
             if norm != -1:
                 stats["norm"] = norm
@@ -171,8 +203,11 @@ class DdpTrainer(Trainer):
         """
         Return model states which will be saved in the checkpoint
         """
-        return {
+        stats = {
             "model_state":
                 self.task.module.nnet.state_dict()
                 if self.distributed else self.task.nnet.state_dict()
         }
+        if self.scaler:
+            stats["scaler_state"] = self.scaler.state_dict()
+        return stats

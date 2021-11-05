@@ -35,6 +35,7 @@ class TorchRNNLM(nn.Module):
                  vocab_size: int = 40,
                  rnn: str = "lstm",
                  dropout: float = 0.2,
+                 proj_size: int = -1,
                  num_layers: int = 3,
                  hidden_size: int = 512,
                  tie_weights: bool = False) -> None:
@@ -47,6 +48,7 @@ class TorchRNNLM(nn.Module):
         self.pred = PyTorchRNN(rnn,
                                embed_size,
                                hidden_size,
+                               proj_size=proj_size,
                                num_layers=num_layers,
                                dropout=dropout,
                                bidirectional=False)

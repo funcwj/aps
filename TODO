@@ -1,5 +1,4 @@
-1. Add recipes (speaker tasks, hybrid AM training)
-2. Add SOTA models
-3. TorchScript/JIT features (export)
-4. Streaming
-5. ...
+1. Add recipes (ASR, SE & SS, Speaker, ...)
+2. Tune the performance on public dataset
+3. Streaming E2E-ASR models
+4. ...

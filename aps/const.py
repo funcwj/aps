@@ -8,6 +8,8 @@ import math
 import numpy as np
 import torch as th
 
+from distutils.version import LooseVersion
+
 IGNORE_ID = -1
 NEG_INF = th.finfo(th.float32).min
 MATH_PI = math.pi
@@ -16,4 +18,4 @@ MAX_INT16 = np.iinfo(np.int16).max
 UNK_TOKEN = "<unk>"
 BLK_TOKEN = "<b>"
 OOM_STRING = "out of memory"
-TORCH_VERSION = float(".".join(th.__version__.split(".")[:2]))
+TORCH_VERSION = LooseVersion(th.__version__)

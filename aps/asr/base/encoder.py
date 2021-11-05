@@ -406,10 +406,10 @@ class Conv2dEncoder(EncoderBase):
                    for_streaming=for_streaming) for i in range(num_layers)
         ])
         # freq axis
-        freq_dim = inp_features
+        freq_dim = th.IntTensor([inp_features])
         for conv2d in self.enc_layers:
             freq_dim = conv2d.compute_outp_dim(freq_dim, 1)
-        freq_x_channel = freq_dim * channel[-1]
+        freq_x_channel = freq_dim.item() * channel[-1]
         if out_features > 0:
             self.out_features = out_features
             self.outp = nn.Linear(freq_x_channel, out_features)

@@ -1,0 +1,17 @@
+[run]
+branch = True
+source = aps
+omit =
+    aps/distributed/*
+    aps/metric/*
+    aps/trainer/*
+    aps/eval/*
+    aps/tokenizer/*
+    tests/*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    raise NotImplementedError
+    if __name__ == .__main__.:
+ignore_errors = True

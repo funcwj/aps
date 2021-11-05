@@ -11,8 +11,9 @@ import librosa.filters as filters
 
 from aps.const import EPSILON, TORCH_VERSION
 from typing import Optional, Tuple
+from distutils.version import LooseVersion
 
-if TORCH_VERSION >= 1.7:
+if TORCH_VERSION >= LooseVersion("1.7"):
     from torch.fft import fft as fft_func
 else:
     pass
@@ -93,7 +94,7 @@ def init_kernel(frame_len: int,
     else:
         S = 1
     # W x B x 2
-    if TORCH_VERSION >= 1.7:
+    if TORCH_VERSION >= LooseVersion("1.7"):
         K = fft_func(th.eye(fft_size) / S, dim=-1)
         K = th.stack([K.real, K.imag], dim=-1)
     else:
@@ -384,14 +385,13 @@ def _pytorch_stft(wav: th.Tensor,
     Return:
         transform (Tensor), STFT transform results
     """
-    if TORCH_VERSION < 1.7:
+    if TORCH_VERSION < LooseVersion("1.7"):
         raise RuntimeError("Can not use this function as TORCH_VERSION < 1.7")
     wav_dim = wav.dim()
     if wav_dim not in [2, 3]:
         raise RuntimeError(f"STFT expect 2D/3D tensor, but got {wav_dim:d}D")
     # if N x C x S, reshape NC x S
-    N, S = wav.shape[0], wav.shape[-1]
-    wav = wav.view(-1, S)
+    wav = wav.view(-1, wav.shape[-1])
     # STFT: N x F x T x 2
     stft = th.stft(wav,
                    n_fft,
@@ -403,7 +403,8 @@ def _pytorch_stft(wav: th.Tensor,
                    onesided=onesided,
                    return_complex=False)
     if wav_dim == 3:
-        stft = stft.view(N, -1, stft.shape[-3], stft.shape[-2])
+        N, F, T, _ = stft.shape
+        stft = stft.view(N, -1, F, T, 2)
     # N x (C) x F x T x 2
     if not return_polar:
         return stft
@@ -439,7 +440,7 @@ def _pytorch_istft(transform: th.Tensor,
     Return:
         wav (Tensor): synthetic audio
     """
-    if TORCH_VERSION < 1.7:
+    if TORCH_VERSION < LooseVersion("1.7"):
         raise RuntimeError("Can not use this function as TORCH_VERSION < 1.7")
 
     transform_dim = transform.dim()
@@ -656,7 +657,9 @@ class STFTBase(nn.Module):
         assert th.sum(wav_len <= self.win_length) == 0
         if self.center:
             wav_len += self.win_length
-        return (wav_len - self.win_length) // self.frame_hop + 1
+        return th.div(wav_len - self.win_length,
+                      self.frame_hop,
+                      rounding_mode="trunc") + 1
 
     def extra_repr(self) -> str:
         str_repr = (

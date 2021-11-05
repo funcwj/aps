@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Optional, Tuple, Union
+from distutils.version import LooseVersion
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 from aps.const import TORCH_VERSION
@@ -41,7 +42,8 @@ def var_len_rnn_forward(rnn_impl: nn.Module,
     if inp_len is not None:
         inp = pack_padded_sequence(
             inp,
-            inp_len if TORCH_VERSION < 1.7 else inp_len.tolist(),
+            inp_len
+            if TORCH_VERSION < LooseVersion("1.7") else inp_len.tolist(),
             batch_first=True,
             enforce_sorted=enforce_sorted)
     out, _ = rnn_impl(inp)
@@ -168,7 +170,8 @@ def PyTorchRNN(mode: str,
     }
     if mode in ["GRU", "LSTM"]:
         # add proj_size if needed
-        if mode == "LSTM" and TORCH_VERSION >= 1.8 and proj_size > 0:
+        if mode == "LSTM" and TORCH_VERSION >= LooseVersion(
+                "1.8") and proj_size > 0:
             kwargs["proj_size"] = proj_size
         return supported_rnn[mode](input_size, hidden_size, num_layers,
                                    **kwargs)
@@ -223,8 +226,10 @@ class Conv1d(nn.Module):
         """
         Compute output dimention
         """
-        return (dim + 2 * self.padding - self.dilation *
-                (self.kernel_size - 1) - 1) // self.stride + 1
+        return th.div(dim + 2 * self.padding - self.dilation *
+                      (self.kernel_size - 1) - 1,
+                      self.stride,
+                      rounding_mode="trunc") + 1
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """
@@ -286,8 +291,10 @@ class Conv2d(nn.Module):
         """
         Compute output dimention
         """
-        return (dim + 2 * self.padding[axis] - self.dilation[axis] *
-                self.kernel_size[axis]) // self.stride[axis] + 1
+        return th.div(dim + 2 * self.padding[axis] -
+                      self.dilation[axis] * self.kernel_size[axis],
+                      self.stride[axis],
+                      rounding_mode="trunc") + 1
 
     def forward(self, inp: th.Tensor) -> th.Tensor:
         """

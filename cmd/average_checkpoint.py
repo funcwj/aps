@@ -6,7 +6,7 @@
 import argparse
 import torch as th
 
-from aps.trainer.base import ParameterAverager
+from aps.trainer import ParameterAverager
 from aps.utils import get_logger
 
 logger = get_logger(__name__)

@@ -53,7 +53,7 @@ fi
 if [ $end -ge 2 ] && [ $beg -le 2 ]; then
   echo "Stage 2: tokenizing ..."
   for name in dev train; do
-    ./utils/tokenizer.py \
+    ./cmd/text_tokenize.py \
       --dump-vocab $data_dir/dict \
       --filter-units "<*IN*>,<*MR.*>,<NOISE>" \
       --add-units "<sos>,<eos>,<unk>" \

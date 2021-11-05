@@ -2,13 +2,22 @@
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v2.4.0
+    rev: v4.0.1
     hooks:
     -   id: trailing-whitespace
     -   id: end-of-file-fixer
     -   id: check-yaml
+    -   id: check-ast
 -   repo: https://github.com/pre-commit/mirrors-yapf
-    rev: ''  # Use the sha / tag you want to point at
+    rev: 'v0.31.0'
     hooks:
     -   id: yapf
         language: python
+-   repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: 'v13.0.0'
+    hooks:
+    -   id: clang-format
+-   repo: https://github.com/pycqa/flake8
+    rev: '4.0.1'
+    hooks:
+    -   id: flake8

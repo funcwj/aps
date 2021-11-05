@@ -9,7 +9,7 @@ sudo apt-get install -y libsndfile-dev ffmpeg curl
 # python dependencies
 pip install --upgrade pip wheel
 pip install -r requirements.txt
-pip install numba==0.48
+pip install numba==0.52 pytest-cov
 # RNNT (can run on CPU)
 git clone https://github.com/HawkAaron/warp-transducer.git && cd warp-transducer
 mkdir build && cd build && cmake .. && make -j $nj && sudo make install && sudo ldconfig -v

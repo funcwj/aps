@@ -43,7 +43,7 @@ class WordTokenizer(Tokenizer):
         for n, tok in enumerate(raw_tokens):
             # remove tokens
             is_filter_tok = tok in self.filter_words
-            if is_filter_tok and not self.char:
+            if is_filter_tok:
                 continue
             # word => char
             if self.char and not is_filter_tok:

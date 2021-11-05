@@ -14,14 +14,18 @@ from aps.asr.transformer.utils import digit_shift, prep_sub_mask
 from aps.asr.base.attention import padding_mask
 
 
-@pytest.mark.parametrize(
-    "str_lib",
-    ["data/external/nnet.py:VoiceFilter", "data/external/task.py:DpclTask"])
+@pytest.mark.parametrize("str_lib", [
+    "tests/data/external/nnet.py:VoiceFilter",
+    "tests/data/external/task.py:DpclTask"
+])
 def test_import_lib(str_lib):
     dynamic_importlib(str_lib)
 
 
-@pytest.mark.parametrize("str_dict", ["data/checkpoint/aishell_att_1a/dict"])
+@pytest.mark.parametrize("str_dict", [
+    "tests/data/checkpoint/aishell_att_1a/dict",
+    "tests/data/checkpoint/timit_rnnt_1a/dict"
+])
 def test_load_dict(str_dict):
     load_dict(str_dict)
     load_dict(str_dict, reverse=True)

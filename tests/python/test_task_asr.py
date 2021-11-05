@@ -3,6 +3,7 @@
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
+import pytest
 import torch as th
 
 from aps.libs import aps_task, aps_asr_nnet
@@ -110,7 +111,8 @@ def test_ctc_xent():
     assert not th.isnan(stats["loss"])
 
 
-def test_rnnt():
+@pytest.mark.parametrize("rnnt_api", ["warprnnt_pytorch", "torchaudio"])
+def test_rnnt(rnnt_api):
     nnet_cls = aps_asr_nnet("asr@transducer")
     vocab_size = 100
     batch_size = 4
@@ -124,7 +126,7 @@ def test_rnnt():
     task = aps_task("asr@transducer",
                     rnnt_asr,
                     blank=vocab_size - 1,
-                    interface="warprnnt_pytorch")
+                    interface=rnnt_api)
     egs = gen_asr_egs(batch_size, vocab_size)
     stats = task(egs)
     assert not th.isnan(stats["loss"])

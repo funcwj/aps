@@ -92,7 +92,7 @@ def _permute_eval(eval_func: Callable,
         return max(metric), perm[max_idx]
 
 
-def permute_metric(
+def permute_sse_metric(
         name: str,
         ref: np.ndarray,
         est: np.ndarray,

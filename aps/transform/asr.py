@@ -159,8 +159,9 @@ class SpeedPerturbTransform(nn.Module):
             return inp_len
         if inp_len is None:
             return None
-        return inp_len // self.src_sr[self.last_choice] * self.dst_sr[
-            self.last_choice]
+        return th.div(inp_len,
+                      self.src_sr[self.last_choice],
+                      rounding_mode="trunc") * self.dst_sr[self.last_choice]
 
     def forward(self, wav: th.Tensor) -> th.Tensor:
         """
@@ -619,10 +620,10 @@ class CmvnTransform(nn.Module):
 
 class SpecAugTransform(nn.Module):
     """
-    Spectra data augmentation
+    Data augmentation on spectral feature
     Args:
         p: probability to do spec-augment
-        p_time: p in SpecAugment paper
+        adaptive_args: adaptive argments (pm, ps) in paper SpecAugment on Large Scale Datasets
         time_args: (T, m_T) in the SpecAugment paper
         freq_args: (F, m_F) in the SpecAugment paper
         mask_zero: use zero value or mean in the masked region
@@ -630,9 +631,9 @@ class SpecAugTransform(nn.Module):
 
     def __init__(self,
                  p: float = 0.5,
-                 p_time: float = 1.0,
-                 time_args: Tuple[int] = [40, 1],
-                 freq_args: Tuple[int] = [30, 1],
+                 adaptive_args: Tuple[float] = (0.0, 0.0),
+                 time_args: Tuple[int] = (40, 1),
+                 freq_args: Tuple[int] = (30, 1),
                  mask_zero: bool = True) -> None:
         super(SpecAugTransform, self).__init__()
         assert len(freq_args) == 2 and len(time_args) == 2
@@ -641,14 +642,13 @@ class SpecAugTransform(nn.Module):
         self.F, self.T = freq_args[0], time_args[0]
         # prob to do spec-augment
         self.p = p
-        # max portion constraint on time axis
-        self.p_time = p_time
+        # pm and ps in the paper: SpecAugment on Large Scale Datasets
+        self.pm, self.ps = adaptive_args
 
     def extra_repr(self) -> str:
-        return (
-            f"max_bands={self.F}, max_frame={self.T}, " +
-            f"p={self.p}, p_time={self.p_time}, mask_zero={self.mask_zero}, "
-            f"num_freq_masks={self.fnum}, num_time_masks={self.tnum}")
+        return (f"max_bands={self.F}, max_frame={self.T}, p={self.p}, " +
+                f"pm={self.pm}, ps={self.ps}, mask_zero={self.mask_zero}, "
+                f"num_freq_masks={self.fnum}, num_time_masks={self.tnum}")
 
     def exportable(self) -> bool:
         return False
@@ -667,7 +667,8 @@ class SpecAugTransform(nn.Module):
                 N, T, F = x.shape
             # N x T x F
             mask = tf_mask(N, (T, F),
-                           p=self.p_time,
+                           pm=self.pm,
+                           ps=self.ps,
                            max_bands=self.F,
                            max_frame=self.T,
                            num_freq_masks=self.fnum,
@@ -856,7 +857,7 @@ class FeatureTransform(nn.Module):
                  num_ceps: int = 13,
                  lifter: float = 0,
                  aug_prob: float = 0,
-                 aug_maxp_time: float = 0.5,
+                 aug_adaptive_args: Tuple[float] = (0, 0),
                  aug_mask_zero: bool = True,
                  aug_time_args: Tuple[int] = (40, 1),
                  aug_freq_args: Tuple[int] = (30, 1),
@@ -971,7 +972,7 @@ class FeatureTransform(nn.Module):
             elif tok == "aug":
                 transform.append(
                     SpecAugTransform(p=aug_prob,
-                                     p_time=aug_maxp_time,
+                                     adaptive_args=aug_adaptive_args,
                                      freq_args=aug_freq_args,
                                      time_args=aug_time_args,
                                      mask_zero=aug_mask_zero))
@@ -1006,7 +1007,10 @@ class FeatureTransform(nn.Module):
         if self.perturb_index != -1:
             inp_len = self.transform[self.perturb_index].output_length(inp_len)
         num_frames = self.transform[self.spectra_index].num_frames(inp_len)
-        return num_frames // self.subsampling_factor
+        # return num_frames // self.subsampling_factor
+        return th.div(num_frames,
+                      self.subsampling_factor,
+                      rounding_mode="trunc")
 
     def forward(self, inp_pad: th.Tensor,
                 inp_len: Optional[th.Tensor]) -> AsrReturnType:

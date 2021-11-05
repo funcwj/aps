@@ -11,17 +11,22 @@ import torch.nn as nn
 
 import torch.nn.functional as tf
 
-# for RNNT loss, we have two options:
-# https://github.com/HawkAaron/warp-transducer
-# https://github.com/1ytic/warp-rnnt
+# for RNNT loss, we have three options:
+# warp-transducer: https://github.com/HawkAaron/warp-transducer
+# warp-rnnt: https://github.com/1ytic/warp-rnnt
+# torchaudio: https://pytorch.org/audio/stable/functional.html#rnnt-loss
 try:
-    from warp_rnnt import rnnt_loss as warp_rnnt_objf
+    from warp_rnnt import rnnt_loss as warp_rnnt_v1
 except ImportError:
-    warp_rnnt_objf = None
+    warp_rnnt_v1 = None
 try:
-    from warprnnt_pytorch import rnnt_loss as warprnnt_pt_objf
+    from warprnnt_pytorch import rnnt_loss as warp_rnnt_v2
 except ImportError:
-    warprnnt_pt_objf = None
+    warp_rnnt_v2 = None
+try:
+    from torchaudio.functional import rnnt_loss as torchaudio_rnnt
+except ImportError:
+    torchaudio_rnnt = None
 
 from typing import Tuple, Dict, NoReturn, Optional
 from aps.task.base import Task
@@ -296,12 +301,13 @@ class TransducerTask(Task):
         Setup RNNT loss impl in the backend
         """
         api = {
-            "warp_rnnt": warp_rnnt_objf,
-            "warprnnt_pytorch": warprnnt_pt_objf
+            "warp_rnnt": warp_rnnt_v1,
+            "torchaudio": torchaudio_rnnt,
+            "warprnnt_pytorch": warp_rnnt_v2
         }
         if interface not in api:
             raise ValueError(f"Unsupported RNNT interface: {interface}")
-        self.interface = interface
+        self.warp_rnnt_v1 = interface == "warp_rnnt"
         self.rnnt_objf = api[interface]
         if self.rnnt_objf is None:
             raise RuntimeError(f"import {interface} failed ..., " +
@@ -321,7 +327,7 @@ class TransducerTask(Task):
         _, dec_out, enc_len = self.nnet(egs["src_pad"], egs["src_len"], tgt_pad,
                                         tgt_len)
         # add log_softmax if use https://github.com/1ytic/warp-rnnt
-        if self.interface == "warp_rnnt":
+        if self.warp_rnnt_v1:
             dec_out = tf.log_softmax(dec_out, -1)
         # compute loss
         loss = self.rnnt_objf(dec_out,

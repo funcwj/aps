@@ -27,7 +27,7 @@ def hermitian_det(Bk: ComplexTensor, eps: float = EPSILON) -> th.Tensor:
     Rk = th.cat([m, n], -2)
     # N x F x 2C
     # eigenvectors=False can not backward error
-    ev, _ = th.symeig(Rk, eigenvectors=True)
+    ev, _ = th.linalg.eigh(Rk, UPLO="U")
     # N x F x C
     det = th.cumprod(ev[..., ::2], dim=-1)
     # N x F, non-negative

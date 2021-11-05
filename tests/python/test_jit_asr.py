@@ -226,7 +226,7 @@ def test_streaming_cfmr_linear(lctx, chunk):
     scripted_cfmr.reset()
     for t in range(0, T, chunk):
         end = t + chunk
-        print(f"{t}:{end}")
+        # print(f"{t}:{end}")
         c = scripted_cfmr.step(egs[:, t:end])
         th.testing.assert_allclose(c[:, :chunk], egs_out[:, t:t + chunk])
 
@@ -238,4 +238,5 @@ if __name__ == "__main__":
     # test_streaming_lstm()
     # test_streaming_mhsa(2, 2)
     # test_streaming_xfmr_linear(2, 2)
-    test_streaming_cfmr_linear(2, 2)
+    # test_streaming_cfmr_linear(2, 2)
+    pass

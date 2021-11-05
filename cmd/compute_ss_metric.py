@@ -8,8 +8,7 @@ import argparse
 import numpy as np
 
 from aps.io import AudioReader
-from aps.metric.reporter import AverageReporter
-from aps.metric.sse import permute_metric
+from aps.metric import AverageReporter, permute_sse_metric
 
 
 def run(args):
@@ -34,17 +33,17 @@ def run(args):
             assert est.ndim == ref.ndim
             ali = None
             if est.ndim == 2:
-                metric, ali = permute_metric(args.metric,
-                                             ref[:, :end],
-                                             est[:, :end],
-                                             fs=args.sr,
-                                             compute_permutation=True)
+                metric, ali = permute_sse_metric(args.metric,
+                                                 ref[:, :end],
+                                                 est[:, :end],
+                                                 fs=args.sr,
+                                                 compute_permutation=True)
             else:
-                metric = permute_metric(args.metric,
-                                        ref[:end],
-                                        est[:end],
-                                        fs=args.sr,
-                                        compute_permutation=False)
+                metric = permute_sse_metric(args.metric,
+                                            ref[:end],
+                                            est[:end],
+                                            fs=args.sr,
+                                            compute_permutation=False)
             reporter.add(key, metric)
             if utt_val:
                 utt_val.write(f"{key}\t{metric:.2f}\n")
@@ -60,11 +59,11 @@ def run(args):
             est = np.stack([reader[key] for reader in est_reader])
             ref = np.stack([reader[key] for reader in ref_reader])
             end = min(est.shape[-1], ref.shape[-1])
-            metric, ali = permute_metric(args.metric,
-                                         ref[:, :end],
-                                         est[:, :end],
-                                         fs=args.sr,
-                                         compute_permutation=True)
+            metric, ali = permute_sse_metric(args.metric,
+                                             ref[:, :end],
+                                             est[:, :end],
+                                             fs=args.sr,
+                                             compute_permutation=True)
             reporter.add(key, metric)
             if utt_val:
                 utt_val.write(f"{key}\t{metric:.2f}\n")
