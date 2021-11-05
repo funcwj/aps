@@ -19,7 +19,7 @@ nnet: asr@rnn_lm
 
 nnet_conf:
   dropout: 0.2
-  embed_size: 512
+  embed_size: 1024
   hidden_size: 1024
   num_layers: 3
   rnn: lstm
@@ -51,10 +51,10 @@ trainer_conf:
 data_conf:
   fmt: lm@bptt
   loader:
-    bptt_size: 48
-    max_token_num: 120
-    min_token_num: 4
+    bptt_size: 128
+    max_token_num: 300
+    min_token_num: 5
   train:
-    text: /datablob/wujian/data/gigaspeech/gigaspeech_train_xl/token
+    text: data/gigaspeech/train_xl/token
   valid:
-    text: /datablob/wujian/data/gigaspeech/gigaspeech_dev/token
+    text: data/gigaspeech/dev/token

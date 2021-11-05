@@ -1,5 +1,12 @@
 ## Overview of the Monthly Update
 
+### 2021/11
+
+1. Update to PyTorch 1.10
+2. Update subampling layer for Transformer based encoders
+3. Adaptive SpecAug
+4. Update LibriSpeech & GigaSpeech results
+
 ### 2021/10
 
 1. Support segment processing in {archive,extract}_wav.py

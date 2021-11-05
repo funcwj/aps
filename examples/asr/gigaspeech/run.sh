@@ -24,8 +24,14 @@ am_exp=1a
 am_batch_size=96
 am_epochs=120
 
+# lm
+lm_exp=1a
+lm_batch_size=128
+lm_epochs=120
+
 # decoding
 beam_size=8
+lm_weight=0.5
 nbest=$beam_size
 len_norm=false
 ctc_weight=0.2
@@ -115,6 +121,42 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
       --spm exp/$dataset/$wp_name/$wp_mode.model \
       $exp_dir $data_dir/$name/wav.scp \
       $exp_dir/$name &
+  done
+  wait
+fi
+
+if [ $end -ge 5 ] && [ $beg -le 5 ]; then
+  echo "Stage 5: training LM ..."
+  # training lm
+  ./scripts/train.sh \
+    --seed 888 \
+    --epochs $lm_epochs \
+    --batch-size $lm_batch_size \
+    --num-workers 32 \
+    --prog-interval 250 \
+    --eval-interval 3000 \
+    lm $dataset $lm_exp
+fi
+
+if [ $end -ge 6 ] && [ $beg -le 6 ]; then
+  echo "Stage 6: decoding ..."
+  # shallow fusion
+  for name in $test_sets; do
+    dec_name=${name}_lm${lm_exp}_$lm_weight
+    ./scripts/decode.sh \
+      --score true \
+      --text $data_dir/$name/text \
+      --spm exp/$dataset/$wp_name/$wp_mode.model \
+      --lm exp/$dataset/nnlm/$lm_exp \
+      --lm-weight $lm_weight \
+      --ctc-weight $ctc_weight \
+      --beam-size $beam_size \
+      --max-len 150 \
+      --len-norm $len_norm \
+      --dict $exp_dir/dict \
+      --nbest $nbest \
+      $exp_dir $data_dir/$name/wav.scp \
+      $exp_dir/$dec_name &
   done
   wait
 fi
