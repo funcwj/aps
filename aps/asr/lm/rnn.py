@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.init as init
 from typing import NoReturn, Union, Tuple, Optional
 from aps.asr.base.component import OneHotEmbedding, PyTorchRNN
+from aps.asr.base.decoder import LayerNormRNN
 from aps.libs import ApsRegisters
 
 
@@ -35,6 +36,7 @@ class TorchRNNLM(nn.Module):
                  vocab_size: int = 40,
                  rnn: str = "lstm",
                  dropout: float = 0.2,
+                 add_ln: bool = False,
                  proj_size: int = -1,
                  num_layers: int = 3,
                  hidden_size: int = 512,
@@ -45,13 +47,22 @@ class TorchRNNLM(nn.Module):
         else:
             self.embed = OneHotEmbedding(vocab_size)
         # uni-directional RNNs
-        self.pred = PyTorchRNN(rnn,
-                               embed_size,
-                               hidden_size,
-                               proj_size=proj_size,
-                               num_layers=num_layers,
-                               dropout=dropout,
-                               bidirectional=False)
+        if add_ln:
+            self.pred = LayerNormRNN(rnn,
+                                     embed_size,
+                                     hidden_size,
+                                     proj_size=proj_size,
+                                     num_layers=num_layers,
+                                     dropout=dropout,
+                                     bidirectional=False)
+        else:
+            self.pred = PyTorchRNN(rnn,
+                                   embed_size,
+                                   hidden_size,
+                                   proj_size=proj_size,
+                                   num_layers=num_layers,
+                                   dropout=dropout,
+                                   bidirectional=False)
         # output distribution
         self.dist = nn.Linear(hidden_size, vocab_size)
         self.embed_drop = nn.Dropout(p=dropout)

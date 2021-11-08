@@ -15,6 +15,56 @@ from aps.asr.base.component import OneHotEmbedding, PyTorchRNN
 HiddenType = Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]
 
 
+class LayerNormRNN(nn.Module):
+    """
+    RNNs with layer normalization
+    """
+
+    def __init__(self,
+                 mode: str,
+                 input_size: int,
+                 hidden_size: int,
+                 proj_size: int = -1,
+                 num_layers: int = 1,
+                 bias: bool = True,
+                 dropout: float = 0.,
+                 bidirectional: bool = False) -> None:
+        super(LayerNormRNN, self).__init__()
+        self.rnns = nn.ModuleList([
+            PyTorchRNN(mode,
+                       input_size,
+                       hidden_size,
+                       num_layers=1,
+                       proj_size=proj_size,
+                       bias=bias,
+                       dropout=0,
+                       bidirectional=bidirectional) for _ in range(num_layers)
+        ])
+        self.dropout = nn.ModuleList(
+            nn.Dropout(p=dropout) for _ in range(num_layers - 1))
+        self.norm = nn.ModuleList(
+            nn.LayerNorm(hidden_size * 2 if bidirectional else hidden_size)
+            for _ in range(num_layers))
+
+    def forward(self, inp, hidden=None):
+        """
+        Args:
+            inp (Tensor): N x T x F
+            hidden (list(Tensor)): [N x ..., ]
+        Return:
+            out (Tensor): N x T x F
+            hidden (list(Tensor)): [N x ..., ]
+        """
+        ret_hidden = []
+        for i, rnn in enumerate(self.rnns):
+            inp, hid = rnn(inp, None if hidden is None else hidden[i])
+            ret_hidden.append(hid)
+            if i != len(self.rnns) - 1:
+                inp = self.dropout[i](inp)
+            inp = self.norm[i](inp)
+        return inp, ret_hidden
+
+
 class PyTorchRNNDecoder(nn.Module):
     """
     PyTorch's RNN decoder
@@ -24,7 +74,9 @@ class PyTorchRNNDecoder(nn.Module):
                  enc_proj: int,
                  vocab_size: int,
                  rnn: str = "lstm",
+                 add_ln: bool = False,
                  num_layers: int = 3,
+                 proj_size: int = -1,
                  hidden: int = 512,
                  dropout: float = 0.0,
                  input_feeding: bool = False,
@@ -36,12 +88,22 @@ class PyTorchRNNDecoder(nn.Module):
         else:
             self.vocab_embed = OneHotEmbedding(vocab_size)
             input_size = enc_proj + vocab_size
-        self.decoder = PyTorchRNN(rnn,
-                                  input_size,
-                                  hidden,
-                                  num_layers,
-                                  dropout=dropout,
-                                  bidirectional=False)
+        if add_ln:
+            self.decoder = PyTorchRNN(rnn,
+                                      input_size,
+                                      hidden,
+                                      proj_size=proj_size,
+                                      num_layers=num_layers,
+                                      dropout=dropout,
+                                      bidirectional=False)
+        else:
+            self.decoder = LayerNormRNN(rnn,
+                                        input_size,
+                                        hidden,
+                                        proj_size=proj_size,
+                                        num_layers=num_layers,
+                                        dropout=dropout,
+                                        bidirectional=False)
         self.proj = nn.Linear(hidden + enc_proj, enc_proj)
         self.drop = nn.Dropout(p=dropout)
         self.pred = nn.Linear(enc_proj, vocab_size)
