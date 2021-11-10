@@ -446,7 +446,7 @@ class BeamTracker(BaseBeamTracker):
                 stop = True
         if verbose:
             logger.info(
-                f"--- get {len(self.hypos)} hypos at step {self.step_num}")
+                f"--- get {len(self.hypos)} hypothesis at step {self.step_num}")
         # update auto_step flag
         self.auto_stop = stop
         # if reach max_len, also return true
@@ -467,8 +467,9 @@ class BeamTracker(BaseBeamTracker):
                 if hyp_final:
                     self.hypos += hyp_final
         # sort and get nbest
-        logger.info(f"--- beam search gets top-{nbest} list " +
-                    f"from {len(self.hypos)} hypos ...")
+        logger.info(f"--- beam search gets {nbest}-best " +
+                    f"from {len(self.hypos)} hypothesis " +
+                    f"(len_norm = {self.param.len_norm}) ...")
         sort_hypos = sorted(self.hypos, key=lambda n: n["score"], reverse=True)
         return sort_hypos[:nbest]
 
@@ -701,8 +702,9 @@ class BatchBeamTracker(BaseBeamTracker):
         # sort and get nbest
         nbest_batch = []
         for u, utt_bypos in enumerate(self.hypos):
-            logger.info(f"--- beam search gets top-{nbest} list (batch[{u}]) " +
-                        f"from {len(utt_bypos)} hypos ...")
+            logger.info(f"--- beam search gets {nbest}-best (batch[{u}]) " +
+                        f"from {len(utt_bypos)} hypothesis " +
+                        f"(len_norm = {self.param.len_norm}) ...")
             sort_hypos = sorted(utt_bypos,
                                 key=lambda n: n["score"],
                                 reverse=True)

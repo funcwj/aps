@@ -65,7 +65,7 @@ class LayerNormRNN(nn.Module):
         return inp, ret_hidden
 
 
-class PyTorchRNNDecoder(nn.Module):
+class TorchRNNDecoder(nn.Module):
     """
     PyTorch's RNN decoder
     """
@@ -81,7 +81,7 @@ class PyTorchRNNDecoder(nn.Module):
                  dropout: float = 0.0,
                  input_feeding: bool = False,
                  onehot_embed: bool = False) -> None:
-        super(PyTorchRNNDecoder, self).__init__()
+        super(TorchRNNDecoder, self).__init__()
         if not onehot_embed:
             self.vocab_embed = nn.Embedding(vocab_size, hidden)
             input_size = enc_proj + hidden

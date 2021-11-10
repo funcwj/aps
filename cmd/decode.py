@@ -42,7 +42,7 @@ beam_search_params = [
     "allow_partial", "end_detect"
 ]
 
-function_choices = ["beam_search", "greedy_search"]
+function_choices = ["beam_search", "greedy_search", "ctc_att_rescore"]
 
 
 class FasterDecoder(NnetEvaluator):

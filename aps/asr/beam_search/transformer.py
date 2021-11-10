@@ -9,6 +9,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
+from torch.nn.utils.rnn import pad_sequence
 from aps.asr.beam_search.utils import BeamSearchParam, BeamTracker, BatchBeamTracker
 from aps.asr.beam_search.lm import lm_score_impl, LmType
 from aps.utils import get_logger
@@ -55,6 +56,49 @@ def greedy_search(decoder: nn.Module,
         "score": score / (len(dec_tok) - 1) if len_norm else score,
         "trans": dec_tok
     }]
+
+
+def decoder_rescore(ctc_nbest: List[Dict],
+                    decoder: nn.Module,
+                    enc_out: th.Tensor,
+                    ctc_weight: float = 0,
+                    len_norm: bool = True) -> List[Dict]:
+    """
+    Rescore CTC nbest using transformer decoder
+    Args:
+        ctc_nbest: nbest from CTC beam search
+        enc_out (Tensor): T x 1 x F
+    """
+    _, N, D_enc = enc_out.shape
+    if N != 1:
+        raise RuntimeError(
+            f"Got batch size {N:d}, now only support one utterance")
+    device = enc_out.device
+    nbest = len(ctc_nbest)
+    logger.info(f"--- decoder rescoring for CTC {nbest}-best hypothesis, " +
+                f"ctc_weight = {ctc_weight}")
+    eos = ctc_nbest[0]["trans"][-1]
+    # remove eos: [sos + ... + eos] => [sos + ...]
+    ctc_seq = [th.as_tensor(h["trans"][:-1]) for h in ctc_nbest]
+    tgt_pad = pad_sequence(ctc_seq, batch_first=True, padding_value=eos)
+    # Ti x N x D => N x Ti x D
+    enc_out = th.repeat_interleave(enc_out, nbest, 1).transpose(0, 1)
+    # N x To x V
+    dec_out = decoder(enc_out, None, tgt_pad.to(device), None)
+    dec_score = th.log_softmax(dec_out, -1)
+    # rescore
+    rescore_nbest = []
+    for i, hyp in enumerate(ctc_nbest):
+        att_score = 0.0
+        # e.g., <sos> a b c d <eos>, att_score adds for a b c d <eos>
+        for n, w in enumerate(hyp["trans"][1:]):
+            att_score += dec_score[i, n, w].item()
+        fusion_score = hyp["score"] * ctc_weight + att_score
+        rescore_nbest.append({
+            "score": fusion_score / (len(hyp["trans"][1:]) if len_norm else 1),
+            "trans": hyp["trans"]
+        })
+    return sorted(rescore_nbest, key=lambda n: n["score"], reverse=True)
 
 
 def beam_search(decoder: nn.Module,

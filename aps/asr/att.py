@@ -12,7 +12,7 @@ import aps.asr.beam_search.transformer as xfmr_api
 
 from typing import Optional, Dict, List
 from aps.asr.ctc import CtcASR, NoneOrTensor, AMForwardType
-from aps.asr.base.decoder import PyTorchRNNDecoder
+from aps.asr.base.decoder import TorchRNNDecoder
 from aps.asr.transformer.decoder import TorchTransformerDecoder
 from aps.asr.base.attention import att_instance
 from aps.asr.beam_search.ctc import CtcApi
@@ -84,9 +84,9 @@ class AttASR(ASREncoderDecoderBase):
             enc_proj = enc_kwargs["arch_kwargs"]["att_dim"]
         self.att_net = att_instance(att_type, enc_proj, dec_dim, **att_kwargs)
         # TODO: make decoder flexible here
-        self.decoder = PyTorchRNNDecoder(enc_proj,
-                                         vocab_size - 1 if ctc else vocab_size,
-                                         **dec_kwargs)
+        self.decoder = TorchRNNDecoder(enc_proj,
+                                       vocab_size - 1 if ctc else vocab_size,
+                                       **dec_kwargs)
 
     def forward(self,
                 x_pad: th.Tensor,
@@ -137,6 +137,35 @@ class AttASR(ASREncoderDecoderBase):
                                          sos=self.sos,
                                          eos=self.eos,
                                          len_norm=len_norm)
+
+    def ctc_att_rescore(self,
+                        x: th.Tensor,
+                        ctc_weight: float = 0,
+                        len_norm: bool = False,
+                        **kwargs) -> List[Dict]:
+        """
+        Decoder rescore for CTC nbest results
+        Args
+            x: audio samples or acoustic features, S or Ti x F
+        """
+        ctc_api = CtcApi(self.vocab_size - 1)
+        with th.no_grad():
+            # N x T x D
+            enc_out = self._decoding_prep(x)
+            if self.ctc is None:
+                raise RuntimeError(
+                    "Can't do CTC beam search as self.ctc is None")
+            ctc_nbest = ctc_api.beam_search(self.ctc(enc_out)[0],
+                                            sos=self.sos,
+                                            eos=self.eos,
+                                            len_norm=False,
+                                            **kwargs)
+            return att_api.decoder_rescore(ctc_nbest,
+                                           self.decoder,
+                                           self.att_net,
+                                           enc_out,
+                                           ctc_weight=ctc_weight,
+                                           len_norm=len_norm)
 
     def beam_search(self,
                     x: th.Tensor,
@@ -265,6 +294,34 @@ class XfmrASR(ASREncoderDecoderBase):
                                           sos=self.sos,
                                           eos=self.eos,
                                           len_norm=len_norm)
+
+    def ctc_att_rescore(self,
+                        x: th.Tensor,
+                        ctc_weight: float = 0,
+                        len_norm: bool = False,
+                        **kwargs) -> List[Dict]:
+        """
+        Decoder rescore for CTC nbest results
+        Args
+            x: audio samples or acoustic features, S or Ti x F
+        """
+        ctc_api = CtcApi(self.vocab_size - 1)
+        with th.no_grad():
+            # T x N x D
+            enc_out = self._decoding_prep(x, batch_first=False)
+            if self.ctc is None:
+                raise RuntimeError(
+                    "Can't do CTC beam search as self.ctc is None")
+            ctc_nbest = ctc_api.beam_search(self.ctc(enc_out)[:, 0],
+                                            sos=self.sos,
+                                            eos=self.eos,
+                                            len_norm=False,
+                                            **kwargs)
+            return xfmr_api.decoder_rescore(ctc_nbest,
+                                            self.decoder,
+                                            enc_out,
+                                            ctc_weight=ctc_weight,
+                                            len_norm=len_norm)
 
     def beam_search(self,
                     x: th.Tensor,

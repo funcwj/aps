@@ -53,7 +53,7 @@ class DecoderBase(nn.Module):
         return self.output(th.tanh(add_out))
 
 
-class PyTorchRNNDecoder(DecoderBase):
+class TorchRNNDecoder(DecoderBase):
     """
     Wrapper for pytorch's RNN Decoder
     """
@@ -70,12 +70,12 @@ class PyTorchRNNDecoder(DecoderBase):
                  add_ln: bool = False,
                  dropout: float = 0.0,
                  onehot_embed: bool = False) -> None:
-        super(PyTorchRNNDecoder, self).__init__(vocab_size,
-                                                embed_size=embed_size,
-                                                enc_dim=enc_dim,
-                                                dec_dim=hidden,
-                                                jot_dim=jot_dim,
-                                                onehot_embed=onehot_embed)
+        super(TorchRNNDecoder, self).__init__(vocab_size,
+                                              embed_size=embed_size,
+                                              enc_dim=enc_dim,
+                                              dec_dim=hidden,
+                                              jot_dim=jot_dim,
+                                              onehot_embed=onehot_embed)
         # uni-dir RNNs
         if add_ln:
             self.decoder = LayerNormRNN(rnn,

@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-brightgreen.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python-Version](https://img.shields.io/badge/Python-3.7%7C3.8-brightgreen)](https://github.com/funcwj/aps)
-[![](https://codecov.io/gh/funcwj/aps/branch/jwu/master/graph/badge.svg)](https://codecov.io/gh/funcwj/aps)
+[![codecov](https://codecov.io/gh/funcwj/aps/branch/jwu/master/graph/badge.svg)](https://codecov.io/gh/funcwj/aps)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![CI](https://github.com/funcwj/aps/actions/workflows/test_python.yml/badge.svg)](https://github.com/funcwj/aps/actions/workflows/test_python.yml/badge.svg)
 
@@ -17,10 +17,10 @@ git clone https://github.com/funcwj/aps
 # 2) create conda enviroments based on requirements.txt (recommended, see docker/Dockerfile)
 cd aps && pip install -r requirements.txt # the optional packages are not shown in requirements.txt
 ```
-For developers (who want to make commits or PRs), contiune to run
+For developers (who want to make commits or PRs), continue to run
 ```shell
 # set up the git hook scripts
-pre-commit install
+pip install -r requirements-dev.txt && pre-commit install
 ```
 to setup the development environments. To build C++ sources and demo commands, running
 ```shell

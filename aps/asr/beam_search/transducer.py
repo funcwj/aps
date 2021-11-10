@@ -70,6 +70,7 @@ class TransducerBeamSearch(nn.Module):
         self.lm = lm
         self.blank = blank
         self.device = next(self.decoder.parameters()).device
+        logger.info(f"TransducerBeamSearch: use blank = {blank}")
 
     def _pred_step(
             self,
@@ -172,8 +173,7 @@ class TransducerBeamSearch(nn.Module):
         if beam_size > vocab_size:
             raise RuntimeError(
                 f"Beam size ({beam_size}) > vocabulary size ({vocab_size})")
-        logger.info("--- shape of the encoder output: " +
-                    f"{T} x {D}, blank = {self.blank}")
+        logger.info(f"--- shape of the encoder output: {T} x {D}")
         # apply projection at first
         enc_proj = self.decoder.enc_proj(enc_out)
         # greedy search
@@ -291,5 +291,7 @@ class TransducerBeamSearch(nn.Module):
         # return best
         nbest_hypos = sorted(final_hypos,
                              key=lambda n: n["score"],
-                             reverse=True)
-        return nbest_hypos[:nbest]
+                             reverse=True)[:nbest]
+        logger.info(f"--- beam search gets {len(nbest_hypos)}-best from " +
+                    f"{len(list_b)} hypothesis (len_norm = {len_norm}) ...")
+        return nbest_hypos
