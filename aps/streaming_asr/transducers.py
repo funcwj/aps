@@ -9,7 +9,7 @@ import torch.nn.functional as tf
 
 from aps.streaming_asr.ctc import StreamingASREncoder
 from aps.asr.beam_search.transducer import TransducerBeamSearch
-from aps.asr.transducer.decoder import PyTorchRNNDecoder
+from aps.asr.transducer.decoder import TorchRNNDecoder
 from aps.asr.ctc import AMForwardType, NoneOrTensor
 from aps.libs import ApsRegisters
 
@@ -45,7 +45,7 @@ class TransducerASR(StreamingASREncoder):
                                             enc_kwargs=enc_kwargs)
         self.blank = vocab_size - 1
         dec_kwargs["enc_dim"] = enc_proj
-        self.decoder = PyTorchRNNDecoder(vocab_size, **dec_kwargs)
+        self.decoder = TorchRNNDecoder(vocab_size, **dec_kwargs)
 
     def forward(self, x_pad: th.Tensor, x_len: NoneOrTensor, y_pad: th.Tensor,
                 y_len: NoneOrTensor) -> AMForwardType:

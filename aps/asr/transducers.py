@@ -9,7 +9,7 @@ import torch.nn.functional as tf
 
 from typing import Optional, Dict, List
 from aps.asr.ctc import ASREncoderBase, NoneOrTensor, AMForwardType
-from aps.asr.transducer.decoder import TorchTransformerDecoder, PyTorchRNNDecoder
+from aps.asr.transducer.decoder import TorchTransformerDecoder, TorchRNNDecoder
 from aps.asr.beam_search.transducer import TransducerBeamSearch
 from aps.libs import ApsRegisters
 
@@ -99,7 +99,7 @@ class TransducerASR(ASRTransducerBase):
             dec_kwargs["enc_dim"] = enc_kwargs["arch_kwargs"]["att_dim"]
         else:
             dec_kwargs["enc_dim"] = enc_proj
-        self.decoder = PyTorchRNNDecoder(vocab_size, **dec_kwargs)
+        self.decoder = TorchRNNDecoder(vocab_size, **dec_kwargs)
 
     def forward(self, x_pad: th.Tensor, x_len: NoneOrTensor, y_pad: th.Tensor,
                 y_len: NoneOrTensor) -> AMForwardType:

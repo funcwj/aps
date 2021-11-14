@@ -3,7 +3,7 @@
 set -eu
 
 sudo apt-get install -y shellcheck
-cat requirements.txt | grep -E "flake8|cpplint" > requirements_lint.txt
+cat requirements-dev.txt | grep -E "flake8|cpplint" > requirements_lint.txt
 pip install -r requirements_lint.txt
 
 # for shell

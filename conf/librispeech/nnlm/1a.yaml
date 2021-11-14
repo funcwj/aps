@@ -45,8 +45,9 @@ trainer_conf:
 data_conf:
   fmt: "lm@bptt"
   loader:
+    kaldi_format: false
     bptt_size: 128
-    min_token_num: 20
+    min_token_num: 2
     max_token_num: 300
   train:
     text: "data/librispeech/lm/train.token"

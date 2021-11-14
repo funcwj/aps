@@ -11,54 +11,8 @@ from aps.asr.transformer.impl import get_xfmr_encoder
 from aps.asr.transformer.pose import get_xfmr_pose
 from aps.asr.transformer.utils import prep_sub_mask
 from aps.asr.base.attention import padding_mask
+from aps.asr.base.decoder import LayerNormRNN
 from aps.asr.base.component import OneHotEmbedding, PyTorchRNN
-
-
-class LayerNormRNN(nn.Module):
-    """
-    RNNs with layer normalization
-    """
-
-    def __init__(self,
-                 mode: str,
-                 input_size: int,
-                 hidden_size: int,
-                 num_layers: int = 1,
-                 bias: bool = True,
-                 dropout: float = 0.,
-                 bidirectional: bool = False) -> None:
-        super(LayerNormRNN, self).__init__()
-        self.rnns = nn.ModuleList([
-            PyTorchRNN(mode,
-                       input_size,
-                       hidden_size,
-                       bias=bias,
-                       dropout=0,
-                       bidirectional=bidirectional) for _ in range(num_layers)
-        ])
-        self.dropout = nn.ModuleList(
-            nn.Dropout(p=dropout) for _ in range(num_layers - 1))
-        self.norm = nn.ModuleList(
-            nn.LayerNorm(hidden_size * 2 if bidirectional else hidden_size)
-            for _ in range(num_layers))
-
-    def forward(self, inp, hidden=None):
-        """
-        Args:
-            inp (Tensor): N x T x F
-            hidden (list(Tensor)): [N x ..., ]
-        Return:
-            out (Tensor): N x T x F
-            hidden (list(Tensor)): [N x ..., ]
-        """
-        ret_hidden = []
-        for i, rnn in enumerate(self.rnns):
-            inp, hid = rnn(inp, None if hidden is None else hidden[i])
-            ret_hidden.append(hid)
-            if i != len(self.rnns) - 1:
-                inp = self.dropout[i](inp)
-            inp = self.norm[i](inp)
-        return inp, ret_hidden
 
 
 class DecoderBase(nn.Module):
@@ -99,7 +53,7 @@ class DecoderBase(nn.Module):
         return self.output(th.tanh(add_out))
 
 
-class PyTorchRNNDecoder(DecoderBase):
+class TorchRNNDecoder(DecoderBase):
     """
     Wrapper for pytorch's RNN Decoder
     """
@@ -109,31 +63,34 @@ class PyTorchRNNDecoder(DecoderBase):
                  embed_size: int = 512,
                  enc_dim: int = 512,
                  jot_dim: int = 512,
-                 add_ln: bool = False,
                  rnn: str = "lstm",
                  num_layers: int = 3,
                  hidden: int = 512,
+                 proj_size: int = -1,
+                 add_ln: bool = False,
                  dropout: float = 0.0,
                  onehot_embed: bool = False) -> None:
-        super(PyTorchRNNDecoder, self).__init__(vocab_size,
-                                                embed_size=embed_size,
-                                                enc_dim=enc_dim,
-                                                dec_dim=hidden,
-                                                jot_dim=jot_dim,
-                                                onehot_embed=onehot_embed)
+        super(TorchRNNDecoder, self).__init__(vocab_size,
+                                              embed_size=embed_size,
+                                              enc_dim=enc_dim,
+                                              dec_dim=hidden,
+                                              jot_dim=jot_dim,
+                                              onehot_embed=onehot_embed)
         # uni-dir RNNs
         if add_ln:
             self.decoder = LayerNormRNN(rnn,
                                         embed_size,
                                         hidden,
-                                        num_layers,
+                                        proj_size=proj_size,
+                                        num_layers=num_layers,
                                         dropout=dropout,
                                         bidirectional=False)
         else:
             self.decoder = PyTorchRNN(rnn,
                                       embed_size,
                                       hidden,
-                                      num_layers,
+                                      proj_size=proj_size,
+                                      num_layers=num_layers,
                                       dropout=dropout,
                                       bidirectional=False)
 

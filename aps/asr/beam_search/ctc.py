@@ -35,8 +35,7 @@ class CtcApi(object):
     """
 
     def __init__(self, blank: int):
-        if blank < 0:
-            raise ValueError(f"Invalid blank ID: {blank}")
+        assert blank >= 0
         self.blank = blank
 
     def beam_search(self,
@@ -56,8 +55,7 @@ class CtcApi(object):
         # T x B
         topk_score, topk_token = th.topk(ctc_prob, beam_size, -1)
         T, V = ctc_prob.shape
-        logger.info("--- shape of the encoder output (CTC): " +
-                    f"{T} x {V}, blank = {self.blank}")
+        logger.info(f"--- shape of the encoder output (CTC): {T} x {V}")
         neg_inf = th.tensor(NEG_INF).to(ctc_prob.device)
         zero = th.tensor(0.0).to(ctc_prob.device)
         # (prefix, log_pb, log_pn)
@@ -105,12 +103,15 @@ class CtcApi(object):
             prev_beam = sorted(next_beam.items(),
                                key=lambda n: n[1].score(),
                                reverse=True)
-        return [{
-            "score":
-                score.score() / (1 if len_norm else len(prefix.split(",")) - 1),
-            "trans":
-                list(map(int, (prefix + f",{eos}").split(",")))
-        } for prefix, score in prev_beam[:nbest]]
+        beam = [{
+            "score": s.score() / (len(p.split(",")) - 1 if len_norm else 1),
+            "trans": list(map(int, p.split(","))) + [eos]
+        } for p, s in prev_beam]
+        # return nbest
+        ctc_nbest = sorted(beam, key=lambda n: n["score"], reverse=True)[:nbest]
+        logger.info(f"--- beam search gets {len(ctc_nbest)}-best from " +
+                    f"{len(prev_beam)} hypothesis (len_norm = {len_norm}) ...")
+        return ctc_nbest
 
     def viterbi_align(self, ctc_enc: th.Tensor, dec_seq: th.Tensor) -> Dict:
         """
@@ -123,8 +124,7 @@ class CtcApi(object):
         """
         ctc_prob = th.log_softmax(ctc_enc, -1)
         T, V = ctc_prob.shape
-        logger.info("--- shape of the encoder output (CTC): " +
-                    f"{T} x {V}, blank = {self.blank}")
+        logger.info(f"--- shape of the encoder output (CTC): {T} x {V}")
         U = dec_seq.shape[-1]
         if U * 2 + 1 > T:
             raise ValueError(f"Invalid target length: {U}")

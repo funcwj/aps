@@ -51,6 +51,7 @@ trainer_conf:
 data_conf:
   fmt: lm@bptt
   loader:
+    kaldi_format: true
     bptt_size: 128
     max_token_num: 300
     min_token_num: 5

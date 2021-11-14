@@ -42,7 +42,7 @@ beam_search_params = [
     "allow_partial", "end_detect"
 ]
 
-function_choices = ["beam_search", "greedy_search"]
+function_choices = ["beam_search", "greedy_search", "ctc_att_rescore"]
 
 
 class FasterDecoder(NnetEvaluator):
@@ -173,7 +173,7 @@ def run(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=
-        "Command to do end-to-end decoding using beam search algothrim",
+        "Command for utterance-by-utterance end-to-end ASR (E2E-ASR) decoding",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[DecodingParser.parser])
     parser.add_argument("--function",

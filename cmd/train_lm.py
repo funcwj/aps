@@ -37,8 +37,8 @@ def run(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=
-        "Command for LM training. To kick off the distributed training, "
-        "using python -m torch.distributed.launch "
+        "Command to train language models (LM). To kick off the distributed training, "
+        "using torchrun (python -m torch.distributed.launch) "
         "or horovodrun to launch the command. See scripts/distributed_train.sh ",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[DistributedTrainParser.parser])

@@ -132,7 +132,7 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
     --seed 888 \
     --epochs $lm_epochs \
     --batch-size $lm_batch_size \
-    --num-workers 32 \
+    --num-workers 16 \
     --prog-interval 250 \
     --eval-interval 3000 \
     lm $dataset $lm_exp
