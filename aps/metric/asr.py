@@ -70,10 +70,13 @@ def wer(hyp: List[str], ref: List[str], details: bool = False) -> Tuple[float]:
             equal += 1
     if details:
         print_operations(hyp, ref, ops)
-    if sub_err + del_err + ins_err != error:
-        raise RuntimeError("Bugs: sub_err + del_err + ins_err != #error")
+    if len(hyp) and sub_err + del_err + ins_err != error:
+        print(f"hyp: {' '.join(hyp)}")
+        print(f"ref: {' '.join(ref)}", flush=True)
+        raise RuntimeError(f"Bugs: sub_err({sub_err}) + del_err({del_err}) + " +
+                           f"ins_err({ins_err}) != #error({error})")
     if equal != match:
-        raise RuntimeError("Bugs: equal != #match")
+        raise RuntimeError(f"Bugs: equal({equal}) != #match({match})")
     return (sub_err, ins_err, del_err)
 
 

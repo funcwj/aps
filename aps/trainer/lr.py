@@ -75,7 +75,7 @@ class NoamLR(lr._LRScheduler):
         if step is None:
             step = self._step_count
         return [
-            self.const * min(step**(-0.5), step * self.warmup**(-1.5))
+            self.const / min(step**(0.5), step * self.warmup**(1.5))
             for _ in self.optimizer.param_groups
         ]
 
