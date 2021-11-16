@@ -6,6 +6,7 @@
 2. Update subampling layer for Transformer based encoders
 3. Adaptive SpecAug
 4. Update LibriSpeech & GigaSpeech results
+5. Add AED decoder rescoring for CTC beam search
 
 ### 2021/10
 

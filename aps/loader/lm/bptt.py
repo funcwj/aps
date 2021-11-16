@@ -148,6 +148,7 @@ class BpttDataloader(object):
             yield {
                 "#utt": self.batch_size,
                 "#tok": self.batch_size * self.bptt_size,
+                "len": self.bptt_size,
                 "src": batch[:, t:t + self.bptt_size],
                 "tgt": batch[:, t + 1:t + 1 + self.bptt_size],
                 "reset": t == 0
