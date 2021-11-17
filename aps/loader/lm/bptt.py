@@ -6,6 +6,7 @@
 for RNNLM (BPTT training)
 """
 
+import torch as th
 import torch.utils.data as dat
 
 import aps.distributed as dist
@@ -146,12 +147,19 @@ class BpttDataloader(object):
             if t + 1 + self.bptt_size > batch.shape[-1]:
                 break
             yield {
-                "#utt": self.batch_size,
-                "#tok": self.batch_size * self.bptt_size,
-                "len": self.bptt_size,
-                "src": batch[:, t:t + self.bptt_size],
-                "tgt": batch[:, t + 1:t + 1 + self.bptt_size],
-                "reset": t == 0
+                "#utt":
+                    self.batch_size,
+                "#tok":
+                    self.batch_size * self.bptt_size,
+                "len":
+                    th.tensor([self.bptt_size] * self.batch_size,
+                              dtype=th.int64),
+                "src":
+                    batch[:, t:t + self.bptt_size],
+                "tgt":
+                    batch[:, t + 1:t + 1 + self.bptt_size],
+                "reset":
+                    t == 0
             }
 
     def __len__(self) -> int:
