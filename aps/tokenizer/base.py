@@ -5,9 +5,12 @@
 
 from abc import ABC
 from typing import List, Union
+from aps.libs import Register
+
+ApsTokenizer = Register("tokenizer")
 
 
-class Tokenizer(ABC):
+class TokenizerAbc(ABC):
     """
     ABC (abstract class) for tokenizer
     """
@@ -16,7 +19,8 @@ class Tokenizer(ABC):
         raise NotImplementedError
 
 
-class WordTokenizer(Tokenizer):
+@ApsTokenizer.register("word")
+class WordTokenizer(TokenizerAbc):
     """
     Word or character tokenizer
     Args:

@@ -4,10 +4,11 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 from typing import List, Union
-from aps.tokenizer.base import Tokenizer, WordTokenizer
+from aps.tokenizer.base import TokenizerAbc, WordTokenizer, ApsTokenizer
 
 
-class SubwordTokenizer(Tokenizer):
+@ApsTokenizer.register("subword")
+class SubwordTokenizer(TokenizerAbc):
     """
     Class of the subword tokenizer (word pieces)
     Args:

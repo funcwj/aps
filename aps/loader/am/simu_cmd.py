@@ -1,26 +1,44 @@
 #!/usr/bin/env python
 
-# Copyright 2019 Jian Wu
+# Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
-Dataloader for raw waveforms in asr tasks
+Online simulation dataloader for ASR
 """
-import torch as th
+import numpy as np
 
-from torch.nn.utils.rnn import pad_sequence
-from typing import Dict, Iterable, Optional
+from typing import Optional, Dict, Iterable
 from aps.loader.am.utils import CommonASRDataset, CommonASRDataLoader
-from aps.io.audio import AudioReader
-from aps.const import IGNORE_ID
+from aps.loader.se.simu_cmd import CommandOptionsDataset
+from aps.loader.am.raw import egs_collate
 from aps.libs import ApsRegisters
 
 
-@ApsRegisters.loader.register("am@raw")
+class SimuCmdReader(CommandOptionsDataset):
+    """
+    Simulation audio reader for ASR task
+    Args:
+        simu_cfg: path of the audio simulation configuraton file
+    """
+
+    def __init__(self, simu_cfg: str) -> None:
+        super(SimuCmdReader, self).__init__(simu_cfg, return_in_egs=["mix"])
+
+    def __getitem__(self, index: int) -> np.ndarray:
+        """
+        Args:
+            index: index ID
+        Return:
+            egs: simulated audio
+        """
+        opts_str = self.simu_cfg[index]
+        return self._simu(opts_str)["mix"]
+
+
+@ApsRegisters.loader.register("am@simu_cmd")
 def DataLoader(train: bool = True,
                distributed: bool = False,
-               wav_scp: str = "",
-               sr: int = 16000,
-               channel: int = -1,
+               simu_cfg: str = "",
                text: str = "",
                utt2dur: str = "",
                vocab_dict: Optional[Dict] = None,
@@ -38,28 +56,26 @@ def DataLoader(train: bool = True,
                max_batch_size: int = 32,
                min_batch_size: int = 4) -> Iterable[Dict]:
     """
-    Return the raw waveform dataloader (for AM training)
+    Return the online simulation dataloader (for AM training, command version)
     Args:
         train: in training mode or not
         distributed: in distributed mode or not
-        sr: sample rate of the audio
-        channel: which channel to load, -1 means all
-        wav_scp: path of the audio script
+        simu_cfg: path of the audio simulation configuration
         text: path of the token file
         utt2dur: path of the duration file
-        vocab_dict: vocabulary dictionary if has
+        vocab_dict: vocabulary dictionary
         tokenizer: tokenizer name (for on-the-fly tokenizer)
         tokenizer_kwargs: argument options for tokenizer
-        skip_utts: skips utterances that the file shows
         {min|max}_token_num: filter the utterances if the token number not in [#min_token_num, #max_token_num]
-        {min|max}_dur: discard utterance when #num_frames is not in [#min_dur, #max_dur]
+        {min|max}_dur: discard utterance when audio length is not in [#min_dur, #max_dur]
         adapt_dur|adapt_token_num: used in adaptive mode
+        skip_utts: skips utterances that the file shows
         batch_mode: adaptive or constraint
         num_workers: number of the workers
         max_batch_size: maximum #batch_size
         min_batch_size: minimum #batch_size
     """
-    audio_reader = AudioReader(wav_scp, sr=sr, channel=channel, norm=True)
+    audio_reader = SimuCmdReader(simu_cfg)
     dataset = CommonASRDataset(audio_reader,
                                text,
                                utt2dur,
@@ -68,7 +84,7 @@ def DataLoader(train: bool = True,
                                tokenizer_kwargs=tokenizer_kwargs,
                                max_dur=max_dur,
                                min_dur=min_dur,
-                               dur_axis=0,
+                               dur_axis=-1,
                                skip_utts=skip_utts,
                                min_token_num=min_token_num,
                                max_token_num=max_token_num)
@@ -82,44 +98,3 @@ def DataLoader(train: bool = True,
                                batch_mode=batch_mode,
                                max_batch_size=max_batch_size,
                                min_batch_size=min_batch_size)
-
-
-def egs_collate(egs: Dict) -> Dict:
-    """
-    Batch collate function, return dict object with keys:
-        #utt: batch size, int
-        #tok: token size, int
-        src_pad: raw waveforms, N x (C) x S
-        tgt_pad: N x T
-        src_len: number of the frames, N
-        tgt_len: length of the tokens, N
-    """
-
-    def pad_seq(seq, value=0):
-        peek_dim = seq[0].dim()
-        assert peek_dim in [1, 2]
-        # C x S => S x C
-        if peek_dim == 2:
-            seq = [s.transpose(0, 1) for s in seq]
-        # N x S x C
-        pad_mat = pad_sequence(seq, batch_first=True, padding_value=value)
-        # N x (C) x S
-        if peek_dim == 2:
-            pad_mat = pad_mat.transpose(1, 2)
-        return pad_mat
-
-    egs = {
-        "#utt":
-            len(egs),
-        "#tok":  # add 1 as during training we pad sos
-            sum([int(eg["len"]) + 1 for eg in egs]),
-        "src_pad":
-            pad_seq([th.from_numpy(eg["inp"]) for eg in egs], value=0),
-        "tgt_pad":
-            pad_seq([th.as_tensor(eg["ref"]) for eg in egs], value=IGNORE_ID),
-        "src_len":
-            th.tensor([eg["dur"] for eg in egs], dtype=th.int64),
-        "tgt_len":
-            th.tensor([eg["len"] for eg in egs], dtype=th.int64)
-    }
-    return egs

@@ -24,6 +24,8 @@ logger = get_logger(__name__)
 @ApsRegisters.loader.register("lm@bptt")
 def DataLoader(text: str = "",
                vocab_dict: Optional[Dict] = None,
+               tokenizer: str = "",
+               tokenizer_kwargs: Dict = {},
                train: bool = True,
                sos: int = -1,
                eos: int = -1,
@@ -39,6 +41,8 @@ def DataLoader(text: str = "",
     Args:
         text: path of the text/token file
         vocab_dict: vocabulary dictionary
+        tokenizer: tokenizer name (for on-the-fly tokenizer)
+        tokenizer_kwargs: argument options for tokenizer
         sos|eos: sos|eos ID
         distributed: for distributed training or not
         kaldi_format: whether text/token file is in kaldi format
@@ -48,7 +52,12 @@ def DataLoader(text: str = "",
         min_batch_size: not used here
         num_workers: number workers used in dataloader, not used here
     """
-    return BpttDataloader(Dataset(text, vocab_dict, kaldi_format=kaldi_format),
+    dataset = Dataset(text,
+                      vocab_dict,
+                      kaldi_format=kaldi_format,
+                      tokenizer=tokenizer,
+                      tokenizer_kwargs=tokenizer_kwargs)
+    return BpttDataloader(dataset,
                           max_batch_size,
                           bptt_size=bptt_size,
                           sos=sos,

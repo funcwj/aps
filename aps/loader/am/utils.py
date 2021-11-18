@@ -9,7 +9,7 @@ import torch as th
 import torch.utils.data as dat
 import aps.distributed as dist
 
-from aps.tokenizer import Vocab
+from aps.tokenizer import Vocab, ApsTokenizer
 from typing import Dict, List, Tuple, NoReturn, Optional, Callable
 from kaldi_python_io import Reader as BaseReader
 
@@ -37,7 +37,7 @@ def derive_indices(num_batches: int,
         return indices
 
 
-class ASRDataset(dat.Dataset):
+class CommonASRDataset(dat.Dataset):
     """
     A base dataset class for AM training
 
@@ -45,7 +45,9 @@ class ASRDataset(dat.Dataset):
         input_reader: source feature reader instance
         text: path of the token file
         utt2dur: path of the duration file
-        vocab_dict: vocabulary dictionary object
+        vocab_dict: vocabulary dictionary
+        tokenizer: tokenizer name (for on-the-fly tokenizer)
+        tokenizer_kwargs: argument options for tokenizer
         dur_axis: duration axis index for input_reader
         skip_utts: skips utterances that the file shows
         {min|max}_token_num: filter the utterances if the token number not in [#min_token_num, #max_token_num]
@@ -57,6 +59,8 @@ class ASRDataset(dat.Dataset):
                  text: str,
                  utt2dur: str,
                  vocab_dict: Optional[Dict],
+                 tokenizer: str = "",
+                 tokenizer_kwargs: Dict = {},
                  dur_axis: int = -1,
                  skip_utts: str = "",
                  max_token_num: int = 400,
@@ -67,6 +71,8 @@ class ASRDataset(dat.Dataset):
         self.token_reader = TokenReader(text,
                                         utt2dur,
                                         vocab_dict,
+                                        tokenizer=tokenizer,
+                                        tokenizer_kwargs=tokenizer_kwargs,
                                         skip_utts=skip_utts,
                                         max_dur=max_dur,
                                         min_dur=min_dur,
@@ -95,19 +101,30 @@ class TokenReader(object):
         1) length of the token not in [min_token_num, max_token_num]
         2) length of the audio not in [min_dur, max_dur]
         3) utterance's key is in skip_utts
-    and tokenize reference files (from string tokens to int sequences)
+    and tokenized reference files (from string tokens to int sequences)
     """
 
     def __init__(self,
                  text: str,
                  utt2dur: str,
                  vocab_dict: Optional[Dict],
+                 tokenizer: str = "",
+                 tokenizer_kwargs: Dict = {},
                  max_token_num: int = 400,
                  min_token_num: int = 2,
                  max_dur: float = 3000,
                  min_dur: float = 40,
                  skip_utts: str = ""):
-        self.vocab_dict = Vocab(vocab_dict) if vocab_dict else None
+        if vocab_dict:
+            self.vocab_dict = Vocab(vocab_dict)
+            if tokenizer:
+                if tokenizer not in ApsTokenizer:
+                    raise ValueError(f"Unsupported tokenizer: {tokenizer}")
+                self.tokenizer = ApsTokenizer[tokenizer](**tokenizer_kwargs)
+            else:
+                self.tokenizer = None
+        else:
+            self.vocab_dict = None
         self.token_list = self._pre_process(text,
                                             utt2dur,
                                             max_dur=max_dur,
@@ -178,7 +195,10 @@ class TokenReader(object):
         # if processed, skip
         if self.vocab_dict and "vis" not in stats:
             # map from str sequences to int sequences
-            stats["tok"] = self.vocab_dict(stats["tok"])
+            toks = stats["tok"]
+            if self.tokenizer is not None:
+                toks = self.tokenizer.run(toks)
+            stats["tok"] = self.vocab_dict(toks)
             stats["vis"] = True
         return stats
 
@@ -290,7 +310,7 @@ class BatchSampler(dat.Sampler):
         return self.num_batches
 
 
-class ASRDataLoader(dat.DataLoader):
+class CommonASRDataLoader(dat.DataLoader):
     """
     ASR dataloader for E2E AM training
 
@@ -325,10 +345,10 @@ class ASRDataLoader(dat.DataLoader):
                                distributed=distributed,
                                min_batch_size=min_batch_size,
                                adapt_token_num=adapt_token_num)
-        super(ASRDataLoader, self).__init__(dataset,
-                                            collate_fn=collate_fn,
-                                            num_workers=num_workers,
-                                            batch_sampler=sampler)
+        super(CommonASRDataLoader, self).__init__(dataset,
+                                                  collate_fn=collate_fn,
+                                                  num_workers=num_workers,
+                                                  batch_sampler=sampler)
 
     def set_epoch(self, epoch: int) -> NoReturn:
         self.batch_sampler.set_epoch(epoch)

@@ -7,6 +7,8 @@
 3. Adaptive SpecAug
 4. Update LibriSpeech & GigaSpeech results
 5. Add AED decoder rescoring for CTC beam search
+6. Add LibriMix recipe
+7. Support online tokenizer
 
 ### 2021/10
 

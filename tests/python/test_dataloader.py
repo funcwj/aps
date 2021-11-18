@@ -111,7 +111,7 @@ def test_ss_chunk_loader(batch_size, chunk_size, num_workers):
 @pytest.mark.parametrize("num_workers", [0, 2])
 def test_ss_command_loader(batch_size, chunk_size, num_workers):
     egs_dir = "tests/data/dataloader/se"
-    loader = aps_dataloader(fmt="se@command",
+    loader = aps_dataloader(fmt="se@simu_cmd",
                             simu_cfg=f"{egs_dir}/cmd.options",
                             sr=16000,
                             max_batch_size=batch_size,
@@ -127,11 +127,12 @@ def test_ss_command_loader(batch_size, chunk_size, num_workers):
 @pytest.mark.parametrize("obj", ["egs.token", "egs.token.gz"])
 def test_lm_utt_loader(batch_size, obj):
     egs_dir = "tests/data/dataloader/lm"
+    vocab = load_dict(f"{egs_dir}/dict")
     loader = aps_dataloader(fmt="lm@utt",
                             sos=1,
                             eos=2,
                             text=f"{egs_dir}/{obj}",
-                            vocab_dict=load_dict(f"{egs_dir}/dict"),
+                            vocab_dict=vocab,
                             max_batch_size=batch_size,
                             min_batch_size=batch_size)
     for egs in loader:
@@ -143,11 +144,12 @@ def test_lm_utt_loader(batch_size, obj):
 @pytest.mark.parametrize("obj", ["egs.token", "egs.token.gz"])
 def test_lm_bptt_loader(batch_size, obj):
     egs_dir = "tests/data/dataloader/lm"
+    vocab = load_dict(f"{egs_dir}/dict")
     loader = aps_dataloader(fmt="lm@bptt",
                             sos=1,
                             eos=2,
                             text=f"{egs_dir}/{obj}",
-                            vocab_dict=load_dict(f"{egs_dir}/dict"),
+                            vocab_dict=vocab,
                             bptt_size=10,
                             max_batch_size=batch_size)
     for egs in loader:

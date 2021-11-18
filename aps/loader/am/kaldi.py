@@ -10,7 +10,7 @@ import torch as th
 from torch.nn.utils.rnn import pad_sequence
 from typing import Dict, Iterable, Optional
 from kaldi_python_io import ScriptReader
-from aps.loader.am.utils import ASRDataset, ASRDataLoader
+from aps.loader.am.utils import CommonASRDataset, CommonASRDataLoader
 from aps.libs import ApsRegisters
 from aps.const import IGNORE_ID
 
@@ -22,8 +22,10 @@ def DataLoader(train: bool = True,
                text: str = "",
                utt2num_frames: str = "",
                vocab_dict: Optional[Dict] = None,
-               max_dur: float = 3000,
-               min_dur: float = 40,
+               tokenizer: str = "",
+               tokenizer_kwargs: Dict = {},
+               max_frame_num: float = 3000,
+               min_frame_num: float = 40,
                adapt_dur: float = 800,
                min_token_num: int = 1,
                max_token_num: int = 400,
@@ -41,8 +43,10 @@ def DataLoader(train: bool = True,
         text: path of the text/token file
         utt2num_frames: path of the utt2num_frames file
         skip_utts: skips utterances if the key is in this file
-        vocab_dict: vocabulary dictionary object
-        {min|max}_dur: discard utterance when #num_frames not in [min_dur, max_dur]
+        vocab_dict: vocabulary dictionary
+        tokenizer: tokenizer name (for on-the-fly tokenizing)
+        tokenizer_kwargs: argument options for tokenizer
+        {min|max}_frame_num: discard utterance when #num_frames not in [min_dur, max_dur]
         {min|max}_token_num: filter the utterances if the token number not in [#min_token_num, #max_token_num]
         adapt_dur|adapt_token_num: used in adaptive mode dataloader
         batch_mode: adaptive or constraint
@@ -50,61 +54,29 @@ def DataLoader(train: bool = True,
         max_batch_size: maximum #batch_size
         min_batch_size: minimum #batch_size
     """
-    dataset = Dataset(feats_scp,
-                      text,
-                      utt2num_frames,
-                      vocab_dict,
-                      skip_utts=skip_utts,
-                      min_token_num=min_token_num,
-                      max_token_num=max_token_num,
-                      max_frame_num=max_dur,
-                      min_frame_num=min_dur)
-    return ASRDataLoader(dataset,
-                         egs_collate,
-                         shuffle=train,
-                         distributed=distributed,
-                         num_workers=num_workers,
-                         adapt_dur=adapt_dur,
-                         adapt_token_num=adapt_token_num,
-                         batch_mode=batch_mode,
-                         max_batch_size=max_batch_size,
-                         min_batch_size=min_batch_size)
-
-
-class Dataset(ASRDataset):
-    """
-    Dataset for kaldi features
-    Args:
-        feats_scp: path of the feature script
-        text: path of the text/token file
-        utt2dur: path of the duration file (should be utt2num_frames here)
-        vocab_dict: vocabulary dictionary object
-        skip_utts: skips utterances if the key is in this file
-        {min|max}_token_num: filter the utterances if the token number not in [#min_token_num, #max_token_num]
-        {min|max}_frame_num: discard utterance when #num_frames not in [#min_frame_num, #max_frame_num]
-    """
-
-    def __init__(self,
-                 feats_scp: str,
-                 text: str,
-                 utt2num_frames: str,
-                 vocab_dict: Optional[Dict],
-                 skip_utts: str = "",
-                 min_token_num: int = 1,
-                 max_token_num: int = 400,
-                 max_frame_num: float = 3000,
-                 min_frame_num: float = 40) -> None:
-        feats_reader = ScriptReader(feats_scp)
-        super(Dataset, self).__init__(feats_reader,
-                                      text,
-                                      utt2num_frames,
-                                      vocab_dict,
-                                      max_dur=max_frame_num,
-                                      min_dur=min_frame_num,
-                                      dur_axis=0,
-                                      skip_utts=skip_utts,
-                                      min_token_num=min_token_num,
-                                      max_token_num=max_token_num)
+    feats_reader = ScriptReader(feats_scp)
+    dataset = CommonASRDataset(feats_reader,
+                               text,
+                               utt2num_frames,
+                               vocab_dict,
+                               tokenizer=tokenizer,
+                               tokenizer_kwargs=tokenizer_kwargs,
+                               max_dur=max_frame_num,
+                               min_dur=min_frame_num,
+                               dur_axis=0,
+                               skip_utts=skip_utts,
+                               min_token_num=min_token_num,
+                               max_token_num=max_token_num)
+    return CommonASRDataLoader(dataset,
+                               egs_collate,
+                               shuffle=train,
+                               distributed=distributed,
+                               num_workers=num_workers,
+                               adapt_dur=adapt_dur,
+                               adapt_token_num=adapt_token_num,
+                               batch_mode=batch_mode,
+                               max_batch_size=max_batch_size,
+                               min_batch_size=min_batch_size)
 
 
 def egs_collate(egs: Dict) -> Dict:

@@ -17,6 +17,7 @@ seed=777
 epochs=100
 batch_size=8
 num_workers=4
+tensorboard=false
 
 # evaluation
 metric=sisnr
@@ -47,10 +48,10 @@ if [ $end -ge 2 ] && [ $beg -le 2 ]; then
     --epochs $epochs \
     --batch-size $batch_size \
     --num-workers $num_workers \
+    --tensorboard $tensorboard \
     --eval-interval -1 \
     --save-interval -1 \
     --prog-interval 100 \
-    --tensorboard false \
     ss $dataset $exp
   echo "$0: Train model done under $cpt_dir"
 fi

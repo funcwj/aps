@@ -18,9 +18,6 @@ epochs=100
 tensorboard=false
 batch_size=8
 num_workers=4
-eval_interval=-1
-save_interval=-1
-prog_interval=100
 
 metric=sisnr
 
@@ -57,10 +54,10 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
     --epochs $epochs \
     --batch-size $batch_size \
     --num-workers $num_workers \
-    --eval-interval $eval_interval \
-    --save-interval $save_interval \
-    --prog-interval $prog_interval \
     --tensorboard $tensorboard \
+    --eval-interval -1 \
+    --save-interval -1 \
+    --prog-interval 100 \
     ss $dataset $exp
   echo "$0: Train model done under $cpt_dir"
 fi
