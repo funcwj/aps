@@ -9,7 +9,7 @@ import torch as th
 import torch.utils.data as dat
 import aps.distributed as dist
 
-from aps.tokenizer import Vocab, ApsTokenizer
+from aps.tokenizer import Tokenizer
 from typing import Dict, List, Tuple, NoReturn, Optional, Callable
 from kaldi_python_io import Reader as BaseReader
 
@@ -116,13 +116,9 @@ class TokenReader(object):
                  min_dur: float = 40,
                  skip_utts: str = ""):
         if vocab_dict:
-            self.vocab_dict = Vocab(vocab_dict)
-            if tokenizer:
-                if tokenizer not in ApsTokenizer:
-                    raise ValueError(f"Unsupported tokenizer: {tokenizer}")
-                self.tokenizer = ApsTokenizer[tokenizer](**tokenizer_kwargs)
-            else:
-                self.tokenizer = None
+            self.tokenizer = Tokenizer(vocab_dict,
+                                       tokenizer=tokenizer,
+                                       tokenizer_kwargs=tokenizer_kwargs)
         else:
             self.vocab_dict = None
         self.token_list = self._pre_process(text,
@@ -154,7 +150,7 @@ class TokenReader(object):
         else:
             skip_keys = []
         utt2dur = BaseReader(utt2dur, value_processor=float)
-        if self.vocab_dict:
+        if self.tokenizer:
             text_reader = BaseReader(text, num_tokens=-1, restrict=False)
         else:
             text_reader = BaseReader(
@@ -193,12 +189,9 @@ class TokenReader(object):
     def __getitem__(self, index):
         stats = self.token_list[index]
         # if processed, skip
-        if self.vocab_dict and "vis" not in stats:
+        if self.tokenizer and "vis" not in stats:
             # map from str sequences to int sequences
-            toks = stats["tok"]
-            if self.tokenizer is not None:
-                toks = self.tokenizer.run(toks)
-            stats["tok"] = self.vocab_dict(toks)
+            stats["tok"] = self.tokenizer.encode(stats["tok"])
             stats["vis"] = True
         return stats
 

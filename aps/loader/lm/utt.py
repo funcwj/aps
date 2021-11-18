@@ -17,7 +17,7 @@ from typing import NoReturn, List, Dict, Optional, Iterator, Iterable
 from aps.loader.lm.utils import filter_utts
 from aps.loader.am.utils import derive_indices
 from aps.utils import get_logger
-from aps.tokenizer import Vocab, ApsTokenizer
+from aps.tokenizer import Tokenizer
 from aps.const import IGNORE_ID
 from aps.libs import ApsRegisters
 
@@ -97,15 +97,11 @@ class Dataset(dat.Dataset):
                  tokenizer_kwargs: Dict = {},
                  kaldi_format: bool = True) -> None:
         if vocab_dict:
-            self.vocab_dict = Vocab(vocab_dict)
-            if tokenizer:
-                if tokenizer not in ApsTokenizer:
-                    raise ValueError(f"Unsupported tokenizer: {tokenizer}")
-                self.tokenizer = ApsTokenizer[tokenizer](**tokenizer_kwargs)
-            else:
-                self.tokenizer = None
+            self.tokenizer = Tokenizer(vocab_dict,
+                                       tokenizer=tokenizer,
+                                       tokenizer_kwargs=tokenizer_kwargs)
         else:
-            self.vocab_dict = None
+            self.tokenizer = None
         self.kaldi_format = kaldi_format
         self.token = self._load(text)
 
@@ -123,15 +119,12 @@ class Dataset(dat.Dataset):
 
     def __getitem__(self, index: int) -> List[int]:
         str_toks = self.token[index].split()
-        # remove the first token (key)
+        # remove the first token (utterance key)
         if self.kaldi_format:
             str_toks = str_toks[1:]
-        if self.vocab_dict:
-            # tokenizing
-            if self.tokenizer:
-                str_toks = self.tokenizer.run(str_toks)
+        if self.tokenizer:
             # map from str sequences to int sequences
-            int_toks = self.vocab_dict(str_toks)
+            int_toks = self.tokenizer.encode(str_toks)
         else:
             int_toks = list(map(int, str_toks))
         return int_toks

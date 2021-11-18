@@ -86,7 +86,7 @@ class SequenceSampler(dat.Sampler):
                  max_token_num: int = 2000) -> None:
         if distributed:
             self.world_size = dist.world_size()
-            self.header = f"SequenceSampler (rank {dist.rank()})"
+            self.header = f"Rank {dist.rank()} - SequenceSampler"
         else:
             self.world_size = 1
             self.header = "SequenceSampler"
