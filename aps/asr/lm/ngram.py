@@ -35,6 +35,15 @@ class NgramLM(object):
                 tok = "<s>"
             self.token[i] = tok
 
+    def score(self,
+              utterance: str,
+              sos: bool = True,
+              eos: bool = True) -> float:
+        """
+        Score a given utterance
+        """
+        return self.ngram_lm.score(utterance, bos=sos, eos=eos)
+
     def _step(self, prev_state):
         """
         Args:

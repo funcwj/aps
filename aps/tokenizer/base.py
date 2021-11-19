@@ -51,6 +51,18 @@ class Tokenizer(TokenizerAbc):
         for key, val in vocab_dict.items():
             self.int2str[val] = key
 
+    def symbol2int(self, sym: str) -> int:
+        """
+        Return index id of the symbol
+        """
+        return self.str2int[sym]
+
+    def int2symbol(self, idx: int) -> str:
+        """
+        Return string symbol of the index
+        """
+        return self.int2str[idx]
+
     def encode(self, str_seq: List[str]) -> List[int]:
         """
         Encode string sequences to int sequences

@@ -3,6 +3,7 @@
 # Copyright 2020 Jian Wu
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
+import yaml
 import pytest
 import torch as th
 
@@ -10,6 +11,33 @@ from aps.libs import aps_task, aps_asr_nnet
 from aps.transform import AsrTransform
 from aps.const import IGNORE_ID
 
+att_enc_cfg = """
+enc_type: pytorch_rnn
+enc_kwargs:
+  rnn: lstm
+  num_layers: 2
+  hidden: 512
+  dropout: 0.2
+  bidirectional: false
+"""
+att_dec_cfg = """
+dec_kwargs:
+  rnn: lstm
+  num_layers: 2
+  hidden: 512
+  dropout: 0.1
+  input_feeding: True
+  onehot_embed: False
+"""
+rnnt_dec_cfg = """
+dec_kwargs:
+  embed_size: 512
+  jot_dim: 512
+  rnn: lstm
+  num_layers: 2
+  hidden: 512
+  dropout: 0.2
+"""
 asr_transform = AsrTransform(feats="fbank-log-cmvn",
                              frame_len=400,
                              frame_hop=160,
@@ -17,32 +45,6 @@ asr_transform = AsrTransform(feats="fbank-log-cmvn",
                              round_pow_of_two=True,
                              pre_emphasis=0.96,
                              center=False)
-
-att_enc_kwargs = {
-    "rnn": "lstm",
-    "num_layers": 2,
-    "hidden": 512,
-    "dropout": 0.2,
-    "bidirectional": False
-}
-
-att_dec_kwargs = {
-    "rnn": "lstm",
-    "num_layers": 2,
-    "hidden": 512,
-    "dropout": 0.1,
-    "input_feeding": True,
-    "onehot_embed": False
-}
-
-rnnt_dec_kwargs = {
-    "embed_size": 512,
-    "jot_dim": 512,
-    "rnn": "lstm",
-    "num_layers": 2,
-    "hidden": 512,
-    "dropout": 0.2
-}
 
 
 def gen_asr_egs(batch_size, vocab_size):
@@ -72,11 +74,12 @@ def test_ctc_only():
     nnet_cls = aps_asr_nnet("asr@ctc")
     vocab_size = 100
     batch_size = 4
+    enc_cfg = yaml.safe_load(att_enc_cfg)
     ctc_asr = nnet_cls(input_size=80,
                        vocab_size=vocab_size,
                        asr_transform=asr_transform,
-                       enc_type="pytorch_rnn",
-                       enc_kwargs=att_enc_kwargs)
+                       enc_type=enc_cfg["enc_type"],
+                       enc_kwargs=enc_cfg["enc_kwargs"])
     task = aps_task("asr@ctc", ctc_asr, blank=vocab_size - 1)
     egs = gen_asr_egs(batch_size, vocab_size)
     stats = task(egs)
@@ -87,6 +90,8 @@ def test_ctc_xent():
     nnet_cls = aps_asr_nnet("asr@att")
     vocab_size = 100
     batch_size = 4
+    enc_cfg = yaml.safe_load(att_enc_cfg)
+    dec_cfg = yaml.safe_load(att_dec_cfg)
     att_asr = nnet_cls(input_size=80,
                        vocab_size=vocab_size,
                        sos=0,
@@ -95,11 +100,11 @@ def test_ctc_xent():
                        asr_transform=asr_transform,
                        att_type="ctx",
                        att_kwargs={"att_dim": 512},
-                       enc_type="pytorch_rnn",
+                       enc_type=enc_cfg["enc_type"],
                        enc_proj=256,
-                       enc_kwargs=att_enc_kwargs,
+                       enc_kwargs=enc_cfg["enc_kwargs"],
                        dec_dim=512,
-                       dec_kwargs=att_dec_kwargs)
+                       dec_kwargs=dec_cfg["dec_kwargs"])
     task = aps_task("asr@ctc_xent",
                     att_asr,
                     lsm_factor=0.1,
@@ -116,13 +121,15 @@ def test_rnnt(rnnt_api):
     nnet_cls = aps_asr_nnet("asr@transducer")
     vocab_size = 100
     batch_size = 4
+    enc_cfg = yaml.safe_load(att_enc_cfg)
+    dec_cfg = yaml.safe_load(rnnt_dec_cfg)
     rnnt_asr = nnet_cls(input_size=80,
                         vocab_size=vocab_size,
                         asr_transform=asr_transform,
-                        enc_type="pytorch_rnn",
-                        enc_kwargs=att_enc_kwargs,
+                        enc_type=enc_cfg["enc_type"],
+                        enc_kwargs=enc_cfg["enc_kwargs"],
                         enc_proj=512,
-                        dec_kwargs=rnnt_dec_kwargs)
+                        dec_kwargs=dec_cfg["dec_kwargs"])
     task = aps_task("asr@transducer",
                     rnnt_asr,
                     blank=vocab_size - 1,
