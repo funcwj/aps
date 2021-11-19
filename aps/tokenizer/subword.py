@@ -19,6 +19,8 @@ class SubwordTokenizer(TokenizerAbc):
 
     def __init__(self, spm: str = "", filter_words: List[str] = []):
         super(SubwordTokenizer, self).__init__()
+        if not spm:
+            raise RuntimeError("spm must be assigned")
         import sentencepiece as sp
         self.sp_mdl = sp.SentencePieceProcessor(model_file=spm)
         self.word_tokenizer = WordTokenizer(filter_words)

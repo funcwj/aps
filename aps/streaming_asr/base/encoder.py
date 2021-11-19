@@ -12,10 +12,10 @@ from aps.libs import Register
 
 from typing import Union, List, Tuple, Optional
 
-StreamingEncoder = Register("streaming_encoder")
+StreamingBaseEncoder = Register("streaming_encoder")
 
 
-@StreamingEncoder.register("pytorch_rnn")
+@StreamingBaseEncoder.register("pytorch_rnn")
 class StreamingRNNEncoder(PyTorchRNNEncoder):
     """
     A streaming version of RNN encoder
@@ -80,7 +80,7 @@ class StreamingRNNEncoder(PyTorchRNNEncoder):
         return out, inp_len
 
 
-@StreamingEncoder.register("fsmn")
+@StreamingBaseEncoder.register("fsmn")
 class StreamingFSMNEncoder(FSMNEncoder):
     """
     A streaming version of FSMN encoder (stride = 1)
@@ -156,7 +156,7 @@ class StreamingFSMNEncoder(FSMNEncoder):
         return chunk
 
 
-@StreamingEncoder.register("conv1d")
+@StreamingBaseEncoder.register("conv1d")
 class StreamingConv1dEncoder(Conv1dEncoder):
     """
     A streaming version of conv1d encoder (prefer stride != 1)
@@ -198,7 +198,7 @@ class StreamingConv1dEncoder(Conv1dEncoder):
         return chunk
 
 
-@StreamingEncoder.register("conv2d")
+@StreamingBaseEncoder.register("conv2d")
 class StreamingConv2dEncoder(Conv2dEncoder):
     """
     A streaming version of conv2d encoder (prefer stride != 1)

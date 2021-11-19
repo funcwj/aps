@@ -25,7 +25,7 @@ __all__ = [
 
 def sisnr(x: th.Tensor,
           s: th.Tensor,
-          eps: float = 1e-8,
+          eps: float = EPSILON,
           zero_mean: bool = True,
           non_nagetive: bool = False) -> th.Tensor:
     """
@@ -58,8 +58,8 @@ def sisnr(x: th.Tensor,
 
 def snr(x: th.Tensor,
         s: th.Tensor,
-        eps: float = 1e-8,
-        threshold: float = -1,
+        eps: float = EPSILON,
+        snr_max: float = -1,
         non_nagetive: bool = False) -> th.Tensor:
     """
     Computer SNR
@@ -76,10 +76,13 @@ def snr(x: th.Tensor,
     if x.shape != s.shape:
         raise RuntimeError("Dimention mismatch when calculate " +
                            f"si-snr, {x.shape} vs {s.shape}")
-    if threshold > 0:
+    if snr_max > 0:
+        # 30dB => 0.001
+        threshold = 10**(-snr_max / 10)
         s_norm = l2norm(s)**2
-        snr_linear = s_norm / (threshold * s_norm + l2norm(x - s)**2 + eps)
-        return 10 * th.log10(eps + snr_linear)
+        x_s_norm = l2norm(x - s)**2
+        return 10 * th.log10(s_norm + eps) - 10 * th.log10(threshold * s_norm +
+                                                           x_s_norm + eps)
     else:
         snr_linear = l2norm(s) / (l2norm(x - s) + eps)
         if non_nagetive:
@@ -259,7 +262,7 @@ class SnrTask(TimeDomainTask):
                  num_spks: int = 2,
                  permute: bool = True,
                  weight: Optional[str] = None,
-                 threshold: float = -1,
+                 snr_max: float = -1,
                  non_nagetive: bool = False) -> None:
         super(SnrTask, self).__init__(
             nnet,
@@ -268,14 +271,14 @@ class SnrTask(TimeDomainTask):
             weight=weight,
             description="Using SNR objective function for training")
         self.non_nagetive = non_nagetive
-        self.threshold = 10**(-threshold / 10)
+        self.snr_max = snr_max
 
     def objf(self, out: th.Tensor, ref: th.Tensor) -> th.Tensor:
         """
         Return negative SNR
         """
         return -snr(
-            out, ref, non_nagetive=self.non_nagetive, threshold=self.threshold)
+            out, ref, non_nagetive=self.non_nagetive, snr_max=self.snr_max)
 
 
 @ApsRegisters.task.register("sse@wa")

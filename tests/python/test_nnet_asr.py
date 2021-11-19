@@ -13,7 +13,10 @@ from aps.asr.base.encoder import Conv1dEncoder, Conv2dEncoder
 asr_transform = AsrTransform(feats="fbank-log-cmvn",
                              frame_len=400,
                              frame_hop=160,
-                             window="hamm")
+                             window="hamm",
+                             center=False,
+                             pre_emphasis=0.97,
+                             stft_mode="kaldi")
 
 default_rnn_dec_kwargs = {
     "rnn": "lstm",
@@ -577,29 +580,4 @@ def test_xfmr_transducer(enc_type, enc_kwargs):
                          dec_kwargs=default_xfmr_transducer_dec_kwargs)
     x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
     _, z, _ = xfmr_rnnt(x, x_len, y, y_len)
-    assert z.shape[2:] == th.Size([u + 1, vocab_size])
-
-
-def test_streaming_transducer():
-    nnet_cls = aps_asr_nnet("streaming_asr@transducer")
-    vocab_size = 100
-    batch_size = 4
-    enc_type = "pytorch_rnn"
-    enc_kwargs = {"num_layers": 3, "hidden": 512, "dropout": 0.2}
-    dec_kwargs = {
-        "embed_size": 512,
-        "jot_dim": 512,
-        "num_layers": 2,
-        "hidden": 512,
-        "dropout": 0.1
-    }
-    rnnt = nnet_cls(input_size=80,
-                    vocab_size=vocab_size,
-                    asr_transform=asr_transform,
-                    enc_type=enc_type,
-                    enc_proj=512,
-                    enc_kwargs=enc_kwargs,
-                    dec_kwargs=dec_kwargs)
-    x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
-    _, z, _ = rnnt(x, x_len, y, y_len)
     assert z.shape[2:] == th.Size([u + 1, vocab_size])
