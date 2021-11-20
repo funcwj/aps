@@ -5,12 +5,12 @@
 
 set -eu
 
+stage=2
 wsj0_data=/scratch/jwu/wsj0
 wham_data=/scratch/jwu/wham
 dataset=wham
 
-stage=2
-
+# train
 exp="1a"
 gpu=0
 seed=777
@@ -19,6 +19,7 @@ tensorboard=false
 batch_size=8
 num_workers=4
 
+# evaluate
 metric=sisnr
 
 . ./utils/parse_options.sh || exit 1
@@ -80,7 +81,9 @@ if [ $end -ge 6 ] && [ $beg -le 6 ]; then
       awk -v ch=$index -F '/' '{printf("%s sox %s -t wav - remix %d |\n", $NF, $0, ch)}' | \
       sed "s:.wav::" > $cpt_dir/bss/spk${index}.scp
   done
-  ./cmd/compute_ss_metric.py --sr 16000 --metric $metric \
+  ./cmd/compute_ss_metric.py \
+    --sr 16000 \
+    --metric $metric \
     $data_dir/tt/spk1.scp,$data_dir/tt/spk2.scp \
     $cpt_dir/bss/spk1.scp,$cpt_dir/bss/spk2.scp
 fi

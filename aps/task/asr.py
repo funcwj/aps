@@ -57,35 +57,6 @@ def compute_accu(dec_out: th.Tensor, tgt_pad: th.Tensor) -> Tuple[float]:
     return (accu.item(), total.item())
 
 
-def compute_ctc_accu(enc_out: th.Tensor,
-                     tgt_pad: th.Tensor,
-                     tgt_len: th.Tensor,
-                     blank: int = -1) -> Tuple[float]:
-    """
-    Compute token accuracy for CTC greedy search sequence
-    Args:
-        enc_out: N x T, decoder output
-        tgt_pad: N x T, padding target labels
-    """
-    # N x T
-    pred = th.argmax(enc_out.detach(), dim=-1)
-    # ignore blank
-    blk_mask = (pred != blank)
-    ctc_len = th.sum(blk_mask, -1)
-    num_correct = 0
-    for i, p in enumerate(pred):
-        cur_tok = p[blk_mask[i]]
-        cur_ref = tgt_pad[i]
-        # padding
-        to_pad = (tgt_len[i] - ctc_len[i]).item()
-        if to_pad:
-            cur_tok = tf.pad(cur_tok, (0, to_pad))
-        num_correct += th.sum(cur_tok == cur_ref[:tgt_len[i]]).float()
-    total = th.sum(tgt_len)
-    accu = num_correct / total
-    return (accu.item(), total.item())
-
-
 def prep_asr_label(
         tgt_pad: th.Tensor,
         tgt_len: th.Tensor,
@@ -171,12 +142,8 @@ class CtcTask(Task):
                             blank=self.ctc_blank,
                             reduction=self.reduction,
                             add_softmax=True)
-        accu, den = compute_ctc_accu(ctc_enc,
-                                     egs["tgt_pad"],
-                                     egs["tgt_len"],
-                                     blank=self.ctc_blank)
         # ignore length of eos
-        assert den == egs["#tok"] - ctc_enc.shape[0]
+        assert th.sum(egs["tgt_len"]) == egs["#tok"] - ctc_enc.shape[0]
         return {"loss": ctc_loss}
 
 

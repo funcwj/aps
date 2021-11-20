@@ -1,10 +1,10 @@
 # Records
 
-1. TCN
+1. TCN++
 
     * configurations: `1b.yaml`
     * commit: `c3b2044224eedbe81e436237e9f526b8ff3b284f`
 
-    | - | Dev | Test |
+    | Metric | Dev | Test |
     |:---:|:---:|:---:|
-    | SiSNR | 16.65 | 16.17 |
+    | Si-SNR | 16.65 | 16.17 |

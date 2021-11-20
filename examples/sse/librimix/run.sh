@@ -75,19 +75,19 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
 fi
 
 if [ $end -ge 4 ] && [ $beg -le 4 ]; then
-  echo "Stage 4: run BSS ..."
+  eval_scp=$eval_dir/$name/${eval_data}.scp
+  echo "Stage 4: run BSS on data $eval_scp..."
   for name in dev test; do
     ./cmd/separate.py \
       --checkpoint $cpt_dir \
       --sr $sr_num \
       --device-id 0 \
-      $eval_dir/$name/${eval_data}.scp \
-      $cpt_dir/bss_$name
+      $eval_scp $cpt_dir/bss_$name
   done
 fi
 
 if [ $end -ge 5 ] && [ $beg -le 5 ]; then
-  echo "Stage 5: evaluate ..."
+  echo "Stage 5: evaluate ($spk-speaker) ..."
   spk_index=$(seq $spk)
   for name in dev test; do
     for index in $spk_index; do
@@ -97,7 +97,7 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
     done
     est_list=$eval_dir/$name/s1.scp,$eval_dir/$name/s2.scp
     ref_list=$cpt_dir/bss_$name/s1.scp,$cpt_dir/bss_$name/s2.scp
-    if [ $spk -eq 3]; then
+    if [ $spk -eq 3 ]; then
       est_list="$est_list,$eval_dir/$name/s3.scp"
       ref_list="$ref_list,$cpt_dir/bss_$name/s3.scp"
     fi
