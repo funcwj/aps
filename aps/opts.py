@@ -300,7 +300,7 @@ class DistributedTrainParser(BaseTrainParser):
                         choices=["torch", "horovod", "none"],
                         help="The distributed backend to use")
     parser.add_argument("--dev-batch-factor",
-                        type=int,
+                        type=float,
                         default=1,
                         help="We will use #batch_size/#dev_batch_factor "
                         "as the batch-size for validation epoch")

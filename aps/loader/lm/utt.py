@@ -17,7 +17,7 @@ from typing import NoReturn, List, Dict, Optional, Iterator, Iterable
 from aps.loader.lm.utils import filter_utts
 from aps.loader.am.utils import derive_indices
 from aps.utils import get_logger
-from aps.tokenizer import Vocab
+from aps.tokenizer import Tokenizer
 from aps.const import IGNORE_ID
 from aps.libs import ApsRegisters
 
@@ -27,6 +27,8 @@ logger = get_logger(__name__)
 @ApsRegisters.loader.register("lm@utt")
 def DataLoader(text: str = "",
                vocab_dict: Optional[Dict] = None,
+               tokenizer: str = "",
+               tokenizer_kwargs: Dict = {},
                train: bool = True,
                sos: int = -1,
                eos: int = -1,
@@ -44,6 +46,8 @@ def DataLoader(text: str = "",
     Args:
         text: path of the text/token file
         vocab_dict: vocabulary dictionary
+        tokenizer: tokenizer name (for on-the-fly tokenizer)
+        tokenizer_kwargs: argument options for tokenizer
         sos|eos: sos|eos ID
         distributed: for distributed training or not
         kaldi_format: whether text/token file is in kaldi format
@@ -56,7 +60,12 @@ def DataLoader(text: str = "",
         chunk_size_for_sort: #chunk_size for mini-batch sorting, we perform sort
                              in each chunk (because LM corpus may very big)
     """
-    return UttDataLoader(Dataset(text, vocab_dict, kaldi_format=kaldi_format),
+    dataset = Dataset(text,
+                      vocab_dict,
+                      kaldi_format=kaldi_format,
+                      tokenizer=tokenizer,
+                      tokenizer_kwargs=tokenizer_kwargs)
+    return UttDataLoader(dataset,
                          sos=sos,
                          eos=eos,
                          shuffle=train,
@@ -76,14 +85,23 @@ class Dataset(dat.Dataset):
     Args:
         text: path of the text/token file
         vocab_dict: vocabulary dictionary
+        tokenizer: tokenizer name (for on-the-fly tokenizer)
+        tokenizer_kwargs: argument options for tokenizer
         kaldi_format: whether text/token file is in kaldi format
     """
 
     def __init__(self,
                  text: str,
                  vocab_dict: Optional[Dict],
+                 tokenizer: str = "",
+                 tokenizer_kwargs: Dict = {},
                  kaldi_format: bool = True) -> None:
-        self.vocab = Vocab(vocab_dict) if vocab_dict else None
+        if vocab_dict:
+            self.tokenizer = Tokenizer(vocab_dict,
+                                       tokenizer=tokenizer,
+                                       tokenizer_kwargs=tokenizer_kwargs)
+        else:
+            self.tokenizer = None
         self.kaldi_format = kaldi_format
         self.token = self._load(text)
 
@@ -101,12 +119,12 @@ class Dataset(dat.Dataset):
 
     def __getitem__(self, index: int) -> List[int]:
         str_toks = self.token[index].split()
-        # remove the first token (key)
+        # remove the first token (utterance key)
         if self.kaldi_format:
             str_toks = str_toks[1:]
-        if self.vocab:
+        if self.tokenizer:
             # map from str sequences to int sequences
-            int_toks = self.vocab(str_toks)
+            int_toks = self.tokenizer.encode(str_toks)
         else:
             int_toks = list(map(int, str_toks))
         return int_toks

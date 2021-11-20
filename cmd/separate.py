@@ -97,6 +97,7 @@ def run(args):
                           chunk_cfg=args.chunk_cfg)
     mix_reader = AudioReader(args.wav_scp, sr=args.sr, channel=args.channel)
 
+    done = 0
     for key, mix in mix_reader:
         timer = SimpleTimer()
         norm = np.max(np.abs(mix))
@@ -114,8 +115,10 @@ def run(args):
             np.save(sep_dir / f"{key}", sep)
         time_cost = timer.elapsed() * 60
         dur = mix.shape[-1] / args.sr
+        done += 1
         logger.info(
-            f"Processing utterance {key} done, RTF = {time_cost / dur:.4f}")
+            f"Processing utterance {key} done ({done}/{len(mix_reader)}), "
+            f"RTF = {time_cost / dur:.4f}")
     logger.info(f"Processed {len(mix_reader)} utterances done!")
 
 

@@ -44,12 +44,12 @@ class MultiStepLR(lr.MultiStepLR):
 @LrScheduler.register("warmup_noam_lr")
 class NoamLR(lr._LRScheduler):
     """
-    Lr schuduler for Transformer
+    Noam LR schuduler for Transformer
 
-    const = factor * att_dim^(-0.5)
-    1) cur_step > warmup:   const * cur_step^(-0.5)
-    2) cur_step < warmup:   const * cur_step/warmup * warmup^(-0.5)
-    3) cur_step = warmup:   const * warmup^(-0.5)
+    scaler = factor * att_dim^(-0.5)
+    1) cur_step > warmup:   scaler * cur_step^(-0.5)
+    2) cur_step < warmup:   scaler * cur_step/warmup * warmup^(-0.5)
+    3) cur_step = warmup:   scaler * warmup^(-0.5)
 
     The peak value of the learning rate is
         peak_lr = factor * (att_dim * warmup)^(-0.5)
@@ -63,24 +63,26 @@ class NoamLR(lr._LRScheduler):
 
     def __init__(self,
                  optimizer: Optimizer,
+                 factor: float = 1,
                  att_dim: int = 512,
                  peak_lr: float = -1,
                  warmup: int = 8000,
                  last_epoch: int = -1) -> None:
         self.warmup = warmup
-        self.const = att_dim**(-0.5) if peak_lr <= 0 else peak_lr * warmup**0.5
+        self.scaler = factor * att_dim**(
+            -0.5) if peak_lr <= 0 else peak_lr * warmup**0.5
         super(NoamLR, self).__init__(optimizer, last_epoch=last_epoch)
 
     def get_lr(self, step: Optional[int] = None) -> List[float]:
         if step is None:
             step = self._step_count
         return [
-            self.const / min(step**(0.5), step * self.warmup**(1.5))
-            for _ in self.optimizer.param_groups
+            self.scaler * min(step**(-0.5), step * self.warmup**(-1.5))
+            for _ in self.base_lrs
         ]
 
 
-class WarmupDecayBase(lr._LRScheduler):
+class WarmupDecayLRBase(lr._LRScheduler):
     """
     Base class for warmup and decay lr scheduler:
 
@@ -105,7 +107,8 @@ class WarmupDecayBase(lr._LRScheduler):
         self.gamma = None
         self.peak_lr, self.stop_lr = peak_lr, stop_lr
         self.warmup, self.holdon, self.max_steps = time_stamps
-        super(WarmupDecayBase, self).__init__(optimizer, last_epoch=last_epoch)
+        super(WarmupDecayLRBase, self).__init__(optimizer,
+                                                last_epoch=last_epoch)
 
     def get_lr(self, step: Optional[int] = None) -> List[float]:
         if step is None:
@@ -116,14 +119,14 @@ class WarmupDecayBase(lr._LRScheduler):
             cur_lr = self.stop_lr
         else:
             cur_lr = self._decay_lr(step)
-        return [cur_lr for _ in self.optimizer.param_groups]
+        return [cur_lr for _ in self.base_lrs]
 
     def _decay_lr(self, step: int):
         raise NotImplementedError()
 
 
 @LrScheduler.register("warmup_exp_decay_lr")
-class ExponentialDecayLR(WarmupDecayBase):
+class ExponentialDecayLR(WarmupDecayLRBase):
     """
     Warmup and exponential decay lr scheduler proposed in SpecAugment paper
     """
@@ -148,7 +151,7 @@ class ExponentialDecayLR(WarmupDecayBase):
 
 
 @LrScheduler.register("warmup_linear_decay_lr")
-class LinearDecayLR(WarmupDecayBase):
+class LinearDecayLR(WarmupDecayLRBase):
     """
     Warmup and linear decay lr scheduler
     """
@@ -173,7 +176,7 @@ class LinearDecayLR(WarmupDecayBase):
 
 
 @LrScheduler.register("warmup_cos_decay_lr")
-class CosineDecayLR(WarmupDecayBase):
+class CosineDecayLR(WarmupDecayLRBase):
     """
     Warmup and cosine decay lr scheduler
     """
@@ -198,7 +201,7 @@ class CosineDecayLR(WarmupDecayBase):
 
 
 @LrScheduler.register("warmup_power_decay_lr")
-class PowerDecayLR(WarmupDecayBase):
+class PowerDecayLR(WarmupDecayLRBase):
     """
     Warmup and power (e.g., square or sqrt) decay lr scheduler
     """

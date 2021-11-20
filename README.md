@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-brightgreen.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python-Version](https://img.shields.io/badge/Python-3.7%7C3.8-brightgreen)](https://github.com/funcwj/aps)
-[![codecov](https://codecov.io/gh/funcwj/aps/branch/jwu/master/graph/badge.svg)](https://codecov.io/gh/funcwj/aps)
+[![codecov](https://codecov.io/gh/funcwj/aps/branch/master/graph/badge.svg)](https://codecov.io/gh/funcwj/aps)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![CI](https://github.com/funcwj/aps/actions/workflows/test_python.yml/badge.svg)](https://github.com/funcwj/aps/actions/workflows/test_python.yml/badge.svg)
 
@@ -40,4 +40,4 @@ cmake .. && make -j
 
 ## Acknowledge
 
-The project was started at early 2019 when the author was a master student of the Audio, Speech and Language Processing Group (ASLP) in Northwestern Polytechnical University (NWPU), Xi'an, China. Originally it was used to collect the source code of the experiments that the author did in the past.
+The project was started at early 2019 when the author was a master student of the [Audio, Speech and Language Processing Group](http://www.npu-aslp.org) (ASLP) in [Northwestern Polytechnical University](https://www.nwpu.edu.cn) (NWPU), Xi'an, China. Originally it was used to collect the source code of the experiments that the author did in the past.

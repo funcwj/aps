@@ -9,7 +9,7 @@ import torch as th
 
 from torch.nn.utils.rnn import pad_sequence
 from typing import Dict, Iterable, Optional
-from aps.loader.am.utils import ASRDataset, ASRDataLoader
+from aps.loader.am.utils import CommonASRDataset, CommonASRDataLoader
 from aps.io.audio import AudioReader
 from aps.const import IGNORE_ID
 from aps.libs import ApsRegisters
@@ -24,6 +24,8 @@ def DataLoader(train: bool = True,
                text: str = "",
                utt2dur: str = "",
                vocab_dict: Optional[Dict] = None,
+               tokenizer: str = "",
+               tokenizer_kwargs: Dict = {},
                min_token_num: int = 1,
                max_token_num: int = 400,
                max_dur: float = 30,
@@ -45,7 +47,9 @@ def DataLoader(train: bool = True,
         wav_scp: path of the audio script
         text: path of the token file
         utt2dur: path of the duration file
-        vocab_dict: dictionary object
+        vocab_dict: vocabulary dictionary if has
+        tokenizer: tokenizer name (for on-the-fly tokenizer)
+        tokenizer_kwargs: argument options for tokenizer
         skip_utts: skips utterances that the file shows
         {min|max}_token_num: filter the utterances if the token number not in [#min_token_num, #max_token_num]
         {min|max}_dur: discard utterance when #num_frames is not in [#min_dur, #max_dur]
@@ -55,75 +59,29 @@ def DataLoader(train: bool = True,
         max_batch_size: maximum #batch_size
         min_batch_size: minimum #batch_size
     """
-    dataset = Dataset(wav_scp,
-                      text,
-                      utt2dur,
-                      vocab_dict,
-                      sr=sr,
-                      channel=channel,
-                      skip_utts=skip_utts,
-                      min_token_num=min_token_num,
-                      max_token_num=max_token_num,
-                      max_wav_dur=max_dur,
-                      min_wav_dur=min_dur)
-    return ASRDataLoader(dataset,
-                         egs_collate,
-                         shuffle=train,
-                         distributed=distributed,
-                         num_workers=num_workers,
-                         adapt_dur=adapt_dur,
-                         adapt_token_num=adapt_token_num,
-                         batch_mode=batch_mode,
-                         max_batch_size=max_batch_size,
-                         min_batch_size=min_batch_size)
-
-
-class Dataset(ASRDataset):
-    """
-    Dataset for raw waveform input
-    Args:
-        wav_scp: path of the audio script
-        text: path of the token file
-        utt2dur: path of the duration file
-        vocab_dict: vocabulary dictionary object
-        sr: sample rate of the audio
-        channel: which channel to load, -1 means all
-        skip_utts: skips utterances that the file shows
-        audio_norm: loading normalized samples (-1, 1) when reading audio
-        {min|max}_token_num: filter the utterances if the token number not in [#min_token_num, #max_token_num]
-        {min|max}_wav_dur: discard utterance when duration is not in [min_wav_dur, max_wav_dur]
-        adapt_wav_dur|adapt_token_num: used in adaptive mode
-    """
-
-    def __init__(self,
-                 wav_scp: str,
-                 text: str,
-                 utt2dur: str,
-                 vocab_dict: Optional[Dict],
-                 sr: int = 16000,
-                 channel: int = -1,
-                 skip_utts: str = "",
-                 audio_norm: bool = True,
-                 min_token_num: int = 1,
-                 max_token_num: int = 400,
-                 max_wav_dur: float = 30,
-                 min_wav_dur: float = 0.4,
-                 adapt_wav_dur: float = 8,
-                 adapt_token_num: int = 150) -> None:
-        audio_reader = AudioReader(wav_scp,
-                                   sr=sr,
-                                   channel=channel,
-                                   norm=audio_norm)
-        super(Dataset, self).__init__(audio_reader,
-                                      text,
-                                      utt2dur,
-                                      vocab_dict,
-                                      max_dur=max_wav_dur,
-                                      min_dur=min_wav_dur,
-                                      dur_axis=0,
-                                      skip_utts=skip_utts,
-                                      min_token_num=min_token_num,
-                                      max_token_num=max_token_num)
+    audio_reader = AudioReader(wav_scp, sr=sr, channel=channel, norm=True)
+    dataset = CommonASRDataset(audio_reader,
+                               text,
+                               utt2dur,
+                               vocab_dict,
+                               tokenizer=tokenizer,
+                               tokenizer_kwargs=tokenizer_kwargs,
+                               max_dur=max_dur,
+                               min_dur=min_dur,
+                               dur_axis=0,
+                               skip_utts=skip_utts,
+                               min_token_num=min_token_num,
+                               max_token_num=max_token_num)
+    return CommonASRDataLoader(dataset,
+                               egs_collate,
+                               shuffle=train,
+                               distributed=distributed,
+                               num_workers=num_workers,
+                               adapt_dur=adapt_dur,
+                               adapt_token_num=adapt_token_num,
+                               batch_mode=batch_mode,
+                               max_batch_size=max_batch_size,
+                               min_batch_size=min_batch_size)
 
 
 def egs_collate(egs: Dict) -> Dict:

@@ -10,17 +10,16 @@ stage="1-3"
 wsj0_2mix_dir=/scratch/jwu/wsj0_2mix
 dataset="wsj0_2mix"
 
+# training
 exp="1a"
 gpu=0
 seed=777
 epochs=100
-tensorboard=false
 batch_size=8
 num_workers=4
-eval_interval=-1
-save_interval=-1
-prog_interval=100
+tensorboard=false
 
+# evaluation
 metric=sisnr
 
 . ./utils/parse_options.sh || exit 1;
@@ -42,17 +41,17 @@ fi
 
 cpt_dir=exp/$dataset/$exp
 if [ $end -ge 2 ] && [ $beg -le 2 ]; then
-  echo "Stage 2: training SS model ..."
+  echo "Stage 2: training BSS model ..."
   ./scripts/train.sh \
     --gpu $gpu \
     --seed $seed \
     --epochs $epochs \
     --batch-size $batch_size \
     --num-workers $num_workers \
-    --eval-interval $eval_interval \
-    --save-interval $save_interval \
-    --prog-interval $prog_interval \
     --tensorboard $tensorboard \
+    --eval-interval -1 \
+    --save-interval -1 \
+    --prog-interval 100 \
     ss $dataset $exp
   echo "$0: Train model done under $cpt_dir"
 fi

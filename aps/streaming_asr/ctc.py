@@ -8,7 +8,8 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from aps.asr.base.encoder import encoder_instance
-from aps.streaming_asr.base.encoder import StreamingEncoder
+from aps.streaming_asr.base.encoder import StreamingBaseEncoder
+from aps.streaming_asr.transformer.encoder import StreamingTransformerEncoder
 from aps.asr.ctc import AMForwardType, NoneOrTensor
 from aps.asr.beam_search.ctc import CtcApi
 from aps.libs import ApsRegisters
@@ -31,7 +32,7 @@ class StreamingASREncoder(nn.Module):
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "pytorch_rnn",
                  enc_proj: int = -1,
-                 enc_kwargs: Optional[Dict] = None) -> None:
+                 enc_kwargs: Dict = {}) -> None:
         super(StreamingASREncoder, self).__init__()
         assert ctc or ead
         ctc_only = ctc and not ead
@@ -40,9 +41,16 @@ class StreamingASREncoder(nn.Module):
         self.rctx = rctx
         self.vocab_size = vocab_size
         self.asr_transform = asr_transform
-        self.encoder = encoder_instance(enc_type, input_size,
-                                        vocab_size if ctc_only else enc_proj,
-                                        enc_kwargs, StreamingEncoder)
+        if enc_type in ["xfmr", "cfmr"]:
+            self.encoder = StreamingTransformerEncoder(
+                enc_type,
+                input_size,
+                output_proj=vocab_size if ctc_only else -1,
+                **enc_kwargs)
+        else:
+            self.encoder = encoder_instance(
+                enc_type, input_size, vocab_size if ctc_only else enc_proj,
+                enc_kwargs, StreamingBaseEncoder)
         # for hybrid ctc/aed, we add CTC branch
         self.ctc = nn.Linear(enc_proj, vocab_size) if ead and ctc else None
 

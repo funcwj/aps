@@ -4,10 +4,12 @@
 # License: Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
 from typing import List, Union
-from aps.tokenizer.base import Tokenizer, WordTokenizer
+from aps.tokenizer.base import TokenizerAbc, ApsTokenizer
+from aps.tokenizer.word import WordTokenizer
 
 
-class SubwordTokenizer(Tokenizer):
+@ApsTokenizer.register("subword")
+class SubwordTokenizer(TokenizerAbc):
     """
     Class of the subword tokenizer (word pieces)
     Args:
@@ -15,11 +17,24 @@ class SubwordTokenizer(Tokenizer):
         filter_words (list): words to be filtered
     """
 
-    def __init__(self, spm: str, filter_words: List[str] = []):
+    def __init__(self, spm: str = "", filter_words: List[str] = []):
+        super(SubwordTokenizer, self).__init__()
+        if not spm:
+            raise RuntimeError("spm must be assigned")
         import sentencepiece as sp
         self.sp_mdl = sp.SentencePieceProcessor(model_file=spm)
-        self.word_tokenizer = WordTokenizer(filter_words, char=False)
+        self.word_tokenizer = WordTokenizer(filter_words)
 
-    def run(self, utt: Union[str, List[str]]) -> List[str]:
-        words = self.word_tokenizer.run(utt)
+    def encode(self, word_seq: Union[str, List[str]]) -> List[str]:
+        """
+        Encode word string sequences to subword string sequences
+        """
+        words = self.word_tokenizer.encode(word_seq)
         return self.sp_mdl.encode(" ".join(words), out_type=str)
+
+    def decode(self, subword_seq: Union[str, List[str]]) -> List[str]:
+        """
+        Encode subword string sequences to word string sequences
+        """
+        subwords = self.word_tokenizer.decode(subword_seq)
+        return self.sp_mdl.decode(subwords).split(" ")

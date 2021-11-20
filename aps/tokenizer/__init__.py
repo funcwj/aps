@@ -1,3 +1,3 @@
-from .base import WordTokenizer
+from .base import Tokenizer
 from .subword import SubwordTokenizer
-from .vocab import Vocab
+from .word import WordTokenizer, CharTokenizer

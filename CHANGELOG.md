@@ -3,9 +3,13 @@
 ### 2021/11
 
 1. Update to PyTorch 1.10
-2. Update subampling layer for Transformer based encoders
+2. Refactor subampling layer for Transformer based encoders
 3. Adaptive SpecAug
 4. Update LibriSpeech & GigaSpeech results
+5. Add AED decoder rescoring for CTC beam search
+6. Add LibriMix recipe
+7. Refactor tokenizer for online tokenizing
+8. Update ngram_rescore.py to lm_rescore.py
 
 ### 2021/10
 

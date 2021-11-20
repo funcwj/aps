@@ -7,7 +7,7 @@ Previous implementation is in aps/utils/tokenizer.{py,pl}
 """
 import argparse
 
-from aps.tokenizer import WordTokenizer, SubwordTokenizer
+from aps.tokenizer import WordTokenizer, CharTokenizer, SubwordTokenizer
 from aps.utils import get_logger
 from aps.io import io_wrapper
 
@@ -44,12 +44,11 @@ def run(args):
             add_to_vocab(vocab, [args.space])
 
     if args.unit == "subword":
-        if not args.spm:
-            raise RuntimeError("Missing --spm when choose subword unit")
         tokenizer = SubwordTokenizer(args.spm, filter_words=filter_units)
+    elif args.unit == "char":
+        tokenizer = CharTokenizer(filter_words=filter_units, space=args.space)
     else:
-        use_char = args.unit == "char"
-        tokenizer = WordTokenizer(filter_units, char=use_char, space=args.space)
+        tokenizer = WordTokenizer(filter_words=filter_units)
     for raw_line in src:
         line = raw_line.strip()
         raw_tokens = line.split()
@@ -58,7 +57,7 @@ def run(args):
             dst.write(f"{raw_tokens[0]}\t")
         else:
             sets = raw_tokens
-        tokens = tokenizer.run(sets)
+        tokens = tokenizer.encode(sets)
         add_to_vocab(vocab, tokens)
         dst.write(" ".join(tokens) + "\n")
     if vocab:

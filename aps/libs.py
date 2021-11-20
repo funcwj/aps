@@ -79,7 +79,7 @@ class ApsModules(object):
         "bss.dense_unet", "bss.sepformer"
     ]
     loader_submodules = [
-        "am.kaldi", "am.raw", "am.command", "se.chunk", "se.command",
+        "am.kaldi", "am.raw", "am.simu_cmd", "se.chunk", "se.simu_cmd",
         "se.config", "lm.utt", "lm.bptt"
     ]
     asr = Module("aps.asr", asr_submodules)
@@ -265,10 +265,10 @@ def start_trainer(trainer: str,
                                 max_batch_size=args.batch_size // num_process,
                                 **loader_conf,
                                 **data_conf["train"])
+    dev_batch_size = int(args.batch_size // args.dev_batch_factor)
     dev_loader = aps_dataloader(train=False,
                                 distributed=False,
-                                max_batch_size=args.batch_size //
-                                args.dev_batch_factor,
+                                max_batch_size=dev_batch_size,
                                 **loader_conf,
                                 **data_conf["valid"])
     trainer.run(trn_loader,

@@ -4,7 +4,7 @@
 import torch as th
 import torch.nn as nn
 import torch.nn.init as init
-from typing import NoReturn, Union, Tuple, Optional
+from typing import NoReturn, Union, Tuple, List, Optional
 from aps.asr.base.component import OneHotEmbedding, PyTorchRNN
 from aps.asr.base.decoder import LayerNormRNN
 from aps.libs import ApsRegisters
@@ -76,9 +76,31 @@ class TorchRNNLM(nn.Module):
             self.dist.weight = self.embed.weight
 
     def init_weights(self, initrange: float = 0.1) -> NoReturn:
+        """
+        Initialize model weights
+        """
         init.zeros_(self.dist.bias)
         init.uniform_(self.dist.weight, -initrange, initrange)
         init.uniform_(self.embed.weight, -initrange, initrange)
+
+    def score(self,
+              hypos: List[int],
+              sos: int = -1,
+              eos: int = -1,
+              device: int = -1) -> float:
+        """
+        Score the given hypothesis
+        """
+        hyp_tensor = th.as_tensor(
+            [sos] + hypos, device="cpu" if device < 0 else f"cuda:{device:d}")
+        # 1 x T+1 => 1 x T+1 x V
+        prob, _ = self(hyp_tensor[None, ...])
+        # T+1 x V
+        prob = th.log_softmax(prob[0], -1)
+        score = 0
+        for n, w in enumerate(hypos + [eos]):
+            score += prob[n, w].item()
+        return score
 
     def forward(
             self,

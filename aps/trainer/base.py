@@ -725,6 +725,8 @@ class Trainer(object):
         self.task.train()
         self.reporter.train()
         self.detector.reset()
+        num_batches = len(data_loader)
+        n, max_n = 0, num_batches // self.acmu_gradient * self.acmu_gradient
         for egs in data_loader:
             # load to gpu
             egs = self.prep_egs(egs)
@@ -733,6 +735,9 @@ class Trainer(object):
             if succ:
                 self.cur_step += 1
             if self.detector.step(succ):
+                break
+            n += 1
+            if n == max_n:
                 break
         stop = self.detector.stop()
         if stop:

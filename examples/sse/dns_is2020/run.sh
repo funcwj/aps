@@ -20,9 +20,7 @@ seed=666
 epochs=100
 batch_size=32
 num_workers=4
-eval_interval=-1
-save_interval=-1
-prog_interval=100
+tensorboard=false
 metric="pesq stoi"
 
 . ./utils/parse_options.sh || exit 1
@@ -50,9 +48,10 @@ if [ $end -ge 3 ] && [ $beg -le 3 ]; then
     --epochs $epochs \
     --batch-size $batch_size \
     --num-workers $num_workers \
-    --eval-interval $eval_interval \
-    --save-interval $save_interval \
-    --prog-interval $prog_interval \
+    --tensorboard $tensorboard \
+    --eval-interval -1 \
+    --save-interval -1 \
+    --prog-interval 100 \
     ss $dataset $exp
 fi
 

@@ -4,7 +4,7 @@
 import torch as th
 import torch.nn as nn
 
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, Dict, List
 from aps.asr.transformer.pose import get_xfmr_pose
 from aps.asr.transformer.impl import get_xfmr_encoder
 from aps.asr.transformer.utils import prep_sub_mask
@@ -31,6 +31,25 @@ class TorchXfmrLM(nn.Module):
         # output distribution
         self.dist = nn.Linear(att_dim, vocab_size)
         self.vocab_size = vocab_size
+
+    def score(self,
+              hypos: List[int],
+              sos: int = -1,
+              eos: int = -1,
+              device: int = -1) -> float:
+        """
+        Score the given hypothesis
+        """
+        hyp_tensor = th.as_tensor(
+            [sos] + hypos, device="cpu" if device < 0 else f"cuda:{device:d}")
+        # 1 x T+1 => 1 x T+1 x V
+        prob, _ = self(hyp_tensor[None, ...])
+        # T+1 x V
+        prob = th.log_softmax(prob[0], -1)
+        score = 0
+        for n, w in enumerate(hypos + [eos]):
+            score += prob[n, w].item()
+        return score
 
     def forward(
             self,

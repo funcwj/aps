@@ -10,6 +10,7 @@ except ImportError:
     kenlm_available = False
 
 from aps.conf import load_dict
+from aps.const import EOS_TOKEN, SOS_TOKEN
 
 
 class NgramLM(object):
@@ -29,11 +30,20 @@ class NgramLM(object):
         vocab = load_dict(vocab_dict, reverse=True)
         self.token = [None] * len(vocab)
         for i, tok in vocab.items():
-            if tok == "<eos>":
+            if tok == EOS_TOKEN:
                 tok = "</s>"
-            if tok == "<sos>":
+            if tok == SOS_TOKEN:
                 tok = "<s>"
             self.token[i] = tok
+
+    def score(self,
+              utterance: str,
+              sos: bool = True,
+              eos: bool = True) -> float:
+        """
+        Score a given utterance
+        """
+        return self.ngram_lm.score(utterance, bos=sos, eos=eos)
 
     def _step(self, prev_state):
         """

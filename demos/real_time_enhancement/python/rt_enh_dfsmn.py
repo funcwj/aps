@@ -97,7 +97,7 @@ def run(args):
             stft_buffer = stft_buffer[1:]
             feat_buffer = feat_buffer[1:]
         last = inverse_stft.flush()
-        enh = th.cat(enh + [last], 0)
+        enh = th.cat(enh + [last[0]], 0)
         enh = enh[center_pad:num_samples - center_pad]
         # for complex mask, we may need re-norm if using si-snr loss
         # if complex_mask:

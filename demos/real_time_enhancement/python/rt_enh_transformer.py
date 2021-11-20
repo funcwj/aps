@@ -85,7 +85,7 @@ def run(args):
                 frame = stft_chunk[..., t, :]
                 enh.append(inverse_stft.step(frame)[0])
         last = inverse_stft.flush()
-        enh = th.cat(enh + [last], 0)
+        enh = th.cat(enh + [last[0]], 0)
         enh = enh[center_pad:num_samples - center_pad]
         # for complex mask, we may need re-norm
         # if complex_mask:
