@@ -1,0 +1,63 @@
+# cmd_args:
+#   batch_size: 128
+#   dev_batch_factor: 4.0
+#   device_ids: 0,1,2,3,4,5,6,7
+#   distributed: torch
+#   epochs: 100
+#   eval_interval: 2500
+#   init: ''
+#   num_workers: 32
+#   prog_interval: 100
+#   resume: ''
+#   save_interval: -1
+#   seed: '888'
+#   tensorboard: false
+#   trainer: ddp
+
+nnet: sse@time_tcn
+
+nnet_conf:
+  B: 256
+  H: 512
+  L: 40
+  N: 256
+  P: 3
+  R: 4
+  X: 8
+  non_linear: relu
+  norm: IN
+  num_spks: 2
+  scaling_param: true
+  skip_residual: true
+
+task: sse@sisnr
+
+task_conf:
+  num_spks: 2
+  permute: true
+  zero_mean: false
+
+trainer_conf:
+  clip_gradient: 10
+  lr_scheduler_kwargs:
+    factor: 0.5
+    min_lr: 1.0e-08
+    patience: 1
+  no_impr: 10
+  no_impr_thres: 0.1
+  optimizer: adam
+  optimizer_kwargs:
+    lr: 0.001
+    weight_decay: 1.0e-05
+
+data_conf:
+  fmt: se@chunk
+  loader:
+    chunk_size: 48000
+    sr: 16000
+  train:
+    mix_scp: data/librimix/2spk_16k_min/train-360/mix_clean.scp
+    ref_scp: data/librimix/2spk_16k_min/train-360/s1.scp,data/librimix/2spk_16k_min/train-360/s2.scp
+  valid:
+    mix_scp: data/librimix/2spk_16k_min/dev/mix_clean.scp
+    ref_scp: data/librimix/2spk_16k_min/dev/s1.scp,data/librimix/2spk_16k_min/dev/s2.scp

@@ -15,7 +15,7 @@ spk=2
 
 # train
 gpu="0,1,2,3"
-exp=1a
+exp=1a_2spk_c_16k_min
 epochs=100
 batch_size=32
 tensorboard=false
@@ -29,7 +29,8 @@ eval_mode=max
 . ./utils/parse_options.sh || exit 1
 
 # e.g., 2spk_16k_max
-eval_dir=data/$dataset/${spk}spk_${sr}_${eval_mode}
+data_dir=data/$dataset
+eval_dir=$data_dir/${spk}spk_${sr}_${eval_mode}
 # check sr
 case $sr in
   "16k" )
@@ -55,7 +56,7 @@ fi
 if [ $end -ge 2 ] && [ $beg -le 2 ]; then
   echo "Stage 2: format LibriMix data ..."
   local/prep_data.sh --spk $spk --sr $sr \
-    $librimix_data_dir $dataset
+    $librimix_data_dir $data_dir
 fi
 
 cpt_dir=exp/$dataset/$exp
@@ -79,7 +80,7 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
     ./cmd/separate.py \
       --checkpoint $cpt_dir \
       --sr $sr_num \
-      --device-id $gpu \
+      --device-id 0 \
       $eval_dir/$name/${eval_data}.scp \
       $cpt_dir/bss_$name
   done
@@ -87,17 +88,22 @@ fi
 
 if [ $end -ge 5 ] && [ $beg -le 5 ]; then
   echo "Stage 5: evaluate ..."
-  spk_list=$(seq $spk)
+  spk_index=$(seq $spk)
   for name in dev test; do
-    for index in $spk_list; do
+    for index in $spk_index; do
       find $cpt_dir/bss_$name -name "*.wav" | \
         awk -v ch=$index -F '/' '{printf("%s sox %s -t wav - remix %d |\n", $NF, $0, ch)}' | \
         sed "s:.wav::" > $cpt_dir/bss_$name/s${index}.scp
     done
+    est_list=$eval_dir/$name/s1.scp,$eval_dir/$name/s2.scp
+    ref_list=$cpt_dir/bss_$name/s1.scp,$cpt_dir/bss_$name/s2.scp
+    if [ $spk -eq 3]; then
+      est_list="$est_list,$eval_dir/$name/s3.scp"
+      ref_list="$ref_list,$cpt_dir/bss_$name/s3.scp"
+    fi
     ./cmd/compute_ss_metric.py \
       --sr $sr_num \
       --metric $metric \
-      $eval_dir/$name/s1.scp,$eval_dir/$name/s2.scp \
-      $cpt_dir/bss_$name/s2.scp,$cpt_dir/bss_$name/s2.scp
+      $est_list $ref_list
   done
 fi
