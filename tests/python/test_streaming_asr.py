@@ -21,7 +21,6 @@ asr_transform = AsrTransform(feats="fbank-log-cmvn",
 xfmr_enc_cfg = """
 enc_type: xfmr
 enc_kwargs:
-  arch: xfmr
   num_layers: 4
   chunk: 4
   lctx: 4

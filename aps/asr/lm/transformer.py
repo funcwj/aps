@@ -32,12 +32,18 @@ class TorchXfmrLM(nn.Module):
         self.dist = nn.Linear(att_dim, vocab_size)
         self.vocab_size = vocab_size
 
-    def score(self, hypos: List[int], sos: int = -1, eos: int = -1) -> float:
+    def score(self,
+              hypos: List[int],
+              sos: int = -1,
+              eos: int = -1,
+              device: int = -1) -> float:
         """
         Score the given hypothesis
         """
+        hyp_tensor = th.as_tensor(
+            [sos] + hypos, device="cpu" if device < 0 else f"cuda:{device:d}")
         # 1 x T+1 => 1 x T+1 x V
-        prob, _ = self(th.as_tensor([sos] + hypos)[None, ...])
+        prob, _ = self(hyp_tensor[None, ...])
         # T+1 x V
         prob = th.log_softmax(prob[0], -1)
         score = 0

@@ -25,7 +25,9 @@ def run(args):
         lm = NgramLM(args.lm, args.dict)
         logger.info(f"Load ngram LM from {args.lm}, weight = {args.lm_weight}")
     else:
-        lm = NnetEvaluator(args.lm, device_id=-1, cpt_tag=args.lm_tag)
+        lm = NnetEvaluator(args.lm,
+                           device_id=args.device_id,
+                           cpt_tag=args.lm_tag)
         logger.info(f"Use NN LM weight: {args.lm_weight}")
         lm = lm.nnet
         tokenizer = TextPreProcessor(args.dict, space=args.space,
@@ -48,15 +50,20 @@ def run(args):
             else:
                 hypos_str_seq = hypos.split(" ")
                 hypos_int_seq = tokenizer.encode(hypos_str_seq)
-                lm_score = lm.score(hypos_int_seq, eos=eos, sos=sos)
+                lm_score = lm.score(hypos_int_seq,
+                                    eos=eos,
+                                    sos=sos,
+                                    device=args.device_id)
                 score = (am_score + lm_score) / num_tokens
             rescore.append((score, hypos))
         rescore = sorted(rescore, key=lambda n: n[0], reverse=True)
         top1.write(f"{key}\t{rescore[0][1]}\n")
         done += 1
+        if done % 1000 == 0:
+            logger.info(f"Rescore {done} utterances done ...")
     if not stdout:
         top1.close()
-    logger.info(f"Rescore {done} utterances on {nbest} hypos")
+    logger.info(f"Rescore {done} utterances on {nbest} hypothesis")
 
 
 if __name__ == "__main__":
@@ -82,6 +89,11 @@ if __name__ == "__main__":
                         default=True,
                         help="If ture, using length normalized "
                         "for acoustic score")
+    parser.add_argument("--device-id",
+                        type=int,
+                        default=-1,
+                        help="GPU-id to offload model to, "
+                        "-1 means running on CPU")
     parser.add_argument("--dict",
                         type=str,
                         required=True,

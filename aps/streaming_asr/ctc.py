@@ -41,9 +41,10 @@ class StreamingASREncoder(nn.Module):
         self.rctx = rctx
         self.vocab_size = vocab_size
         self.asr_transform = asr_transform
-        if enc_type == "xfmr":
+        if enc_type in ["xfmr", "cfmr"]:
             self.encoder = StreamingTransformerEncoder(
-                input_size=input_size,
+                enc_type,
+                input_size,
                 output_proj=vocab_size if ctc_only else -1,
                 **enc_kwargs)
         else:

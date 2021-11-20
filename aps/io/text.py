@@ -40,27 +40,29 @@ class NbestReader(object):
     def __init__(self, nbest: str):
         self.nbest, self.hypos = self._load_nbest(nbest)
 
-    def _load_nbest(self, nbest: str):
-        hypos = {}
-        nbest = 1
-        with codecs.open(nbest, "r", encoding="utf-8") as f:
-            nbest = int(f.readline())
-            while True:
-                key = f.readline().strip()
-                if not key:
-                    break
-                topk = []
-                n = 0
-                while n < self.nbest:
-                    items = f.readline().strip().split()
-                    score = float(items[0])
-                    num_tokens = int(items[1])
-                    trans = " ".join(items[2:])
-                    topk.append((score, num_tokens, trans))
-                    n += 1
-                hypos[key] = topk
-        return nbest, hypos
+    def __len__(self) -> int:
+        return len(self.hypos)
 
     def __iter__(self):
-        for key in self.hypos:
-            yield key, self.hypos[key]
+        return iter(self.hypos.items())
+
+    def _load_nbest(self, nbest: str):
+        hypos = {}
+        with codecs.open(nbest, "r", encoding="utf-8") as fd:
+            all_lines = fd.readlines()
+        nbest = int(all_lines[0].strip())
+        if (len(all_lines) - 1) % (nbest + 1) != 0:
+            raise RuntimeError("Seems that nbest format is wrong")
+        n = 1
+        while n < len(all_lines):
+            key = all_lines[n].strip()
+            topk = []
+            for i in range(nbest):
+                items = all_lines[n + 1 + i].strip().split()
+                score = float(items[0])
+                num_tokens = int(items[1])
+                trans = " ".join(items[2:])
+                topk.append((score, num_tokens, trans))
+            n += nbest + 1
+            hypos[key] = topk
+        return nbest, hypos
