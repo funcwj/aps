@@ -12,6 +12,7 @@ import torch.nn.functional as tf
 
 from typing import Optional, Tuple, Dict, List
 from aps.libs import Register
+from aps.const import MIN_F32
 from aps.asr.transformer.utils import digit_shift, get_activation_fn, get_relative_uv
 
 TransformerEncoderLayers = Register("xfmr_encoder_layer")
@@ -102,7 +103,7 @@ class ApsMultiheadAttention(nn.Module):
         logit = logit / (self.head_dim)**0.5
         if key_padding_mask is not None:
             logit = logit.masked_fill(key_padding_mask[None, :, None, :],
-                                      float("-inf"))
+                                      MIN_F32)
         if attn_mask is not None:
             logit += attn_mask[:, None, None, :]
         # L x N x H x S

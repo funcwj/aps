@@ -6,6 +6,7 @@ import pprint
 import argparse
 
 from aps.utils import set_seed
+from aps.const import SOS_TOKEN, EOS_TOKEN
 from aps.conf import load_lm_conf, dump_dict
 from aps.opts import DistributedTrainParser
 from aps.libs import aps_asr_nnet, start_trainer
@@ -22,8 +23,8 @@ def run(args):
 
     other_loader_conf = {
         "vocab_dict": vocab,
-        "sos": vocab["<sos>"],
-        "eos": vocab["<eos>"],
+        "sos": vocab[SOS_TOKEN],
+        "eos": vocab[EOS_TOKEN],
     }
     start_trainer(args.trainer,
                   conf,

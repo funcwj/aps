@@ -179,6 +179,9 @@ class ProgressReporter(object):
         """
         Track one recording item
         """
+        if not math.isfinite(value):
+            self.log(f"Get invalid number for {key}: {value}, replaced with 0")
+            value = 0
         self.stats[key].append(value)
         N = len(self.stats[key])
         if not N % self.period:

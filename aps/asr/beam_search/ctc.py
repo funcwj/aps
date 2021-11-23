@@ -7,7 +7,7 @@ import torch as th
 import torch.nn as nn
 
 from collections import defaultdict
-from aps.const import NEG_INF
+from aps.const import MIN_F32
 from aps.utils import get_logger
 from typing import Dict, List, Union
 
@@ -56,7 +56,7 @@ class CtcApi(object):
         topk_score, topk_token = th.topk(ctc_prob, beam_size, -1)
         T, V = ctc_prob.shape
         logger.info(f"--- shape of the encoder output (CTC): {T} x {V}")
-        neg_inf = th.tensor(NEG_INF).to(ctc_prob.device)
+        neg_inf = th.tensor(MIN_F32).to(ctc_prob.device)
         zero = th.tensor(0.0).to(ctc_prob.device)
         # (prefix, log_pb, log_pn)
         # NOTE: actually do not need sos/eos here, just place it in the sentence
@@ -131,7 +131,7 @@ class CtcApi(object):
 
         dec_seq = dec_seq.tolist()
         # T x U*2+1
-        score = NEG_INF * th.ones(T, U * 2 + 1, device=ctc_prob.device)
+        score = MIN_F32 * th.ones(T, U * 2 + 1, device=ctc_prob.device)
         point = -1 * th.ones(
             T, U * 2 + 1, dtype=th.int32, device=ctc_prob.device)
 
@@ -223,9 +223,9 @@ class CtcScorer(nn.Module):
         self.blank = -1
         self.offset = th.arange(batch_size, device=self.device)
         self.beam_size = beam_size
-        # eq (51) NEG_INF ~ log(0), T x N
+        # eq (51) MIN_F32 ~ log(0), T x N
         self.gamma_n_g = th.full((self.T, batch_size),
-                                 NEG_INF,
+                                 MIN_F32,
                                  device=self.device)
         self.gamma_b_g = th.zeros(self.T, batch_size, device=self.device)
         # eq (52)
@@ -235,7 +235,7 @@ class CtcScorer(nn.Module):
                                  self.ctc_prob[t, self.blank])
         # ctc score in previous steps
         self.ctc_score = th.zeros(1, batch_size, device=self.device)
-        self.neg_inf = th.tensor(NEG_INF).to(self.device)
+        self.neg_inf = th.tensor(MIN_F32).to(self.device)
 
     def update_var(self, point: Union[th.Tensor, int]) -> None:
         """
@@ -276,8 +276,8 @@ class CtcScorer(nn.Module):
         # zero based
         glen = g.shape[-1] - 1
         start = max(glen, 1)
-        gamma_n_h[start - 1] = self.ctc_prob[0, c] if glen == 0 else NEG_INF
-        gamma_b_h[start - 1] = NEG_INF
+        gamma_n_h[start - 1] = self.ctc_prob[0, c] if glen == 0 else MIN_F32
+        gamma_b_h[start - 1] = MIN_F32
 
         # N*ctc_beam
         score = gamma_n_h[start - 1]

@@ -58,7 +58,7 @@ dec_kwargs:
 
 def gen_egs(vocab_size, batch_size):
     u = th.randint(10, 20, (1,)).item()
-    x_len = th.randint(16000, 16000 * 5, (batch_size,))
+    x_len = th.randint(16000 * 2, 16000 * 3, (batch_size,))
     x_len = x_len.sort(-1, descending=True)[0]
     y_len = th.randint(u // 2, u, (batch_size,))
     y_len[0] = u
@@ -79,6 +79,7 @@ def test_streaming_ctc(vocab_size):
                    enc_kwargs=cfg["enc_kwargs"])
     x, x_len, _, _, _ = gen_egs(vocab_size, 4)
     y = ctc(x, x_len)[0]
+    assert th.isnan(y).sum().item() == 0
     assert y.shape[-1] == vocab_size
 
 
@@ -101,4 +102,5 @@ def test_streaming_transducer(vocab_size, enc_cfg):
 
 
 if __name__ == "__main__":
-    test_streaming_transducer(100, xfmr_enc_cfg)
+    # test_streaming_transducer(100, xfmr_enc_cfg)
+    test_streaming_ctc(400)

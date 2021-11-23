@@ -121,16 +121,16 @@ class TokenReader(object):
                                        tokenizer_kwargs=tokenizer_kwargs)
         else:
             self.vocab_dict = None
-        self.token_list = self._pre_process(text,
-                                            utt2dur,
-                                            max_dur=max_dur,
-                                            min_dur=min_dur,
-                                            skip_utts=skip_utts,
-                                            max_token_num=max_token_num,
-                                            min_token_num=min_token_num)
-        if len(self.token_list) < 10:
+        self.token_stats = self._pre_process(text,
+                                             utt2dur,
+                                             max_dur=max_dur,
+                                             min_dur=min_dur,
+                                             skip_utts=skip_utts,
+                                             max_token_num=max_token_num,
+                                             min_token_num=min_token_num)
+        if len(self.token_stats) < 10:
             raise RuntimeError(
-                f"Too less utterances: {len(self.token_list)}, " +
+                f"Too less utterances: {len(self.token_stats)}, " +
                 "please check data configurations")
 
     def _pre_process(self,
@@ -158,36 +158,40 @@ class TokenReader(object):
                 value_processor=lambda tok: list(map(int, tok)),
                 num_tokens=-1,
                 restrict=False)
-        token_set = []
-        drop_utts = 0
+        token_stats = []
+        dropped_num = 0
         for key, tokens in text_reader:
             num_toks = len(tokens)
             if num_toks > max_token_num or num_toks < min_token_num:
-                drop_utts += 1
+                dropped_num += 1
                 continue
             if key not in utt2dur:
-                drop_utts += 1
+                dropped_num += 1
                 continue
             if key in skip_keys:
                 continue
             num_frames = utt2dur[key]
             if num_frames < min_dur or num_frames > max_dur:
-                drop_utts += 1
+                dropped_num += 1
                 continue
-            token_set.append({
+            token_stats.append({
                 "key": key,
                 "dur": num_frames,
                 "len": num_toks,
                 "tok": tokens
             })
         # long -> short
-        token_set = sorted(token_set, key=lambda d: d["dur"], reverse=True)
-        if drop_utts:
-            warnings.warn(f"Drop {drop_utts} utterances")
-        return token_set
+        token_stats = sorted(token_stats, key=lambda d: d["dur"], reverse=True)
+        if dropped_num:
+            ratio = dropped_num / len(text_reader)
+            warnings.warn(f"Drop {dropped_num}({ratio:.2f}%) utterances")
+        return token_stats
 
     def __getitem__(self, index):
-        stats = self.token_list[index]
+        """
+        Return {key, duration, #num_of_tokens, token list}
+        """
+        stats = self.token_stats[index]
         # if processed, skip
         if self.tokenizer and "vis" not in stats:
             # map from str sequences to int sequences
@@ -196,7 +200,10 @@ class TokenReader(object):
         return stats
 
     def __len__(self) -> int:
-        return len(self.token_list)
+        """
+        Return number of valid utterances
+        """
+        return len(self.token_stats)
 
 
 class BatchSampler(dat.Sampler):

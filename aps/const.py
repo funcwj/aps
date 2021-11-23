@@ -11,7 +11,8 @@ import torch as th
 from distutils.version import LooseVersion
 
 IGNORE_ID = -1
-NEG_INF = th.finfo(th.float32).min
+MIN_F32 = th.finfo(th.float32).min
+NEG_INF = float("-inf")
 MATH_PI = math.pi
 EPSILON = float(np.finfo(np.float32).eps)
 MAX_INT16 = np.iinfo(np.int16).max

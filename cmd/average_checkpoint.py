@@ -16,11 +16,11 @@ def run(args):
     averager = ParameterAverager()
     num_parameters = -1
     for cpt in args.checkpoints:
-        logger.info(f"Loading {cpt} ...")
-        cpt = th.load(cpt, map_location="cpu")
-        averager.add(cpt["model_state"])
+        cpt_stats = th.load(cpt, map_location="cpu")
+        logger.info(f"Loading {cpt} ... loss = {cpt_stats['loss']:.3f}")
+        averager.add(cpt_stats["model_state"])
         if num_parameters == -1:
-            num_parameters = cpt["num_parameters"]
+            num_parameters = cpt_stats["num_parameters"]
     avg = {
         "step": -1,
         "epoch": -1,

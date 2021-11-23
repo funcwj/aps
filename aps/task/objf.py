@@ -112,6 +112,9 @@ def ctc_objf(outs: th.Tensor,
     if outs.shape[1] < L:
         raise ValueError(
             f"#frames({outs.shape[1]}) < #labels({L}), not valid for CTC")
+    num_nans = th.isnan(outs).sum().item()
+    if num_nans > 0:
+        raise ValueError(f"Get {num_nans} NANs in the tensor")
     # add log-softmax, N x T x V => T x N x V
     if add_softmax:
         outs = tf.log_softmax(outs, dim=-1)

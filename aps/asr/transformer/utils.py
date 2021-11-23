@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Tuple
+from aps.const import NEG_INF
 
 
 def digit_shift(term: th.Tensor) -> th.Tensor:
@@ -53,7 +54,7 @@ def prep_sub_mask(num_frames: int, device: th.device = "cpu") -> th.Tensor:
     """
     ones = th.ones(num_frames, num_frames, device=device)
     mask = (th.triu(ones, diagonal=1) == 1).float()
-    mask = mask.masked_fill(mask == 1, float("-inf"))
+    mask = mask.masked_fill(mask == 1, NEG_INF)
     return mask
 
 
@@ -92,7 +93,7 @@ def prep_context_mask(num_frames: int,
     # generate masks
     zeros = th.zeros(num_frames, device=device)
     ctx_mask = th.logical_or(left_mask, right_mask)
-    mask = zeros.masked_fill(ctx_mask, float("-inf"))
+    mask = zeros.masked_fill(ctx_mask, NEG_INF)
     return mask
 
 

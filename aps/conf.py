@@ -17,9 +17,7 @@ all_am_conf_keys = required_keys + [
     "enh_transform", "asr_transform", "cmd_args"
 ]
 all_lm_conf_keys = required_keys + ["cmd_args"]
-transducer_or_ctc_tasks = [
-    "asr@transducer", "asr@ctc", "streaming_asr@transducer", "streaming_asr@ctc"
-]
+transducer_or_ctc_tasks = ["asr@transducer", "asr@ctc"]
 
 
 def load_dict(dict_path: str,
@@ -111,26 +109,24 @@ def load_am_conf(yaml_conf: str, dict_path: str) -> Tuple[Dict, Dict]:
     with open(yaml_conf, "r") as f:
         conf = yaml.full_load(f)
     conf = check_conf(conf, required_keys, all_am_conf_keys)
-
-    # add dict info
     nnet_conf = conf["nnet_conf"]
     is_transducer_or_ctc = conf["task"] in transducer_or_ctc_tasks
 
+    # load and add dict info
     required_units = [] if is_transducer_or_ctc else [EOS_TOKEN, EOS_TOKEN]
     vocab = load_dict(dict_path, required=required_units)
     nnet_conf["vocab_size"] = len(vocab)
-
     # Generally we don't use eos/sos in
     if not is_transducer_or_ctc:
         nnet_conf["sos"] = vocab[SOS_TOKEN]
         nnet_conf["eos"] = vocab[EOS_TOKEN]
     # for transducer/CTC
     task_conf = conf["task_conf"]
-    use_ctc = "ctc_weight" in task_conf and task_conf["ctc_weight"] > 0
-    if use_ctc or is_transducer_or_ctc:
-        conf["task_conf"]["blank"] = len(vocab)
+    ctc_att_hybrid = "ctc_weight" in task_conf and task_conf["ctc_weight"] > 0
+    if ctc_att_hybrid or is_transducer_or_ctc:
+        task_conf["blank"] = len(vocab)
         # add blank
         nnet_conf["vocab_size"] += 1
-        if use_ctc:
-            nnet_conf["ctc"] = use_ctc
+        if ctc_att_hybrid:
+            nnet_conf["ctc"] = True
     return conf, vocab

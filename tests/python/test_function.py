@@ -13,18 +13,20 @@ from aps.asr.transformer.impl import ApsMultiheadAttention
 from aps.asr.transformer.utils import digit_shift, prep_sub_mask
 from aps.asr.base.attention import padding_mask
 
+external_dir = "tests/data/external"
+checkpoint_dir = "tests/data/checkpoint"
 
-@pytest.mark.parametrize("str_lib", [
-    "tests/data/external/nnet.py:VoiceFilter",
-    "tests/data/external/task.py:DpclTask"
-])
+
+@pytest.mark.parametrize(
+    "str_lib",
+    [f"{external_dir}/nnet.py:VoiceFilter", f"{external_dir}/task.py:DpclTask"])
 def test_import_lib(str_lib):
     dynamic_importlib(str_lib)
 
 
 @pytest.mark.parametrize("str_dict", [
-    "tests/data/checkpoint/aishell_att_1a/dict",
-    "tests/data/checkpoint/timit_rnnt_1a/dict"
+    f"{checkpoint_dir}/aishell_att_1a/dict",
+    f"{checkpoint_dir}/timit_rnnt_1a/dict"
 ])
 def test_load_dict(str_dict):
     load_dict(str_dict)
