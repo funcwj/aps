@@ -30,9 +30,9 @@ class Task(nn.Module):
         self.description = description
 
 
-class KdTask(Task):
+class TsTask(Task):
     """
-    Base class for KD task
+    Base class for TS (Teacher-Student) task
     Args:
         nnet: network instance
         cpt: checkpoint directory for teacher network
@@ -44,7 +44,7 @@ class KdTask(Task):
                  cpt: str,
                  cpt_tag: str = "best",
                  description: str = "unknown") -> None:
-        super(KdTask, self).__init__(nnet, description=description)
+        super(TsTask, self).__init__(nnet, description=description)
         stats = load_checkpoint(cpt, cpt_tag=cpt_tag)
         self.teacher = stats["nnet"]
         # fix teacher

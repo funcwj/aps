@@ -21,6 +21,7 @@ num_workers=4
 
 # evaluate
 metric=sisnr
+eval_data=wav16k_max # {8k,16k}_{min,max}
 
 . ./utils/parse_options.sh || exit 1
 
@@ -38,12 +39,12 @@ fi
 # NOTE: we only create 16k min here
 if [ $end -ge 2 ] && [ $beg -le 2 ]; then
   echo "Stage 2: simulating data ..."
-  ./local/create_wham.sh $wsj0_data $wham_data
+  mkdir -p $wham_data && ./local/create_wham.sh $wsj0_data $wham_data
 fi
 
 if [ $end -ge 3 ] && [ $beg -le 3 ]; then
   echo "Stage 3: formating data ..."
-  ./local/format_data.sh $wham_data/wham_mix/wav16k/min $data_dir
+  ./local/format_data.sh $wham_data/wham_mix $data_dir
 fi
 
 cpt_dir=exp/$dataset/$exp
@@ -63,6 +64,7 @@ if [ $end -ge 4 ] && [ $beg -le 4 ]; then
   echo "$0: Train model done under $cpt_dir"
 fi
 
+eval_dir=data_dir/$eval_data
 if [ $end -ge 5 ] && [ $beg -le 5 ]; then
   echo "Stage 5: run speech separation ..."
   # generate separation audio under exp/$dataset/$exp/bss
@@ -70,7 +72,7 @@ if [ $end -ge 5 ] && [ $beg -le 5 ]; then
     --checkpoint $cpt_dir \
     --sr 16000 \
     --device-id $gpu \
-    $data_dir/tt/mix.scp \
+    $eval_dir/tt/mix.scp \
     $cpt_dir/bss
 fi
 
@@ -79,11 +81,11 @@ if [ $end -ge 6 ] && [ $beg -le 6 ]; then
   for index in 1 2; do
     find $cpt_dir/bss -name "*.wav" | \
       awk -v ch=$index -F '/' '{printf("%s sox %s -t wav - remix %d |\n", $NF, $0, ch)}' | \
-      sed "s:.wav::" > $cpt_dir/bss/spk${index}.scp
+      sed "s:.wav::" > $cpt_dir/bss/s${index}.scp
   done
   ./cmd/compute_ss_metric.py \
     --sr 16000 \
     --metric $metric \
-    $data_dir/tt/spk1.scp,$data_dir/tt/spk2.scp \
-    $cpt_dir/bss/spk1.scp,$cpt_dir/bss/spk2.scp
+    $eval_dir/tt/s1.scp,$eval_dir/tt/s2.scp \
+    $cpt_dir/bss/s1.scp,$cpt_dir/bss/s2.scp
 fi

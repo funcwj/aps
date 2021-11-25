@@ -185,11 +185,19 @@ class CtcXentHybridTask(Task):
         if reduction not in ["mean", "batchmean"]:
             raise ValueError(f"Unsupported reduction option: {reduction}")
         self.reduction = reduction
-        self.ctc_blank = blank
         self.ctc_weight = ctc_weight
         self.lsm_factor = lsm_factor
-        self.lsm_method = lsm_method
-        self.label_count = load_label_count(label_count)
+        self.ctc_kwargs = {
+            "blank": blank,
+            "reduction": reduction,
+            "add_softmax": True
+        }
+        self.lsm_kwargs = {
+            "method": lsm_method,
+            "reduction": reduction,
+            "lsm_factor": lsm_factor,
+            "label_count": load_label_count(label_count)
+        }
 
     def forward(self, egs: Dict) -> Dict:
         """
@@ -212,24 +220,14 @@ class CtcXentHybridTask(Task):
                                            ssr=ssr)
         # compute loss
         if self.lsm_factor > 0:
-            att_loss = ls_objf(outs,
-                               tgt_refer,
-                               method=self.lsm_method,
-                               reduction=self.reduction,
-                               lsm_factor=self.lsm_factor,
-                               label_count=self.label_count)
+            att_loss = ls_objf(outs, tgt_refer, **self.lsm_kwargs)
         else:
             att_loss = ce_objf(outs, tgt_refer, reduction=self.reduction)
 
         stats = {}
         if self.ctc_weight > 0:
-            ctc_loss = ctc_objf(ctc_enc,
-                                egs["tgt_pad"],
-                                enc_len,
-                                egs["tgt_len"],
-                                blank=self.ctc_blank,
-                                reduction=self.reduction,
-                                add_softmax=True)
+            ctc_loss = ctc_objf(ctc_enc, egs["tgt_pad"], enc_len,
+                                egs["tgt_len"], **self.ctc_kwargs)
             stats["@ctc"] = ctc_loss.item()
             stats["xent"] = att_loss.item()
         else:

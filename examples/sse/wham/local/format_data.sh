@@ -8,16 +8,20 @@ set -eu
 wham_dir=$1
 data_dir=$2
 
-prepare_scp () {
+gen_scp () {
   find $2 -name "*.$1" | awk -F '/' '{printf("%s\t%s\n", $NF, $0)}' | sed "s:.$1::"
 }
 
-mkdir -p $data_dir/{tr,cv,tt}
-for dir in tr cv tt; do
-  prepare_scp wav $wham_dir/$dir/mix_both > $data_dir/$dir/mix.scp
-  prepare_scp wav $wham_dir/$dir/s1 > $data_dir/$dir/spk1.scp
-  prepare_scp wav $wham_dir/$dir/s2 > $data_dir/$dir/spk2.scp
-  prepare_scp wav $wham_dir/$dir/noise > $data_dir/$dir/noise.scp
+for sr in 8k 16k; do
+  for mode in max min; do
+    mkdir -p $data_dir/wav${sr}_${mode}/{tr,cv,tt}
+    for dir in tr cv tt; do
+      for s in mix_{both,clean,single} s1 s2; do
+        gen_scp wav $wham_dir/wav$sr/$mode/$dir/$s \
+          > $data_dir/wav${sr}_${mode}/$dir/$s.scp
+      done
+    done
+  done
 done
 
 echo "$0: Prepare data done under $data_dir"

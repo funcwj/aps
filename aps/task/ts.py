@@ -11,13 +11,13 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from aps.task.sse import hybrid_objf
-from aps.task.base import KdTask
+from aps.task.base import TsTask
 from typing import Dict
 
 
-class SseFreqKdTask(KdTask):
+class SseFreqTsTask(TsTask):
     """
-    Frequency domain KD task for SSE models
+    Frequency domain TS task for SSE models
     """
 
     def __init__(self,
@@ -27,7 +27,7 @@ class SseFreqKdTask(KdTask):
                  teacher_tag: str = "best",
                  permute: bool = True,
                  num_spks: int = 2):
-        super(SseFreqKdTask, self).__init__(
+        super(SseFreqTsTask, self).__init__(
             nnet,
             teacher,
             cpt_tag=teacher_tag,

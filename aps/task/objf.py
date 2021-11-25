@@ -7,7 +7,7 @@ import torch.nn.functional as tf
 
 from itertools import permutations
 from typing import List, Any, Callable, Optional
-from aps.const import IGNORE_ID
+from aps.const import IGNORE_ID, EPSILON
 
 
 def ce_objf(outs: th.Tensor,
@@ -128,6 +128,108 @@ def ctc_objf(outs: th.Tensor,
                        zero_infinity=True)
     loss = loss / (th.sum(tgt_len) if reduction == "mean" else N)
     return loss
+
+
+def sisnr_objf(x: th.Tensor,
+               s: th.Tensor,
+               eps: float = EPSILON,
+               zero_mean: bool = True,
+               non_nagetive: bool = False) -> th.Tensor:
+    """
+    Computer SiSNR
+    Args:
+        x (Tensor): separated signal, N x S
+        s (Tensor): reference signal, N x S
+    Return:
+        sisnr (Tensor): N
+    """
+
+    def l2norm(mat, keepdim=False):
+        return th.norm(mat, dim=-1, keepdim=keepdim)
+
+    if x.shape != s.shape:
+        raise RuntimeError("Dimention mismatch when calculate " +
+                           f"si-snr, {x.shape} vs {s.shape}")
+    if zero_mean:
+        x = x - th.mean(x, dim=-1, keepdim=True)
+        s = s - th.mean(s, dim=-1, keepdim=True)
+    t = th.sum(x * s, dim=-1,
+               keepdim=True) * s / (l2norm(s, keepdim=True)**2 + eps)
+
+    snr_linear = l2norm(t) / (l2norm(x - t) + eps)
+    if non_nagetive:
+        return 10 * th.log10(1 + snr_linear**2)
+    else:
+        return 20 * th.log10(eps + snr_linear)
+
+
+def snr_objf(x: th.Tensor,
+             s: th.Tensor,
+             eps: float = EPSILON,
+             snr_max: float = -1,
+             non_nagetive: bool = False) -> th.Tensor:
+    """
+    Computer SNR
+    Args:
+        x (Tensor): separated signal, N x S
+        s (Tensor): reference signal, N x S
+    Return:
+        snr (Tensor): N
+    """
+
+    def l2norm(mat, keepdim=False):
+        return th.norm(mat, dim=-1, keepdim=keepdim)
+
+    if x.shape != s.shape:
+        raise RuntimeError("Dimention mismatch when calculate " +
+                           f"si-snr, {x.shape} vs {s.shape}")
+    if snr_max > 0:
+        # 30dB => 0.001
+        threshold = 10**(-snr_max / 10)
+        s_norm = l2norm(s)**2
+        x_s_norm = l2norm(x - s)**2
+        return 10 * th.log10(s_norm + eps) - 10 * th.log10(threshold * s_norm +
+                                                           x_s_norm + eps)
+    else:
+        snr_linear = l2norm(s) / (l2norm(x - s) + eps)
+        if non_nagetive:
+            return 10 * th.log10(1 + snr_linear**2)
+        else:
+            return 20 * th.log10(eps + snr_linear)
+
+
+def dpcl_objf(net_embed: th.Tensor,
+              classes: th.Tensor,
+              weights: th.Tensor,
+              num_spks: int = 2,
+              whitened: bool = False) -> th.Tensor:
+    """
+    Compute Deep Clustering Loss
+    Args:
+        net_embed (Tensor): network embeddings, N x FT x D
+        classes (Tensor): classes id for each TF-bin, N x F x T
+        weights (Tensor): weights for each TF bin, N x F x T
+    """
+    N, F, T = classes.shape
+    # encode one-hot: N x FT x 2
+    ref_embed = th.zeros([N, F * T, num_spks], device=classes.device)
+    ref_embed.scatter_(2, classes.view(N, T * F, 1), 1)
+
+    def affinity(v, y):
+        # z: D x D
+        z = th.bmm(th.transpose(v, 1, 2), y)
+        return th.norm(z, 2)**2
+
+    # reshape vad_mask: N x TF x 1
+    weights = weights.view(N, F * T, 1)
+    out = net_embed * weights.sqrt()
+    ref = ref_embed * weights.sqrt()
+    if whitened:
+        raise NotImplementedError("Not implemented for whitened = True")
+    else:
+        loss = affinity(out, out) + affinity(ref, ref) - affinity(out, ref) * 2
+    # return loss per-frame
+    return loss * F
 
 
 def multiple_objf(inp: List[Any],

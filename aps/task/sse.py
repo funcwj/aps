@@ -12,7 +12,7 @@ import torch.nn.functional as tf
 from typing import List, Dict, Any, Tuple, Callable, Optional
 
 from aps.task.base import Task
-from aps.task.objf import permu_invarint_objf, multiple_objf
+from aps.task.objf import permu_invarint_objf, multiple_objf, snr_objf, sisnr_objf, dpcl_objf
 from aps.libs import ApsRegisters
 from aps.transform.utils import STFT, mel_filter
 from aps.const import EPSILON
@@ -21,74 +21,6 @@ __all__ = [
     "SisnrTask", "SnrTask", "WaTask", "LinearFreqSaTask", "LinearTimeSaTask",
     "MelFreqSaTask", "MelTimeSaTask", "ComplexMappingTask", "ComplexMaskingTask"
 ]
-
-
-def sisnr(x: th.Tensor,
-          s: th.Tensor,
-          eps: float = EPSILON,
-          zero_mean: bool = True,
-          non_nagetive: bool = False) -> th.Tensor:
-    """
-    Computer SiSNR
-    Args:
-        x (Tensor): separated signal, N x S
-        s (Tensor): reference signal, N x S
-    Return:
-        sisnr (Tensor): N
-    """
-
-    def l2norm(mat, keepdim=False):
-        return th.norm(mat, dim=-1, keepdim=keepdim)
-
-    if x.shape != s.shape:
-        raise RuntimeError("Dimention mismatch when calculate " +
-                           f"si-snr, {x.shape} vs {s.shape}")
-    if zero_mean:
-        x = x - th.mean(x, dim=-1, keepdim=True)
-        s = s - th.mean(s, dim=-1, keepdim=True)
-    t = th.sum(x * s, dim=-1,
-               keepdim=True) * s / (l2norm(s, keepdim=True)**2 + eps)
-
-    snr_linear = l2norm(t) / (l2norm(x - t) + eps)
-    if non_nagetive:
-        return 10 * th.log10(1 + snr_linear**2)
-    else:
-        return 20 * th.log10(eps + snr_linear)
-
-
-def snr(x: th.Tensor,
-        s: th.Tensor,
-        eps: float = EPSILON,
-        snr_max: float = -1,
-        non_nagetive: bool = False) -> th.Tensor:
-    """
-    Computer SNR
-    Args:
-        x (Tensor): separated signal, N x S
-        s (Tensor): reference signal, N x S
-    Return:
-        snr (Tensor): N
-    """
-
-    def l2norm(mat, keepdim=False):
-        return th.norm(mat, dim=-1, keepdim=keepdim)
-
-    if x.shape != s.shape:
-        raise RuntimeError("Dimention mismatch when calculate " +
-                           f"si-snr, {x.shape} vs {s.shape}")
-    if snr_max > 0:
-        # 30dB => 0.001
-        threshold = 10**(-snr_max / 10)
-        s_norm = l2norm(s)**2
-        x_s_norm = l2norm(x - s)**2
-        return 10 * th.log10(s_norm + eps) - 10 * th.log10(threshold * s_norm +
-                                                           x_s_norm + eps)
-    else:
-        snr_linear = l2norm(s) / (l2norm(x - s) + eps)
-        if non_nagetive:
-            return 10 * th.log10(1 + snr_linear**2)
-        else:
-            return 20 * th.log10(eps + snr_linear)
 
 
 def hybrid_objf(out: List[Any],
@@ -247,7 +179,7 @@ class SisnrTask(TimeDomainTask):
         """
         Return negative SiSNR
         """
-        return -sisnr(
+        return -sisnr_objf(
             out, ref, zero_mean=self.zero_mean, non_nagetive=self.non_nagetive)
 
 
@@ -277,7 +209,7 @@ class SnrTask(TimeDomainTask):
         """
         Return negative SNR
         """
-        return -snr(
+        return -snr_objf(
             out, ref, non_nagetive=self.non_nagetive, snr_max=self.snr_max)
 
 
@@ -329,16 +261,18 @@ class FreqSaTask(SepTask):
         permute: use permutation invariant loss or not
         description: description string for current task
         weight: weight on each output branch if needed
+        dpcl_weight: weight of the DPCL loss if needed
     """
 
     def __init__(self,
                  nnet: nn.Module,
                  phase_sensitive: bool = False,
-                 truncated: Optional[float] = None,
+                 truncated: float = -1,
                  permute: bool = True,
                  masking: bool = True,
                  num_spks: int = 2,
                  description: str = "",
+                 dpcl_weight: float = 0,
                  weight: Optional[str] = None) -> None:
         # STFT context
         sa_ctx = nnet.enh_transform.ctx("forward_stft")
@@ -346,30 +280,35 @@ class FreqSaTask(SepTask):
                                          ctx=sa_ctx,
                                          weight=weight,
                                          description=description)
-        if not masking and truncated:
+        if not masking and truncated > 0:
             raise ValueError(
-                "Conflict parameters: masksing = True while truncated != None")
+                "Conflict parameters: masksing = True while truncated > 0")
         self.phase_sensitive = phase_sensitive
         self.truncated = truncated
         self.permute = permute
         self.masking = masking
         self.num_spks = num_spks
+        self.dpcl_weight = dpcl_weight
 
-    def _ref_mag(self, mix_mag: th.Tensor, mix_pha: th.Tensor,
-                 ref: th.Tensor) -> th.Tensor:
+    def _ref_mag(self,
+                 mix_mag: th.Tensor,
+                 mix_pha: th.Tensor,
+                 ref: th.Tensor,
+                 psa: bool = False,
+                 truncated: float = -1) -> th.Tensor:
         """
         Compute reference magnitude for SA
         """
         in_polar = self.ctx(ref, return_polar=True)
         ref_mag, ref_pha = in_polar[..., 0], in_polar[..., 1]
-        # use phase-sensitive
-        if self.phase_sensitive:
+        # use phase-sensitive approximation
+        if psa:
             # non-negative
             pha_dif = th.clamp(th.cos(ref_pha - mix_pha), min=0)
             ref_mag = ref_mag * pha_dif
         # truncated
-        if self.truncated is not None:
-            ref_mag = th.min(ref_mag, self.truncated * mix_mag)
+        if truncated > 0:
+            ref_mag = th.min(ref_mag, truncated * mix_mag)
         return ref_mag
 
     def forward(self, egs: Dict) -> Dict:
@@ -391,20 +330,41 @@ class FreqSaTask(SepTask):
         if isinstance(mask, th.Tensor):
             mask, ref = [mask], [ref]
         # for each reference
-        ref = [self._ref_mag(mix_mag, mix_pha, r) for r in ref]
+        ref_psa = [
+            self._ref_mag(mix_mag,
+                          mix_pha,
+                          r,
+                          psa=self.phase_sensitive,
+                          truncated=self.truncated) for r in ref
+        ]
         if self.masking:
             out = [m * mix_mag for m in mask]
         else:
             out = mask
-        # ref = [self.transform(r) for r in ref]
-        # out = [self.transform(o) for o in out]
         loss = hybrid_objf(out,
-                           ref,
+                           ref_psa,
                            self.objf,
                            transform=self.transform,
                            weight=self.weight,
                            permute=self.permute,
                            permu_num_spks=self.num_spks)
+        # if have dpcl branch
+        enable_dpcl = self.dpcl_weight > 0 and hasattr(self.nnet, "dpcl_embed")
+        if enable_dpcl and len(ref) >= 2:
+            raw_mag = [
+                self._ref_mag(mix_mag, mix_pha, r, psa=False, truncated=-1)
+                for r in ref
+            ]
+            # classes id: N x F x T
+            classes = th.argmax(th.stack(raw_mag, -1), -1)
+            # weights: N x F x T
+            weights = mix_mag / th.sum(mix_mag, (-1, -2), keepdim=True)
+            dpcl_loss = dpcl_objf(self.nnet.dpcl_embed(),
+                                  classes,
+                                  weights,
+                                  num_spks=self.num_spks,
+                                  whitened=False)
+            loss = (1 - self.dpcl_weight) * loss + self.dpcl_weight * dpcl_loss
         return {"loss": th.mean(loss)}
 
 
@@ -422,14 +382,16 @@ class LinearFreqSaTask(FreqSaTask):
         permute: use permutation invariant loss or not
         objf: L1 or L2 distance
         weight: weight on each output branch if needed
+        dpcl_weight: weight of the DPCL loss if needed
     """
 
     def __init__(self,
                  nnet: nn.Module,
                  phase_sensitive: bool = False,
-                 truncated: Optional[float] = None,
+                 truncated: float = -1,
                  permute: bool = True,
                  masking: bool = True,
+                 dpcl_weight: float = 0,
                  num_spks: int = 2,
                  objf: str = "L2",
                  weight: Optional[str] = None) -> None:
@@ -440,6 +402,7 @@ class LinearFreqSaTask(FreqSaTask):
                              permute=permute,
                              masking=masking,
                              weight=weight,
+                             dpcl_weight=dpcl_weight,
                              num_spks=num_spks,
                              description="Using spectral approximation "
                              "(MSA or tPSA) loss function")
@@ -475,14 +438,16 @@ class MelFreqSaTask(FreqSaTask):
                  if the network predicts spectrogram, set it false
         permute: use permutation invariant loss or not
         weight: weight on each output branch if needed
+        dpcl_weight: weight of the DPCL loss if needed
         ...: others are parameters for mel-spectrogram computation
     """
 
     def __init__(self,
                  nnet: nn.Module,
                  phase_sensitive: bool = False,
-                 truncated: Optional[float] = None,
+                 truncated: float = -1,
                  weight: Optional[str] = None,
+                 dpcl_weight: float = 0,
                  permute: bool = True,
                  num_spks: int = 2,
                  masking: bool = True,
@@ -501,6 +466,7 @@ class MelFreqSaTask(FreqSaTask):
                              permute=permute,
                              masking=masking,
                              weight=weight,
+                             dpcl_weight=dpcl_weight,
                              num_spks=num_spks,
                              description="Using L2 loss of the mel features")
         mel = mel_filter(None,

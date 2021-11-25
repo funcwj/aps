@@ -1,6 +1,6 @@
-# Cpp Example
+# Notes
 
-A example showcasing the way to perform speech enhancement (single-channel) using Torch Script. The pre-trained model is based on [Deep Complex U-Net](https://openreview.net/pdf?id=SkeRTsAcYm) structure.
+A old example showcasing the way to perform speech enhancement (single-channel) using TorchScript. The pre-trained model is based on [Deep Complex U-Net](https://openreview.net/pdf?id=SkeRTsAcYm) structure.
 
 ## Compile & Test
 ```bash
