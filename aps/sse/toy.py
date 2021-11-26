@@ -44,6 +44,7 @@ class ToyRNN(SSEBase):
                  dropout: float = 0.2,
                  bidirectional: bool = False,
                  training_mode: str = "freq",
+                 mask_max_clip: Optional[float] = None,
                  mask_non_linear: str = "sigmoid") -> None:
         super(ToyRNN, self).__init__(enh_transform, training_mode=training_mode)
         assert enh_transform is not None
@@ -60,7 +61,9 @@ class ToyRNN(SSEBase):
                                   dropout=dropout,
                                   bidirectional=bidirectional,
                                   non_linear="none")
-        self.non_linear = MaskNonLinear(mask_non_linear, enable="positive")
+        self.non_linear = MaskNonLinear(mask_non_linear,
+                                        enable="positive",
+                                        vmax=mask_max_clip)
         self.num_spks = num_spks
 
     def _tf_mask(self, feats: th.Tensor, num_spks: int) -> th.Tensor:

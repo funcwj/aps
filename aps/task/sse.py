@@ -9,10 +9,10 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from typing import List, Dict, Any, Tuple, Callable, Optional
+from typing import Dict, Tuple, Optional
 
 from aps.task.base import Task
-from aps.task.objf import permu_invarint_objf, multiple_objf, snr_objf, sisnr_objf, dpcl_objf
+from aps.task.objf import hybrid_permu_objf, snr_objf, sisnr_objf, DpclObjfComputer
 from aps.libs import ApsRegisters
 from aps.transform.utils import STFT, mel_filter
 from aps.const import EPSILON
@@ -21,50 +21,6 @@ __all__ = [
     "SisnrTask", "SnrTask", "WaTask", "LinearFreqSaTask", "LinearTimeSaTask",
     "MelFreqSaTask", "MelTimeSaTask", "ComplexMappingTask", "ComplexMaskingTask"
 ]
-
-
-def hybrid_objf(out: List[Any],
-                ref: List[Any],
-                objf: Callable,
-                transform: Optional[Callable] = None,
-                weight: Optional[List[float]] = None,
-                permute: bool = True,
-                permu_num_spks: int = 2) -> th.Tensor:
-    """
-    Return hybrid loss (pair-wise, permutated or pair-wise + permutated)
-    Args:
-        inp (list(Object)): estimated list
-        ref (list(Object)): reference list
-        objf (function): function to compute single pair loss (per mini-batch)
-        weight (list(float)): weight on each loss value
-        permute (bool): use permutation invariant or not
-        permu_num_spks (int): number of speakers when computing PIT
-    """
-    num_branch = len(out)
-    if num_branch != len(ref):
-        raise RuntimeError(
-            f"Got {len(ref)} references but with {num_branch} outputs")
-
-    if permute:
-        # N
-        loss = permu_invarint_objf(out[:permu_num_spks],
-                                   ref[:permu_num_spks],
-                                   objf,
-                                   transform=transform)
-        # add residual loss
-        if num_branch > permu_num_spks:
-            # warnings.warn(f"#Branch: {num_branch} > #Speaker: {permu_num_spks}")
-            num_weight = num_branch - (permu_num_spks - 1)
-            if weight is None:
-                weight = [1 / num_weight] * num_weight
-            other_loss = multiple_objf(out[permu_num_spks:],
-                                       ref[permu_num_spks:],
-                                       objf,
-                                       weight=weight[1:])
-            loss = weight[0] * loss + other_loss
-    else:
-        loss = multiple_objf(out, ref, objf, weight=weight, transform=transform)
-    return loss
 
 
 class SepTask(Task):
@@ -137,12 +93,12 @@ class TimeDomainTask(SepTask):
 
         if isinstance(out, th.Tensor):
             out, ref = [out], [ref]
-        loss = hybrid_objf(out,
-                           ref,
-                           self.objf,
-                           weight=self.weight,
-                           permute=self.permute,
-                           permu_num_spks=self.num_spks)
+        loss = hybrid_permu_objf(out,
+                                 ref,
+                                 self.objf,
+                                 weight=self.weight,
+                                 permute=self.permute,
+                                 permu_num_spks=self.num_spks)
         return {"loss": th.mean(loss)}
 
 
@@ -289,25 +245,30 @@ class FreqSaTask(SepTask):
         self.masking = masking
         self.num_spks = num_spks
         self.dpcl_weight = dpcl_weight
+        self.mask_weight = 1 - dpcl_weight
+        enable_dpcl = dpcl_weight > 0 and hasattr(self.nnet, "dpcl_embed")
+        if enable_dpcl and num_spks > 1:
+            self.dpcl_objf = DpclObjfComputer()
+        else:
+            self.dpcl_objf = None
 
     def _ref_mag(self,
-                 mix_mag: th.Tensor,
-                 mix_pha: th.Tensor,
-                 ref: th.Tensor,
-                 psa: bool = False,
+                 mix_in_polar: th.Tensor,
+                 ref_in_polar: th.Tensor,
+                 phase_sensitive: bool = False,
                  truncated: float = -1) -> th.Tensor:
         """
         Compute reference magnitude for SA
         """
-        in_polar = self.ctx(ref, return_polar=True)
-        ref_mag, ref_pha = in_polar[..., 0], in_polar[..., 1]
+        ref_mag, ref_pha = ref_in_polar[..., 0], ref_in_polar[..., 1]
         # use phase-sensitive approximation
-        if psa:
-            # non-negative
-            pha_dif = th.clamp(th.cos(ref_pha - mix_pha), min=0)
-            ref_mag = ref_mag * pha_dif
-        # truncated
+        if phase_sensitive:
+            mix_pha = mix_in_polar[..., 1]
+            # make sure non-negative
+            ref_mag = ref_mag * th.clamp(th.cos(ref_pha - mix_pha), min=0)
         if truncated > 0:
+            mix_mag = mix_in_polar[..., 0]
+            # truncate reference value
             ref_mag = th.min(ref_mag, truncated * mix_mag)
         return ref_mag
 
@@ -323,49 +284,43 @@ class FreqSaTask(SepTask):
         mask = self.nnet(mix)
 
         # if multi-channel, use ch0 as reference
-        in_polar = self.ctx(mix[:, 0] if mix.dim() == 3 else mix,
-                            return_polar=True)
-        mix_mag, mix_pha = in_polar[..., 0], in_polar[..., 1]
+        mix_in_polar = self.ctx(mix[:, 0] if mix.dim() == 3 else mix,
+                                return_polar=True)
 
         if isinstance(mask, th.Tensor):
             mask, ref = [mask], [ref]
+
+        ref_in_polar = [self.ctx(r, return_polar=True) for r in ref]
         # for each reference
-        ref_psa = [
-            self._ref_mag(mix_mag,
-                          mix_pha,
+        ref_psa_or_msa = [
+            self._ref_mag(mix_in_polar,
                           r,
-                          psa=self.phase_sensitive,
-                          truncated=self.truncated) for r in ref
+                          phase_sensitive=self.phase_sensitive,
+                          truncated=self.truncated) for r in ref_in_polar
         ]
         if self.masking:
-            out = [m * mix_mag for m in mask]
+            out = [m * mix_in_polar[..., 0] for m in mask]
         else:
             out = mask
-        loss = hybrid_objf(out,
-                           ref_psa,
-                           self.objf,
-                           transform=self.transform,
-                           weight=self.weight,
-                           permute=self.permute,
-                           permu_num_spks=self.num_spks)
+        loss = hybrid_permu_objf(out,
+                                 ref_psa_or_msa,
+                                 self.objf,
+                                 transform=self.transform,
+                                 weight=self.weight,
+                                 permute=self.permute,
+                                 permu_num_spks=self.num_spks)
+        mask_loss = loss.mean()
         # if have dpcl branch
-        enable_dpcl = self.dpcl_weight > 0 and hasattr(self.nnet, "dpcl_embed")
-        if enable_dpcl and len(ref) >= 2:
-            raw_mag = [
-                self._ref_mag(mix_mag, mix_pha, r, psa=False, truncated=-1)
-                for r in ref
-            ]
-            # classes id: N x F x T
-            classes = th.argmax(th.stack(raw_mag, -1), -1)
-            # weights: N x F x T
-            weights = mix_mag / th.sum(mix_mag, (-1, -2), keepdim=True)
-            dpcl_loss = dpcl_objf(self.nnet.dpcl_embed(),
-                                  classes,
-                                  weights,
-                                  num_spks=self.num_spks,
-                                  whitened=False)
-            loss = (1 - self.dpcl_weight) * loss + self.dpcl_weight * dpcl_loss
-        return {"loss": th.mean(loss)}
+        if self.dpcl_objf:
+            raw_mag = th.stack([r[..., 0] for r in ref_in_polar], -1)
+            dpcl_loss = self.dpcl_objf(self.nnet.dpcl_embed(),
+                                       raw_mag,
+                                       mix_in_polar[..., 0],
+                                       mean=True)
+            loss = self.dpcl_weight * dpcl_loss + self.mask_weight * mask_loss
+            return {"loss": loss, "dpcl": dpcl_loss, "mask": mask_loss}
+        else:
+            return {"loss": mask_loss}
 
 
 @ApsRegisters.task.register("sse@freq_linear_sa")
@@ -575,13 +530,13 @@ class TimeSaTask(SepTask):
         # post processing
         # out = [self.transform(s) for s in spk_mag]
         # ref = [self.transform(r) for r in ref_mag]
-        loss = hybrid_objf(spk_mag,
-                           ref_mag,
-                           self.objf,
-                           transform=self.transform,
-                           weight=self.weight,
-                           permute=self.permute,
-                           permu_num_spks=self.num_spks)
+        loss = hybrid_permu_objf(spk_mag,
+                                 ref_mag,
+                                 self.objf,
+                                 transform=self.transform,
+                                 weight=self.weight,
+                                 permute=self.permute,
+                                 permu_num_spks=self.num_spks)
         return {"loss": th.mean(loss)}
 
 
@@ -787,12 +742,12 @@ class ComplexMappingTask(SepTask):
             out, ref = [out], [ref]
         # for each reference
         ref = [self.ctx(r, return_polar=False) for r in ref]
-        loss = hybrid_objf(out,
-                           ref,
-                           self.objf,
-                           weight=self.weight,
-                           permute=self.permute,
-                           permu_num_spks=self.num_spks)
+        loss = hybrid_permu_objf(out,
+                                 ref,
+                                 self.objf,
+                                 weight=self.weight,
+                                 permute=self.permute,
+                                 permu_num_spks=self.num_spks)
         return {"loss": th.mean(loss)}
 
 
@@ -872,10 +827,10 @@ class ComplexMaskingTask(ComplexMappingTask):
         else:
             ref = [self.ctx(r, return_polar=False) for r in ref]
             out = [self._complex_tf_mask(mix, o) for o in out]
-        loss = hybrid_objf(out,
-                           ref,
-                           self.objf,
-                           weight=self.weight,
-                           permute=self.permute,
-                           permu_num_spks=self.num_spks)
+        loss = hybrid_permu_objf(out,
+                                 ref,
+                                 self.objf,
+                                 weight=self.weight,
+                                 permute=self.permute,
+                                 permu_num_spks=self.num_spks)
         return {"loss": th.mean(loss)}

@@ -32,9 +32,7 @@ class EendTask(TimeDomainTask):
         Return BCE loss
         """
         # N x T
-        ref_sub1 = ref[:, :-2:2]
-        ref_sub2 = ref_sub1[:, :-2:2]
         loss = tf.binary_cross_entropy_with_logits(th.squeeze(out),
-                                                   ref_sub2,
+                                                   ref,
                                                    reduction="none")
         return loss.sum(-1)

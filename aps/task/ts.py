@@ -10,7 +10,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as tf
 
-from aps.task.sse import hybrid_objf
+from aps.task.objf import hybrid_permu_objf
 from aps.task.base import TsTask
 from typing import Dict
 
@@ -55,9 +55,9 @@ class SseFreqTsTask(TsTask):
 
         if isinstance(out, th.Tensor):
             out, ref = [out], [ref]
-        loss = hybrid_objf(out,
-                           ref,
-                           self.objf,
-                           permute=self.permute,
-                           permu_num_spks=self.num_spks)
+        loss = hybrid_permu_objf(out,
+                                 ref,
+                                 self.objf,
+                                 permute=self.permute,
+                                 permu_num_spks=self.num_spks)
         return {"loss": th.mean(loss)}

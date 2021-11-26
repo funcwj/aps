@@ -8,7 +8,7 @@ import torch.nn as nn
 
 from typing import Optional, List, Union
 from aps.sse.base import SSEBase, MaskNonLinear, tf_masking
-from aps.sse.rnn import RNNWrapper
+from aps.sse.toy import RNNWrapper
 from aps.libs import ApsRegisters
 
 

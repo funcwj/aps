@@ -209,6 +209,8 @@ def dpcl_objf(net_embed: th.Tensor,
         net_embed (Tensor): network embeddings, N x FT x D
         classes (Tensor): classes id for each TF-bin, N x F x T
         weights (Tensor): weights for each TF bin, N x F x T
+    Return:
+        loss (Tensor): DPCL loss for each utterance
     """
     N, F, T = classes.shape
     # encode one-hot: N x FT x 2
@@ -216,9 +218,10 @@ def dpcl_objf(net_embed: th.Tensor,
     ref_embed.scatter_(2, classes.view(N, T * F, 1), 1)
 
     def affinity(v, y):
-        # z: D x D
+        # z: N x D x D
         z = th.bmm(th.transpose(v, 1, 2), y)
-        return th.norm(z, 2)**2
+        # N
+        return th.norm(z, 2, dim=(1, 2))**2
 
     # reshape vad_mask: N x TF x 1
     weights = weights.view(N, F * T, 1)
@@ -229,7 +232,7 @@ def dpcl_objf(net_embed: th.Tensor,
     else:
         loss = affinity(out, out) + affinity(ref, ref) - affinity(out, ref) * 2
     # return loss per-frame
-    return loss * F
+    return loss / T
 
 
 def multiple_objf(inp: List[Any],
@@ -322,47 +325,80 @@ def permu_invarint_objf(inp: List[Any],
         return loss
 
 
-class MultiObjfComputer(nn.Module):
+def hybrid_permu_objf(out: List[Any],
+                      ref: List[Any],
+                      objf: Callable,
+                      transform: Optional[Callable] = None,
+                      weight: Optional[List[float]] = None,
+                      permute: bool = True,
+                      permu_num_spks: int = 2) -> th.Tensor:
     """
-    A class to compute summary of multiple objective functions
+    Return hybrid loss (pair-wise, permutated or pair-wise + permutated)
+    Args:
+        inp (list(Object)): estimated list
+        ref (list(Object)): reference list
+        objf (function): function to compute single pair loss (per mini-batch)
+        weight (list(float)): weight on each loss value
+        permute (bool): use permutation invariant or not
+        permu_num_spks (int): number of speakers when computing PIT
     """
+    num_branch = len(out)
+    if num_branch != len(ref):
+        raise RuntimeError(
+            f"Got {len(ref)} references but with {num_branch} outputs")
 
-    def __init__(self):
-        super(MultiObjfComputer, self).__init__()
-
-    def forward(self,
-                inp: List[Any],
-                ref: List[Any],
-                objf: Callable,
-                weight: Optional[List[float]] = None,
-                transform: Optional[Callable] = None,
-                batchmean: bool = False) -> th.Tensor:
-        return multiple_objf(inp,
-                             ref,
-                             objf,
-                             weight=weight,
-                             transform=transform,
-                             batchmean=batchmean)
-
-
-class PermuInvarintObjfComputer(nn.Module):
-    """
-    A class to compute permutation-invariant objective function
-    """
-
-    def __init__(self):
-        super(PermuInvarintObjfComputer, self).__init__()
-
-    def forward(self,
-                inp: List[Any],
-                ref: List[Any],
-                objf: Callable,
-                transform: Optional[Callable] = None,
-                batchmean: bool = False,
-                return_permutation: bool = False) -> th.Tensor:
-        return permu_invarint_objf(inp,
-                                   ref,
+    if permute:
+        # N
+        loss = permu_invarint_objf(out[:permu_num_spks],
+                                   ref[:permu_num_spks],
                                    objf,
-                                   transform=transform,
-                                   return_permutation=return_permutation,
-                                   batchmean=batchmean)
+                                   transform=transform)
+        # add residual loss
+        if num_branch > permu_num_spks:
+            # warnings.warn(f"#Branch: {num_branch} > #Speaker: {permu_num_spks}")
+            num_weight = num_branch - (permu_num_spks - 1)
+            if weight is None:
+                weight = [1 / num_weight] * num_weight
+            other_loss = multiple_objf(out[permu_num_spks:],
+                                       ref[permu_num_spks:],
+                                       objf,
+                                       weight=weight[1:])
+            loss = weight[0] * loss + other_loss
+    else:
+        loss = multiple_objf(out, ref, objf, weight=weight, transform=transform)
+    return loss
+
+
+class DpclObjfComputer(nn.Module):
+    """
+    A class for computation of the DPCL loss
+    """
+
+    def __init__(self):
+        super(DpclObjfComputer, self).__init__()
+
+    def forward(self,
+                embedding: th.Tensor,
+                magnitude_ref: th.Tensor,
+                magnitude_mix: th.Tensor,
+                mean: bool = True) -> th.Tensor:
+        """
+        Args:
+            embedding (Tensor): network embeddings, N x FT x D
+            magnitude_ref (Tensor): magnitude of each speaker, N x F x T x S
+            magnitude_mix (Tensor): magnitude of mixture signal, N x F x T
+        Return:
+            loss (Tensor): loss of each utterance, N
+        """
+        num_spks = magnitude_ref.shape[-1]
+        # classes: N x F x T
+        classes = th.argmax(magnitude_ref, -1)
+        # weights: N x F x T
+        weights = magnitude_mix / th.sum(magnitude_mix, (-1, -2), keepdim=True)
+        # loss: N
+        loss = dpcl_objf(embedding,
+                         classes,
+                         weights,
+                         num_spks=num_spks,
+                         whitened=False)
+        return loss.mean() if mean else loss
