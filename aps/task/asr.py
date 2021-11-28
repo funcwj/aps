@@ -115,8 +115,23 @@ def load_label_count(label_count: str) -> Optional[th.Tensor]:
     return th.clamp_min(counts, 1)
 
 
+class ASRTask(Task):
+    """
+    Base class for ASR tasks
+    """
+
+    def __init__(self,
+                 nnet: nn.Module,
+                 reduction: str = "batchmean",
+                 description: str = ""):
+        super(ASRTask, self).__init__(nnet, description=description)
+        if reduction not in ["mean", "batchmean"]:
+            raise ValueError(f"Unsupported reduction option: {reduction}")
+        self.reduction = reduction
+
+
 @ApsRegisters.task.register("asr@ctc")
-class CtcTask(Task):
+class CtcTask(ASRTask):
     """
     For CTC objective function only
     Args:
@@ -130,10 +145,9 @@ class CtcTask(Task):
                  blank: int = 0,
                  reduction: str = "batchmean") -> None:
         super(CtcTask, self).__init__(
-            nnet, description="CTC objective function training for ASR")
-        if reduction not in ["mean", "batchmean"]:
-            raise ValueError(f"Unsupported reduction option: {reduction}")
-        self.reduction = reduction
+            nnet,
+            reduction=reduction,
+            description="CTC objective function training for ASR")
         self.ctc_blank = blank
 
     def forward(self, egs: Dict) -> Dict:
@@ -156,7 +170,7 @@ class CtcTask(Task):
 
 
 @ApsRegisters.task.register("asr@ctc_xent")
-class CtcXentHybridTask(Task):
+class CtcXentHybridTask(ASRTask):
     """
     For encoder/decoder attention based AM training. (CTC for encoder, Xent for decoder)
     Args:
@@ -178,23 +192,22 @@ class CtcXentHybridTask(Task):
                  ctc_weight: float = 0,
                  label_count: str = "") -> None:
         super(CtcXentHybridTask, self).__init__(
-            nnet, description="CTC + Xent multi-task training for ASR")
+            nnet,
+            reduction=reduction,
+            description="CTC + Xent multi-task training for ASR")
         if lsm_method == "unigram" and not label_count:
             raise RuntimeError(
                 "Missing label_count to use unigram label smoothing")
-        if reduction not in ["mean", "batchmean"]:
-            raise ValueError(f"Unsupported reduction option: {reduction}")
-        self.reduction = reduction
         self.ctc_weight = ctc_weight
         self.lsm_factor = lsm_factor
         self.ctc_kwargs = {
             "blank": blank,
-            "reduction": reduction,
+            "reduction": self.reduction,
             "add_softmax": True
         }
         self.lsm_kwargs = {
             "method": lsm_method,
-            "reduction": reduction,
+            "reduction": self.reduction,
             "lsm_factor": lsm_factor,
             "label_count": load_label_count(label_count)
         }
@@ -244,28 +257,26 @@ class CtcXentHybridTask(Task):
 
 
 @ApsRegisters.task.register("asr@transducer")
-class TransducerTask(Task):
+class TransducerTask(ASRTask):
     """
-    For RNNT objective function training.
+    For transducer objective training.
     Args:
-        nnet: AM network
-        interface: which RNNT loss api to use (warp_rnnt|warprnnt_pytorch)
+        nnet: Transducer based model
+        interface: which transducer loss api to use (torchaudio|warp_rnnt|warprnnt_pytorch)
         reduction: reduction option applied to the sum of the loss
-        blank: blank ID for RNNT loss computation
+        blank: blank ID for transducer loss computation
     """
 
     def __init__(self,
                  nnet: nn.Module,
-                 interface: str = "warp_rnnt",
+                 interface: str = "torchaudio",
                  reduction: str = "batchmean",
                  blank: int = 0) -> None:
-        super(TransducerTask,
-              self).__init__(nnet,
-                             description="RNNT objective function for ASR")
-        if reduction not in ["mean", "batchmean"]:
-            raise ValueError(f"Unsupported reduction option: {reduction}")
+        super(TransducerTask, self).__init__(
+            nnet,
+            reduction=reduction,
+            description="Transducer objective for ASR training")
         self.blank = blank
-        self.reduction = reduction
         self._setup_rnnt_backend(interface)
 
     def _setup_rnnt_backend(self, interface: str) -> NoReturn:
@@ -278,12 +289,13 @@ class TransducerTask(Task):
             "warprnnt_pytorch": warp_rnnt_v2
         }
         if interface not in api:
-            raise ValueError(f"Unsupported RNNT interface: {interface}")
-        self.warp_rnnt_v1 = interface == "warp_rnnt"
+            raise ValueError(
+                f"Unsupported transducer loss interface: {interface}")
         self.rnnt_objf = api[interface]
         if self.rnnt_objf is None:
             raise RuntimeError(f"import {interface} failed ..., " +
                                "please check python envrionments")
+        self.warp_rnnt_v1 = interface == "warp_rnnt"
 
     def forward(self, egs: Dict) -> Dict:
         """
@@ -315,7 +327,7 @@ class TransducerTask(Task):
 
 
 @ApsRegisters.task.register("asr@lm")
-class LmXentTask(Task):
+class LmXentTask(ASRTask):
     """
     For LM training (Xent loss)
     Args:
@@ -329,12 +341,10 @@ class LmXentTask(Task):
                  bptt_mode: bool = False,
                  reduction: str = "batchmean") -> None:
         super(LmXentTask, self).__init__(nnet,
+                                         reduction=reduction,
                                          description="Xent for LM training")
-        if reduction not in ["mean", "batchmean"]:
-            raise ValueError(f"Unsupported reduction option: {reduction}")
         self.hidden = None
         self.bptt_mode = bptt_mode
-        self.reduction = reduction
 
     def forward(self, egs: Dict) -> Dict:
         """

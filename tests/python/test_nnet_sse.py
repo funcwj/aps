@@ -16,27 +16,28 @@ from aps.transform import EnhTransform
     pytest.param(2, "relu")
 ])
 def test_base_rnn(num_spks, non_linear):
-    nnet_cls = aps_sse_nnet("sse@base_rnn")
-    transform = EnhTransform(feats="spectrogram-log-cmvn",
-                             frame_len=512,
-                             frame_hop=256)
-    base_rnn = nnet_cls(enh_transform=transform,
-                        num_bins=257,
-                        input_size=257,
-                        input_proj=512,
-                        num_layers=2,
-                        hidden=512,
-                        num_spks=num_spks,
-                        mask_non_linear=non_linear)
-    inp = th.rand(2, 64000)
-    x = base_rnn(inp)
-    if num_spks > 1:
-        x = x[0]
-    assert x.shape == th.Size([2, 257, 249])
-    z = base_rnn.infer(inp[0])
-    if num_spks > 1:
-        z = z[0]
-    assert z.shape == th.Size([64000])
+    for nnet in ["base_rnn", "chimera++"]:
+        nnet_cls = aps_sse_nnet(f"sse@{nnet}")
+        transform = EnhTransform(feats="spectrogram-log-cmvn",
+                                 frame_len=512,
+                                 frame_hop=256)
+        base_rnn = nnet_cls(enh_transform=transform,
+                            num_bins=257,
+                            input_size=257,
+                            input_proj=512,
+                            num_layers=2,
+                            hidden=512,
+                            num_spks=num_spks,
+                            mask_non_linear=non_linear)
+        inp = th.rand(2, 64000)
+        x = base_rnn(inp)
+        if num_spks > 1:
+            x = x[0]
+        assert x.shape == th.Size([2, 257, 249])
+        z = base_rnn.infer(inp[0])
+        if num_spks > 1:
+            z = z[0]
+        assert z.shape == th.Size([64000])
 
 
 def test_phasen():
