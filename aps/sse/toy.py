@@ -90,9 +90,8 @@ class ToyRNN(SSEBase):
         feats = self.enh_transform(stft)
         # S x N x F x T
         masks = self._tf_mask(feats, self.num_spks)
-        masks = th.chunk(masks, self.num_spks, 0)
         # [N x F x T, ...]
-        masks = [m[0] for m in masks]
+        masks = [m[0] for m in th.chunk(masks, self.num_spks, 0)]
         if mode == "freq":
             packed = masks
         else:

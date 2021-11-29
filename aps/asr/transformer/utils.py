@@ -62,6 +62,7 @@ def prep_context_mask(num_frames: int,
                       chunk_size: int = 1,
                       lctx: int = 0,
                       rctx: int = 0,
+                      ninf: float = NEG_INF,
                       device: th.device = "cpu") -> th.Tensor:
     """
     Prepare the square masks (-inf/0) for context masking
@@ -93,7 +94,7 @@ def prep_context_mask(num_frames: int,
     # generate masks
     zeros = th.zeros(num_frames, device=device)
     ctx_mask = th.logical_or(left_mask, right_mask)
-    mask = zeros.masked_fill(ctx_mask, NEG_INF)
+    mask = zeros.masked_fill(ctx_mask, ninf)
     return mask
 
 

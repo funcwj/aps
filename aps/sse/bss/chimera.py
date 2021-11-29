@@ -36,9 +36,7 @@ class Chimera(SSEBase):
         super(Chimera, self).__init__(enh_transform,
                                       training_mode=training_mode)
         assert enh_transform is not None
-        if num_spks == 1 and mask_non_linear == "softmax":
-            raise ValueError(
-                "mask_non_linear can not be softmax when num_spks == 1")
+        assert num_spks >= 1
         self.encoder = RNNWrapper(input_size,
                                   -1,
                                   input_proj=input_proj,
@@ -101,10 +99,9 @@ class Chimera(SSEBase):
         # feats: N x T x F
         feats = self.enh_transform(stft)
         # S x N x F x T
-        masks, embed = self._tf_mask(feats, self.num_spks)
-        masks = th.chunk(masks, self.num_spks, 0)
+        masks = self._tf_mask(feats, self.num_spks)
         # [N x F x T, ...]
-        masks = [m[0] for m in masks]
+        masks = [m[0] for m in th.chunk(masks, self.num_spks, 0)]
         if mode == "freq":
             packed = masks
         else:

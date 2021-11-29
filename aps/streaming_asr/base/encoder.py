@@ -62,7 +62,7 @@ class StreamingRNNEncoder(PyTorchRNNEncoder):
             chunk = chunk[:, None]
         if self.proj is not None:
             chunk = tf.relu(self.proj(chunk))
-        out, hx = self.rnns(chunk, self.hx)
+        out, hx = self.impl(chunk, self.hx)
         self.hx = hx
         if self.outp is not None:
             out = self.outp(out)

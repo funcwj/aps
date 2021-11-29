@@ -98,9 +98,10 @@ def test_streaming_transducer(vocab_size, enc_cfg):
                     dec_kwargs=dec_cfg["dec_kwargs"])
     x, x_len, y, y_len, u = gen_egs(vocab_size, 4)
     _, z, _ = rnnt(x, x_len, y, y_len)
-    assert z.shape[2:] == th.Size([u + 1, vocab_size])
+    assert z.shape[2:] == th.Size([u, vocab_size])
 
 
 if __name__ == "__main__":
     # test_streaming_transducer(100, xfmr_enc_cfg)
-    test_streaming_ctc(400)
+    # test_streaming_ctc(400)
+    pass
