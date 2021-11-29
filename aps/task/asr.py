@@ -58,29 +58,37 @@ def compute_accu(dec_out: th.Tensor, tgt_pad: th.Tensor) -> Tuple[float]:
 
 
 def prep_asr_label(
-        tgt_pad: th.Tensor,
+        tgt_ori: th.Tensor,
         tgt_len: th.Tensor,
         pad_value: int,
+        sos_value: int = -1,
         eos_value: int = -1) -> Tuple[th.Tensor, Optional[th.Tensor]]:
     """
     Process asr label for loss and accu computation
     Args:
-        tgt_pad: padding target labels
+        tgt_ori: padded target labels
         tgt_len: target length
         pad_value: padding value, e.g., ignore_id
-        eos_value: EOS value
+        sos_value: value to pad in sos position
+        eos_value: value to pad in eos position
     """
     # N x To, -1 => EOS
-    tgt_v1 = tgt_pad.masked_fill(tgt_pad == IGNORE_ID, pad_value)
-    # add eos if needed
-    if eos_value >= 0:
-        # N x (To+1), pad -1
-        tgt_v2 = tf.pad(tgt_pad, (0, 1), value=IGNORE_ID)
-        # add eos
-        tgt_v2 = tgt_v2.scatter(1, tgt_len[:, None], eos_value)
+    if pad_value != IGNORE_ID:
+        tgt_infer = tgt_ori.masked_fill(tgt_ori == IGNORE_ID, pad_value)
     else:
-        tgt_v2 = None
-    return tgt_v1, tgt_v2
+        tgt_infer = tgt_ori
+    # add sos if needed
+    if sos_value >= 0:
+        # N x (To+1), pad sos
+        tgt_infer = tf.pad(tgt_infer, (1, 0), value=sos_value)
+    if eos_value >= 0:
+        # N x (To+1), pad IGNORE_ID
+        tgt_refer = tf.pad(tgt_ori, (0, 1), value=IGNORE_ID)
+        # replace with eos
+        tgt_refer = tgt_refer.scatter(1, tgt_len[:, None], eos_value)
+    else:
+        tgt_refer = None
+    return tgt_infer, tgt_refer
 
 
 def load_label_count(label_count: str) -> Optional[th.Tensor]:
@@ -107,8 +115,23 @@ def load_label_count(label_count: str) -> Optional[th.Tensor]:
     return th.clamp_min(counts, 1)
 
 
+class ASRTask(Task):
+    """
+    Base class for ASR tasks
+    """
+
+    def __init__(self,
+                 nnet: nn.Module,
+                 reduction: str = "batchmean",
+                 description: str = ""):
+        super(ASRTask, self).__init__(nnet, description=description)
+        if reduction not in ["mean", "batchmean"]:
+            raise ValueError(f"Unsupported reduction option: {reduction}")
+        self.reduction = reduction
+
+
 @ApsRegisters.task.register("asr@ctc")
-class CtcTask(Task):
+class CtcTask(ASRTask):
     """
     For CTC objective function only
     Args:
@@ -122,10 +145,9 @@ class CtcTask(Task):
                  blank: int = 0,
                  reduction: str = "batchmean") -> None:
         super(CtcTask, self).__init__(
-            nnet, description="CTC objective function training for ASR")
-        if reduction not in ["mean", "batchmean"]:
-            raise ValueError(f"Unsupported reduction option: {reduction}")
-        self.reduction = reduction
+            nnet,
+            reduction=reduction,
+            description="CTC objective function training for ASR")
         self.ctc_blank = blank
 
     def forward(self, egs: Dict) -> Dict:
@@ -148,7 +170,7 @@ class CtcTask(Task):
 
 
 @ApsRegisters.task.register("asr@ctc_xent")
-class CtcXentHybridTask(Task):
+class CtcXentHybridTask(ASRTask):
     """
     For encoder/decoder attention based AM training. (CTC for encoder, Xent for decoder)
     Args:
@@ -170,66 +192,62 @@ class CtcXentHybridTask(Task):
                  ctc_weight: float = 0,
                  label_count: str = "") -> None:
         super(CtcXentHybridTask, self).__init__(
-            nnet, description="CTC + Xent multi-task training for ASR")
+            nnet,
+            reduction=reduction,
+            description="CTC + Xent multi-task training for ASR")
         if lsm_method == "unigram" and not label_count:
             raise RuntimeError(
                 "Missing label_count to use unigram label smoothing")
-        if reduction not in ["mean", "batchmean"]:
-            raise ValueError(f"Unsupported reduction option: {reduction}")
-        self.eos = nnet.eos
-        self.reduction = reduction
-        self.ctc_blank = blank
         self.ctc_weight = ctc_weight
         self.lsm_factor = lsm_factor
-        self.lsm_method = lsm_method
-        self.label_count = load_label_count(label_count)
+        self.ctc_kwargs = {
+            "blank": blank,
+            "reduction": self.reduction,
+            "add_softmax": True
+        }
+        self.lsm_kwargs = {
+            "method": lsm_method,
+            "reduction": self.reduction,
+            "lsm_factor": lsm_factor,
+            "label_count": load_label_count(label_count)
+        }
 
     def forward(self, egs: Dict) -> Dict:
         """
         Compute CTC & Attention loss, egs contains:
         src_pad: N x Ti x F, src_len: N, tgt_pad: N x To, tgt_len: N, ssr: float if needed
         """
-        # tgt_pad: N x To (replace ignore_id with eos, used in decoder)
-        # tgts: N x To+1 (pad eos, used in loss)
-        tgt_pad, tgts = prep_asr_label(egs["tgt_pad"],
-                                       egs["tgt_len"],
-                                       pad_value=self.eos,
-                                       eos_value=self.eos)
+        # tgt_infer: N x To+1 (pad eos, replace ignore_id with eos, used in decoder)
+        # tgt_refer: N x To+1 (pad eos, used in loss computation)
+        tgt_infer, tgt_refer = prep_asr_label(egs["tgt_pad"],
+                                              egs["tgt_len"],
+                                              self.nnet.eos,
+                                              sos_value=self.nnet.sos,
+                                              eos_value=self.nnet.eos)
         # outs: N x (To+1) x V
-        # alis: N x (To+1) x Ti
         ssr = egs["ssr"] if "ssr" in egs else 0
         outs, ctc_enc, enc_len = self.nnet(egs["src_pad"],
                                            egs["src_len"],
-                                           tgt_pad,
-                                           egs["tgt_len"],
+                                           tgt_infer,
+                                           egs["tgt_len"] + 1,
                                            ssr=ssr)
         # compute loss
         if self.lsm_factor > 0:
-            att_loss = ls_objf(outs,
-                               tgts,
-                               method=self.lsm_method,
-                               reduction=self.reduction,
-                               lsm_factor=self.lsm_factor,
-                               label_count=self.label_count)
+            att_loss = ls_objf(outs, tgt_refer, **self.lsm_kwargs)
         else:
-            att_loss = ce_objf(outs, tgts, reduction=self.reduction)
+            att_loss = ce_objf(outs, tgt_refer, reduction=self.reduction)
 
         stats = {}
         if self.ctc_weight > 0:
-            ctc_loss = ctc_objf(ctc_enc,
-                                egs["tgt_pad"],
-                                enc_len,
-                                egs["tgt_len"],
-                                blank=self.ctc_blank,
-                                reduction=self.reduction,
-                                add_softmax=True)
+            ctc_loss = ctc_objf(ctc_enc, egs["tgt_pad"], enc_len,
+                                egs["tgt_len"], **self.ctc_kwargs)
             stats["@ctc"] = ctc_loss.item()
             stats["xent"] = att_loss.item()
         else:
             ctc_loss = 0
         loss = self.ctc_weight * ctc_loss + (1 - self.ctc_weight) * att_loss
         # compute accu
-        accu, den = compute_accu(outs, tgts)
+        accu, den = compute_accu(outs, tgt_refer)
         # check coding error
         assert den == egs["#tok"]
         # add to reporter
@@ -239,28 +257,26 @@ class CtcXentHybridTask(Task):
 
 
 @ApsRegisters.task.register("asr@transducer")
-class TransducerTask(Task):
+class TransducerTask(ASRTask):
     """
-    For RNNT objective function training.
+    For transducer objective training.
     Args:
-        nnet: AM network
-        interface: which RNNT loss api to use (warp_rnnt|warprnnt_pytorch)
+        nnet: Transducer based model
+        interface: which transducer loss api to use (torchaudio|warp_rnnt|warprnnt_pytorch)
         reduction: reduction option applied to the sum of the loss
-        blank: blank ID for RNNT loss computation
+        blank: blank ID for transducer loss computation
     """
 
     def __init__(self,
                  nnet: nn.Module,
-                 interface: str = "warp_rnnt",
+                 interface: str = "torchaudio",
                  reduction: str = "batchmean",
                  blank: int = 0) -> None:
-        super(TransducerTask,
-              self).__init__(nnet,
-                             description="RNNT objective function for ASR")
-        if reduction not in ["mean", "batchmean"]:
-            raise ValueError(f"Unsupported reduction option: {reduction}")
+        super(TransducerTask, self).__init__(
+            nnet,
+            reduction=reduction,
+            description="Transducer objective for ASR training")
         self.blank = blank
-        self.reduction = reduction
         self._setup_rnnt_backend(interface)
 
     def _setup_rnnt_backend(self, interface: str) -> NoReturn:
@@ -273,43 +289,45 @@ class TransducerTask(Task):
             "warprnnt_pytorch": warp_rnnt_v2
         }
         if interface not in api:
-            raise ValueError(f"Unsupported RNNT interface: {interface}")
-        self.warp_rnnt_v1 = interface == "warp_rnnt"
+            raise ValueError(
+                f"Unsupported transducer loss interface: {interface}")
         self.rnnt_objf = api[interface]
         if self.rnnt_objf is None:
             raise RuntimeError(f"import {interface} failed ..., " +
                                "please check python envrionments")
+        self.warp_rnnt_v1 = interface == "warp_rnnt"
 
     def forward(self, egs: Dict) -> Dict:
         """
         Compute transducer loss, egs contains:
         src_pad: N x Ti x F, src_len: N, tgt_pad: N x To, tgt_len: N
         """
-        # tgt_pad: N x To (replace ignore_id with blank)
-        tgt_pad, _ = prep_asr_label(egs["tgt_pad"],
-                                    egs["tgt_len"],
-                                    pad_value=self.blank)
-        tgt_len = egs["tgt_len"]
+        # tgt_infer: N x To+1 (start with blank, replace ignore_id with blank)
+        tgt_infer = prep_asr_label(egs["tgt_pad"],
+                                   egs["tgt_len"],
+                                   self.blank,
+                                   sos_value=self.blank,
+                                   eos_value=self.blank)[0]
         # N x Ti x To+1 x V
-        _, dec_out, enc_len = self.nnet(egs["src_pad"], egs["src_len"], tgt_pad,
-                                        tgt_len)
+        _, dec_out, enc_len = self.nnet(egs["src_pad"], egs["src_len"],
+                                        tgt_infer, egs["tgt_len"] + 1)
         # add log_softmax if use https://github.com/1ytic/warp-rnnt
         if self.warp_rnnt_v1:
             dec_out = tf.log_softmax(dec_out, -1)
         # compute loss
         loss = self.rnnt_objf(dec_out,
-                              tgt_pad.to(th.int32),
+                              egs["tgt_pad"].to(th.int32),
                               enc_len.to(th.int32),
-                              tgt_len.to(th.int32),
+                              egs["tgt_len"].to(th.int32),
                               blank=self.blank,
                               reduction="sum")
         denorm = th.sum(
-            tgt_len) if self.reduction == "mean" else dec_out.shape[0]
+            egs["tgt_len"]) if self.reduction == "mean" else dec_out.shape[0]
         return {"loss": loss / denorm}
 
 
 @ApsRegisters.task.register("asr@lm")
-class LmXentTask(Task):
+class LmXentTask(ASRTask):
     """
     For LM training (Xent loss)
     Args:
@@ -323,12 +341,10 @@ class LmXentTask(Task):
                  bptt_mode: bool = False,
                  reduction: str = "batchmean") -> None:
         super(LmXentTask, self).__init__(nnet,
+                                         reduction=reduction,
                                          description="Xent for LM training")
-        if reduction not in ["mean", "batchmean"]:
-            raise ValueError(f"Unsupported reduction option: {reduction}")
         self.hidden = None
         self.bptt_mode = bptt_mode
-        self.reduction = reduction
 
     def forward(self, egs: Dict) -> Dict:
         """

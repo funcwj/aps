@@ -328,7 +328,7 @@ def test_asr_att(att_type, att_kwargs):
                        dec_kwargs=default_rnn_dec_kwargs)
     x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
     z, _, _ = att_asr(x, x_len, y, y_len)
-    assert z.shape == th.Size([4, u + 1, vocab_size - 1])
+    assert z.shape == th.Size([4, u, vocab_size - 1])
 
 
 @pytest.mark.parametrize("att_type,att_kwargs", [
@@ -384,7 +384,7 @@ def test_mvdr_att(att_type, att_kwargs):
                                     batch_size,
                                     num_channels=num_channels)
     z, _, _ = mvdr_att_asr(x, x_len, y, y_len)
-    assert z.shape == th.Size([4, u + 1, vocab_size - 1])
+    assert z.shape == th.Size([4, u, vocab_size - 1])
 
 
 @pytest.mark.parametrize("enh_type,enh_kwargs", [
@@ -446,7 +446,7 @@ def test_beam_att(enh_type, enh_kwargs):
                                     batch_size,
                                     num_channels=num_channels)
     z, _, _ = beam_att_asr(x, x_len, y, y_len)
-    assert z.shape == th.Size([4, u + 1, vocab_size - 1])
+    assert z.shape == th.Size([4, u, vocab_size - 1])
 
 
 @pytest.mark.parametrize("enc_type,enc_kwargs", [
@@ -482,7 +482,7 @@ def test_att_encoder(enc_type, enc_kwargs):
                        dec_kwargs=default_rnn_dec_kwargs)
     x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
     z, _, _ = att_asr(x, x_len, y, y_len)
-    assert z.shape == th.Size([4, u + 1, vocab_size - 1])
+    assert z.shape == th.Size([4, u, vocab_size - 1])
 
 
 @pytest.mark.parametrize("enc_type,enc_kwargs", [
@@ -515,7 +515,7 @@ def test_xfmr_encoder(enc_type, enc_kwargs):
         dec_kwargs=default_xfmr_dec_kwargs)
     x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
     z, _, _ = xfmr_asr(x, x_len, y, y_len)
-    assert z.shape == th.Size([4, u + 1, vocab_size - 1])
+    assert z.shape == th.Size([4, u, vocab_size - 1])
 
 
 @pytest.mark.parametrize("enc_type,enc_kwargs", [
@@ -553,7 +553,7 @@ def test_common_transducer(enc_type, enc_kwargs):
                     dec_kwargs=dec_kwargs)
     x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
     _, z, _ = rnnt(x, x_len, y, y_len)
-    assert z.shape[2:] == th.Size([u + 1, vocab_size])
+    assert z.shape[2:] == th.Size([u, vocab_size])
 
 
 @pytest.mark.parametrize("enc_type,enc_kwargs", [
@@ -580,4 +580,4 @@ def test_xfmr_transducer(enc_type, enc_kwargs):
                          dec_kwargs=default_xfmr_transducer_dec_kwargs)
     x, x_len, y, y_len, u = gen_egs(vocab_size, batch_size)
     _, z, _ = xfmr_rnnt(x, x_len, y, y_len)
-    assert z.shape[2:] == th.Size([u + 1, vocab_size])
+    assert z.shape[2:] == th.Size([u, vocab_size])

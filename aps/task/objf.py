@@ -7,7 +7,7 @@ import torch.nn.functional as tf
 
 from itertools import permutations
 from typing import List, Any, Callable, Optional
-from aps.const import IGNORE_ID
+from aps.const import IGNORE_ID, EPSILON
 
 
 def ce_objf(outs: th.Tensor,
@@ -112,6 +112,9 @@ def ctc_objf(outs: th.Tensor,
     if outs.shape[1] < L:
         raise ValueError(
             f"#frames({outs.shape[1]}) < #labels({L}), not valid for CTC")
+    num_nans = th.isnan(outs).sum().item()
+    if num_nans > 0:
+        raise ValueError(f"Get {num_nans} NANs in the tensor")
     # add log-softmax, N x T x V => T x N x V
     if add_softmax:
         outs = tf.log_softmax(outs, dim=-1)
@@ -125,6 +128,111 @@ def ctc_objf(outs: th.Tensor,
                        zero_infinity=True)
     loss = loss / (th.sum(tgt_len) if reduction == "mean" else N)
     return loss
+
+
+def sisnr_objf(x: th.Tensor,
+               s: th.Tensor,
+               eps: float = EPSILON,
+               zero_mean: bool = True,
+               non_nagetive: bool = False) -> th.Tensor:
+    """
+    Computer SiSNR
+    Args:
+        x (Tensor): separated signal, N x S
+        s (Tensor): reference signal, N x S
+    Return:
+        sisnr (Tensor): N
+    """
+
+    def l2norm(mat, keepdim=False):
+        return th.norm(mat, dim=-1, keepdim=keepdim)
+
+    if x.shape != s.shape:
+        raise RuntimeError("Dimention mismatch when calculate " +
+                           f"si-snr, {x.shape} vs {s.shape}")
+    if zero_mean:
+        x = x - th.mean(x, dim=-1, keepdim=True)
+        s = s - th.mean(s, dim=-1, keepdim=True)
+    t = th.sum(x * s, dim=-1,
+               keepdim=True) * s / (l2norm(s, keepdim=True)**2 + eps)
+
+    snr_linear = l2norm(t) / (l2norm(x - t) + eps)
+    if non_nagetive:
+        return 10 * th.log10(1 + snr_linear**2)
+    else:
+        return 20 * th.log10(eps + snr_linear)
+
+
+def snr_objf(x: th.Tensor,
+             s: th.Tensor,
+             eps: float = EPSILON,
+             snr_max: float = -1,
+             non_nagetive: bool = False) -> th.Tensor:
+    """
+    Computer SNR
+    Args:
+        x (Tensor): separated signal, N x S
+        s (Tensor): reference signal, N x S
+    Return:
+        snr (Tensor): N
+    """
+
+    def l2norm(mat, keepdim=False):
+        return th.norm(mat, dim=-1, keepdim=keepdim)
+
+    if x.shape != s.shape:
+        raise RuntimeError("Dimention mismatch when calculate " +
+                           f"si-snr, {x.shape} vs {s.shape}")
+    if snr_max > 0:
+        # 30dB => 0.001
+        threshold = 10**(-snr_max / 10)
+        s_norm = l2norm(s)**2
+        x_s_norm = l2norm(x - s)**2
+        return 10 * th.log10(s_norm + eps) - 10 * th.log10(threshold * s_norm +
+                                                           x_s_norm + eps)
+    else:
+        snr_linear = l2norm(s) / (l2norm(x - s) + eps)
+        if non_nagetive:
+            return 10 * th.log10(1 + snr_linear**2)
+        else:
+            return 20 * th.log10(eps + snr_linear)
+
+
+def dpcl_objf(net_embed: th.Tensor,
+              classes: th.Tensor,
+              weights: th.Tensor,
+              num_spks: int = 2,
+              whitened: bool = False) -> th.Tensor:
+    """
+    Compute Deep Clustering Loss
+    Args:
+        net_embed (Tensor): network embeddings, N x FT x D
+        classes (Tensor): classes id for each TF-bin, N x F x T
+        weights (Tensor): weights for each TF bin, N x F x T
+    Return:
+        loss (Tensor): DPCL loss for each utterance
+    """
+    N, F, T = classes.shape
+    # encode one-hot: N x FT x 2
+    ref_embed = th.zeros([N, F * T, num_spks], device=classes.device)
+    ref_embed.scatter_(2, classes.view(N, T * F, 1), 1)
+
+    def affinity(v, y):
+        # z: N x D x D
+        z = th.bmm(th.transpose(v, 1, 2), y)
+        # N
+        return th.norm(z, 2, dim=(1, 2))**2
+
+    # reshape vad_mask: N x TF x 1
+    weights = weights.view(N, F * T, 1)
+    out = net_embed * weights.sqrt()
+    ref = ref_embed * weights.sqrt()
+    if whitened:
+        raise NotImplementedError("Not implemented for whitened = True")
+    else:
+        loss = affinity(out, out) + affinity(ref, ref) - affinity(out, ref) * 2
+    # return loss per-frame
+    return loss / T
 
 
 def multiple_objf(inp: List[Any],
@@ -217,47 +325,80 @@ def permu_invarint_objf(inp: List[Any],
         return loss
 
 
-class MultiObjfComputer(nn.Module):
+def hybrid_permu_objf(out: List[Any],
+                      ref: List[Any],
+                      objf: Callable,
+                      transform: Optional[Callable] = None,
+                      weight: Optional[List[float]] = None,
+                      permute: bool = True,
+                      permu_num_spks: int = 2) -> th.Tensor:
     """
-    A class to compute summary of multiple objective functions
+    Return hybrid loss (pair-wise, permutated or pair-wise + permutated)
+    Args:
+        inp (list(Object)): estimated list
+        ref (list(Object)): reference list
+        objf (function): function to compute single pair loss (per mini-batch)
+        weight (list(float)): weight on each loss value
+        permute (bool): use permutation invariant or not
+        permu_num_spks (int): number of speakers when computing PIT
     """
+    num_branch = len(out)
+    if num_branch != len(ref):
+        raise RuntimeError(
+            f"Got {len(ref)} references but with {num_branch} outputs")
 
-    def __init__(self):
-        super(MultiObjfComputer, self).__init__()
-
-    def forward(self,
-                inp: List[Any],
-                ref: List[Any],
-                objf: Callable,
-                weight: Optional[List[float]] = None,
-                transform: Optional[Callable] = None,
-                batchmean: bool = False) -> th.Tensor:
-        return multiple_objf(inp,
-                             ref,
-                             objf,
-                             weight=weight,
-                             transform=transform,
-                             batchmean=batchmean)
-
-
-class PermuInvarintObjfComputer(nn.Module):
-    """
-    A class to compute permutation-invariant objective function
-    """
-
-    def __init__(self):
-        super(PermuInvarintObjfComputer, self).__init__()
-
-    def forward(self,
-                inp: List[Any],
-                ref: List[Any],
-                objf: Callable,
-                transform: Optional[Callable] = None,
-                batchmean: bool = False,
-                return_permutation: bool = False) -> th.Tensor:
-        return permu_invarint_objf(inp,
-                                   ref,
+    if permute:
+        # N
+        loss = permu_invarint_objf(out[:permu_num_spks],
+                                   ref[:permu_num_spks],
                                    objf,
-                                   transform=transform,
-                                   return_permutation=return_permutation,
-                                   batchmean=batchmean)
+                                   transform=transform)
+        # add residual loss
+        if num_branch > permu_num_spks:
+            # warnings.warn(f"#Branch: {num_branch} > #Speaker: {permu_num_spks}")
+            num_weight = num_branch - (permu_num_spks - 1)
+            if weight is None:
+                weight = [1 / num_weight] * num_weight
+            other_loss = multiple_objf(out[permu_num_spks:],
+                                       ref[permu_num_spks:],
+                                       objf,
+                                       weight=weight[1:])
+            loss = weight[0] * loss + other_loss
+    else:
+        loss = multiple_objf(out, ref, objf, weight=weight, transform=transform)
+    return loss
+
+
+class DpclObjfComputer(nn.Module):
+    """
+    A class for computation of the DPCL loss
+    """
+
+    def __init__(self):
+        super(DpclObjfComputer, self).__init__()
+
+    def forward(self,
+                embedding: th.Tensor,
+                magnitude_ref: th.Tensor,
+                magnitude_mix: th.Tensor,
+                mean: bool = True) -> th.Tensor:
+        """
+        Args:
+            embedding (Tensor): network embeddings, N x FT x D
+            magnitude_ref (Tensor): magnitude of each speaker, N x F x T x S
+            magnitude_mix (Tensor): magnitude of mixture signal, N x F x T
+        Return:
+            loss (Tensor): loss of each utterance, N
+        """
+        num_spks = magnitude_ref.shape[-1]
+        # classes: N x F x T
+        classes = th.argmax(magnitude_ref, -1)
+        # weights: N x F x T
+        weights = magnitude_mix / th.sum(magnitude_mix, (-1, -2), keepdim=True)
+        # loss: N
+        loss = dpcl_objf(embedding,
+                         classes,
+                         weights,
+                         num_spks=num_spks,
+                         whitened=False)
+        return loss.mean() if mean else loss

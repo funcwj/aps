@@ -20,8 +20,8 @@ wget https://storage.googleapis.com/whisper-public/wham_scripts.tar.gz -P $wham_
 tar -xzf $wham_out/wham_scripts.tar.gz -C $wham_out && rm $wham_out/wham_scripts.tar.gz
 
 cd $wham_out/wham_scripts
-sed "s:'max', ::" create_wham_from_scratch.py | sed "s:, '8k'::" > create_wham_16k_min.py
-python create_wham_16k_min.py \
+# sed "s:'max', ::" create_wham_from_scratch.py | sed "s:, '8k'::" > create_wham_16k_min.py
+python create_wham_from_scratch.py \
 	--wsj0-root $wsj0_dir \
   --wham-noise-root $wham_out/wham_noise
 	--output-dir $wham_out/wham_mix

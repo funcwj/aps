@@ -8,6 +8,7 @@ import argparse
 from pathlib import Path
 from aps.asr.lm.ngram import NgramLM
 from aps.utils import get_logger
+from aps.const import EOS_TOKEN, SOS_TOKEN
 from aps.eval import NnetEvaluator, TextPreProcessor
 from aps.opts import StrToBoolAction
 from aps.io import io_wrapper, NbestReader
@@ -32,8 +33,8 @@ def run(args):
         lm = lm.nnet
         tokenizer = TextPreProcessor(args.dict, space=args.space,
                                      spm=args.spm).tokenizer
-        sos = tokenizer.symbol2int("<sos>")
-        eos = tokenizer.symbol2int("<eos>")
+        sos = tokenizer.symbol2int(SOS_TOKEN)
+        eos = tokenizer.symbol2int(EOS_TOKEN)
 
     stdout, top1 = io_wrapper(args.top1, "w")
     done = 0

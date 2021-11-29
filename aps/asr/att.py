@@ -5,7 +5,6 @@
 
 import torch as th
 import torch.nn as nn
-import torch.nn.functional as tf
 
 import aps.asr.beam_search.att as att_api
 import aps.asr.beam_search.transformer as xfmr_api
@@ -98,7 +97,7 @@ class AttASR(ASREncoderDecoderBase):
         Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
-            y_pad: N x To
+            y_pad: N x To (start with sos)
             y_len: N or None, not used here
             ssr: schedule sampling rate
         Return:
@@ -110,13 +109,11 @@ class AttASR(ASREncoderDecoderBase):
         self.att_net.clear()
         # go through feature extractor & encoder
         enc_out, enc_ctc, enc_len = self._training_prep(x_pad, x_len)
-        # N x To+1
-        tgt_pad = tf.pad(y_pad, (1, 0), value=self.sos)
-        # N x (To+1), pad SOS
+        # N x To
         dec_out, _ = self.decoder(self.att_net,
                                   enc_out,
                                   enc_len,
-                                  tgt_pad,
+                                  y_pad,
                                   schedule_sampling=ssr)
         return dec_out, enc_ctc, enc_len
 
@@ -262,7 +259,7 @@ class XfmrASR(ASREncoderDecoderBase):
         Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
-            y_pad: N x To
+            y_pad: N x To (start with eos)
             y_len: N or None
             ssr: not used here, left for future
         Return:
@@ -272,10 +269,8 @@ class XfmrASR(ASREncoderDecoderBase):
         """
         # go through feature extractor & encoder
         enc_out, enc_ctc, enc_len = self._training_prep(x_pad, x_len)
-        # N x To+1
-        tgt_pad = tf.pad(y_pad, (1, 0), value=self.sos)
-        # N x To+1 x D
-        dec_out = self.decoder(enc_out, enc_len, tgt_pad, y_len + 1)
+        # N x To x D
+        dec_out = self.decoder(enc_out, enc_len, y_pad, y_len)
         return dec_out, enc_ctc, enc_len
 
     def greedy_search(self,

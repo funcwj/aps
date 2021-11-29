@@ -5,7 +5,6 @@
 
 import torch as th
 import torch.nn as nn
-import torch.nn.functional as tf
 
 from aps.streaming_asr.ctc import StreamingASREncoder
 from aps.asr.beam_search.transducer import TransducerBeamSearch
@@ -54,7 +53,7 @@ class TransducerASR(StreamingASREncoder):
         Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
-            y_pad: N x To
+            y_pad: N x To (start with blank)
             y_len: N or None (not used here)
         Return:
             enc_out: N x Ti x D
@@ -63,10 +62,8 @@ class TransducerASR(StreamingASREncoder):
         """
         # go through feature extractor & encoder
         enc_out, _, enc_len = self._training_prep(x_pad, x_len)
-        # N x To+1
-        tgt_pad = tf.pad(y_pad, (1, 0), value=self.blank)
-        # N x Ti x To+1 x V
-        dec_out = self.decoder(enc_out, tgt_pad)
+        # N x Ti x To x V
+        dec_out = self.decoder(enc_out, y_pad)
         return enc_out, dec_out, enc_len
 
     def greedy_search(self, x: th.Tensor) -> List[Dict]:

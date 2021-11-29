@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as tf
 
 from typing import Optional, Tuple
+from aps.const import NEG_INF
 from aps.libs import Register
 
 AsrAtt = Register("asr_att")
@@ -65,7 +66,7 @@ class Attention(nn.Module):
             if pad_mask is None:
                 raise RuntimeError("Attention: pad_mask should not be None "
                                    "when enc_len is not None")
-            score = score.masked_fill(pad_mask, float("-inf"))
+            score = score.masked_fill(pad_mask, NEG_INF)
             return tf.softmax(score, dim=-1)
 
     def clear(self):

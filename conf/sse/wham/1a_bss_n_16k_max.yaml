@@ -1,0 +1,71 @@
+# cmd_args:
+#   batch_size: 64
+#   dev_batch_factor: 1.0
+#   device_ids: '0'
+#   distributed: none
+#   epochs: 100
+#   eval_interval: -1
+#   init: ''
+#   num_workers: 32
+#   prog_interval: 100
+#   resume: ''
+#   save_interval: -1
+#   seed: '888'
+#   tensorboard: false
+#   trainer: ddp
+
+nnet: sse@base_rnn
+
+nnet_conf:
+  bidirectional: true
+  dropout: 0.3
+  hidden: 512
+  input_size: 257
+  mask_non_linear: sigmoid
+  num_bins: 257
+  num_layers: 4
+  num_spks: 2
+  rnn: lstm
+  training_mode: freq
+
+enh_transform:
+  center: true
+  feats: spectrogram-log-cmvn
+  frame_hop: 256
+  frame_len: 512
+  round_pow_of_two: true
+  stft_normalized: false
+  window: sqrthann
+
+task: sse@freq_linear_sa
+
+task_conf:
+  num_spks: 2
+  permute: true
+  phase_sensitive: true
+  truncated: 1
+
+trainer_conf:
+  clip_gradient: 10
+  lr_scheduler_kwargs:
+    factor: 0.5
+    min_lr: 1.0e-08
+    patience: 1
+  no_impr: 10
+  no_impr_thres: 0.01
+  optimizer: adam
+  optimizer_kwargs:
+    lr: 0.001
+    weight_decay: 1.0e-05
+
+data_conf:
+  fmt: se@chunk
+  loader:
+    chunk_size: 64000
+    sr: 16000
+  train:
+    mix_scp: data/wham/wav16k_max/tr/mix_both.scp
+    ref_scp: data/wham/wav16k_max/tr/s1.scp,data/wham/wav16k_max/tr/s2.scp
+  valid:
+    mix_scp: data/wham/wav16k_max/cv/mix_both.scp
+    ref_scp: data/wham/wav16k_max/cv/s1.scp,data/wham/wav16k_max/cv/s2.scp

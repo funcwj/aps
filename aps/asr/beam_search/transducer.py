@@ -13,7 +13,7 @@ import torch.nn.functional as tf
 from copy import deepcopy
 from typing import List, Dict, Tuple, Optional
 from aps.utils import get_logger
-from aps.const import NEG_INF
+from aps.const import MIN_F32
 from aps.asr.beam_search.lm import lm_score_impl, LmType
 
 logger = get_logger(__name__)
@@ -242,7 +242,7 @@ class TransducerBeamSearch(nn.Module):
                 cache_dec_out.append(dec_out)
 
                 # set -inf as it already used
-                cache_logp[best_idx][best_tok] = NEG_INF
+                cache_logp[best_idx][best_tok] = MIN_F32
                 # init as None and 0
                 best_val, best_idx, best_tok = None, 0, 0
                 for i, logp in enumerate(cache_logp):

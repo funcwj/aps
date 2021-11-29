@@ -74,9 +74,9 @@ class ApsModules(object):
         "filter.mvdr", "filter.conv", "filter.google"
     ]
     sse_submodules = [
-        "rnn", "unsuper.rnn", "enh.phasen", "enh.dcunet", "enh.demucs",
-        "enh.dfsmn", "bss.dccrn", "bss.dprnn", "bss.tcn", "bss.transformer",
-        "bss.dense_unet", "bss.sepformer"
+        "toy", "unsuper.rnn", "enh.phasen", "enh.dcunet", "enh.demucs",
+        "enh.dfsmn", "bss.chimera", "bss.dccrn", "bss.dprnn", "bss.tcn",
+        "bss.transformer", "bss.dense_unet", "bss.sepformer"
     ]
     loader_submodules = [
         "am.kaldi", "am.raw", "am.simu_cmd", "se.chunk", "se.simu_cmd",
@@ -84,7 +84,7 @@ class ApsModules(object):
     ]
     asr = Module("aps.asr", asr_submodules)
     sse = Module("aps.sse", sse_submodules)
-    task = Module("aps.task", ["asr", "sse", "ml", "kd"])
+    task = Module("aps.task", ["asr", "sse", "ml", "ts"])
     loader = Module("aps.loader", loader_submodules)
     trainer = Module("aps.trainer", ["ddp", "hvd", "apex"])
     transform = Module("aps.transform", ["asr", "enh"])

@@ -8,7 +8,7 @@
 set -eu
 
 # test decoding for att
-# diable on github workflow
+# disable on github workflow
 cpt_dir=data/checkpoint/aishell_att_1a
 ../cmd/decode.py $cpt_dir/egs.scp - \
     --beam-size 16 \

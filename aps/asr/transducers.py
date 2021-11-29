@@ -5,7 +5,6 @@
 
 import torch as th
 import torch.nn as nn
-import torch.nn.functional as tf
 
 from typing import Optional, Dict, List
 from aps.asr.ctc import ASREncoderBase, NoneOrTensor, AMForwardType
@@ -107,7 +106,7 @@ class TransducerASR(ASRTransducerBase):
         Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
-            y_pad: N x To
+            y_pad: N x To (start with blank)
             y_len: N or None (not used here)
         Return:
             enc_out: N x Ti x D
@@ -116,10 +115,8 @@ class TransducerASR(ASRTransducerBase):
         """
         # go through feature extractor & encoder
         enc_out, _, enc_len = self._training_prep(x_pad, x_len)
-        # N x To+1
-        tgt_pad = tf.pad(y_pad, (1, 0), value=self.blank)
-        # N x Ti x To+1 x V
-        dec_out = self.decoder(enc_out, tgt_pad)
+        # N x Ti x To x V
+        dec_out = self.decoder(enc_out, y_pad)
         return enc_out, dec_out, enc_len
 
 
@@ -134,7 +131,7 @@ class XfmrTransducerASR(ASRTransducerBase):
                  vocab_size: int = 40,
                  asr_transform: Optional[nn.Module] = None,
                  enc_type: str = "xfmr",
-                 enc_proj: Optional[int] = None,
+                 enc_proj: int = -1,
                  enc_kwargs: Dict = {},
                  dec_type: str = "xfmr",
                  dec_kwargs: Dict = {}) -> None:
@@ -158,7 +155,7 @@ class XfmrTransducerASR(ASRTransducerBase):
         Args:
             x_pad: N x Ti x D or N x S
             x_len: N or None
-            y_pad: N x To
+            y_pad: N x To (start with blank)
             y_len: N or None
         Return:
             enc_out: N x Ti x D
@@ -167,8 +164,6 @@ class XfmrTransducerASR(ASRTransducerBase):
         """
         # go through feature extractor & encoder
         enc_out, _, enc_len = self._training_prep(x_pad, x_len)
-        # N x To+1
-        tgt_pad = tf.pad(y_pad, (1, 0), value=self.blank)
-        # N x Ti x To+1 x V
-        dec_out = self.decoder(enc_out, tgt_pad, y_len + 1)
+        # N x Ti x To x V
+        dec_out = self.decoder(enc_out, y_pad, y_len)
         return enc_out, dec_out, enc_len

@@ -521,7 +521,7 @@ class FeatureTransform(nn.Module):
             if asr_transform.spectra_index == -1:
                 raise RuntimeError(
                     "Now only support spectrogram/mfcc/fbank features")
-            feats_dim = asr_transform.feats_dim
+            feats_dim = asr_transform.dim()
             # remove SpectrogramTransform()
             mag_transform = [
                 RefChannelTransform(ref_channel=ref_channel, input_dim=5),
@@ -543,6 +543,12 @@ class FeatureTransform(nn.Module):
         else:
             self.ipd_transform = None
         self.feats_dim = feats_dim
+
+    def dim(self) -> int:
+        """
+        Return feature dimention
+        """
+        return self.feats_dim
 
     def ctx(self, name: str = "forward_stft") -> nn.Module:
         """

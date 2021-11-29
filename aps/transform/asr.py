@@ -994,6 +994,12 @@ class FeatureTransform(nn.Module):
         self.feats_dim = feats_dim
         self.subsampling_factor = subsampling_factor
 
+    def dim(self) -> int:
+        """
+        Return feature dimention
+        """
+        return self.feats_dim
+
     def num_frames(self, inp_len: th.Tensor) -> th.Tensor:
         """
         Work out number of frames

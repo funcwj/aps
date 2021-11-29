@@ -9,20 +9,32 @@ import torch as th
 from aps.libs import aps_sse_nnet
 from aps.transform import EnhTransform
 
+num_bins = 257
+log_cmvn_transform = EnhTransform(feats="spectrogram-log-cmvn",
+                                  frame_len=512,
+                                  frame_hop=256,
+                                  center=True)
+with_ipd_transform = EnhTransform(feats="spectrogram-log-cmvn-ipd",
+                                  frame_len=512,
+                                  frame_hop=256,
+                                  center=True,
+                                  ipd_index="0,1;0,2;0,3")
+none_transform = EnhTransform(feats="",
+                              frame_len=512,
+                              frame_hop=256,
+                              center=True)
+
 
 @pytest.mark.parametrize("num_spks,non_linear", [
     pytest.param(1, "sigmoid"),
     pytest.param(2, "softmax"),
-    pytest.param(2, "relu")
+    pytest.param(3, "relu")
 ])
 def test_base_rnn(num_spks, non_linear):
     nnet_cls = aps_sse_nnet("sse@base_rnn")
-    transform = EnhTransform(feats="spectrogram-log-cmvn",
-                             frame_len=512,
-                             frame_hop=256)
-    base_rnn = nnet_cls(enh_transform=transform,
-                        num_bins=257,
-                        input_size=257,
+    base_rnn = nnet_cls(enh_transform=log_cmvn_transform,
+                        num_bins=num_bins,
+                        input_size=num_bins,
                         input_proj=512,
                         num_layers=2,
                         hidden=512,
@@ -32,28 +44,44 @@ def test_base_rnn(num_spks, non_linear):
     x = base_rnn(inp)
     if num_spks > 1:
         x = x[0]
-    assert x.shape == th.Size([2, 257, 249])
+    assert x.shape == th.Size([2, num_bins, 251])
     z = base_rnn.infer(inp[0])
     if num_spks > 1:
         z = z[0]
     assert z.shape == th.Size([64000])
 
 
+@pytest.mark.parametrize("non_linear", ["softmax", "relu"])
+def test_chimera(non_linear):
+    nnet_cls = aps_sse_nnet("sse@chimera++")
+    chimera = nnet_cls(enh_transform=log_cmvn_transform,
+                       num_bins=num_bins,
+                       input_size=num_bins,
+                       num_layers=2,
+                       hidden=512,
+                       num_spks=2,
+                       mask_non_linear=non_linear)
+    inp = th.rand(2, 64000)
+    x = chimera(inp)
+    assert x[0].shape == th.Size([2, num_bins, 251])
+    z = chimera.infer(inp[0])
+    assert z[0].shape == th.Size([64000])
+
+
 def test_phasen():
     nnet_cls = aps_sse_nnet("sse@phasen")
-    transform = EnhTransform(feats="", frame_len=512, frame_hop=256)
     phasen = nnet_cls(12,
                       4,
-                      enh_transform=transform,
+                      enh_transform=none_transform,
                       num_tsbs=1,
-                      num_bins=257,
+                      num_bins=num_bins,
                       channel_r=5,
                       conv1d_kernel=9,
                       lstm_hidden=256,
                       linear_size=512)
     inp = th.rand(4, 64000)
     x = phasen(inp)
-    assert x.shape == th.Size([4, 257, 249, 2])
+    assert x.shape == th.Size([4, num_bins, 251, 2])
     z = phasen.infer(inp[1])
     assert z.shape == th.Size([64000])
 
@@ -62,8 +90,7 @@ def test_phasen():
 @pytest.mark.parametrize("cplx", [True, False])
 def test_dcunet(num_branch, cplx):
     nnet_cls = aps_sse_nnet("sse@dcunet")
-    transform = EnhTransform(feats="", frame_len=512, frame_hop=256)
-    dcunet = nnet_cls(enh_transform=transform,
+    dcunet = nnet_cls(enh_transform=none_transform,
                       K="7,5;7,5;5,3;5,3;3,3;3,3",
                       S="2,1;2,1;2,1;2,1;2,1;2,1",
                       C="32,32,64,64,64,128",
@@ -89,9 +116,6 @@ def test_dcunet(num_branch, cplx):
 @pytest.mark.parametrize("non_linear", ["", "sigmoid"])
 def test_dense_unet(num_spks, non_linear):
     nnet_cls = aps_sse_nnet("sse@dense_unet")
-    transform = EnhTransform(feats="spectrogram-log-cmvn",
-                             frame_len=512,
-                             frame_hop=256)
     dense_unet = nnet_cls(K="3,3;3,3;3,3;3,3;3,3;3,3;3,3;3,3",
                           S="1,1;2,1;2,1;2,1;2,1;2,1;2,1;2,1",
                           P="0,1;0,1;0,1;0,1;0,1;0,1;0,1;0,1;0,1",
@@ -106,7 +130,7 @@ def test_dense_unet(num_spks, non_linear):
                           rnn_bidir=False,
                           rnn_dropout=0.2,
                           num_dense_blocks=3,
-                          enh_transform=transform,
+                          enh_transform=log_cmvn_transform,
                           non_linear=non_linear,
                           inp_cplx=True,
                           out_cplx=True,
@@ -125,9 +149,6 @@ def test_dense_unet(num_spks, non_linear):
 @pytest.mark.parametrize("num_spks", [1, 2])
 def test_freq_xfmr(num_spks):
     nnet_cls = aps_sse_nnet("sse@freq_xfmr")
-    transform = EnhTransform(feats="spectrogram-log-cmvn",
-                             frame_len=512,
-                             frame_hop=256)
     pose_kwargs = {"lradius": 256, "rradius": 256, "dropout": 0.1}
     arch_kwargs = {
         "att_dropout": 0.1,
@@ -137,10 +158,10 @@ def test_freq_xfmr(num_spks):
         "nhead": 4
     }
     xfmr = nnet_cls(arch="xfmr",
-                    input_size=257,
-                    enh_transform=transform,
+                    input_size=num_bins,
+                    enh_transform=log_cmvn_transform,
                     num_spks=num_spks,
-                    num_bins=257,
+                    num_bins=num_bins,
                     arch_kwargs=arch_kwargs,
                     pose_kwargs=pose_kwargs,
                     num_layers=3,
@@ -194,8 +215,7 @@ def test_tasnet(num_spks, nonlinear):
 @pytest.mark.parametrize("cplx", [True, False])
 def test_dccrn(num_spks, cplx):
     nnet_cls = aps_sse_nnet("sse@dccrn")
-    transform = EnhTransform(feats="spectrogram", frame_len=512, frame_hop=256)
-    dccrn = nnet_cls(enh_transform=transform,
+    dccrn = nnet_cls(enh_transform=log_cmvn_transform,
                      cplx=cplx,
                      K="3,3;3,3;3,3;3,3;3,3;3,3;3,3",
                      S="2,1;2,1;2,1;2,1;2,1;2,1;2,1",
@@ -217,14 +237,9 @@ def test_dccrn(num_spks, cplx):
     assert y.shape == th.Size([64000])
 
 
-@pytest.mark.parametrize("num_bins", [257])
-def test_rnn_enh_ml(num_bins):
+def test_rnn_enh_ml():
     nnet_cls = aps_sse_nnet("sse@rnn_enh_ml")
-    transform = EnhTransform(feats="spectrogram-log-cmvn-ipd",
-                             frame_len=512,
-                             frame_hop=256,
-                             ipd_index="0,1;0,2;0,3")
-    rnn_enh_ml = nnet_cls(enh_transform=transform,
+    rnn_enh_ml = nnet_cls(enh_transform=with_ipd_transform,
                           num_bins=num_bins,
                           input_size=num_bins * 4,
                           input_proj=512,
@@ -232,11 +247,11 @@ def test_rnn_enh_ml(num_bins):
                           hidden=512)
     inp = th.rand(2, 5, 64000)
     x, y = rnn_enh_ml(inp)
-    assert x.shape == th.Size([2, 5, num_bins, 249])
+    assert x.shape == th.Size([2, 5, num_bins, 251])
     assert th.isnan(x.real).sum() + th.isnan(x.imag).sum() == 0
-    assert y.shape == th.Size([2, 249, num_bins])
+    assert y.shape == th.Size([2, 251, num_bins])
     z = rnn_enh_ml.infer(inp[0])
-    assert z.shape == th.Size([249, num_bins])
+    assert z.shape == th.Size([251, num_bins])
 
 
 @pytest.mark.parametrize("resampling_factor", [1, 2, 4])
@@ -258,11 +273,7 @@ def test_demucs(resampling_factor, chunk_len):
 @pytest.mark.parametrize("num_spks", [1, 2])
 def test_dfsmn(num_spks):
     nnet_cls = aps_sse_nnet("sse@dfsmn")
-    transform = EnhTransform(feats="spectrogram-log",
-                             frame_len=512,
-                             frame_hop=256,
-                             center=True)
-    dfsmn = nnet_cls(enh_transform=transform,
+    dfsmn = nnet_cls(enh_transform=log_cmvn_transform,
                      num_layers=3,
                      dim=512,
                      num_branchs=num_spks,
@@ -309,13 +320,9 @@ def test_sepformer():
         "ffn_dropout": 0.1,
         "activation": "relu"
     }
-    transform = EnhTransform(feats="spectrogram-log-cmvn",
-                             frame_len=256,
-                             frame_hop=128,
-                             center=True)
     sepformer = nnet_cls("xfmr",
-                         enh_transform=transform,
-                         num_bins=129,
+                         enh_transform=log_cmvn_transform,
+                         num_bins=num_bins,
                          num_spks=1,
                          num_blocks=2,
                          num_layers=2,

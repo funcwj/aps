@@ -8,7 +8,7 @@ import torch as th
 from dataclasses import dataclass
 from typing import List, Dict, Union, Tuple, Optional, NoReturn
 from aps.asr.beam_search.ctc import CtcScorer
-from aps.const import NEG_INF
+from aps.const import MIN_F32
 from aps.utils import get_logger
 
 logger = get_logger(__name__)
@@ -135,7 +135,7 @@ class BaseBeamTracker(object):
         none_eos_best, _ = th.max(score[:, self.none_eos_idx], dim=-1)
         # set inf to disable the eos
         disable_eos = eos_prob < none_eos_best * self.param.eos_threshold
-        score[disable_eos, self.param.eos] = NEG_INF
+        score[disable_eos, self.param.eos] = MIN_F32
         if verbose and th.sum(disable_eos):
             disable_index = [i for i, s in enumerate(disable_eos) if s]
             logger.info(f"--- disable <eos> in beam index: {disable_index}")
@@ -152,7 +152,7 @@ class BaseBeamTracker(object):
         """
         if self.param.unk >= 0:
             unk_index = token == self.param.unk
-            score[unk_index] = NEG_INF
+            score[unk_index] = MIN_F32
         return score
 
     def beam_select(self, am_prob: th.Tensor,
@@ -401,7 +401,7 @@ class BeamTracker(BaseBeamTracker):
             point (Tensor): initial backward point
         """
         score = self.score[point].tolist()
-        self.acmu_score[point] = NEG_INF
+        self.acmu_score[point] = MIN_F32
         return self.trace_hypos(point,
                                 score,
                                 self.trans,
@@ -611,7 +611,7 @@ class BatchBeamTracker(BaseBeamTracker):
             point (Tensor): initial backward point
         """
         score = self.score[batch, point].tolist()
-        self.acmu_score[batch, point] = NEG_INF
+        self.acmu_score[batch, point] = MIN_F32
         trans = th.chunk(self.trans, self.batch_size, 0)[batch]
         align = th.chunk(self.align, self.batch_size, 0)[batch]
         points = [p[batch] for p in self.point]

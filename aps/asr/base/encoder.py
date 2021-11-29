@@ -92,7 +92,7 @@ class RNNEncoderBase(EncoderBase):
     def __init__(self,
                  inp_features: int,
                  out_features: int,
-                 rnns: nn.Module,
+                 impl: nn.Module,
                  input_proj: int = -1,
                  hidden: int = -1,
                  bidirectional: bool = False,
@@ -105,7 +105,7 @@ class RNNEncoderBase(EncoderBase):
             self.proj = nn.Linear(inp_features, input_proj)
         else:
             self.proj = None
-        self.rnns = rnns
+        self.impl = impl
         factor = 2 if bidirectional else 1
         if out_features > 0:
             self.outp = nn.Linear(hidden * factor, out_features)
@@ -173,11 +173,11 @@ class PyTorchRNNEncoder(RNNEncoderBase):
                              non_linear=non_linear)
 
     def flat(self):
-        self.rnns.flatten_parameters()
+        self.impl.flatten_parameters()
 
     def _forward(self, inp: th.Tensor,
                  inp_len: Optional[th.Tensor]) -> th.Tensor:
-        return var_len_rnn_forward(self.rnns,
+        return var_len_rnn_forward(self.impl,
                                    inp,
                                    inp_len=inp_len,
                                    enforce_sorted=False,
@@ -219,7 +219,7 @@ class JitLSTMEncoder(RNNEncoderBase):
 
     def _forward(self, inp: th.Tensor,
                  inp_len: Optional[th.Tensor]) -> th.Tensor:
-        return self.rnns(inp)[0]
+        return self.impl(inp)[0]
 
 
 @BaseEncoder.register("variant_rnn")
