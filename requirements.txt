@@ -4,7 +4,7 @@ kaldi_python_io==1.2.2
 librosa==0.8.1
 matplotlib==3.4.3
 museval==0.4.0
-numpy==1.21.4
+numpy==1.22.0
 onnxruntime==1.9.0
 pypesq==1.2.4
 pystoi==0.3.3
