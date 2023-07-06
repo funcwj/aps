@@ -10,7 +10,7 @@ pypesq==1.2.4
 pystoi==0.3.3
 pytest==6.2.5
 PyYAML==6.0
-scipy==1.7.1
+scipy==1.10.0
 sentencepiece==0.1.96
 SoundFile==0.10.3.post1
 torchaudio==0.10.0
